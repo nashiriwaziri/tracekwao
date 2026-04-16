@@ -1,8 +1,5 @@
-Gmail	Nashiri Waziri <nashiriwaziri29@gmail.com>
-original indexhtml1642026
-Nashiri Waziri <nashiriwaziri29@gmail.com>	16 April 2026 at 09:52
-To: Nashiri Waziri <nashiriwaziri29@gmail.com>
 <!DOCTYPE html>
+<!-- Version 2.0: Cross-Device Sync Enabled -->
 <html lang="sw">
 <head>
     <meta charset="UTF-8">
@@ -480,6 +477,13 @@ To: Nashiri Waziri <nashiriwaziri29@gmail.com>
         .btn-download-png { background: var(--primary); color: white; border: none; padding: 5px 12px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; float: right; transition: opacity 0.2s; }
         .btn-download-png:hover { opacity: 0.8; }
 
+        /* SYNC STYLES */
+        .sync-options { display: flex; flex-direction: column; gap: 15px; }
+        .sync-card { border: 1px solid #dee2e6; padding: 15px; border-radius: 8px; background: #fdfdfd; }
+        .sync-card h4 { margin-bottom: 10px; color: var(--primary); font-size: 1rem; }
+        .sync-desc { font-size: 0.85rem; color: var(--muted); margin-bottom: 10px; }
+        textarea.code-area { width: 100%; height: 100px; font-family: monospace; font-size: 0.75rem; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: none; background: #f1f3f5; }
+
         @media print {
             body { margin: 0; padding: 0; }
             body * { visibility: hidden; }
@@ -602,6 +606,8 @@ To: Nashiri Waziri <nashiriwaziri29@gmail.com>
                     <a href="#" onclick="printReport()"><i class="fas fa-print"></i> Print</a>
                     <a href="#" onclick="showNotificationReport()"><i class="fas fa-users"></i> <span>View Identifiers</span></a>
                     <a href="#" onclick="exportIdentifiersPDF()"><i class="fas fa-file-pdf"></i> Identifiers PDF</a>
+                    <!-- NEW SYNC LINK -->
+                    <a href="#" onclick="openSyncModal()" style="color: var(--primary); font-weight:bold; border-top: 2px solid var(--primary);"><i class="fas fa-sync-alt"></i> Sync Data (Cross-Device)</a>
                 </div>
             </div>
 
@@ -977,6 +983,46 @@ To: Nashiri Waziri <nashiriwaziri29@gmail.com>
                     </thead>
                     <tbody id="messagesTableBody"></tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- === NEW: DATA SYNC MODAL === -->
+    <div id="syncModal" class="modal-overlay hidden">
+        <div class="modal-content wide">
+            <button class="close-modal" onclick="closeSyncModal()">&times;</button>
+            <div class="modal-header">
+                <h2><i class="fas fa-sync-alt"></i> Cross-Device Data Sync</h2>
+                <p style="color:var(--muted); font-size:0.9rem;">Export data from this device to move it to another computer or phone.</p>
+            </div>
+            
+            <div class="sync-options">
+                <!-- Option 1: File Download -->
+                <div class="sync-card">
+                    <h4><i class="fas fa-file-download"></i> Export Database (Download)</h4>
+                    <p class="sync-desc">Downloads a file containing all reports, users, and identifiers. Send this file to your other device and import it there.</p>
+                    <button class="btn-submit" onclick="exportDatabaseFile()">Download Database File (.json)</button>
+                </div>
+
+                <!-- Option 2: File Upload -->
+                <div class="sync-card">
+                    <h4><i class="fas fa-file-upload"></i> Import Database (Upload)</h4>
+                    <p class="sync-desc">Select a database file (.json) that you previously exported to update this device.</p>
+                    <input type="file" id="importFileInput" accept=".json" style="margin-bottom:10px;">
+                    <button class="btn-submit" style="background-color: var(--secondary);" onclick="importDatabaseFile()">Import & Replace Data</button>
+                </div>
+
+                <!-- Option 3: Clipboard (Text) -->
+                <div class="sync-card">
+                    <h4><i class="fas fa-copy"></i> Copy / Paste Database Code</h4>
+                    <p class="sync-desc">Use this if you cannot send files. Copy the code below and paste it into a chat or note. On the other device, paste the code into the box.</p>
+                    
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <button class="btn-secondary-clear" onclick="copyDatabaseCode()">Copy Current Code</button>
+                    </div>
+                    <textarea id="syncCodeArea" class="code-area" placeholder="Paste database code here to import..."></textarea>
+                    <button class="btn-submit" onclick="importDatabaseCode()" style="margin-top:10px;">Import from Code</button>
+                </div>
             </div>
         </div>
     </div>
@@ -2052,6 +2098,108 @@ To: Nashiri Waziri <nashiriwaziri29@gmail.com>
             const pageCount = doc.internal.getNumberOfPages();
             for(let i = 1; i <= pageCount; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150); doc.text('Page ' + i + ' of ' + pageCount, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: 'center' }); }
             doc.save('Identifiers_Registry.pdf');
+        }
+
+        // =============================================
+        // ===== CROSS-DEVICE DATA SYNC LOGIC =====
+        // =============================================
+        function openSyncModal() {
+            document.getElementById('syncModal').classList.remove('hidden');
+        }
+        function closeSyncModal() {
+            document.getElementById('syncModal').classList.add('hidden');
+        }
+
+        function exportDatabaseFile() {
+            const dataObj = {
+                children: JSON.parse(localStorage.getItem('childrenData')) || [],
+                users: JSON.parse(localStorage.getItem('registeredUsers')) || [],
+                notifications: JSON.parse(localStorage.getItem('notificationsData')) || [],
+                exportDate: new Date().toISOString()
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataObj));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "ncrs_database_backup_" + Date.now() + ".json");
+            document.body.appendChild(downloadAnchorNode); // required for firefox
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+
+            BrickNotify.success("Database file downloaded successfully.");
+        }
+
+        function importDatabaseFile() {
+            const fileInput = document.getElementById('importFileInput');
+            if (!fileInput.files.length) {
+                BrickNotify.error("Please select a .json file first.");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const dataObj = JSON.parse(e.target.result);
+                    if (dataObj.children && dataObj.users) {
+                        if(confirm("This will REPLACE all current data on this device. Are you sure?")) {
+                            localStorage.setItem('childrenData', JSON.stringify(dataObj.children));
+                            localStorage.setItem('registeredUsers', JSON.stringify(dataObj.users));
+                            if(dataObj.notifications) localStorage.setItem('notificationsData', JSON.stringify(dataObj.notifications));
+                            
+                            BrickNotify.success("Data imported successfully. Page will reload.");
+                            setTimeout(() => location.reload(), 1500);
+                        }
+                    } else {
+                        BrickNotify.error("Invalid database file format.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    BrickNotify.error("Error parsing file. Please ensure it is a valid JSON.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function copyDatabaseCode() {
+            const dataObj = {
+                children: JSON.parse(localStorage.getItem('childrenData')) || [],
+                users: JSON.parse(localStorage.getItem('registeredUsers')) || [],
+                notifications: JSON.parse(localStorage.getItem('notificationsData')) || []
+            };
+            const jsonString = JSON.stringify(dataObj);
+            
+            navigator.clipboard.writeText(jsonString).then(() => {
+                BrickNotify.success("Database code copied to clipboard!");
+            }).catch(err => {
+                BrickNotify.error("Failed to copy code.");
+            });
+        }
+
+        function importDatabaseCode() {
+            const code = document.getElementById('syncCodeArea').value;
+            if (!code.trim()) {
+                BrickNotify.error("Please paste the database code first.");
+                return;
+            }
+
+            try {
+                const dataObj = JSON.parse(code);
+                if (dataObj.children && dataObj.users) {
+                    if(confirm("This will REPLACE all current data on this device. Are you sure?")) {
+                        localStorage.setItem('childrenData', JSON.stringify(dataObj.children));
+                        localStorage.setItem('registeredUsers', JSON.stringify(dataObj.users));
+                        if(dataObj.notifications) localStorage.setItem('notificationsData', JSON.stringify(dataObj.notifications));
+                        
+                        BrickNotify.success("Data imported from code successfully. Page will reload.");
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                } else {
+                    BrickNotify.error("Invalid code format.");
+                }
+            } catch (err) {
+                BrickNotify.error("Error parsing code. Please ensure it is correct.");
+            }
         }
 
     </script>
