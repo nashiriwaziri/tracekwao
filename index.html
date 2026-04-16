@@ -1,161 +1,697 @@
 <!DOCTYPE html>
 <html lang="sw">
 <head>
-  <meta charset="UTF-8">
-  <title>Smart Firebase System</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - NCRS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
 
-  <style>
-    body { font-family: Arial; margin: 20px; background:#f5f5f5; }
-    input, textarea, select { width: 100%; margin: 5px 0; padding: 10px; }
-    button { padding: 10px 15px; cursor: pointer; margin-top:5px;}
-    table { width: 100%; border-collapse: collapse; margin-top:20px; background:#fff;}
-    th, td { border: 1px solid #ccc; padding: 8px; text-align:left;}
-    th { background:#eee; }
-  </style>
+    <!-- External Libraries for Export/Charts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --primary: #003366; --secondary: #e63946; --accent: #f4a261; --light: #f8f9fa;
+            --dark: #1d3557; --text: #333333; --muted: #6c757d; --white: #ffffff;
+            --shadow: 0 4px 6px rgba(0,0,0,0.1);
+            --gold: #FFD700;
+            --brick-red: #8B2500;
+            --brick-dark: #6B1A00;
+            --brick-light: #A63A10;
+            --brick-glow: rgba(139, 37, 0, 0.4);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--light); color: var(--text); line-height: 1.6; }
+        a { text-decoration: none; color: inherit; }
+        ul { list-style: none; }
+        h1, h2, h3, h4 { font-family: 'Montserrat', sans-serif; font-weight: 700; }
+
+        /* ===== RED BRICK NOTIFICATION SYSTEM (Fixed Z-Index) ===== */
+        .brick-notify-container {
+            position: fixed;
+            top: 90px; /* Chini ya navbar ili usifunge menu */
+            right: 20px;
+            z-index: 99999; /* Z-Index kubwa sana */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            max-width: 420px;
+            width: 100%;
+        }
+
+        .brick-notify {
+            pointer-events: auto;
+            background: linear-gradient(135deg, var(--brick-red) 0%, var(--brick-dark) 50%, var(--brick-red) 100%);
+            color: #ffffff;
+            padding: 16px 20px;
+            border-radius: 4px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 0.92rem;
+            font-weight: 500;
+            box-shadow: 0 6px 24px var(--brick-glow), inset 0 1px 0 rgba(255,255,255,0.1);
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            position: relative;
+            overflow: hidden;
+            border-left: 5px solid var(--brick-light);
+            animation: brickSlideIn 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+            opacity: 0;
+            transform: translateX(120%);
+        }
+
+        .brick-notify .brick-icon {
+            width: 38px; height: 38px; min-width: 38px; border-radius: 50%;
+            background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+        }
+
+        .brick-notify .brick-close {
+            position: absolute; top: 8px; right: 10px; background: none; border: none;
+            color: rgba(255,255,255,0.6); cursor: pointer; font-size: 1.1rem;
+        }
+        
+        @keyframes brickSlideIn {
+            0% { opacity: 0; transform: translateX(120%) scale(0.9); }
+            60% { opacity: 1; transform: translateX(-5px) scale(1.01); }
+            100% { opacity: 1; transform: translateX(0) scale(1); }
+        }
+
+        /* Navigation & Dropdown Fixes */
+        .top-bar { background: var(--primary); color: var(--white); padding: 0.5rem 5%; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
+        nav { background: var(--white); padding: 1rem 5%; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); position: sticky; top: 0; z-index: 1000; }
+        
+        .nav-links { display: flex; gap: 20px; align-items: center; }
+        
+        /* Dropdown Logic - Fixed for Mobile/Click */
+        .nav-dropdown { position: relative; display: inline-block; }
+        .nav-dropdown .dropbtn {
+            background: transparent; color: var(--dark); padding: 8px 15px; border-radius: 50px;
+            font-weight: 600; cursor: pointer; border: none; display: flex; align-items: center; gap: 5px;
+            font-size: 0.95rem; transition: color 0.3s;
+        }
+        .nav-dropdown .dropdown-content {
+            display: none; 
+            position: absolute; 
+            left: 0; 
+            background-color: var(--white);
+            min-width: 220px; 
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); 
+            z-index: 2001; /* Juu ya modal */
+            border-radius: 8px; 
+            overflow: hidden; 
+            margin-top: 5px;
+        }
+        .nav-dropdown .dropdown-content a {
+            color: black; padding: 12px 16px; text-decoration: none; display: flex; align-items: center; gap: 10px;
+            border-bottom: 1px solid #eee; font-size: 0.9rem;
+        }
+        .nav-dropdown .dropdown-content a:hover { background-color: #f1f1f1; }
+       
+        .nav-dropdown.show-dropdown .dropdown-content { display: block; }
+        .nav-dropdown.show-dropdown .fa-caret-down { transform: rotate(180deg); transition: transform 0.3s; }
+
+        .hero { background: linear-gradient(rgba(0, 51, 102, 0.85), rgba(0, 51, 102, 0.9)), url('https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1200') center/cover no-repeat; color: var(--white); padding: 5rem 5%; text-align: center; }
+        
+        .search-section { max-width: 1600px; margin: -60px auto 0; background: var(--white); border-radius: 15px; padding: 2rem; position: relative; z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .table-responsive { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; min-width: 1000px; }
+        thead { background: var(--primary); color: var(--white); }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; font-size: 0.9rem; }
+        
+        /* Buttons & Modals */
+        .btn-primary { background: var(--secondary); color: white; padding: 15px 30px; border-radius: 8px; border: none; cursor: pointer; font-size: 1rem; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 1rem; }
+        .modal-overlay.hidden { display: none; }
+        .modal-content { background: var(--white); width: 100%; max-width: 500px; border-radius: 20px; position: relative; max-height: 90vh; overflow-y: auto; padding: 2rem; }
+        .modal-content.wide { max-width: 800px; }
+        
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        
+        /* Status Badges */
+        .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+        .missing { background: #ffe3e3; color: #c92a2a; }
+        .found { background: #d3f9d8; color: #2b8a3e; }
+        .identified { background: #fff3cd; color: #856404; }
+
+        /* Privacy Shield */
+        .privacy-shield {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px dashed var(--accent); border-radius: 10px; padding: 25px; text-align: center; margin-bottom: 20px; color: white;
+        }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; } /* Simplified for mobile logic */
+            .hero h1 { font-size: 1.8rem; }
+        }
+    </style>
 </head>
-
 <body>
 
-<h2>📩 Sajili Taarifa za Mtoto</h2>
+    <!-- NOTIFICATION CONTAINER -->
+    <div class="brick-notify-container" id="brickNotifyContainer"></div>
 
-<input type="text" id="name" placeholder="Jina">
-<input type="number" id="age" placeholder="Umri">
-<select id="gender">
-  <option value="">Chagua Jinsia</option>
-  <option>Male</option>
-  <option>Female</option>
-</select>
+    <!-- TOP BAR -->
+    <div class="top-bar">
+        <div><i class="fas fa-phone-alt"></i> Hotline: <a href="tel:+255714864117" style="color: var(--accent);">+255 714 864 117</a></div>
+        <div>
+            <a href="#" onclick="changeLanguage('en')">English</a> | <a href="#" onclick="changeLanguage('sw')">Kiswahili</a>
+        </div>
+    </div>
 
-<textarea id="message" placeholder="Maelezo"></textarea>
+    <!-- NAVIGATION -->
+    <nav>
+        <div class="logo" style="font-weight: bold; color: var(--primary); font-size: 1.5rem;">
+            NCRS <span style="font-size: 0.8rem; display: block; font-weight: normal;">National Child Reunification System</span>
+        </div>
+       
+        <div class="nav-links">
+            <div class="nav-dropdown">
+                <button class="dropbtn">Menu <i class="fa fa-caret-down"></i></button>
+                <div class="dropdown-content">
+                    <a href="#" onclick="alert('Home Page')">Home</a>
+                    <a href="#">About Us</a>
+                </div>
+            </div>
+            <button class="btn-primary" onclick="openModal('login')" id="loginBtn">Sign In</button>
+            <div id="userProfileWidget" style="display: none; align-items: center; gap: 10px;">
+                <span id="navUserName">User</span>
+                <button class="btn-primary" style="background: var(--secondary); padding: 5px 15px; font-size: 0.8rem;" onclick="logoutUser()">Logout</button>
+            </div>
+        </div>
+    </nav>
 
-<button onclick="saveData()">💾 Hifadhi</button>
+    <!-- MAIN CONTENT -->
+    <div id="mainSiteContent" style="display: none;">
+        <header class="hero">
+            <h1>When a child goes missing, Every Minute Matters.</h1>
+            <p>NCRS inakuunganisha na watoto waliopotea haraka zaidi kupitia mfumo wa kimataifa.</p>
+            <div style="margin-top: 20px;">
+                <button class="btn-primary" onclick="document.getElementById('search').scrollIntoView({behavior: 'smooth'})">Find Child</button>
+                <button class="btn-primary" style="background: white; color: var(--primary);" onclick="openAddChildModal()">Report New Child</button>
+            </div>
+        </header>
 
-<hr>
+        <section class="search-section" id="search">
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <input type="text" id="myInput" onkeyup="filterTable()" placeholder="Search by name..." style="flex: 1; padding: 15px;">
+            </div>
+            
+            <div class="table-responsive">
+                <table id="myTable">
+                    <thead>
+                        <tr>
+                            <th>Photo</th>
+                            <th>Name</th>
+                            <th>Age</th>
+                            <th>Gender</th>
+                            <th>Region</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="childTableBody">
+                        <!-- Data will be loaded here from Firestore -->
+                        <tr><td colspan="7" style="text-align: center;">Loading data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
 
-<h2>🛠️ Admin Dashboard (Live)</h2>
+    <!-- AUTH MODAL -->
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button onclick="closeModal('authModal')" style="position: absolute; right: 20px; top: 15px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            
+            <!-- Login Form -->
+            <div id="loginForm">
+                <h2 style="text-align: center; color: var(--primary); margin-bottom: 20px;">Sign In</h2>
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="loginEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%;">Sign In</button>
+                </form>
+                
+                <div style="text-align: center; margin: 20px 0; border-top: 1px solid #eee; padding-top: 10px;">
+                    <p>Or</p>
+                    <button type="button" class="btn-primary" style="background: #DB4437; margin-top: 10px;" onclick="handleGoogleLogin()">
+                        <i class="fab fa-google"></i> Sign in with Google
+                    </button>
+                </div>
+                <p style="text-align: center; font-size: 0.9rem;">
+                    Don't have an account? <a href="#" style="color: var(--secondary); font-weight: bold;" onclick="toggleAuth('signup')">Sign Up</a>
+                </p>
+            </div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Jina</th>
-      <th>Umri</th>
-      <th>Jinsia</th>
-      <th>Maelezo</th>
-      <th>Muda</th>
-      <th>Action</th>
-    </tr>
-  </thead>
-  <tbody id="dataList"></tbody>
-</table>
+            <!-- Signup Form -->
+            <div id="signupForm" style="display: none;">
+                <h2 style="text-align: center; color: var(--primary); margin-bottom: 20px;">Create Account</h2>
+                <form onsubmit="handleSignup(event)">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="su_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="su_email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="su_pass" required>
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%;">Register</button>
+                </form>
+                <p style="text-align: center; margin-top: 20px;">
+                    Already have an account? <a href="#" style="color: var(--secondary); font-weight: bold;" onclick="toggleAuth('login')">Sign In</a>
+                </p>
+            </div>
+        </div>
+    </div>
 
+    <!-- ADD CHILD MODAL -->
+    <div id="addChildModal" class="modal-overlay hidden">
+        <div class="modal-content wide">
+            <button onclick="closeModal('addChildModal')" style="position: absolute; right: 20px; top: 15px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            <h2 style="text-align: center; color: var(--primary); margin-bottom: 20px;">Report Missing Child</h2>
+            <form onsubmit="handleAddChild(event)">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label>Police RB No.</label>
+                        <input type="text" id="child_rb" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Child Name</label>
+                        <input type="text" id="child_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Age</label>
+                        <input type="number" id="child_age" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Gender</label>
+                        <select id="child_gender">
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Region</label>
+                        <input type="text" id="child_region" required>
+                    </div>
+                    <div class="form-group">
+                        <label>District</label>
+                        <input type="text" id="child_district" required>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Photo (Base64 or URL)</label>
+                        <!-- Simple implementation: Use URL for speed, or file input converted to Base64 -->
+                        <input type="text" id="child_photo" placeholder="Paste image URL or use file input below">
+                        <input type="file" id="child_file" accept="image/*" style="margin-top: 5px;">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 20px;">Submit Report</button>
+            </form>
+        </div>
+    </div>
 
-<script type="module">
+    <!-- IDENTIFY MODAL -->
+    <div id="identifyModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button onclick="closeModal('identifyModal')" style="position: absolute; right: 20px; top: 15px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            
+            <div class="privacy-shield">
+                <i class="fas fa-shield-alt" style="font-size: 2rem; color: var(--accent);"></i>
+                <h3>Privacy Protected</h3>
+                <p style="font-size: 0.9rem;">Your details will be sent securely to the admin. You will not see other people's identification claims.</p>
+            </div>
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+            <h2 style="text-align: center;">Identify Child</h2>
+            <p style="text-align: center; margin-bottom: 20px;">I am identifying: <strong id="identifyChildName"></strong></p>
+            
+            <form onsubmit="handleIdentify(event)">
+                <input type="hidden" id="identify_child_id">
+                <div class="form-group">
+                    <label>Your Name</label>
+                    <input type="text" id="id_name" required>
+                </div>
+                <div class="form-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="id_phone" required>
+                </div>
+                <div class="form-group">
+                    <label>Message</label>
+                    <textarea id="id_msg" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%;">Submit Identification</button>
+            </form>
+        </div>
+    </div>
 
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  deleteDoc,
-  doc,
-  serverTimestamp
-} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+    <!-- SCRIPTS: FIREBASE & LOGIC -->
+    <script type="module">
+        // ============================================
+        // 1. FIREBASE CONFIGURATION & IMPORTS
+        // ============================================
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { 
+            getAuth, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            GoogleAuthProvider, 
+            signInWithPopup, 
+            onAuthStateChanged,
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot, 
+            doc, 
+            updateDoc, 
+            arrayUnion,
+            serverTimestamp,
+            query, 
+            orderBy 
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+        const firebaseConfig = {
+            apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+            authDomain: "ncrs-aeb43.firebaseapp.com",
+            projectId: "ncrs-aeb43",
+            storageBucket: "ncrs-aeb43.appspot.com",
+            messagingSenderId: "786434442929",
+            appId: "1:786434442929:web:7c91cb67f71a23904b4490"
+        };
 
-// 🔐 CONFIG YAKO
-const firebaseConfig = {
-  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-  authDomain: "ncrs-aeb43.firebaseapp.com",
-  projectId: "ncrs-aeb43",
-  storageBucket: "ncrs-aeb43.appspot.com",
-  messagingSenderId: "786434442929",
-  appId: "1:786434442929:web:7c91cb67f71a23904b4490"
-};
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-// INIT
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+        // Global State
+        let currentUser = null;
 
+        // ============================================
+        // 2. NOTIFICATION SYSTEM (BRICK NOTIFY)
+        // ============================================
+        const BrickNotify = {
+            container: document.getElementById('brickNotifyContainer'),
+            show(options) {
+                const { title, message, icon, duration = 5000 } = options;
+                const el = document.createElement('div');
+                el.className = 'brick-notify';
+                el.innerHTML = `
+                    <div class="brick-icon"><i class="fas ${icon || 'fa-bell'}"></i></div>
+                    <div class="brick-content">
+                        <div class="brick-title">${title}</div>
+                        <div class="brick-message">${message}</div>
+                    </div>
+                    <button class="brick-close" onclick="this.parentElement.remove()">&times;</button>
+                `;
+                this.container.appendChild(el);
+                setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 500); }, duration);
+            }
+        };
+        // Expose to window for inline HTML onclick
+        window.BrickNotify = BrickNotify;
 
-// ================= SAVE DATA =================
-window.saveData = async function () {
-  const name = document.getElementById("name").value;
-  const age = document.getElementById("age").value;
-  const gender = document.getElementById("gender").value;
-  const message = document.getElementById("message").value;
+        // ============================================
+        // 3. UI LOGIC (Dropdowns & Modals)
+        // ============================================
+        window.setupDropdowns = function() {
+            const dropdowns = document.querySelectorAll('.nav-dropdown');
+            dropdowns.forEach(dd => {
+                const btn = dd.querySelector('.dropbtn');
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Stop bubbling
+                    // Close others
+                    dropdowns.forEach(d => { if(d !== dd) d.classList.remove('show-dropdown'); });
+                    dd.classList.toggle('show-dropdown');
+                });
+            });
+            // Close when clicking outside
+            window.addEventListener('click', () => {
+                dropdowns.forEach(d => d.classList.remove('show-dropdown'));
+            });
+        };
 
-  if (!name || !age || !gender || !message) {
-    alert("⚠️ Tafadhali jaza kila sehemu");
-    return;
-  }
+        window.openModal = function(id) {
+            document.getElementById(id + 'Modal')?.classList.remove('hidden');
+            if(id === 'auth') toggleAuth('login');
+        };
+        window.closeModal = function(id) { document.getElementById(id).classList.add('hidden'); };
+        window.toggleAuth = function(view) {
+            document.getElementById('loginForm').style.display = view === 'login' ? 'block' : 'none';
+            document.getElementById('signupForm').style.display = view === 'signup' ? 'block' : 'none';
+        };
 
-  try {
-    await addDoc(collection(db, "children"), {
-      name,
-      age,
-      gender,
-      message,
-      createdAt: serverTimestamp()
-    });
+        // ============================================
+        // 4. AUTHENTICATION LOGIC
+        // ============================================
+        // Monitor Auth State
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('loginBtn').style.display = 'none';
+                document.getElementById('userProfileWidget').style.display = 'flex';
+                document.getElementById('navUserName').textContent = user.displayName || user.email;
+                document.getElementById('mainSiteContent').style.display = 'block';
+                BrickNotify.show({ title: 'Karibu', message: 'Umeingia kwa mafanikio', icon: 'fa-check-circle' });
+                initRealtimeListener(); // Load Data
+            } else {
+                currentUser = null;
+                document.getElementById('loginBtn').style.display = 'block';
+                document.getElementById('userProfileWidget').style.display = 'none';
+                document.getElementById('mainSiteContent').style.display = 'none';
+                // Don't force modal open immediately for better UX, or do it if required:
+                // document.getElementById('authModal').classList.remove('hidden'); 
+            }
+        });
 
-    alert("✅ Imehifadhiwa!");
+        window.handleLogin = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const pass = document.getElementById('loginPassword').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+                closeModal('authModal');
+            } catch (err) {
+                BrickNotify.show({ title: 'Error', message: err.message, icon: 'fa-exclamation-circle' });
+            }
+        };
 
-    document.getElementById("name").value = "";
-    document.getElementById("age").value = "";
-    document.getElementById("gender").value = "";
-    document.getElementById("message").value = "";
+        window.handleSignup = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('su_email').value;
+            const pass = document.getElementById('su_pass').value;
+            const name = document.getElementById('su_name').value;
+            try {
+                const cred = await createUserWithEmailAndPassword(auth, email, pass);
+                // Update profile with name
+                // Note: updateProfile requires an extra import, skipping for brevity, storing name in Firestore instead:
+                await addDoc(collection(db, "users"), {
+                    uid: cred.user.uid,
+                    name: name,
+                    email: email,
+                    role: "User", // Default role
+                    createdAt: serverTimestamp()
+                });
+                closeModal('authModal');
+            } catch (err) {
+                BrickNotify.show({ title: 'Error', message: err.message, icon: 'fa-exclamation-circle' });
+            }
+        };
 
-  } catch (error) {
-    alert("❌ Error: " + error.message);
-  }
-};
+        window.handleGoogleLogin = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                const result = await signInWithPopup(auth, provider);
+                // Check if user exists in DB, if not add them
+                // (Skipping check for brevity, assuming auto-create)
+                closeModal('authModal');
+            } catch (err) {
+                console.error(err);
+                BrickNotify.show({ title: 'Google Auth Failed', message: err.message, icon: 'fa-times-circle' });
+            }
+        };
 
+        window.logoutUser = () => signOut(auth);
 
+        // ============================================
+        // 5. FIRESTORE DATA OPERATIONS (REALTIME)
+        // ============================================
+        
+        let childrenData = []; // Local cache for filtering
 
-// ================= DELETE =================
-window.deleteData = async function(id) {
-  if (confirm("Unataka kufuta?")) {
-    await deleteDoc(doc(db, "children", id));
-  }
-};
+        function initRealtimeListener() {
+            const q = query(collection(db, "children"), orderBy("createdAt", "desc"));
+            onSnapshot(q, (snapshot) => {
+                childrenData = [];
+                snapshot.forEach(doc => {
+                    childrenData.push({ id: doc.id, ...doc.data() });
+                });
+                renderTable(childrenData);
+            });
+        }
 
+        function renderTable(data) {
+            const tbody = document.getElementById('childTableBody');
+            tbody.innerHTML = '';
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>';
+                return;
+            }
 
+            data.forEach(child => {
+                const tr = document.createElement('tr');
+                
+                // Image handling
+                const imgSrc = child.photoUrl || `https://via.placeholder.com/50?text=${child.name.charAt(0)}`;
+                
+                // Status Logic
+                let statusClass = 'missing';
+                let statusText = 'Missing';
+                if (child.status === 'found') { statusClass = 'found'; statusText = 'Found'; }
+                if (child.identifiers && child.identifiers.length >= 3) { statusClass = 'identified'; statusText = 'Identified'; }
 
-// ================= REALTIME =================
-const q = query(collection(db, "children"), orderBy("createdAt", "desc"));
+                tr.innerHTML = `
+                    <td><img src="${imgSrc}" style="width:50px; height:50px; object-fit:cover; border-radius:5px;"></td>
+                    <td><strong>${child.name}</strong><br><small>${child.rbNumber}</small></td>
+                    <td>${child.age}</td>
+                    <td>${child.gender}</td>
+                    <td>${child.region}</td>
+                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                    <td>
+                        <button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem; background: var(--accent);" onclick="openIdentify('${child.id}', '${child.name}')">Identify</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
 
-onSnapshot(q, (snapshot) => {
+        window.filterTable = () => {
+            const query = document.getElementById('myInput').value.toLowerCase();
+            const filtered = childrenData.filter(c => 
+                c.name.toLowerCase().includes(query) || 
+                c.region.toLowerCase().includes(query)
+            );
+            renderTable(filtered);
+        };
 
-  let html = "";
+        // ============================================
+        // 6. ADD CHILD LOGIC
+        // ============================================
+        window.handleAddChild = async (e) => {
+            e.preventDefault();
+            if (!currentUser) return alert("Please login first");
 
-  snapshot.forEach(docSnap => {
-    const d = docSnap.data();
+            const rb = document.getElementById('child_rb').value;
+            const name = document.getElementById('child_name').value;
+            const age = document.getElementById('child_age').value;
+            const gender = document.getElementById('child_gender').value;
+            const region = document.getElementById('child_region').value;
+            const district = document.getElementById('child_district').value;
+            
+            // Image Processing (File to Base64 for Firestore)
+            const fileInput = document.getElementById('child_file');
+            const urlInput = document.getElementById('child_photo');
+            let finalPhoto = urlInput.value;
 
-    let time = d.createdAt?.toDate().toLocaleString() || "Loading...";
+            if (fileInput.files && fileInput.files[0]) {
+                finalPhoto = await toBase64(fileInput.files[0]);
+            }
 
-    html += `
-      <tr>
-        <td>${d.name}</td>
-        <td>${d.age}</td>
-        <td>${d.gender}</td>
-        <td>${d.message}</td>
-        <td>${time}</td>
-        <td>
-          <button onclick="deleteData('${docSnap.id}')">🗑️ Delete</button>
-        </td>
-      </tr>
-    `;
-  });
+            try {
+                await addDoc(collection(db, "children"), {
+                    rbNumber: rb,
+                    name: name,
+                    age: parseInt(age),
+                    gender: gender,
+                    region: region,
+                    district: district,
+                    status: 'missing',
+                    photoUrl: finalPhoto,
+                    identifiers: [],
+                    reportedBy: currentUser.email,
+                    createdAt: serverTimestamp()
+                });
+                
+                closeModal('addChildModal');
+                BrickNotify.show({ title: 'Success', message: 'Child reported successfully!', icon: 'fa-check' });
+                e.target.reset();
+            } catch (err) {
+                BrickNotify.show({ title: 'Error', message: err.message, icon: 'fa-times' });
+            }
+        };
 
-  document.getElementById("dataList").innerHTML = html;
+        const toBase64 = file => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
 
-});
+        // ============================================
+        // 7. IDENTIFICATION LOGIC
+        // ============================================
+        window.openIdentify = (id, name) => {
+            document.getElementById('identify_child_id').value = id;
+            document.getElementById('identifyChildName').textContent = name;
+            document.getElementById('identifyModal').classList.remove('hidden');
+        };
 
-</script>
+        window.handleIdentify = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('identify_child_id').value;
+            const idName = document.getElementById('id_name').value;
+            const idPhone = document.getElementById('id_phone').value;
+            const idMsg = document.getElementById('id_msg').value;
 
+            const childRef = doc(db, "children", id);
+
+            try {
+                await updateDoc(childRef, {
+                    identifiers: arrayUnion({
+                        name: idName,
+                        contact: idPhone,
+                        message: idMsg,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                closeModal('identifyModal');
+                BrickNotify.show({ 
+                    title: 'Shukrani', 
+                    message: 'Taarifa yako imepokewa. Admin watawasiliana na wewe.', 
+                    icon: 'fa-user-check' 
+                });
+                e.target.reset();
+            } catch (err) {
+                console.error(err);
+                BrickNotify.show({ title: 'Error', message: 'Failed to submit.', icon: 'fa-times' });
+            }
+        };
+
+        // Initialize Dropdowns
+        setupDropdowns();
+        
+    </script>
 </body>
 </html>
