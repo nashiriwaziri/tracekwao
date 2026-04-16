@@ -374,7 +374,7 @@
             background: linear-gradient(135deg, var(--primary) 0%, #0056b3 100%);
             padding: 2.5rem; width: 40%; border-radius: 20px 0 0 20px;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            border-right: 1px solid #dee2e6; color: white;
+            border-right:1px solid #dee2e6; color: white;
         }
        
         .auth-header-top { font-size: 0.85rem; letter-spacing: 1px; color: rgba(255,255,255,0.9); margin-bottom: 5px; text-transform: uppercase; font-weight: 600; text-align: center; }
@@ -610,7 +610,7 @@
     <div id="mainSiteContent" style="display: none;">
         <header class="hero">
             <h1 data-translate="hero_title">When a child goes missing, Every Minute Matters.</h1>
-            <p data-translate="hero_subtitle">NCRS is a system dedicated to protecting missing children by quickly reuniting them with their families after being found and reported to the police.</p>
+            <p data-translate="hero_subtitle">NCRS is a system dedicated to protecting missing children by quickly reuniting them with their families after being found and reported to police.</p>
             <div class="hero-buttons">
                 <a href="#search" class="btn-primary"><i class="fas fa-search"></i> <span data-translate="btn_find_child">Find Child</span></a>
                 <button onclick="openAddChildModal()" class="btn-secondary"><i class="fas fa-plus-circle"></i> <span data-translate="btn_report_new">Report New Child</span></button>
@@ -1123,7 +1123,7 @@
         const translations = {
             en: {
                 hotline: "Hotline", nav_home: "Home", nav_search: "Find Child", nav_edu: "Education", nav_join: "Join Us", btn_login: "Sign In", btn_logout: "Sign Out", btn_report: "User Report", btn_get_report: "Get Report",
-                hero_title: "When a child goes missing, Every Minute Matters.", hero_subtitle: "NCRS is a system dedicated to protecting missing children by quickly reuniting them with their families after being found and reported to the police.",
+                hero_title: "When a child goes missing, Every Minute Matters.", hero_subtitle: "NCRS is a system dedicated to protecting missing children by quickly reuniting them with their families after being found and reported to police.",
                 btn_find_child: "Find Child", btn_report_new: "Report New Child", search_title: "Search for Missing Child", search_placeholder: "Type child's name...",
                 th_police_rb: "Police RB", th_photo: "Photo", th_name: "Name", th_age: "Age", th_gender: "Gender", th_region: "Region", th_district: "District", th_ward: "Ward", th_location: "Location", th_status: "Status", th_remarks: "Remarks", th_actions: "Actions", th_identify: "Identify",
                 status_missing: "Missing", status_found: "Found", status_identified: "Identified", footer_rights: "All Rights Reserved.",
@@ -1147,6 +1147,10 @@
             }
         };
        
+        // =============================================
+        // ===== UTILITY FUNCTIONS =====
+        // =============================================
+        
         function changeLanguage(lang) {
             currentLang = lang; localStorage.setItem('lang', lang);
             document.getElementById('btn-en').classList.toggle('active', lang === 'en');
@@ -1154,7 +1158,7 @@
             document.documentElement.lang = lang;
             document.querySelectorAll('[data-translate]').forEach(el => { const k = el.getAttribute('data-translate'); if (translations[lang][k]) el.innerHTML = translations[lang][k]; });
             document.querySelectorAll('[data-translate-placeholder]').forEach(el => { const k = el.getAttribute('data-translate-placeholder'); if (translations[lang][k]) el.placeholder = translations[lang][k]; });
-            renderChildrenTable(document.getElementById('myInput').value);
+            window.renderChildrenTable(document.getElementById('myInput').value);
         }
 
         // =============================================
@@ -1213,81 +1217,6 @@
         }
        
         if (!localStorage.getItem('notificationsData')) { localStorage.setItem('notificationsData', JSON.stringify([])); }
-
-        window.onload = function() {
-            // 1. Ensure the specific Administrator credentials exist
-            ensureSuperAdmin();
-           
-            BrickNotify.init();
-            changeLanguage(currentLang);
-            const u = sessionStorage.getItem('currentUser');
-            if (u) showSite(JSON.parse(u)); else enforceLogin();
-            setupDropdowns();
-            // Google initialization is now handled automatically by the HTML tag (g_id_onload)
-        };
-
-        // =============================================
-        // ===== GOOGLE AUTH (UPDATED TO MATCH SNIPPET) =====
-        // =============================================
-       
-        // This function name matches the 'data-callback="handleCredentialResponse"' in your HTML snippet
-        window.handleCredentialResponse = async function(response) {
-            console.log("Encoded JWT ID token: " + response.credential);
-           
-            // Decode and process user
-            const responsePayload = decodeJwtResponse(response.credential);
-            const googleUser = {
-                id: 'google_' + responsePayload.sub,
-                fname: responsePayload.given_name,
-                lname: responsePayload.family_name,
-                email: responsePayload.email,
-                role: "User",
-                photoUrl: responsePayload.picture,
-                password: null
-            };
-           
-            // Check if user exists, if not register them
-            let users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-            const existingIndex = users.findIndex(u => u.email === googleUser.email);
-           
-            if (existingIndex === -1) {
-                users.push(googleUser);
-                localStorage.setItem('registeredUsers', JSON.stringify(users));
-                
-                // Firebase Save
-                try {
-                    await addDoc(collection(db, "users"), {
-                        name: googleUser.fname + " " + googleUser.lname,
-                        email: googleUser.email,
-                        createdAt: serverTimestamp()
-                    });
-                } catch(e) { console.error("Firebase Error:", e); }
-            } else {
-                if(!users[existingIndex].photoUrl) {
-                    users[existingIndex].photoUrl = googleUser.photoUrl;
-                    localStorage.setItem('registeredUsers', JSON.stringify(users));
-                }
-            }
-           
-            // Login User
-            const userToLogin = existingIndex !== -1 ? users[existingIndex] : googleUser;
-            sessionStorage.setItem('currentUser', JSON.stringify(userToLogin));
-           
-            // Alert as requested in snippet (plus app functionality)
-            alert("Login Successful!");
-           
-            showSite(userToLogin);
-            closeModal();
-        }
-
-        function decodeJwtResponse(token) {
-            let base64Url = token.split('.')[1];
-            let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            let jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-            return JSON.parse(jsonPayload);
-        }
 
         // =============================================
         // ===== UI & NAV LOGIC =====
@@ -1354,8 +1283,8 @@
                 document.getElementById('reportDropdown').classList.add('show-btn');
                 document.getElementById('navDashboardLink').style.display = 'block';
                 document.getElementById('messagesBtn').style.display = 'inline-flex';
-                updateAdminBadge();
-                updateMessagesBadge();
+                window.updateAdminBadge();
+                window.updateMessagesBadge();
             } else {
                 document.getElementById('reportBtn').style.display = 'none';
                 document.getElementById('actionHeader').style.display = 'none';
@@ -1363,7 +1292,7 @@
                 document.getElementById('navDashboardLink').style.display = 'none';
                 document.getElementById('messagesBtn').style.display = 'none';
             }
-            renderChildrenTable();
+            window.renderChildrenTable();
         }
 
         function generateInitialsAvatar(initials) {
@@ -1412,7 +1341,7 @@
         }
 
         // =============================================
-        // ===== AUTH LOGIC (ENHANCED WITH FIREBASE) =====
+        // ===== AUTH LOGIC =====
         // =============================================
         function openModal(t) { document.getElementById('authModal').classList.remove('hidden'); document.getElementById('closeModalBtn').classList.remove('forced'); toggleAuthForm(t); }
         function closeModal() { if(sessionStorage.getItem('currentUser')) document.getElementById('authModal').classList.add('hidden'); }
@@ -1530,6 +1459,62 @@
         function closeContactSupport() { document.getElementById('contactModal').classList.add('hidden'); }
 
         // =============================================
+        // ===== GOOGLE AUTH =====
+        // =============================================
+        window.handleCredentialResponse = async function(response) {
+            console.log("Encoded JWT ID token: " + response.credential);
+           
+            const responsePayload = decodeJwtResponse(response.credential);
+            const googleUser = {
+                id: 'google_' + responsePayload.sub,
+                fname: responsePayload.given_name,
+                lname: responsePayload.family_name,
+                email: responsePayload.email,
+                role: "User",
+                photoUrl: responsePayload.picture,
+                password: null
+            };
+           
+            let users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+            const existingIndex = users.findIndex(u => u.email === googleUser.email);
+           
+            if (existingIndex === -1) {
+                users.push(googleUser);
+                localStorage.setItem('registeredUsers', JSON.stringify(users));
+                
+                try {
+                    await addDoc(collection(db, "users"), {
+                        name: googleUser.fname + " " + googleUser.lname,
+                        email: googleUser.email,
+                        createdAt: serverTimestamp()
+                    });
+                } catch(e) { console.error("Firebase Error:", e); }
+            } else {
+                if(!users[existingIndex].photoUrl) {
+                    users[existingIndex].photoUrl = googleUser.photoUrl;
+                    localStorage.setItem('registeredUsers', JSON.stringify(users));
+                }
+            }
+           
+            const userToLogin = existingIndex !== -1 ? users[existingIndex] : googleUser;
+            sessionStorage.setItem('currentUser', JSON.stringify(userToLogin));
+           
+            alert("Login Successful!");
+           
+            showSite(userToLogin);
+            closeModal();
+        }
+
+        function decodeJwtResponse(token) {
+            let base64Url = token.split('.')[1];
+            let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            let jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        }
+
+        // =============================================
         // ===== CHILDREN TABLE RENDERING =====
         // =============================================
         function renderChildrenTable(query = "") {
@@ -1560,7 +1545,6 @@
                     if(count >= 3) {
                         identifyBtnHtml = `<button class="btn-xs" disabled style="background:#ffc107; color:black; cursor:not-allowed;">Identified (3/3)</button>`;
                     } else {
-                        // FOR NON-ADMIN: Do NOT show the count in the button text
                         if (isAdmin) {
                             identifyBtnHtml = `<button class="btn-xs btn-notify-admin" onclick="openNotificationModal(${c.id})"><i class="fas fa-bell"></i> Identify (${count}/3)</button>`;
                         } else {
@@ -1604,7 +1588,6 @@
             };
             let children = JSON.parse(localStorage.getItem('childrenData')) || []; children.unshift(newChild); localStorage.setItem('childrenData', JSON.stringify(children));
             
-            // FIREBASE: Save Child
             try {
                 await addDoc(collection(db, "children"), {
                     name: newChild.name,
@@ -1641,7 +1624,6 @@
                 const viewSection = document.getElementById('viewIdentifiersSection');
                 const viewList = document.getElementById('viewIdentifierList');
                
-                // ONLY ADMIN can see identifiers list
                 if(isAdmin && currentViewChild.identifiers && currentViewChild.identifiers.length > 0) {
                     viewSection.style.display = 'block';
                     viewList.innerHTML = "";
@@ -1742,9 +1724,7 @@
         }
 
         // =============================================
-        // ===== IDENTIFICATION / NOTIFICATION (ENHANCED) =====
-        // ===== PRIVACY: Identifiers CANNOT see others' records
-        // ===== ONLY identifier details go to Admin Messages
+        // ===== IDENTIFICATION / NOTIFICATION =====
         // =============================================
         function openNotificationModal(childId) {
             let children = JSON.parse(localStorage.getItem('childrenData')) || [];
@@ -1762,13 +1742,11 @@
                 const user = JSON.parse(sessionStorage.getItem('currentUser'));
                 const isAdmin = user && user.role === 'Administrator';
 
-                // PRIVACY: Show different UI for Admin vs Regular Identifier
                 const privacyShield = document.getElementById('privacyShieldBlock');
                 const adminInfo = document.getElementById('adminIdentifyInfo');
                 const genericInfo = document.getElementById('genericIdentifyInfo');
 
                 if (isAdmin) {
-                    // ADMIN: Can see count and full status
                     privacyShield.style.display = 'none';
                     adminInfo.style.display = 'block';
                     genericInfo.style.display = 'none';
@@ -1777,7 +1755,6 @@
                     document.getElementById('identifyCounter').innerText = `Identifications: ${count}/3`;
                     document.getElementById('notifyChildStatus').innerText = child.status;
                 } else {
-                    // NON-ADMIN: CANNOT see count or other identifiers' info
                     privacyShield.style.display = 'block';
                     adminInfo.style.display = 'none';
                     genericInfo.style.display = 'block';
@@ -1810,7 +1787,6 @@
                 const identifierContact = document.getElementById('notify_contact').value;
                 const identifierMessage = document.getElementById('notify_message').value;
 
-                // ONLY identifier's OWN details are saved — nothing from other identifiers
                 const newIdentification = {
                     name: identifierName,
                     contact: identifierContact,
@@ -1821,7 +1797,6 @@
 
                 child.identifiers.push(newIdentification);
 
-                // Check if child is now fully identified
                 let becameIdentified = false;
                 if(child.identifiers.length >= 3) {
                     child.status = "identified";
@@ -1831,7 +1806,6 @@
                 children[childIndex] = child;
                 localStorage.setItem('childrenData', JSON.stringify(children));
 
-                // FIREBASE: Save Report/Identifier Info
                 try {
                     await addDoc(collection(db, "reports"), {
                         name: child.name,
@@ -1849,7 +1823,6 @@
                 const isAdmin = user && user.role === 'Administrator';
 
                 if (isAdmin) {
-                    // Admin gets the brick notification that their identification was saved
                     BrickNotify.identifierSent(child.name);
                     if (becameIdentified) {
                         setTimeout(() => {
@@ -1857,16 +1830,12 @@
                         }, 1500);
                     }
                 } else {
-                    // Regular identifier gets privacy-focused brick notification
                     BrickNotify.identifierSent(child.name);
-                    // Show privacy warning reinforcing they cannot see others
                     setTimeout(() => {
                         BrickNotify.privacyWarning();
                     }, 2500);
                 }
 
-                // If admin is logged in somewhere, notify them too
-                // (In a real app this would be server-push; here we just update badges)
                 updateAdminBadge();
                 updateMessagesBadge();
                 renderChildrenTable();
@@ -1883,7 +1852,6 @@
             children.forEach(child => {
                 if(child.identifiers && child.identifiers.length > 0){
                     hasRecords = true;
-                    // ADMIN ONLY: Can see all identifier details
                     child.identifiers.forEach(id => {
                         t.innerHTML += `<tr><td><strong>${child.name}</strong></td><td>${id.name}</td><td>${id.contact}</td><td>${id.message}</td><td>${id.timestamp}</td></tr>`;
                     });
@@ -1895,9 +1863,65 @@
         function closeNotificationReportModal() { document.getElementById('notificationReportModal').classList.add('hidden'); }
 
         // =============================================
-        // ===== MESSAGES BOX (ADMIN ONLY)
-        // ===== Shows ONLY Identifier Details (name, contact, message)
-        // ===== No cross-identifier visibility
+        // ===== IMAGE EDIT MODAL =====
+        // =============================================
+        function openImageEditModal(id) {
+            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            const child = children.find(c => c.id === id);
+            if(child) {
+                document.getElementById('edit_child_id').value = id;
+                document.getElementById('edit_preview_img').src = child.img || 'https://via.placeholder.com/150';
+                document.getElementById('imageEditModal').classList.remove('hidden');
+            }
+        }
+        function closeImageEditModal() { document.getElementById('imageEditModal').classList.add('hidden'); }
+        function previewEditImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('edit_preview_img').src = e.target.result;
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        async function saveImageChanges() {
+            const id = document.getElementById('edit_child_id').value;
+            const input = document.getElementById('edit_image_input');
+            if (!id) return;
+            
+            let children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            const childIndex = children.findIndex(c => c.id == id);
+            
+            if (childIndex !== -1 && input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    children[childIndex].img = e.target.result;
+                    localStorage.setItem('childrenData', JSON.stringify(children));
+                    renderChildrenTable();
+                    BrickNotify.success("Image updated successfully.");
+                    closeImageEditModal();
+                };
+                reader.readAsDataURL(input.files[0]);
+            } else if (childIndex !== -1) {
+                 BrickNotify.warning("Please select a new image first.");
+            }
+        }
+        function clearImage() {
+            const id = document.getElementById('edit_child_id').value;
+            if(!confirm("Are you sure you want to remove this image?")) return;
+            let children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            const childIndex = children.findIndex(c => c.id == id);
+            if(childIndex !== -1) {
+                children[childIndex].img = null;
+                localStorage.setItem('childrenData', JSON.stringify(children));
+                document.getElementById('edit_preview_img').src = 'https://via.placeholder.com/150';
+                renderChildrenTable();
+                BrickNotify.success("Image removed.");
+            }
+        }
+
+        // =============================================
+        // ===== MESSAGES BOX =====
         // =============================================
         function openMessagesBox() {
             const user = JSON.parse(sessionStorage.getItem('currentUser'));
@@ -1913,7 +1937,6 @@
                 if(child.identifiers && child.identifiers.length > 0) {
                     child.identifiers.forEach((id, index) => {
                         messagesFound = true;
-                        // ONLY identifier details are shown — no cross-identifier data
                         const replyInfo = id.adminReply
                             ? `<div style="margin-top:6px;padding:5px 8px;background:#eef;border-radius:4px;font-size:0.78rem;"><strong>Jibu la Msimamizi:</strong> ${id.adminReply}</div>`
                             : '';
@@ -1982,7 +2005,6 @@
             const childIndex = children.findIndex(c => c.id === childId);
             if(childIndex !== -1) {
                 children[childIndex].identifiers.splice(identifierIndex, 1);
-                // If child was "identified" and now has < 3, revert status
                 if(children[childIndex].status === "identified" && children[childIndex].identifiers.length < 3) {
                     children[childIndex].status = "missing";
                 }
@@ -2129,6 +2151,85 @@
             for(let i = 1; i <= pageCount; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150); doc.text('Page ' + i + ' of ' + pageCount, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: 'center' }); }
             doc.save('Identifiers_Registry.pdf');
         }
+
+        // =============================================
+        // ===== GLOBAL SCOPE ATTACHMENTS =====
+        // =============================================
+        // Attach all functions to window to ensure onclick handlers work
+        window.changeLanguage = changeLanguage;
+        window.ensureSuperAdmin = ensureSuperAdmin;
+        window.BrickNotify = BrickNotify;
+        window.setupDropdowns = setupDropdowns;
+        window.toggleUserMenu = toggleUserMenu;
+        window.enforceLogin = enforceLogin;
+        window.showSite = showSite;
+        window.generateInitialsAvatar = generateInitialsAvatar;
+        window.updateAdminBadge = updateAdminBadge;
+        window.updateMessagesBadge = updateMessagesBadge;
+        window.logoutUser = logoutUser;
+        window.openModal = openModal;
+        window.closeModal = closeModal;
+        window.toggleAuthForm = toggleAuthForm;
+        window.toggleForgotForm = toggleForgotForm;
+        window.togglePass = togglePass;
+        window.handleSignup = handleSignup;
+        window.handleLogin = handleLogin;
+        window.handleForgotCheck = handleForgotCheck;
+        window.handlePasswordReset = handlePasswordReset;
+        window.handleContactSupport = handleContactSupport;
+        window.openContactSupport = openContactSupport;
+        window.closeContactSupport = closeContactSupport;
+        window.handleCredentialResponse = window.handleCredentialResponse;
+        window.decodeJwtResponse = decodeJwtResponse;
+        window.renderChildrenTable = renderChildrenTable;
+        window.searchTable = searchTable;
+        window.openAddChildModal = openAddChildModal;
+        window.closeAddChildModal = closeAddChildModal;
+        window.handleAddChild = handleAddChild;
+        window.saveChildData = saveChildData;
+        window.deleteChild = deleteChild;
+        window.openViewChildModal = openViewChildModal;
+        window.closeViewChildModal = closeViewChildModal;
+        window.saveAdminReply = saveAdminReply;
+        window.setPosterRatio = setPosterRatio;
+        window.drawChildPoster = drawChildPoster;
+        window.downloadPoster = downloadPoster;
+        window.openNotificationModal = openNotificationModal;
+        window.closeNotificationModal = closeNotificationModal;
+        window.handleNotification = handleNotification;
+        window.showNotificationReport = showNotificationReport;
+        window.closeNotificationReportModal = closeNotificationReportModal;
+        window.openImageEditModal = openImageEditModal;
+        window.closeImageEditModal = closeImageEditModal;
+        window.previewEditImage = previewEditImage;
+        window.saveImageChanges = saveImageChanges;
+        window.clearImage = clearImage;
+        window.openMessagesBox = openMessagesBox;
+        window.closeMessagesBox = closeMessagesBox;
+        window.initiateCall = initiateCall;
+        window.copyContactNumber = copyContactNumber;
+        window.deleteMessage = deleteMessage;
+        window.showUserReport = showUserReport;
+        window.closeReportModal = closeReportModal;
+        window.deleteUser = deleteUser;
+        window.showDashboard = showDashboard;
+        window.closeDashboard = closeDashboard;
+        window.downloadChart = downloadChart;
+        window.exportPDF = exportPDF;
+        window.exportExcel = exportExcel;
+        window.exportPPT = exportPPT;
+        window.exportWord = exportWord;
+        window.printReport = printReport;
+        window.exportIdentifiersPDF = exportIdentifiersPDF;
+
+        window.onload = function() {
+            ensureSuperAdmin();
+            BrickNotify.init();
+            changeLanguage(currentLang);
+            const u = sessionStorage.getItem('currentUser');
+            if (u) showSite(JSON.parse(u)); else enforceLogin();
+            setupDropdowns();
+        };
 
     </script>
 </body>
