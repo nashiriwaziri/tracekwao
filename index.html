@@ -538,7 +538,7 @@
          * Clean, modular structure.
          */
         
-        // --- TRANSLATIONS ---
+        // --- CONFIG & TRANSLATIONS ---
         const I18N = {
             en: {
                 nav_home: "Home", nav_search: "Find Child", nav_edu: "Education",
@@ -568,7 +568,7 @@
             }
         };
 
-        // --- MOCK DATABASE (LocalStorage Wrapper) ---
+        // --- DATABASE LAYER ---
         const DB = {
             init() {
                 if (!localStorage.getItem('ncrs_children')) {
@@ -593,7 +593,7 @@
             }
         };
 
-        // --- NOTIFICATION SYSTEM ---
+        // --- UTILITIES ---
         const Notify = {
             show(msg, title = 'ARIFA', type = 'info') {
                 const container = document.getElementById('notifyContainer');
@@ -621,7 +621,6 @@
             }
         };
 
-        // --- CHARTS MANAGER ---
         const Charts = {
             instances: {},
             render() {
@@ -660,7 +659,7 @@
             }
         };
 
-        // --- MAIN APP LOGIC ---
+        // --- MAIN APP CONTROLLER ---
         const app = {
             state: {
                 lang: 'sw',
@@ -703,7 +702,7 @@
                 });
             },
 
-            // --- UI RENDERING ---
+            // --- UI RENDERERS ---
             renderAuthUI() {
                 const container = document.getElementById('authContainer');
                 const user = this.state.user;
@@ -735,6 +734,7 @@
             renderTable(query = "") {
                 const tbody = document.getElementById('tableBody');
                 let children = DB.getChildren();
+                const isAdmin = this.state.user && this.state.user.role === 'admin';
                 
                 if (query) {
                     const lowerQ = query.toLowerCase();
@@ -754,18 +754,18 @@
                     
                     // Identify Logic
                     let idBtn = `<button class="btn btn-sm btn-primary" onclick="app.handlers.identifyOpen(${c.id})">Identify</button>`;
-                    if (this.state.user && this.state.user.role === 'admin') {
+                    if (isAdmin) {
                          idBtn = `<span style="font-size:0.8rem; color:var(--text-light)">${c.identifiers ? c.identifiers.length : 0} Identifiers</span>`;
                     }
                     if (c.identifiers && c.identifiers.length >= 3) {
                         idBtn = `<span class="status-badge status-identified">Identified</span>`;
                     }
 
-                    // Admin Delete
-                    let actions = '';
-                    if (this.state.user && this.state.user.role === 'admin') {
-                        actions = `<button class="btn btn-sm" style="color:red; background:none;" onclick="app.handlers.deleteChild(${c.id})"><i class="fas fa-trash"></i></button>`;
-                    }
+                    // Admin Actions
+                    const actions = isAdmin 
+                        ? `<button class="btn btn-sm" style="color:red; background:none;" onclick="app.handlers.deleteChild(${c.id})"><i class="fas fa-trash"></i></button>` 
+                        : '';
+                    const actionClass = isAdmin ? '' : 'hidden';
 
                     tbody.innerHTML += `
                         <tr>
@@ -777,15 +777,10 @@
                             <td>${c.region}</td>
                             <td><span class="status-badge ${statusClass}">${c.status}</span></td>
                             <td>${idBtn}</td>
-                            <td class="actions-col hidden">${actions}</td>
+                            <td class="actions-col ${actionClass}">${actions}</td>
                         </tr>
                     `;
                 });
-
-                // Re-apply admin visibility for action column
-                if (this.state.user && this.state.user.role === 'admin') {
-                    document.querySelectorAll('.actions-col').forEach(el => el.classList.remove('hidden'));
-                }
             },
 
             searchTable() {
@@ -797,7 +792,7 @@
                 window.location.reload();
             },
 
-            // --- MODALS SYSTEM ---
+            // --- MODAL SYSTEM ---
             modals: {
                 open(id, data = null) {
                     document.querySelectorAll('.modal-overlay').forEach(el => el.classList.remove('active'));
@@ -879,7 +874,7 @@
                 }
             },
 
-            // --- AUTHENTICATION ---
+            // --- AUTHENTICATION HANDLERS ---
             auth: {
                 login(e) {
                     e.preventDefault();
@@ -943,7 +938,7 @@
                 }
             },
 
-            // --- DATA HANDLERS ---
+            // --- EVENT & DATA HANDLERS ---
             handlers: {
                 addChild(e) {
                     e.preventDefault();
