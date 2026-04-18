@@ -1255,7 +1255,24 @@
         // =============================================
         const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
 
-        let currentLang = localStorage.getItem('lang') || 'sw';
+        import { getDoc, doc } from "firebase/firestore";
+
+let currentLang = "sw"; // default
+
+async function loadLanguage() {
+  const snap = await getDoc(doc(db, "appData", "settings"));
+
+  if (snap.exists() && snap.data().lang) {
+    currentLang = snap.data().lang;
+  } else {
+    currentLang = "sw";
+  }
+
+  console.log("Current language:", currentLang);
+}
+
+loadLanguage();
+
         const translations = {
             en: {
                 hotline: "Hotline", nav_home: "Home", nav_search: "Find Child", nav_edu: "Education", nav_join: "Join Us", btn_login: "Sign In", btn_logout: "Sign Out", btn_report: "User Report", btn_get_report: "Get Report",
@@ -1284,7 +1301,14 @@
         };
        
         function changeLanguage(lang) {
-            currentLang = lang; localStorage.setItem('lang', lang);
+          import { doc, setDoc } from "firebase/firestore";
+
+currentLang = lang;
+
+await setDoc(doc(db, "appData", "settings"), {
+  lang: lang
+});
+
             document.getElementById('btn-en').classList.toggle('active', lang === 'en');
             document.getElementById('btn-sw').classList.toggle('active', lang === 'sw');
             document.documentElement.lang = lang;
@@ -1297,7 +1321,18 @@
         // ===== ADMINISTRATOR LOGIN OVERRIDE LOGIC =====
         // =============================================
         function ensureSuperAdmin() {
-            let users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+           import { getDoc, doc } from "firebase/firestore";
+
+let users = [];
+
+const snap = await getDoc(doc(db, "appData", "registeredUsers"));
+
+if (snap.exists()) {
+  users = snap.data().users || [];
+} else {
+  users = [];
+}
+
             const targetEmail = "nashiriwaziri29@gmail.com";
             const targetPassword = "WAZIRI2015";
            
@@ -1328,29 +1363,68 @@
 })          
             }
            
-            localStorage.setItem('registeredUsers', JSON.stringify(users));
+            import { doc, setDoc } from "firebase/firestore";
+
+await setDoc(doc(db, "appData", "registeredUsers"), {
+  users: users
+});
+
             console.log("Super Administrator access ensured.");
         }
         // =============================================
         // ===== DATA INITIALIZATION =====
         // =============================================
-        if (!localStorage.getItem('childrenData')) {
+        import { getDoc, doc } from "firebase/firestore";
+
+const snap = await getDoc(doc(db, "appData", "childrenData"));
+
+if (!snap.exists()) {
+  // hakuna data
+}
+
             const sampleChildren = [
                 { id: 1, policeRb: "RB/DSM/001/23", name: "Alice Johnson", age: 12, gender: "Kike", region: "Dar es Salaam", district: "Ilala", ward: "Kisutu", location: "Msimbazi", status: "missing", img: "https://via.placeholder.com/150", remarks: "Red dress.", createdAt: Date.now() - 3600000, identifiers: [] },
                 { id: 2, policeRb: "RB/DSM/002/23", name: "Bob Smith", age: 16, gender: "Kiume", region: "Dar es Salaam", district: "Kinondoni", ward: "Mwenge", location: "Bus Stand", status: "found", img: "https://via.placeholder.com/150", remarks: "Safe.", createdAt: Date.now() - 86400000 * 2, identifiers: [] },
             ];
-            localStorage.setItem('childrenData', JSON.stringify(sampleChildren));
+            import { doc, setDoc } from "firebase/firestore";
+
+await setDoc(doc(db, "appData", "childrenData"), {
+  children: sampleChildren
+});
+
         }
 
-        if (!localStorage.getItem('registeredUsers')) {
+        import { getDoc, doc } from "firebase/firestore";
+
+const snap = await getDoc(doc(db, "appData", "registeredUsers"));
+
+if (!snap.exists()) {
+  // hakuna data
+}
+
             const defaultUsers = [
                 { id: 1, fname: "Admin", lname: "One", email: "admin", phone: "000", role: "Administrator", password: "admin", photoUrl: null },
                 { id: 2, fname: "Admin", lname: "Two", email: "admin2", phone: "000", role: "Administrator", password: "admin2", photoUrl: null }
             ];
-            localStorage.setItem('registeredUsers', JSON.stringify(defaultUsers));
+           import { doc, setDoc } from "firebase/firestore";
+
+await setDoc(doc(db, "appData", "registeredUsers"), {
+  users: defaultUsers
+});
+
         }
        
-        if (!localStorage.getItem('notificationsData')) { localStorage.setItem('notificationsData', JSON.stringify([])); }
+       import { getDoc, setDoc, doc } from "firebase/firestore";
+
+const ref = doc(db, "appData", "notificationsData");
+const snap = await getDoc(ref);
+
+if (!snap.exists()) {
+  await setDoc(ref, {
+    notifications: []
+  });
+}
+
 
         window.onload = function() {
             // 1. Ensure the specific Administrator credentials exist
@@ -1387,22 +1461,51 @@
             };
            
             // Check if user exists, if not register them
-            let users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+            import { getDoc, doc } from "firebase/firestore";
+
+let users = [];
+
+const ref = doc(db, "appData", "registeredUsers");
+const snap = await getDoc(ref);
+
+if (snap.exists()) {
+  users = snap.data().users || [];
+} else {
+  users = [];
+}
+
             const existingIndex = users.findIndex(u => u.email === googleUser.email);
            
             if (existingIndex === -1) {
                 users.push(googleUser);
-                localStorage.setItem('registeredUsers', JSON.stringify(users));
+                import { doc, setDoc } from "firebase/firestore";
+
+await setDoc(doc(db, "appData", "registeredUsers"), {
+  users: users
+});
+
             } else {
                 if(!users[existingIndex].photoUrl) {
                     users[existingIndex].photoUrl = googleUser.photoUrl;
-                    localStorage.setItem('registeredUsers', JSON.stringify(users));
+                    import { doc, setDoc } from "firebase/firestore";
+
+await setDoc(doc(db, "appData", "registeredUsers"), {
+  users: users
+});
+
                 }
             }
            
             // Login User
-            const userToLogin = existingIndex !== -1 ? users[existingIndex] : googleUser;
-            sessionStorage.setItem('currentUser', JSON.stringify(userToLogin));
+            import { doc, setDoc } from "firebase/firestore";
+
+const userToLogin = existingIndex !== -1 ? users[existingIndex] : googleUser;
+
+await setDoc(doc(db, "sessions", "currentUser"), {
+  user: userToLogin,
+  loggedInAt: Date.now()
+});
+
            
             // Alert as requested in snippet (plus app functionality)
             alert("Login Successful!");
@@ -1444,18 +1547,37 @@
         function toggleUserMenu() { document.getElementById('userDropdownMenu').classList.toggle('show'); }
 
         function enforceLogin() {
-            document.getElementById('authModal').classList.remove('hidden');
-            document.getElementById('mainSiteContent').style.display = 'none';
-            document.getElementById('closeModalBtn').classList.add('forced');
-            document.getElementById('loginBtn').style.display = 'block';
-            document.getElementById('logoutBtn').style.display = 'none';
-            document.getElementById('reportBtn').style.display = 'none';
-            document.getElementById('actionHeader').style.display = 'none';
-            document.getElementById('reportDropdown').classList.remove('show-btn');
-            document.getElementById('dashboardBtn').style.display = 'none';
-            document.getElementById('contactSupportBtn').style.display = 'none';
-            document.getElementById('userProfileWidget').style.display = 'none';
-            document.getElementById('messagesBtn').style.display = 'none';
+    const hide = (id) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    };
+
+    const show = (id, value = 'block') => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = value;
+    };
+
+    const el = document.getElementById('authModal');
+    if (el) el.classList.remove('hidden');
+
+    hide('mainSiteContent');
+    hide('logoutBtn');
+    hide('reportBtn');
+    hide('actionHeader');
+    hide('dashboardBtn');
+    hide('contactSupportBtn');
+    hide('userProfileWidget');
+    hide('messagesBtn');
+
+    show('loginBtn');
+    
+    const closeBtn = document.getElementById('closeModalBtn');
+    if (closeBtn) closeBtn.classList.add('forced');
+
+    const dropdown = document.getElementById('reportDropdown');
+    if (dropdown) dropdown.classList.remove('show-btn');
+}
+
         }
        
         function showSite(user) {
@@ -1512,14 +1634,38 @@
         }
        
         function updateAdminBadge() {
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            import { getDoc, doc } from "firebase/firestore";
+
+let children = [];
+
+const ref = doc(db, "appData", "childrenData");
+const snap = await getDoc(ref);
+
+if (snap.exists()) {
+  children = snap.data().children || [];
+} else {
+  children = [];
+}
+
             const hasIdentifications = children.some(c => c.identifiers && c.identifiers.length > 0);
             const badge = document.getElementById('adminNotifyBadge');
             if(hasIdentifications) badge.style.display = 'block'; else badge.style.display = 'none';
         }
        
         function updateMessagesBadge() {
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            import { getDoc, doc } from "firebase/firestore";
+
+let children = [];
+
+const ref = doc(db, "appData", "childrenData");
+const snap = await getDoc(ref);
+
+if (snap.exists()) {
+  children = snap.data().children || [];
+} else {
+  children = [];
+}
+
             let count = 0;
             children.forEach(c => {
                 if(c.identifiers) count += c.identifiers.length;
@@ -1555,7 +1701,19 @@
             l.style.display = 'none'; s.style.display = 'none'; f.style.display = 'none';
             if (t==='signup') {
                 s.style.display='block';
-                const users = JSON.parse(localStorage.getItem('registeredUsers'))||[];
+                import { getDoc, doc } from "firebase/firestore";
+
+let users = [];
+
+const ref = doc(db, "appData", "registeredUsers");
+const snap = await getDoc(ref);
+
+if (snap.exists()) {
+  users = snap.data().users || [];
+} else {
+  users = [];
+}
+
                 const roleSelect = document.getElementById('su_role');
                 const adminCount = users.filter(u => u.role === 'Administrator').length;
                 if(adminCount >= 2) { roleSelect.value='User'; roleSelect.disabled=true; } else { roleSelect.disabled=false; }
@@ -1566,7 +1724,17 @@
                 document.getElementById('forgotEmail').value = '';
             } else {
                 l.style.display='block';
-                const savedEmail = localStorage.getItem('rememberedEmail');
+                import { getDoc, doc } from "firebase/firestore";
+
+let savedEmail = null;
+
+const ref = doc(db, "appData", "userSettings");
+const snap = await getDoc(ref);
+
+if (snap.exists()) {
+  savedEmail = snap.data().rememberedEmail || null;
+}
+
                 if (savedEmail) { document.getElementById('loginEmail').value = savedEmail; document.getElementById('rememberMe').checked = true; }
                 else { document.getElementById('loginEmail').value = ''; document.getElementById('rememberMe').checked = false; }
                 // Note: Manual rendering of Google button is no longer needed here
@@ -1579,13 +1747,16 @@
         function handleSignup(e) {
             e.preventDefault();
             if (document.getElementById('su_pass').value !== document.getElementById('su_cpass').value) { BrickNotify.error("Nenosiri hazilingani!"); return; }
-            let users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+          
             let requestedRole = document.getElementById('su_role').value;
             const adminCount = users.filter(u => u.role === 'Administrator').length;
             if (requestedRole === 'Administrator' && adminCount >= 2) { requestedRole = 'User'; BrickNotify.warning("Msimamizi wapata zaidi ya 2 hawaruhusiwi."); }
             const userData = { id: Date.now(), fname: document.getElementById('su_fname').value, lname: document.getElementById('su_lname').value, email: document.getElementById('su_email').value, phone: document.getElementById('su_phone').value, role: requestedRole, password: document.getElementById('su_pass').value, photoUrl: null };
             if (users.some(u => u.email === userData.email)) { BrickNotify.error("Mtumiaji tayari yupo!"); return; }
-            users.push(userData); localStorage.setItem('registeredUsers', JSON.stringify(users));
+            users.push(userData);import { addDoc, collection } from "firebase/firestore";
+
+await addDoc(collection(db, "users"), userData);
+
             BrickNotify.success("Usajili umefanikiwa! Tafadhali ingia.");
             toggleAuthForm('login');
         }
@@ -1593,44 +1764,72 @@
         function handleLogin(e) {
             e.preventDefault();
             const em = document.getElementById('loginEmail').value; const p = document.getElementById('loginPassword').value;
-            const users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+            import { getDoc, doc } from "firebase/firestore";
+
+let users = [];
+
+const ref = doc(db, "appData", "registeredUsers");
+const snap = await getDoc(ref);
+
+if (snap.exists()) {
+  users = snap.data().users || [];
+} else {
+  users = [];
+}
+
             const user = users.find(u => u.email === em && u.password === p);
             if (user) {
-                if (document.getElementById('rememberMe').checked) { localStorage.setItem('rememberedEmail', em); } else { localStorage.removeItem('rememberedEmail'); }
-                sessionStorage.setItem('currentUser', JSON.stringify(user)); showSite(user);
-                BrickNotify.success(`Karibu tena, ${user.fname}!`);
-            } else {
-                BrickNotify.error(translations[currentLang].alert_invalid_cred);
-            }
-        }
+               import { doc, setDoc } from "firebase/firestore";
+
+if (document.getElementById('rememberMe').checked) {
+  await setDoc(doc(db, "userSettings", user.uid), {
+    rememberedEmail: em
+  }, { merge: true });
+}
+
        
-        function handleForgotCheck(e) {
-            e.preventDefault();
-            const email = document.getElementById('forgotEmail').value;
-            const users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-            const user = users.find(u => u.email === email);
-            if (user) {
-                document.getElementById('forgotStep1').style.display = 'none';
-                document.getElementById('forgotStep2').style.display = 'block';
-                document.getElementById('resetEmailDisplay').innerText = email;
-                document.getElementById('resetEmailHidden').value = email;
-            } else BrickNotify.error("Akaunti haipatikani.");
-        }
-        function handlePasswordReset(e) {
-            e.preventDefault();
-            const email = document.getElementById('resetEmailHidden').value;
-            const newPass = document.getElementById('newPassword').value;
-            const confirmPass = document.getElementById('confirmNewPassword').value;
-            if (newPass !== confirmPass) { BrickNotify.error("Nenosiri hazilingani!"); return; }
-            let users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-            const userIndex = users.findIndex(u => u.email === email);
-            if (userIndex !== -1) {
-                users[userIndex].password = newPass;
-                localStorage.setItem('registeredUsers', JSON.stringify(users));
-                BrickNotify.success("Nenosiri imesasishwa! Tafadhali ingia.");
-                toggleAuthForm('login');
-            }
-        }
+      import { collection, query, where, getDocs } from "firebase/firestore";
+
+async function handleForgotCheck(e) {
+    e.preventDefault();
+
+    const email = document.getElementById('forgotEmail').value;
+
+    const q = query(
+        collection(db, "users"),
+        where("email", "==", email)
+    );
+
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+        const userDoc = snapshot.docs[0];
+        const user = userDoc.data();
+
+        document.getElementById('forgotStep1').style.display = 'none';
+        document.getElementById('forgotStep2').style.display = 'block';
+        document.getElementById('resetEmailDisplay').innerText = email;
+        document.getElementById('resetEmailHidden').value = email;
+    } else {
+        BrickNotify.error("Akaunti haipatikani.");
+    }
+}
+
+  import { sendPasswordResetEmail } from "firebase/auth";
+
+async function handlePasswordReset(e) {
+    e.preventDefault();
+
+    const email = document.getElementById('resetEmailHidden').value;
+
+    try {
+        await sendPasswordResetEmail(auth, email);
+        BrickNotify.success("Check email yako kurekebisha nenosiri!");
+        toggleAuthForm('login');
+    } catch (error) {
+        BrickNotify.error(error.message);
+    }
+}
 
         function openContactSupport() { document.getElementById('contactModal').classList.remove('hidden'); }
         function closeContactSupport() { document.getElementById('contactModal').classList.add('hidden'); }
@@ -1641,10 +1840,19 @@
         // =============================================
         function renderChildrenTable(query = "") {
             const tbody = document.getElementById('childTableBody');
-            let children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            import { collection, getDocs } from "firebase/firestore";
+
+let children = [];
+
+const snap = await getDocs(collection(db, "children"));
+
+children = snap.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+}));
+
             children = children.map(c => { if (!c.identifiers) c.identifiers = []; return c; });
-            localStorage.setItem('childrenData', JSON.stringify(children));
-            const user = JSON.parse(sessionStorage.getItem('currentUser'));
+            const user = JSON.parse(sessionStorage.getItem("currentUser"));
             const isAdmin = user && user.role === 'Administrator';
             const isLoggedIn = user ? true : false;
             tbody.innerHTML = "";
@@ -1700,12 +1908,27 @@
                 status: document.getElementById('child_status').value, remarks: document.getElementById('child_remarks').value,
                 img: imgData, createdAt: Date.now(), identifiers: []
             };
-            let children = JSON.parse(localStorage.getItem('childrenData')) || []; children.unshift(newChild); localStorage.setItem('childrenData', JSON.stringify(children));
-            closeAddChildModal(); document.querySelector('form[onsubmit="handleAddChild(event)"]').reset();
-            BrickNotify.success(translations[currentLang].alert_child_added);
-            renderChildrenTable();
-        }
-        function deleteChild(id) { if (confirm("Delete?")) { let c = JSON.parse(localStorage.getItem('childrenData')) || []; c = c.filter(x => x.id !== id); localStorage.setItem('childrenData', JSON.stringify(c)); renderChildrenTable(); } }
+            import { collection, addDoc } from "firebase/firestore";
+
+async function handleAddChild(newChild) {
+    try {
+        await addDoc(collection(db, "children"), {
+            ...newChild,
+            createdAt: Date.now(),
+            identifiers: [],
+            status: "missing"
+        });
+
+        closeAddChildModal();
+        document.querySelector('form[onsubmit="handleAddChild(event)"]').reset();
+
+        BrickNotify.success(translations[currentLang].alert_child_added);
+        renderChildrenTable();
+
+    } catch (error) {
+        console.log(error);
+    }
+}
 
         // =============================================
         // ===== VIEW CHILD & POSTER =====
@@ -1715,7 +1938,19 @@
         const canvasWidth = 1080;
 
         function openViewChildModal(id) {
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            import { collection, onSnapshot } from "firebase/firestore";
+
+let children = [];
+
+onSnapshot(collection(db, "children"), (snap) => {
+    children = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+
+    renderChildrenTable(); // auto update UI
+});
+
             currentViewChild = children.find(c => c.id === id);
             if(currentViewChild) {
                 document.getElementById('viewChildModal').classList.remove('hidden');
@@ -1759,11 +1994,27 @@
             const input = document.getElementById(`reply-${currentViewChild.identifiers[identifierIndex].timestamp}`);
             const message = input.value;
             if(!message) return;
-            let children = JSON.parse(localStorage.getItem('childrenData')) || [];
+            import { collection, onSnapshot } from "firebase/firestore";
+
+let children = [];
+
+onSnapshot(collection(db, "children"), (snap) => {
+    children = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+
+    renderChildrenTable(); // auto update UI
+});
+
             const childIndex = children.findIndex(c => c.id === childId);
             if (childIndex !== -1) {
                 children[childIndex].identifiers[identifierIndex].adminReply = message;
-                localStorage.setItem('childrenData', JSON.stringify(children));
+                import { collection, addDoc } from "firebase/firestore";
+
+// kwa kila child
+await addDoc(collection(db, "children"), child);
+
                 BrickNotify.success("Jibu limehifadhiwa.");
                 openViewChildModal(childId);
             }
@@ -1835,7 +2086,18 @@
         // ===== ONLY identifier details go to Admin Messages
         // =============================================
         function openNotificationModal(childId) {
-            let children = JSON.parse(localStorage.getItem('childrenData')) || [];
+import { collection, onSnapshot } from "firebase/firestore";
+
+let children = [];
+
+onSnapshot(collection(db, "children"), (snap) => {
+    children = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+
+    renderChildrenTable(); // auto update UI
+});
             let child = children.find(c => c.id === childId);
            
             if(child) {
@@ -1883,7 +2145,18 @@
         function handleNotification(e) {
             e.preventDefault();
             const childId = document.getElementById('notify_child_id').value;
-            let children = JSON.parse(localStorage.getItem('childrenData')) || [];
+import { collection, onSnapshot } from "firebase/firestore";
+
+let children = [];
+
+onSnapshot(collection(db, "children"), (snap) => {
+    children = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+
+    renderChildrenTable(); // auto refresh UI
+});
             const childIndex = children.findIndex(c => c.id == childId);
 
             if (childIndex !== -1) {
@@ -1903,7 +2176,10 @@
                     name: identifierName,
                     contact: identifierContact,
                     message: identifierMessage,
-                    timestamp: new Date().toLocaleString(),
+                  import { serverTimestamp } from "firebase/firestore";
+
+timestamp: serverTimestamp()
+
                     adminReply: null
                 };
 
@@ -1917,7 +2193,12 @@
                 }
 
                 children[childIndex] = child;
-                localStorage.setItem('childrenData', JSON.stringify(children));
+               import { addDoc, collection } from "firebase/firestore";
+
+for (const child of children) {
+    await addDoc(collection(db, "children"), child);
+}
+
 
                 closeNotificationModal();
 
@@ -1949,22 +2230,54 @@
             }
         }
 
-        function showNotificationReport() {
-            const user = JSON.parse(sessionStorage.getItem('currentUser'));
-            if (!user || user.role !== 'Administrator') return;
-            const t = document.getElementById('notificationTableBody');
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
-            t.innerHTML = "";
-            let hasRecords = false;
-            children.forEach(child => {
-                if(child.identifiers && child.identifiers.length > 0){
-                    hasRecords = true;
-                    // ADMIN ONLY: Can see all identifier details
-                    child.identifiers.forEach(id => {
-                        t.innerHTML += `<tr><td><strong>${child.name}</strong></td><td>${id.name}</td><td>${id.contact}</td><td>${id.message}</td><td>${id.timestamp}</td></tr>`;
-                    });
-                }
+        import { collection, getDocs } from "firebase/firestore";
+
+async function showNotificationReport() {
+
+    const user = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (!user || user.role !== 'Administrator') return;
+
+    const t = document.getElementById('notificationTableBody');
+    t.innerHTML = "";
+
+    const snap = await getDocs(collection(db, "children"));
+
+    let hasRecords = false;
+
+    snap.forEach(docSnap => {
+        const child = docSnap.data();
+
+        if (child.identifiers && child.identifiers.length > 0) {
+            hasRecords = true;
+
+            child.identifiers.forEach(id => {
+                t.innerHTML += `
+                    <tr>
+                        <td><strong>${child.name}</strong></td>
+                        <td>${id.name || ''}</td>
+                        <td>${id.contact || ''}</td>
+                        <td>${id.message || ''}</td>
+                        <td>
+  ${id.timestamp
+    ? new Date(
+        id.timestamp.seconds
+          ? id.timestamp.seconds * 1000
+          : id.timestamp
+      ).toLocaleString()
+    : ''}
+</td>
+
+                    </tr>
+                `;
             });
+        }
+    });
+
+    if (!hasRecords) {
+        t.innerHTML = `<tr><td colspan="5" style="text-align:center;">No records found</td></tr>`;
+    }
+}
+
             if(!hasRecords) t.innerHTML = `<tr><td colspan="5" style="text-align:center">No records.</td></tr>`;
             document.getElementById('notificationReportModal').classList.remove('hidden');
         }
@@ -1975,25 +2288,63 @@
         // ===== Shows ONLY Identifier Details (name, contact, message)
         // ===== No cross-identifier visibility
         // =============================================
-        function openMessagesBox() {
-            const user = JSON.parse(sessionStorage.getItem('currentUser'));
-            if (!user || user.role !== 'Administrator') return;
+        import { collection, getDocs } from "firebase/firestore";
 
-            const tbody = document.getElementById('messagesTableBody');
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
-            tbody.innerHTML = "";
-           
-            let messagesFound = false;
+async function openMessagesBox() {
 
-            children.forEach(child => {
-                if(child.identifiers && child.identifiers.length > 0) {
-                    child.identifiers.forEach((id, index) => {
-                        messagesFound = true;
-                        // ONLY identifier details are shown — no cross-identifier data
-                        const replyInfo = id.adminReply
-                            ? `<div style="margin-top:6px;padding:5px 8px;background:#eef;border-radius:4px;font-size:0.78rem;"><strong>Jibu la Msimamizi:</strong> ${id.adminReply}</div>`
-                            : '';
-                       
+    const user = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (!user || user.role !== 'Administrator') return;
+
+    const tbody = document.getElementById('messagesTableBody');
+    tbody.innerHTML = "";
+
+    const snap = await getDocs(collection(db, "children"));
+
+    let messagesFound = false;
+
+    snap.forEach(docSnap => {
+        const child = docSnap.data();
+
+        if (child.identifiers && child.identifiers.length > 0) {
+
+            child.identifiers.forEach((id) => {
+                messagesFound = true;
+
+                const replyInfo = id.adminReply
+                    ? `
+                        <div style="margin-top:6px;padding:5px 8px;background:#eef;border-radius:4px;font-size:0.78rem;">
+                            <strong>Jibu la Msimamizi:</strong> ${id.adminReply}
+                        </div>
+                      `
+                    : '';
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${child.name || ''}</strong></td>
+                        <td>${id.name || ''}</td>
+                        <td>${id.contact || ''}</td>
+                        <td>${id.message || ''}</td>
+                        <td>${id.timestamp ? new Date(id.timestamp).toLocaleString() : ''}</td>
+                        <td>
+                            ${replyInfo}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+    });
+
+    if (!messagesFound) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align:center;">
+                    Hakuna ujumbe wowote
+                </td>
+            </tr>
+        `;
+    }
+}
+
                         tbody.innerHTML += `
                             <tr>
                                 <td>
@@ -2052,159 +2403,483 @@
             });
         }
 
-        function deleteMessage(childId, identifierIndex) {
-            if(!confirm("Je, una uhakika unataka kufuta ujumbe huu?")) return;
-            let children = JSON.parse(localStorage.getItem('childrenData')) || [];
-            const childIndex = children.findIndex(c => c.id === childId);
-            if(childIndex !== -1) {
-                children[childIndex].identifiers.splice(identifierIndex, 1);
-                // If child was "identified" and now has < 3, revert status
-                if(children[childIndex].status === "identified" && children[childIndex].identifiers.length < 3) {
-                    children[childIndex].status = "missing";
-                }
-                localStorage.setItem('childrenData', JSON.stringify(children));
-                BrickNotify.info("Ujumbe umefutwa.");
-                openMessagesBox();
-                updateMessagesBadge();
-                renderChildrenTable();
-            }
+        import { doc, getDoc, updateDoc } from "firebase/firestore";
+
+async function deleteMessage(childId, identifierIndex) {
+
+    if (!confirm("Je, una uhakika unataka kufuta ujumbe huu?")) return;
+
+    try {
+        const ref = doc(db, "children", childId);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) return;
+
+        const data = snap.data();
+        let identifiers = data.identifiers || [];
+
+        // remove selected message
+        identifiers.splice(identifierIndex, 1);
+
+        // update status logic
+        let status = data.status;
+
+        if (status === "identified" && identifiers.length < 3) {
+            status = "missing";
         }
+
+        await updateDoc(ref, {
+            identifiers: identifiers,
+            status: status
+        });
+
+        BrickNotify.info("Ujumbe umefutwa.");
+
+        // refresh UI
+        openMessagesBox();
+        updateMessagesBadge();
+        renderChildrenTable();
+
+    } catch (error) {
+        console.error(error);
+        BrickNotify.error("Kuna tatizo la kufuta ujumbe.");
+    }
+}
+
 
         // =============================================
         // ===== USER REPORT =====
         // =============================================
-        function showUserReport() {
-            const u = JSON.parse(sessionStorage.getItem('currentUser'));
-            if (!u || u.role !== 'Administrator') return;
-            const t = document.getElementById('userReportBody');
-            const us = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-            t.innerHTML = "";
-            us.forEach(u => { t.innerHTML += `<tr><td>${u.fname} ${u.lname}</td><td>${u.email}</td><td>${u.role}</td><td><button class="btn-delete" onclick="deleteUser(${u.id})">Delete</button></td></tr>`; });
-            document.getElementById('reportModal').classList.remove('hidden');
-        }
-        function closeReportModal() { document.getElementById('reportModal').classList.add('hidden'); }
-        function deleteUser(id) { if (confirm("Delete?")) { let u = JSON.parse(localStorage.getItem('registeredUsers')) || []; u = u.filter(x => x.id !== id); localStorage.setItem('registeredUsers', JSON.stringify(u)); showUserReport(); } }
+        import { collection, getDocs } from "firebase/firestore";
 
-        // =============================================
-        // ===== DASHBOARD =====
-        // =============================================
-        const charts = {};
-        function showDashboard() {
-            const user = JSON.parse(sessionStorage.getItem('currentUser'));
-            if (!user || user.role !== 'Administrator') { BrickNotify.error("Hakikisha ruhusa."); return; }
-            document.getElementById('dashboardModal').classList.remove('hidden');
-            loadDashboardData();
+async function showUserReport() {
+
+    const u = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (!u || u.role !== 'Administrator') return;
+
+    const t = document.getElementById('userReportBody');
+    t.innerHTML = "";
+
+    const snap = await getDocs(collection(db, "users"));
+
+    snap.forEach(docSnap => {
+        const user = docSnap.data();
+        const id = docSnap.id;
+
+        t.innerHTML += `
+            <tr>
+                <td>${user.fname || ''} ${user.lname || ''}</td>
+                <td>${user.email || ''}</td>
+                <td>${user.role || ''}</td>
+                <td>
+                    <button class="btn-delete" onclick="deleteUser('${id}')">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    document.getElementById('reportModal').classList.remove('hidden');
+}
+
+        async function loadDashboardData() {
+    const user = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (!user || user.role !== 'Administrator') {
+        BrickNotify.error("Hakikisha ruhusa.");
+        return;
+    }
+import { collection, getDocs } from "firebase/firestore";
+
+const snapshot = await getDocs(collection(db, "children"));
+
+const children = [];
+
+snapshot.forEach(docSnap => {
+    children.push({
+        id: docSnap.id,   // 🔥 IMPORTANT FIX
+        ...docSnap.data()
+    });
+});
+
+
+    // =============================
+    // 🔥 FIRESTORE FETCH (REPLACE LOCALSTORAGE)
+import { collection, getDocs } from "firebase/firestore";
+
+async function loadChildrenFromFirestore() {
+    const snapshot = await getDocs(collection(db, "children"));
+
+    const children = [];
+    snapshot.forEach(docSnap => {
+        children.push({
+            id: docSnap.id,
+            ...docSnap.data()
+        });
+    });
+
+    // =============================
+    // YOUR EXISTING LOGIC (UNCHANGED)
+    // =============================
+
+    const total = children.length;
+    const missing = children.filter(c => c.status === 'missing' && (!c.identifiers || c.identifiers.length < 3)).length;
+    const found = children.filter(c => c.status === 'found').length;
+    const identified = children.filter(c => c.identifiers && c.identifiers.length >= 3).length;
+
+    const totalAge = children.reduce((sum, c) => sum + (parseInt(c.age) || 0), 0);
+    const avgAge = total > 0 ? (totalAge / total).toFixed(1) : 0;
+
+    let totalIdentifiers = 0;
+    const identifierDistribution = {
+        '0 Identifiers': 0,
+        '1 Identifier': 0,
+        '2 Identifiers': 0,
+        '3 Identifiers': 0
+    };
+
+    children.forEach(c => {
+        const count = c.identifiers ? c.identifiers.length : 0;
+        totalIdentifiers += count;
+
+        if (count === 0) identifierDistribution['0 Identifiers']++;
+        else if (count === 1) identifierDistribution['1 Identifier']++;
+        else if (count === 2) identifierDistribution['2 Identifiers']++;
+        else if (count >= 3) identifierDistribution['3 Identifiers']++;
+    });
+
+    document.getElementById('metricTotal').innerText = total;
+    document.getElementById('metricMissing').innerText = missing;
+    document.getElementById('metricFound').innerText = found + identified;
+    document.getElementById('metricAvgAge').innerText = avgAge;
+    document.getElementById('metricIdentifiers').innerText = totalIdentifiers;
+
+    const ageBins = { '0-5': 0, '6-10': 0, '11-15': 0, '16-20': 0, '21+': 0 };
+
+    children.forEach(c => {
+        const age = parseInt(c.age) || 0;
+        if (age <= 5) ageBins['0-5']++;
+        else if (age <= 10) ageBins['6-10']++;
+        else if (age <= 15) ageBins['11-15']++;
+        else if (age <= 20) ageBins['16-20']++;
+        else ageBins['21+']++;
+    });
+
+    const genderData = { 'Kiume': 0, 'Kike': 0 };
+    children.forEach(c => {
+        if (genderData[c.gender] !== undefined) genderData[c.gender]++;
+    });
+
+    const regionData = {};
+    children.forEach(c => {
+        const r = c.region || 'Unknown';
+        regionData[r] = (regionData[r] || 0) + 1;
+    });
+
+    const statusData = {
+        'Missing': missing,
+        'Found/Identified': found + identified
+    };
+
+    // =============================
+    // CHARTS (UNCHANGED)
+    // =============================
+
+    Object.values(charts).forEach(chart => chart.destroy());
+
+    const chartColors = {
+        red: 'rgba(231, 76, 60, 0.7)',
+        blue: 'rgba(52, 152, 219, 0.7)',
+        yellow: 'rgba(241, 196, 15, 0.7)',
+        green: 'rgba(46, 204, 113, 0.7)',
+        purple: 'rgba(155, 89, 182, 0.7)',
+        orange: 'rgba(243, 156, 18, 0.7)',
+        teal: 'rgba(26, 188, 156, 0.7)'
+    };
+
+    const colorArray = Object.values(chartColors);
+
+    const ageCtx = document.getElementById('ageChart').getContext('2d');
+    charts['ageChart'] = new Chart(ageCtx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(ageBins),
+            datasets: [{
+                label: 'Count',
+                data: Object.values(ageBins),
+                backgroundColor: colorArray
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    charts['statusChart'] = new Chart(statusCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Missing', 'Found/Identified'],
+            datasets: [{
+                data: [statusData.Missing, statusData['Found/Identified']],
+                backgroundColor: [chartColors.red, chartColors.green]
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const genderCtx = document.getElementById('genderChart').getContext('2d');
+    charts['genderChart'] = new Chart(genderCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Male', 'Female'],
+            datasets: [{
+                data: [genderData['Kiume'], genderData['Kike']],
+                backgroundColor: [chartColors.blue, chartColors.purple]
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const regionCtx = document.getElementById('regionChart').getContext('2d');
+    charts['regionChart'] = new Chart(regionCtx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(regionData),
+            datasets: [{
+                label: 'Count',
+                data: Object.values(regionData),
+                backgroundColor: chartColors.teal
+            }]
+        },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false }
+    });
+
+    const identifierCtx = document.getElementById('identifierChart').getContext('2d');
+    charts['identifierChart'] = new Chart(identifierCtx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(identifierDistribution),
+            datasets: [{
+                label: 'Number of Children',
+                data: Object.values(identifierDistribution),
+                backgroundColor: [
+                    chartColors.red,
+                    chartColors.yellow,
+                    chartColors.blue,
+                    chartColors.green
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 }
+                }
+            }
         }
-        function closeDashboard() { document.getElementById('dashboardModal').classList.add('hidden'); }
-        function downloadChart(chartId) { const chartInstance = charts[chartId]; if (chartInstance) { const link = document.createElement('a'); link.download = chartId + '.png'; link.href = chartInstance.toBase64Image(); link.click(); } }
-       
-        function loadDashboardData() {
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
-            const total = children.length;
-            const missing = children.filter(c => c.status === 'missing' && (!c.identifiers || c.identifiers.length < 3)).length;
-            const found = children.filter(c => c.status === 'found').length;
-            const identified = children.filter(c => c.identifiers && c.identifiers.length >= 3).length;
-            const totalAge = children.reduce((sum, c) => sum + (parseInt(c.age) || 0), 0);
-            const avgAge = total > 0 ? (totalAge / total).toFixed(1) : 0;
-           
-            let totalIdentifiers = 0;
-            const identifierDistribution = { '0 Identifiers': 0, '1 Identifier': 0, '2 Identifiers': 0, '3 Identifiers': 0 };
-            children.forEach(c => {
-                const count = c.identifiers ? c.identifiers.length : 0;
-                totalIdentifiers += count;
-                if(count === 0) identifierDistribution['0 Identifiers']++;
-                else if(count === 1) identifierDistribution['1 Identifier']++;
-                else if(count === 2) identifierDistribution['2 Identifiers']++;
-                else if(count >= 3) identifierDistribution['3 Identifiers']++;
-            });
-           
-            document.getElementById('metricTotal').innerText = total;
-            document.getElementById('metricMissing').innerText = missing;
-            document.getElementById('metricFound').innerText = found + identified;
-            document.getElementById('metricAvgAge').innerText = avgAge;
-            document.getElementById('metricIdentifiers').innerText = totalIdentifiers;
-           
-            const ageBins = { '0-5': 0, '6-10': 0, '11-15': 0, '16-20': 0, '21+': 0 };
-            children.forEach(c => { const age = parseInt(c.age) || 0; if (age <= 5) ageBins['0-5']++; else if (age <= 10) ageBins['6-10']++; else if (age <= 15) ageBins['11-15']++; else if (age <= 20) ageBins['16-20']++; else ageBins['21+']++; });
-            const genderData = { 'Kiume': 0, 'Kike': 0 }; children.forEach(c => { if (genderData[c.gender] !== undefined) genderData[c.gender]++; });
-            const regionData = {}; children.forEach(c => { const r = c.region || 'Unknown'; regionData[r] = (regionData[r] || 0) + 1; });
-            const statusData = { 'Missing': missing, 'Found/Identified': found + identified };
-           
-            Object.values(charts).forEach(chart => chart.destroy());
-            const chartColors = { red: 'rgba(231, 76, 60, 0.7)', blue: 'rgba(52, 152, 219, 0.7)', yellow: 'rgba(241, 196, 15, 0.7)', green: 'rgba(46, 204, 113, 0.7)', purple: 'rgba(155, 89, 182, 0.7)', orange: 'rgba(243, 156, 18, 0.7)', teal: 'rgba(26, 188, 156, 0.7)' };
-            const colorArray = Object.values(chartColors);
-           
-            const ageCtx = document.getElementById('ageChart').getContext('2d');
-            charts['ageChart'] = new Chart(ageCtx, { type: 'bar', data: { labels: Object.keys(ageBins), datasets: [{ label: 'Count', data: Object.values(ageBins), backgroundColor: colorArray }] }, options: { responsive: true, maintainAspectRatio: false } });
-            const statusCtx = document.getElementById('statusChart').getContext('2d');
-            charts['statusChart'] = new Chart(statusCtx, { type: 'pie', data: { labels: ['Missing', 'Found/Identified'], datasets: [{ data: [statusData.Missing, statusData['Found/Identified']], backgroundColor: [chartColors.red, chartColors.green] }] }, options: { responsive: true, maintainAspectRatio: false } });
-            const genderCtx = document.getElementById('genderChart').getContext('2d');
-            charts['genderChart'] = new Chart(genderCtx, { type: 'doughnut', data: { labels: ['Male', 'Female'], datasets: [{ data: [genderData['Kiume'], genderData['Kike']], backgroundColor: [chartColors.blue, chartColors.purple] }] }, options: { responsive: true, maintainAspectRatio: false } });
-            const regionCtx = document.getElementById('regionChart').getContext('2d');
-            charts['regionChart'] = new Chart(regionCtx, { type: 'bar', data: { labels: Object.keys(regionData), datasets: [{ label: 'Count', data: Object.values(regionData), backgroundColor: chartColors.teal }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false } });
-            const identifierCtx = document.getElementById('identifierChart').getContext('2d');
-            charts['identifierChart'] = new Chart(identifierCtx, {
-                type: 'bar',
-                data: { labels: Object.keys(identifierDistribution), datasets: [{ label: 'Number of Children', data: Object.values(identifierDistribution), backgroundColor: [chartColors.red, chartColors.yellow, chartColors.blue, chartColors.green] }] },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-            });
-        }
+    });
+}
+
 
         // =============================================
         // ===== EXPORTS =====
         // =============================================
-        function getTableData() {
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
-            const headers = [["Police RB", "Name", "Age", "Gender", "Region", "District", "Ward", "Location", "Status", "Remarks"]];
-            const data = children.map(c => [c.policeRb, c.name, c.age, c.gender, c.region, c.district, c.ward, c.location, c.status, c.remarks]);
-            return { headers, data };
-        }
-       
-        function exportPDF() {
-            const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.text("NCRS Report", 14, 20);
-            const { headers, data } = getTableData();
-            const donorImg = document.querySelector('.footer-logos img[alt="Donor Logo"]');
-            const partnerImg = document.querySelector('.footer-logos img[alt="Partner Logo"]');
-            doc.autoTable({ head: headers, body: data, startY: 25, theme: 'striped', headStyles: { fillColor: [0, 51, 102] }, margin: { bottom: 25 },
-                didDrawPage: function (data) {
-                    const footerY = doc.internal.pageSize.height - 15;
-                    try { if(donorImg && donorImg.complete) doc.addImage(donorImg, 14, footerY - 5, 20, 10); } catch(e) {}
-                    try { if(partnerImg && partnerImg.complete) doc.addImage(partnerImg, doc.internal.pageSize.width - 34, footerY - 5, 20, 10); } catch(e) {}
-                }
-            });
-            const pageCount = doc.internal.getNumberOfPages();
-            for(let i = 1; i <= pageCount; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150); doc.text('Page ' + i + ' of ' + pageCount, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: 'center' }); }
-            doc.save('NCRS_Report.pdf');
-        }
+async function exportPDF() {
 
-        function exportExcel() { const { headers, data } = getTableData(); const ws = XLSX.utils.aoa_to_sheet([...headers, ...data]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Report"); XLSX.writeFile(wb, 'NCRS_Report.xlsx'); }
-        function exportPPT() { let pptx = new PptxGenJS(); let slide = pptx.addSlide(); slide.title = "NCRS Report"; const { headers, data } = getTableData(); slide.addTable([...headers, ...data], { x: 0.5, y: 1.0, w: 9.0 }); pptx.writeFile('NCRS_Report.pptx'); }
-        function exportWord() { const { headers, data } = getTableData(); let html = `<table border="1" style="border-collapse:collapse;width:100%">`; html += '<tr>' + headers[0].map(h => `<th>${h}</th>`).join('') + '</tr>'; data.forEach(row => { html += '<tr>' + row.map(cell => `<td>${cell || ''}</td>`).join('') + '</tr>'; }); html += '</table>'; const blob = new Blob(['\ufeff', html], { type: 'application/msword' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'NCRS_Report.doc'; link.click(); }
-        function printReport() { window.print(); }
-       
-        function exportIdentifiersPDF() {
-            const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.text("Child Identifiers Registry", 14, 20);
-            const children = JSON.parse(localStorage.getItem('childrenData')) || [];
-            const headers = [["Child Name", "Identified By", "Contact", "Message", "Date"]]; const data = [];
-            children.forEach(child => {
-                if(child.identifiers && child.identifiers.length > 0){
-                    child.identifiers.forEach(id => { data.push([child.name, id.name, id.contact, id.message, id.timestamp]); });
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.text("NCRS Report", 14, 20);
+
+    const { headers, data } = await getTableData();
+
+    const donorImg = document.querySelector('.footer-logos img[alt="Donor Logo"]');
+    const partnerImg = document.querySelector('.footer-logos img[alt="Partner Logo"]');
+
+    doc.autoTable({
+        head: headers,
+        body: data,
+        startY: 25,
+        theme: 'striped',
+        headStyles: { fillColor: [0, 51, 102] },
+        margin: { bottom: 25 },
+
+        didDrawPage: function () {
+            const footerY = doc.internal.pageSize.height - 15;
+
+            // 🔥 Donor logo safe rendering
+            if (donorImg && donorImg.complete && donorImg.naturalHeight !== 0) {
+                try {
+                    doc.addImage(donorImg, 'PNG', 14, footerY - 5, 20, 10);
+                } catch (e) {
+                    console.log("Donor image error:", e);
                 }
-            });
-            if(data.length === 0) { BrickNotify.warning("Hakuna rekodi za watambulishi kuzihamisha."); return; }
-            const donorImg = document.querySelector('.footer-logos img[alt="Donor Logo"]');
-            const partnerImg = document.querySelector('.footer-logos img[alt="Partner Logo"]');
-            doc.autoTable({ head: headers, body: data, startY: 25, margin: { bottom: 25 },
-                didDrawPage: function (data) {
-                    const footerY = doc.internal.pageSize.height - 15;
-                    try { if(donorImg && donorImg.complete) doc.addImage(donorImg, 14, footerY - 5, 20, 10); } catch(e) {}
-                    try { if(partnerImg && partnerImg.complete) doc.addImage(partnerImg, doc.internal.pageSize.width - 34, footerY - 5, 20, 10); } catch(e) {}
+            }
+
+            // 🔥 Partner logo safe rendering
+            if (partnerImg && partnerImg.complete && partnerImg.naturalHeight !== 0) {
+                try {
+                    doc.addImage(
+                        partnerImg,
+                        'PNG',
+                        doc.internal.pageSize.width - 34,
+                        footerY - 5,
+                        20,
+                        10
+                    );
+                } catch (e) {
+                    console.log("Partner image error:", e);
                 }
-            });
-            const pageCount = doc.internal.getNumberOfPages();
-            for(let i = 1; i <= pageCount; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150); doc.text('Page ' + i + ' of ' + pageCount, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: 'center' }); }
-            doc.save('Identifiers_Registry.pdf');
+            }
         }
+    });
+
+    const pageCount = doc.internal.getNumberOfPages();
+
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(
+            `Page ${i} of ${pageCount}`,
+            doc.internal.pageSize.width / 2,
+            doc.internal.pageSize.height - 10,
+            { align: 'center' }
+        );
+    }
+
+    doc.save('NCRS_Report.pdf');
+}
+
+
+
+        function exportExcel() {
+    const { headers, data } = getTableData();
+
+    const ws = XLSX.utils.aoa_to_sheet([...headers, ...data]);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Report");
+    XLSX.writeFile(wb, 'NCRS_Report.xlsx');
+}                                                                                                                                                 function exportPPT() {
+    let pptx = new PptxGenJS();
+    let slide = pptx.addSlide();
+
+    slide.title = "NCRS Report";
+
+    const { headers, data } = getTableData();
+
+    const tableData = [...headers, ...data];
+
+    slide.addTable(tableData, {
+        x: 0.5,
+        y: 1.0,
+        w: 9.0
+    });
+
+    pptx.writeFile({ fileName: 'NCRS_Report.pptx' });
+}                                                                                                                                                         function exportWord() {
+    const { headers, data } = getTableData();
+
+    let html = `<table border="1" style="border-collapse:collapse;width:100%">`;
+
+    html += '<tr>' + headers[0].map(h => `<th>${h}</th>`).join('') + '</tr>';
+
+    data.forEach(row => {
+        html += '<tr>' + row.map(cell => `<td>${cell || ''}</td>`).join('') + '</tr>';
+    });
+
+    html += '</table>';
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'NCRS_Report.doc';
+    link.click();
+}
+ function printReport() {
+    window.print();
+}
+ function exportIdentifiersPDF() {
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.text("Child Identifiers Registry", 14, 20);
+
+    const children = JSON.parse(localStorage.getItem('childrenData')) || [];
+
+    const headers = [["Child Name", "Identified By", "Contact", "Message", "Date"]];
+    const data = [];
+
+    children.forEach(child => {
+        if (child.identifiers && child.identifiers.length > 0) {
+            child.identifiers.forEach(id => {
+                data.push([
+                    child.name,
+                    id.name,
+                    id.contact,
+                    id.message,
+                    id.timestamp ? new Date(id.timestamp).toLocaleString() : ""
+                ]);
+            });
+        }
+    });
+
+    if (data.length === 0) {
+        BrickNotify.warning("Hakuna rekodi za watambulishi kuzihamisha.");
+        return;
+    }
+
+    const donorImg = document.querySelector('.footer-logos img[alt="Donor Logo"]');
+    const partnerImg = document.querySelector('.footer-logos img[alt="Partner Logo"]');
+
+    doc.autoTable({
+        head: headers,
+        body: data,
+        startY: 25,
+        margin: { bottom: 25 },
+
+        didDrawPage: function () {
+            const footerY = doc.internal.pageSize.height - 15;
+
+            if (donorImg && donorImg.complete && donorImg.naturalHeight !== 0) {
+                try {
+                    doc.addImage(donorImg, 'PNG', 14, footerY - 5, 20, 10);
+                } catch (e) {}
+            }
+
+            if (partnerImg && partnerImg.complete && partnerImg.naturalHeight !== 0) {
+                try {
+                    doc.addImage(partnerImg, 'PNG',
+                        doc.internal.pageSize.width - 34,
+                        footerY - 5,
+                        20, 10
+                    );
+                } catch (e) {}
+            }
+        }
+    });
+
+    const pageCount = doc.internal.getNumberOfPages();
+
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(
+            `Page ${i} of ${pageCount}`,
+            doc.internal.pageSize.width / 2,
+            doc.internal.pageSize.height - 10,
+            { align: 'center' }
+        );
+    }
+
+    doc.save('Identifiers_Registry.pdf');
+}
 
     </script>
 </body>
