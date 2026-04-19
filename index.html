@@ -1444,66 +1444,176 @@ mutation comment {
         }
 
         // =============================================
-        // ===== AUTH LOGIC =====
         // =============================================
-        function openModal(t) { document.getElementById('authModal').classList.remove('hidden'); document.getElementById('closeModalBtn').classList.remove('forced'); toggleAuthForm(t); }
-        function closeModal() { if(sessionStorage.getItem('currentUser')) document.getElementById('authModal').classList.add('hidden'); }
-       
-        function toggleAuthForm(t) {
-            const l = document.getElementById('loginFormContainer');
-            const s = document.getElementById('signupFormContainer');
-            const f = document.getElementById('forgotFormContainer');
-            l.style.display = 'none'; s.style.display = 'none'; f.style.display = 'none';
-            if (t==='signup') {
-                s.style.display='block';
-                const users = JSON.parse(localStorage.getItem('registeredUsers'))||[];
-                const roleSelect = document.getElementById('su_role');
-                const adminCount = users.filter(u => u.role === 'Administrator').length;
-                if(adminCount >= 2) { roleSelect.value='User'; roleSelect.disabled=true; } else { roleSelect.disabled=false; }
-            } else if (t === 'forgot') {
-                f.style.display='block';
-                document.getElementById('forgotStep1').style.display = 'block';
-                document.getElementById('forgotStep2').style.display = 'none';
-                document.getElementById('forgotEmail').value = '';
-            } else {
-                l.style.display='block';
-                const savedEmail = localStorage.getItem('rememberedEmail');
-                if (savedEmail) { document.getElementById('loginEmail').value = savedEmail; document.getElementById('rememberMe').checked = true; }
-                else { document.getElementById('loginEmail').value = ''; document.getElementById('rememberMe').checked = false; }
-                // Note: Manual rendering of Google button is no longer needed here
-                // as it is handled by the HTML snippet <div class="g_id_signin">
-            }
+// ===== AUTH LOGIC (FIRESTORE FIXED) =====
+// =============================================
+
+// ✅ IMPORTS (MUST BE AT TOP OF FILE)
+import { db } from "./firebase.js";
+import { collection, getDocs, addDoc } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+function openModal(t) {
+    document.getElementById('authModal').classList.remove('hidden');
+    document.getElementById('closeModalBtn').classList.remove('forced');
+    toggleAuthForm(t);
+}
+
+function closeModal() {
+    if (sessionStorage.getItem('currentUser')) {
+        document.getElementById('authModal').classList.add('hidden');
+    }
+}
+
+async function toggleAuthForm(t) {
+    const l = document.getElementById('loginFormContainer');
+    const s = document.getElementById('signupFormContainer');
+    const f = document.getElementById('forgotFormContainer');
+
+    l.style.display = 'none';
+    s.style.display = 'none';
+    f.style.display = 'none';
+
+    if (t === 'signup') {
+        s.style.display = 'block';
+
+        // 🔥 FIRESTORE: GET USERS
+        const snapshot = await getDocs(collection(db, "users"));
+        let users = [];
+        snapshot.forEach(doc => users.push(doc.data()));
+
+        const roleSelect = document.getElementById('su_role');
+        const adminCount = users.filter(u => u.role === 'Administrator').length;
+
+        if (adminCount >= 2) {
+            roleSelect.value = 'User';
+            roleSelect.disabled = true;
+        } else {
+            roleSelect.disabled = false;
         }
-        function toggleForgotForm() { toggleAuthForm('forgot'); }
-        function togglePass(i,ic) { const el=document.getElementById(i); if(el.type==="password"){el.type="text";ic.textContent="🙈";}else{el.type="password";ic.textContent="👁️";} }
-       
-        function handleSignup(e) {
-            e.preventDefault();
-            if (document.getElementById('su_pass').value !== document.getElementById('su_cpass').value) { BrickNotify.error("Nenosiri hazilingani!"); return; }
-            let users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-            let requestedRole = document.getElementById('su_role').value;
-            const adminCount = users.filter(u => u.role === 'Administrator').length;
-            if (requestedRole === 'Administrator' && adminCount >= 2) { requestedRole = 'User'; BrickNotify.warning("Msimamizi wapata zaidi ya 2 hawaruhusiwi."); }
-            const userData = { id: Date.now(), fname: document.getElementById('su_fname').value, lname: document.getElementById('su_lname').value, email: document.getElementById('su_email').value, phone: document.getElementById('su_phone').value, role: requestedRole, password: document.getElementById('su_pass').value, photoUrl: null };
-            if (users.some(u => u.email === userData.email)) { BrickNotify.error("Mtumiaji tayari yupo!"); return; }
-            users.push(userData); localStorage.setItem('registeredUsers', JSON.stringify(users));
-            BrickNotify.success("Usajili umefanikiwa! Tafadhali ingia.");
-            toggleAuthForm('login');
+
+    } else if (t === 'forgot') {
+        f.style.display = 'block';
+        document.getElementById('forgotStep1').style.display = 'block';
+        document.getElementById('forgotStep2').style.display = 'none';
+        document.getElementById('forgotEmail').value = '';
+
+    } else {
+        l.style.display = 'block';
+
+        const savedEmail = localStorage.getItem('rememberedEmail');
+
+        if (savedEmail) {
+            document.getElementById('loginEmail').value = savedEmail;
+            document.getElementById('rememberMe').checked = true;
+        } else {
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('rememberMe').checked = false;
         }
-       
-        function handleLogin(e) {
-            e.preventDefault();
-            const em = document.getElementById('loginEmail').value; const p = document.getElementById('loginPassword').value;
-            const users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-            const user = users.find(u => u.email === em && u.password === p);
-            if (user) {
-                if (document.getElementById('rememberMe').checked) { localStorage.setItem('rememberedEmail', em); } else { localStorage.removeItem('rememberedEmail'); }
-                sessionStorage.setItem('currentUser', JSON.stringify(user)); showSite(user);
-                BrickNotify.success(`Karibu tena, ${user.fname}!`);
-            } else {
-                BrickNotify.error(translations[currentLang].alert_invalid_cred);
-            }
+    }
+}
+
+function toggleForgotForm() {
+    toggleAuthForm('forgot');
+}
+
+function togglePass(i, ic) {
+    const el = document.getElementById(i);
+    if (el.type === "password") {
+        el.type = "text";
+        ic.textContent = "🙈";
+    } else {
+        el.type = "password";
+        ic.textContent = "👁️";
+    }
+}
+
+
+// =============================================
+// ===== SIGNUP (FIRESTORE FIXED) =====
+// =============================================
+async function handleSignup(e) {
+    e.preventDefault();
+
+    if (document.getElementById('su_pass').value !== document.getElementById('su_cpass').value) {
+        BrickNotify.error("Nenosiri hazilingani!");
+        return;
+    }
+
+    const snapshot = await getDocs(collection(db, "users"));
+    let users = [];
+    snapshot.forEach(doc => users.push(doc.data()));
+
+    let requestedRole = document.getElementById('su_role').value;
+    const adminCount = users.filter(u => u.role === 'Administrator').length;
+
+    if (requestedRole === 'Administrator' && adminCount >= 2) {
+        requestedRole = 'User';
+        BrickNotify.warning("Msimamizi zaidi ya 2 hawaruhusiwi.");
+    }
+
+    const userData = {
+        id: Date.now(),
+        fname: document.getElementById('su_fname').value,
+        lname: document.getElementById('su_lname').value,
+        email: document.getElementById('su_email').value,
+        phone: document.getElementById('su_phone').value,
+        role: requestedRole,
+        password: document.getElementById('su_pass').value,
+        photoUrl: null
+    };
+
+    // 🔥 CHECK DUPLICATE EMAIL
+    if (users.some(u => u.email === userData.email)) {
+        BrickNotify.error("Mtumiaji tayari yupo!");
+        return;
+    }
+
+    // 🔥 SAVE TO FIRESTORE
+    await addDoc(collection(db, "users"), userData);
+
+    BrickNotify.success("Usajili umefanikiwa! Tafadhali ingia.");
+    toggleAuthForm('login');
+}
+
+
+// =============================================
+// ===== LOGIN (FIRESTORE FIXED) =====
+// =============================================
+async function handleLogin(e) {
+    e.preventDefault();
+
+    const em = document.getElementById('loginEmail').value;
+    const p = document.getElementById('loginPassword').value;
+
+    const snapshot = await getDocs(collection(db, "users"));
+
+    let users = [];
+    snapshot.forEach(doc => {
+        users.push({ id: doc.id, ...doc.data() });
+    });
+
+    const user = users.find(u => u.email === em && u.password === p);
+
+    if (user) {
+
+        if (document.getElementById('rememberMe').checked) {
+            localStorage.setItem('rememberedEmail', em);
+        } else {
+            localStorage.removeItem('rememberedEmail');
         }
+
+        sessionStorage.setItem('currentUser', JSON.stringify(user));
+
+        showSite(user);
+
+        BrickNotify.success(`Karibu tena, ${user.fname}!`);
+
+    } else {
+        BrickNotify.error(translations[currentLang].alert_invalid_cred);
+    }
+}
+
        
         function handleForgotCheck(e) {
             e.preventDefault();
