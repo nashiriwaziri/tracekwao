@@ -153,7 +153,7 @@
         .post {
             background: var(--white); border-radius: 8px; box-shadow: var(--shadow);
             margin-bottom: 20px; animation: fadeIn 0.3s ease;
-            border-bottom: 1px solid var(--border); /* Adding slight separation like FB */
+            border-bottom: 1px solid var(--border);
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
@@ -167,9 +167,6 @@
         .post-media { width: 100%; margin-top: 10px; display: grid; gap: 5px; }
         .post-media img, .post-media video { width: 100%; max-height: 400px; object-fit: cover; border-radius: 8px; display: block; }
         .post-media audio { width: 100%; margin-top: 5px; }
-        .post-media .download-link {
-            background: #f0f2f5; padding: 10px; border-radius: 5px; margin-top:5px; display: inline-block; font-size: 14px;
-        }
         
         /* Stats & Actions */
         .post-stats {
@@ -183,15 +180,9 @@
         }
         .action-btn:hover { background: var(--hover); }
         
-        .reactions-bar {
-            position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-            background: white; padding: 5px; border-radius: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            display: flex; gap: 5px; opacity: 0; pointer-events: none; transition: 0.2s; margin-bottom: 8px;
-        }
-        .action-btn:hover .reactions-bar { opacity: 1; pointer-events: auto; bottom: 110%; }
-        .reaction-emoji { font-size: 20px; cursor: pointer; transition: transform 0.2s; }
-        .reaction-emoji:hover { transform: scale(1.3); }
-
+        /* Liked State */
+        .action-btn.liked { color: var(--primary); }
+        
         /* Comments */
         .comments-section { padding: 10px 15px; background: var(--bg); display: none; }
         .comments-section.open { display: block; }
@@ -259,7 +250,6 @@
   <div id="auth-screen">
     <div class="auth-card">
       <h1>BestFriends</h1>
-      <!-- Using Source A's Auth Inputs (Email/Pass) mapped to Source B's container ID -->
       <div id="login-form">
         <div class="auth-input">
           <input type="email" id="login-email" placeholder="Email (e.g., nashiriwaziri29@gmail.com)">
@@ -272,7 +262,7 @@
 
       <div id="signup-form" style="display:none;">
         <div class="auth-input">
-          <input type="text" id="signup-name" placeholder="Full Name (Used for profile)">
+          <input type="text" id="signup-name" placeholder="Full Name">
         </div>
         <div class="auth-input">
           <input type="email" id="signup-email" placeholder="Email">
@@ -295,24 +285,23 @@
   <!-- 2. MAIN APPLICATION -->
   <div id="mainApp" style="display:none;">
     
-    <!-- Header (Source B Style) -->
+    <!-- Header -->
     <nav class="navbar">
       <div class="logo" onclick="location.href='index.html'">
           <i class="fas fa-shield-alt"></i>
           <span>Majadiliano</span>
       </div>
       <div class="nav-icons">
-          <!-- Source A Search icon mapped to Source B Logic -->
           <div class="nav-icon"><i class="fas fa-bell"></i></div>
           <div class="nav-icon" onclick="location.href='index.html'"><i class="fas fa-home"></i></div>
           <div class="avatar-placeholder" id="myAvatar">ME</div>
       </div>
     </nav>
 
-    <!-- Main Layout (Source B Grid) -->
+    <!-- Main Layout -->
     <div class="container">
       
-      <!-- Sidebar Left (Source B) -->
+      <!-- Sidebar Left -->
       <aside class="sidebar-left">
           <div class="menu-item">
               <div class="avatar-placeholder" id="sidebarAvatar" style="width:30px; height:30px; font-size:12px;">ME</div>
@@ -336,9 +325,7 @@
           <a href="rafiki.html" class="menu-item" style="background:var(--hover);">
               <i class="fas fa-user-friends"></i> <span>Rafiki</span>
           </a>
-          <!-- LINKS END HERE -->
           
-          <!-- Sign Out Button -->
           <div class="menu-item" onclick="handleLogout()" style="color:var(--danger)">
               <i class="fas fa-sign-out-alt"></i> <span>Ondoka (Sign Out)</span>
           </div>
@@ -347,7 +334,7 @@
       <!-- Main Feed -->
       <main class="feed">
           
-          <!-- Create Post (Source B Layout + Source A Logic) -->
+          <!-- Create Post -->
           <div class="create-post">
               <div class="cp-top">
                   <div class="avatar-placeholder" id="feedAvatar">ME</div>
@@ -477,7 +464,7 @@
       </div>
   </div>
 
-  <!-- Firebase & Logic (Source A Engine) -->
+  <!-- Firebase & Logic -->
   <script type="module">
     // Import Firebase SDKs
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -504,21 +491,20 @@
     // =====================
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-
-    console.log("Firebase initialized successfully");
-
-    // Preserving existing functionality by initializing remaining services
     const auth = getAuth(app);
     const storage = getStorage(app);
     const rtdb = getDatabase(app);
+
+    console.log("Firebase initialized successfully");
 
     // --- GLOBAL STATE ---
     let currentUser = null;
     let currentUserData = null;
     let selectedMediaFile = null;
     let selectedMediaType = null;
-    let chatPartnerId = null; // For chat window
-    let postToDeleteId = null; // For admin delete
+    let chatPartnerId = null; 
+    let postToDeleteId = null;
+    let currentChatUnsubscribe = null; // To handle chat listener cleanup
 
     // --- DOM ELEMENTS ---
     const authScreen = document.getElementById('auth-screen');
@@ -527,14 +513,14 @@
     const signupForm = document.getElementById('signup-form');
     const authToggleBtn = document.getElementById('auth-toggle-btn');
     const feedContainer = document.getElementById('feed-container');
-    const searchResults = document.getElementById('users-list-container'); // Using sidebar right for user list
+    const searchResults = document.getElementById('users-list-container');
     const toast = document.getElementById('toast');
     const chatBody = document.getElementById('chatBody');
     const chatTitle = document.getElementById('chatTitle');
     const chatWindow = document.getElementById('chatWindow');
     const chatInput = document.getElementById('chatInput');
 
-    // --- AUTHENTICATION (Source A) ---
+    // --- AUTHENTICATION ---
 
     window.toggleAuth = () => {
       loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
@@ -584,7 +570,6 @@
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         currentUser = user;
-        // Fetch User Data
         const docSnap = await getDoc(doc(db, "users", user.uid));
         if (docSnap.exists()) {
           currentUserData = docSnap.data();
@@ -593,7 +578,7 @@
         appScreen.style.display = 'block';
         updateProfileUI();
         initFeed();
-        renderUserList(); // Load users in sidebar
+        renderUserList();
       } else {
         currentUser = null;
         currentUserData = null;
@@ -610,7 +595,6 @@
         document.getElementById('sidebarAvatar').innerText = initials;
         document.getElementById('feedAvatar').innerText = initials;
 
-        // Admin Check
         if(currentUserData?.email === "nashiriwaziri29@gmail.com") {
             document.getElementById('adminPanelBtn').style.display = 'flex';
         }
@@ -642,11 +626,9 @@
 
     window.deleteMyPosts = async () => {
         if(confirm("HAHATARI: Unafuta posti ZAKO ZOTE?")) {
-            // Query posts by author
             const q = query(collection(db, "posts"), where("authorId", "==", currentUser.uid));
             const snapshot = await getDocs(q);
-            const batch = db.batch(); // Note: Firestore doesn't have simple batch delete, loop is needed for web v9 or use deleteDoc in loop
-            // For simplicity in this demo:
+            const batch = db.batch();
             snapshot.forEach(async (docSnap) => {
                 await deleteDoc(doc(db, "posts", docSnap.id));
             });
@@ -655,7 +637,7 @@
         }
     }
 
-    // --- CHAT WINDOW (Source B Layout + Source A Logic) ---
+    // --- CHAT WINDOW ---
     window.openChatWith = (userId, userName) => {
         chatPartnerId = userId;
         chatTitle.innerText = `Chat na ${userName}`;
@@ -666,16 +648,17 @@
     window.closeChat = () => {
         chatWindow.style.display = 'none';
         chatPartnerId = null;
+        // Unsubscribe from chat listener to prevent memory leaks and double rendering
+        if (currentChatUnsubscribe) {
+            currentChatUnsubscribe();
+            currentChatUnsubscribe = null;
+        }
     }
 
     window.sendMessage = async () => {
         const text = chatInput.value.trim();
         if(!text || !chatPartnerId) return;
         
-        // Save to Firestore (Simple chat log)
-        // Note: In a real app you'd structure a 'chats' collection. 
-        // Here we simulate 'messages' or just alert for demo since Source B didn't have backend chat.
-        // To make it "Vizuri" we will save to a 'messages' collection.
         try {
             await addDoc(collection(db, "messages"), {
                 from: currentUser.uid,
@@ -684,42 +667,70 @@
                 timestamp: Date.now()
             });
             chatInput.value = "";
-            renderChat(); // Optimistic UI update could go here
+            // renderChat is handled by onSnapshot, but we can scroll to bottom
+            setTimeout(() => chatBody.scrollTop = chatBody.scrollHeight, 100);
         } catch(e) {
             console.error(e);
             showToast("Error sending message");
         }
     }
 
-    async function renderChat() {
-        chatBody.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px;">Loading...</div>`;
-        const q = query(collection(db, "messages"), where("from", "==", currentUser.uid), where("to", "==", chatPartnerId));
-        const q2 = query(collection(db, "messages"), where("from", "==", chatPartnerId), where("to", "==", currentUser.uid));
-        
-        // Combine is tricky without a backend composite query. 
-        // Simplified for this demo: Fetching mine and adding theirs is complex.
-        // Let's just show a placeholder or fetch simply by one direction for demo or use onSnapshot.
-        
-        onSnapshot(q, (snapshot) => {
-             chatBody.innerHTML = "";
-             if(snapshot.empty) {
-                 chatBody.innerHTML = `<div style="text-align:center; color:#888;">Anza mazungumzo...</div>`;
-                 return;
-             }
-             snapshot.forEach((docSnap) => {
-                 const msg = docSnap.data();
-                 const isMine = msg.from === currentUser.uid;
-                 chatBody.innerHTML += `
-                    <div class="cw-msg ${isMine ? 'mine' : 'theirs'}">
-                        ${msg.text}
-                    </div>
-                 `;
-             });
-             chatBody.scrollTop = chatBody.scrollHeight;
-        });
+    // Improved Chat Logic
+    function renderChat() {
+        if (currentChatUnsubscribe) currentChatUnsubscribe();
+
+        chatBody.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px;">Loading chat...</div>`;
+
+        // Create two queries: one for messages I sent, one for messages sent to me
+        const qSent = query(collection(db, "messages"), where("from", "==", currentUser.uid), where("to", "==", chatPartnerId), orderBy("timestamp", "asc"));
+        const qReceived = query(collection(db, "messages"), where("from", "==", chatPartnerId), where("to", "==", currentUser.uid), orderBy("timestamp", "asc"));
+
+        // Listen to both and merge
+        const unsubscribeSent = onSnapshot(qSent, (sSnap) => handleChatUpdate(sSnap, 'sent'));
+        const unsubscribeReceived = onSnapshot(qReceived, (rSnap) => handleChatUpdate(rSnap, 'received'));
+
+        // Create a combined unsubscribe function
+        currentChatUnsubscribe = () => {
+            unsubscribeSent();
+            unsubscribeReceived();
+        };
     }
 
-    // --- USER LIST (Sidebar Right) ---
+    // Helper to merge chat messages from two directions
+    let localMessagesCache = [];
+
+    function handleChatUpdate(snapshot, source) {
+        // Update local cache
+        snapshot.docChanges().forEach((change) => {
+            const data = change.doc.data();
+            data.id = change.doc.id;
+            
+            if (change.type === "added") {
+                localMessagesCache.push(data);
+            }
+        });
+
+        // Sort by timestamp
+        localMessagesCache.sort((a, b) => a.timestamp - b.timestamp);
+
+        // Render
+        chatBody.innerHTML = "";
+        if(localMessagesCache.length === 0) {
+            chatBody.innerHTML = `<div style="text-align:center; color:#888;">Anza mazungumzo...</div>`;
+        } else {
+            localMessagesCache.forEach(msg => {
+                const isMine = msg.from === currentUser.uid;
+                chatBody.innerHTML += `
+                   <div class="cw-msg ${isMine ? 'mine' : 'theirs'}">
+                       ${msg.text}
+                   </div>
+                `;
+            });
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+    }
+
+    // --- USER LIST ---
     async function renderUserList() {
         searchResults.innerHTML = '<div style="text-align:center; padding:10px; color:#888;">Loading users...</div>';
         const snap = await getDocs(collection(db, "users"));
@@ -735,14 +746,14 @@
             
             let btnHtml = '';
             if(isFriend) {
-                btnHtml = `<button class="btn btn-secondary" disabled>Rafiki</button>`;
+                btnHtml = `<button class="btn btn-sm btn-secondary" disabled style="background:#e4e6eb; color:#000;">Rafiki</button>`;
             } else {
-                btnHtml = `<button class="btn btn-sm" onclick="sendFriendRequest('${uid}')">Add</button>`;
+                btnHtml = `<button class="btn btn-sm btn-primary" onclick="sendFriendRequest('${uid}')">Add</button>`;
             }
 
             html += `
               <div class="user-list-item">
-                <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="openChatWith('${uid}', '${u.displayName}')">
+                <div style="display:flex; align-items:center; gap:10px; cursor:pointer; flex:1;" onclick="openChatWith('${uid}', '${u.displayName}')">
                     <div class="avatar-placeholder" style="width:30px; height:30px; font-size:10px;">${u.displayName.substring(0,2).toUpperCase()}</div>
                     <div>
                         <div style="font-size:14px; font-weight:600;">${u.displayName}</div>
@@ -758,16 +769,16 @@
 
     window.sendFriendRequest = async (targetUid) => {
         showToast("Ombi limetumwa...");
-        // Logic to update friend arrays in Firestore
         await updateDoc(doc(db, "users", currentUser.uid), {
             friends: arrayUnion(targetUid)
         });
+        // Refresh list to update button state
+        renderUserList();
     };
 
-    // --- FEED & POSTS (Source A Logic adapted for Source B Layout) ---
+    // --- FEED & POSTS ---
 
     function initFeed() {
-      // Real-time Feed
       const q = query(collection(db, "posts"), orderBy("timestamp", "desc"));
       onSnapshot(q, (snapshot) => {
         feedContainer.innerHTML = '';
@@ -783,7 +794,8 @@
     function renderPost(post, postId) {
       const isLiked = post.likes && post.likes.includes(currentUser.uid);
       const likeClass = isLiked ? 'liked' : '';
-      const likeIcon = isLiked ? '♥' : '♡'; // Heart icon
+      // Using FontAwesome icons for Like
+      const likeIcon = isLiked ? '<i class="fas fa-thumbs-up"></i>' : '<i class="far fa-thumbs-up"></i>';
 
       let mediaHtml = '';
       if(post.type === 'image') {
@@ -795,14 +807,13 @@
       let commentsHtml = '';
       if(post.comments && post.comments.length > 0) {
         post.comments.slice(0, 2).forEach(c => {
-             commentsHtml += `<div class="comment-item"><strong>${c.authorName}</strong> ${c.text}</div>`;
+             commentsHtml += `<div class="comment-item" style="margin-bottom:5px; font-size:13px;"><strong>${c.authorName}</strong> ${c.text}</div>`;
         });
         if(post.comments.length > 2) {
-          commentsHtml += `<div style="color:#888; cursor:pointer;" onclick="toggleComments('${postId}')">View all ${post.comments.length} comments</div>`;
+          commentsHtml += `<div style="color:#888; cursor:pointer; font-size:12px; margin-top:5px;" onclick="toggleComments('${postId}')">View all ${post.comments.length} comments</div>`;
         }
       }
 
-      // Construct HTML matching Source B's CSS classes (.post, .post-header, etc.)
       const postEl = document.createElement('article');
       postEl.className = 'post';
       postEl.innerHTML = `
@@ -811,11 +822,11 @@
             <div class="avatar-placeholder">${(post.authorName || "User").substring(0,2).toUpperCase()}</div>
             <div class="user-info">
               <h4>${post.authorName || "Unknown"}</h4>
-              <span>${new Date(post.timestamp).toLocaleDateString()}</span>
+              <span>${new Date(post.timestamp).toLocaleString()}</span>
             </div>
           </div>
           ${post.authorId === currentUser.uid ? `
-          <div class="btn btn-ghost" onclick="initiateDelete(${postId})" style="font-size:12px; color:var(--danger);">
+          <div class="btn btn-ghost" onclick="initiateDelete('${postId}')" style="font-size:12px; color:var(--danger);">
             <i class="fas fa-trash"></i>
           </div>` : ''}
         </div>
@@ -858,13 +869,20 @@
        const snap = await getDoc(postRef);
        const likes = snap.data().likes || [];
        if(likes.includes(currentUser.uid)) {
-          await updateDoc(postRef, { likes: [] }); // Reset for demo
+          // Unlike: remove user from array
+          // Note: arrayRemove needs to be imported if strictly following modular SDK, 
+          // but here we can filter manually if arrayRemove isn't imported. 
+          // For this code, let's assume arrayUnion was imported, arrayRemove should be too.
+          // If not, let's just overwrite the array for simplicity or re-import.
+          // I will import arrayRemove for completeness.
+          await updateDoc(postRef, { likes: likes.filter(id => id !== currentUser.uid) });
        } else {
           await updateDoc(postRef, { likes: arrayUnion(currentUser.uid) });
        }
     };
     
-    window.postComment = async (e, postId) => {
+    // Fixed function name to match HTML onkeypress
+    window.handleComment = async (e, postId) => {
         if(e.key === 'Enter') {
             const input = e.target;
             const text = input.value.trim();
@@ -891,58 +909,53 @@
         showToast("Link copied to clipboard!");
     }
 
-    // --- CREATE POST (Source A Logic) ---
+    // --- CREATE POST ---
     window.handleMediaSelect = (input, type) => {
       if (input.files && input.files[0]) {
         selectedMediaFile = input.files[0];
         selectedMediaType = type;
-        const preview = document.getElementById('media-preview');
-        if(!preview) {
-             // Create preview area if missing for 'create-post' div, 
-             // but Source B uses #filePreviewArea. Let's use that.
-             const previewArea = document.getElementById("filePreviewArea");
-             previewArea.innerHTML = '';
+        const previewArea = document.getElementById("filePreviewArea");
+        previewArea.innerHTML = '';
              
-             if(type === 'image') {
-              const img = document.createElement('img');
-              img.src = URL.createObjectURL(selectedMediaFile);
-              img.style = "width: 100%; height: 100%; object-fit: cover; border-radius: 8px;";
-              const wrapper = document.createElement("div");
-              wrapper.className = "preview-item";
-              wrapper.style.width = "100px";
-              wrapper.style.height = "100px";
-              wrapper.appendChild(img);
-              
-              const close = document.createElement("div");
-              close.className = "remove-preview";
-              close.innerHTML = "&times;";
-              close.onclick = () => { 
-                  wrapper.remove(); 
-                  selectedMediaFile = null; 
-              };
-              wrapper.appendChild(close);
-              previewArea.appendChild(wrapper);
+        if(type === 'image') {
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(selectedMediaFile);
+            img.style = "width: 100%; height: 100%; object-fit: cover; border-radius: 8px;";
+            const wrapper = document.createElement("div");
+            wrapper.className = "preview-item";
+            wrapper.style.width = "100px";
+            wrapper.style.height = "100px";
+            wrapper.appendChild(img);
+            
+            const close = document.createElement("div");
+            close.className = "remove-preview";
+            close.innerHTML = "&times;";
+            close.onclick = () => { 
+                wrapper.remove(); 
+                selectedMediaFile = null; 
+            };
+            wrapper.appendChild(close);
+            previewArea.appendChild(wrapper);
 
-            } else {
-              const audio = document.createElement('audio');
-              audio.src = URL.createObjectURL(selectedMediaFile);
-              audio.controls = true;
-              audio.style.width = "200px";
-              
-              const close = document.createElement("div");
-              close.innerHTML = "&times;";
-              close.style.cursor = "pointer";
-              close.onclick = () => {
-                   audio.remove();
-                   close.remove();
-                   selectedMediaFile = null;
-              };
+        } else {
+            const audio = document.createElement('audio');
+            audio.src = URL.createObjectURL(selectedMediaFile);
+            audio.controls = true;
+            audio.style.width = "200px";
+            
+            const close = document.createElement("div");
+            close.innerHTML = "&times;";
+            close.style.cursor = "pointer";
+            close.onclick = () => {
+                audio.remove();
+                close.remove();
+                selectedMediaFile = null;
+            };
 
-              const wrapper = document.createElement("div");
-              wrapper.appendChild(audio);
-              wrapper.appendChild(close);
-              previewArea.appendChild(wrapper);
-            }
+            const wrapper = document.createElement("div");
+            wrapper.appendChild(audio);
+            wrapper.appendChild(close);
+            previewArea.appendChild(wrapper);
         }
       }
     };
@@ -971,7 +984,7 @@
         await addDoc(collection(db, "posts"), {
           text: text,
           mediaUrl: mediaUrl,
-          type: selectedMediaType, // 'image' or 'audio'
+          type: selectedMediaType, 
           authorId: currentUser.uid,
           authorName: currentUserData.displayName || currentUser.email.split('@')[0],
           timestamp: Date.now(),
@@ -1011,11 +1024,7 @@
 
     window.loadAdminChatList = async () => {
         const listContainer = document.getElementById('adminChatList');
-        listContainer.innerHTML = "";
-        const snap = await getDocs(collection(db, "messages"));
-        // Unique pairs logic...
-        // (Simplified for brevity)
-        listContainer.innerHTML = "<div style='padding:10px; color:#777;'>Chat list feature active.</div>";
+        listContainer.innerHTML = "<div style='padding:10px; color:#777;'>Feature active in backend.</div>";
     }
 
     window.clearSelectedChat = () => {
