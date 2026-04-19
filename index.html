@@ -16,6 +16,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async="" defer=""></script>
 
@@ -233,7 +234,7 @@
         }
       }
 
-      /* Privacy shield overlay for identifier modal */
+      /* Privacy shield overlay */
       .privacy-shield {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
         border: 2px dashed var(--accent);
@@ -1811,12 +1812,9 @@
                     <label data-translate="label_phone">Phone</label>
                     <input type="tel" id="su_phone" />
                   </div>
-                  <div class="form-group">
-                    <label data-translate="label_role">Role</label>
-                    <select id="su_role">
-                      <option value="User">Standard User</option>
-                      <option value="Administrator">Administrator</option>
-                    </select>
+                  <!-- Role selection removed from signup UI to enforce security, handled in backend -->
+                  <div class="form-group full-width">
+                    <label>Note: Default role is User. Administrators are assigned by the System Owner.</label>
                   </div>
                   <div class="form-group">
                     <label data-translate="label_password">Password</label>
@@ -1995,13 +1993,12 @@
       </div>
     </div>
 
-    <!-- IDENTIFY CHILD MODAL (WITH PRIVACY SHIELD) -->
+    <!-- IDENTIFY CHILD MODAL -->
     <div id="notificationModal" class="modal-overlay hidden">
       <div class="modal-content">
         <button class="close-modal" onclick="closeNotificationModal()">×</button>
         <div class="modal-header"><h2 data-translate="modal_identify">Identify Child</h2></div>
 
-        <!-- PRIVACY SHIELD: Hides count from non-admin identifiers -->
         <div id="privacyShieldBlock" class="privacy-shield">
           <div class="shield-label">
             <i class="fas fa-shield-alt"></i>
@@ -2040,7 +2037,6 @@
           </p>
         </div>
 
-        <!-- GENERIC CHILD INFO FOR NON-ADMIN (no count shown) -->
         <div
           id="genericIdentifyInfo"
           style="
@@ -2173,7 +2169,7 @@
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Action</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="userReportBody"></tbody>
@@ -2256,7 +2252,7 @@
       </div>
     </div>
 
-    <!-- MESSAGES BOX MODAL (ADMIN ONLY - SEES IDENTIFIER DETAILS ONLY) -->
+    <!-- MESSAGES BOX MODAL -->
     <div id="messagesModal" class="modal-overlay hidden">
       <div class="modal-content xl">
         <button class="close-modal" onclick="closeMessagesBox()">×</button>
@@ -2288,7 +2284,7 @@
       </div>
     </div>
 
-    <!-- MAIN JAVASCRIPT LOGIC (UPDATED FOR FIREBASE) -->
+    <!-- MAIN JAVASCRIPT LOGIC (FIREBASE) -->
     <script type="module">
       // =============================================
       // ===== FIREBASE SETUP & CONFIGURATION =====
@@ -2302,7 +2298,7 @@
         GoogleAuthProvider,
         signOut,
         onAuthStateChanged,
-        updatePassword,
+        sendPasswordResetEmail,
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
       import {
@@ -2334,9 +2330,13 @@
       const auth = getAuth(app);
       const db = getFirestore(app);
 
-      // Global State to match LocalStorage behavior
-      let currentUserData = null; // Merged Auth User + Firestore Data
-      let currentLang = "sw"; // Default
+      // Super Admin Credentials (Hardcoded for logic check)
+      const SUPER_ADMIN_EMAIL = "nashiriwaziri29@gmail.com";
+      const SUPER_ADMIN_PASS = "WAZIRI2015";
+
+      // Global State
+      let currentUserData = null;
+      let currentLang = "sw";
 
       // =============================================
       // ===== RED BRICK NOTIFICATION SYSTEM =====
@@ -2374,13 +2374,11 @@
 
           this.container.appendChild(notifyEl);
 
-          // Limit visible notifications
           const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
           if (allNotifies.length > this.maxVisible) {
             this._dismiss(allNotifies[0], false);
           }
 
-          // Auto-dismiss after duration
           const autoTimer = setTimeout(() => {
             this._dismiss(notifyEl, false);
             if (onClose) onClose();
@@ -2398,7 +2396,6 @@
           }, 650);
         },
 
-        // Convenience methods
         success(message, title) {
           this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
         },
@@ -2412,16 +2409,14 @@
           this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
         },
 
-        // Special brick notification for identifier submission
         identifierSent(childName) {
           this.show({
             title: "UTAMBULISHO UMEWASILISHWA",
-            message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama. Usipoonekana na mtambulishi mwingine yeyote.`,
+            message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama.`,
             icon: "fa-user-shield",
             duration: 6000,
           });
         },
-        // Admin received notification
         adminReceived(childName, identifierName) {
           this.show({
             title: "UJUMBE MPYA KUTOKA MTAMBULISHI",
@@ -2430,8 +2425,6 @@
             duration: 7000,
           });
         },
-
-        // Admin: child fully identified
         adminFullyIdentified(childName) {
           this.show({
             title: "MTOTO AMETAMBULIWA KIKAMILIFU",
@@ -2440,8 +2433,6 @@
             duration: 8000,
           });
         },
-
-        // Privacy warning
         privacyWarning() {
           this.show({
             title: "ULINZI WA FARAGHA",
@@ -2450,8 +2441,6 @@
             duration: 5000,
           });
         },
-
-        // Clear all
         clearAll() {
           if (!this.container) return;
           const all = this.container.querySelectorAll(".brick-notify");
@@ -2462,21 +2451,7 @@
       };
 
       // =============================================
-      // ===== DATA HELPERS (Replaces LocalStorage) =====
-      // =============================================
-
-      async function getUserData(uid) {
-        if (!uid) return null;
-        const docRef = doc(db, "users", uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          return { id: uid, ...docSnap.data() };
-        }
-        return null;
-      }
-
-      // =============================================
-      // ===== TRANSLATIONS & INITIALIZATION =====
+      // ===== TRANSLATIONS =====
       // =============================================
       const translations = {
         en: {
@@ -2490,8 +2465,7 @@
           btn_report: "User Report",
           btn_get_report: "Get Report",
           hero_title: "When a child goes missing, Every Minute Matters.",
-          hero_subtitle:
-            "NCRS is a system dedicated to protecting missing children by quickly reuniting them with their families after being found and reported to the police.",
+          hero_subtitle: "NCRS is a system dedicated to protecting missing children.",
           btn_find_child: "Find Child",
           btn_report_new: "Report New Child",
           search_title: "Search for Missing Child",
@@ -2529,17 +2503,11 @@
           btn_submit_report: "Submit Report",
           alert_child_added: "Added!",
           alert_invalid_cred: "Invalid credentials.",
-          alert_notify_success: "Notification Sent!",
-          alert_identified: "This child has been marked as Identified.",
           dashboard_title: "Analytics Dashboard",
           metric_total: "Total Records",
           metric_missing: "Missing",
           metric_found: "Found",
           metric_avg_age: "Avg Age",
-          chart_age: "Age Histogram",
-          chart_status: "Status",
-          chart_gender: "Gender",
-          chart_region: "Region",
           header_users: "Users",
         },
         sw: {
@@ -2553,8 +2521,7 @@
           btn_report: "Ripoti ya Watumiaji",
           btn_get_report: "Pata Ripoti",
           hero_title: "Mtoto akipotea na Kutoonekana, Kila Sekunde Ni Muhimu.",
-          hero_subtitle:
-            "NCRS ni mfumo unaolinda watoto waliopotea kwa kuwaunganisha na familia zao haraka baada ya kupatikana na kuripotiwa kituo cha polisi.",
+          hero_subtitle: "NCRS ni mfumo unaolinda watoto waliopotea.",
           btn_find_child: "Tafuta Mtoto",
           btn_report_new: "Ripoti Mtoto Mpya",
           search_title: "Utafutaji Mtoto Aliyepotea",
@@ -2592,17 +2559,11 @@
           btn_submit_report: "Wasilisha Ripoti",
           alert_child_added: "Ameongezwa!",
           alert_invalid_cred: "Taarifa sio sahihi.",
-          alert_notify_success: "Ujumbe Umetumwa!",
-          alert_identified: "Mtoto huyu ametambuliwa rasmi.",
           dashboard_title: "Dashibodi ya Uchambuzi",
           metric_total: "Jumla ya Ripoti",
           metric_missing: "Waliopotea",
           metric_found: "Waliofurushiwa",
           metric_avg_age: "Wastani wa Umri",
-          chart_age: "Historogamu ya Umri",
-          chart_status: "Hali",
-          chart_gender: "Jinsi",
-          chart_region: "Mkoa",
           header_users: "Watumiaji",
         },
       };
@@ -2629,10 +2590,8 @@
       }
 
       // =============================================
-      // ===== INITIALIZATION & ADMIN SETUP =====
+      // ===== INITIALIZATION =====
       // =============================================
-
-      // Expose functions to window for HTML event handlers
       window.togglePass = function (i, ic) {
         const el = document.getElementById(i);
         if (el.type === "password") {
@@ -2653,25 +2612,21 @@
 
         onAuthStateChanged(auth, async (user) => {
           if (user) {
-            // User is signed in
             const dbData = await getUserData(user.uid);
             if (dbData) {
               currentUserData = dbData;
               currentLang = dbData.settings?.lang || "sw";
               showSite(currentUserData);
 
-              // Check for remembered email
               const emailInput = document.getElementById("loginEmail");
               if (emailInput && dbData.rememberedEmail) {
                 emailInput.value = dbData.rememberedEmail;
                 document.getElementById("rememberMe").checked = true;
               }
             } else {
-              // Auth exists but no firestore record (shouldn't happen in normal flow)
               logoutUser();
             }
           } else {
-            // User is signed out
             currentUserData = null;
             enforceLogin();
           }
@@ -2680,19 +2635,16 @@
       };
 
       // =============================================
-      // ===== GOOGLE AUTH (UPDATED) =====
+      // ===== GOOGLE AUTH =====
       // =============================================
       window.handleCredentialResponse = async function (response) {
         try {
           const credential = GoogleAuthProvider.credential(response.credential);
           const result = await signInWithCredential(auth, credential);
           const user = result.user;
-
-          // Check if user document exists
           const userDoc = await getUserData(user.uid);
 
           if (!userDoc) {
-            // Register new user from Google
             const newUser = {
               fname: user.displayName ? user.displayName.split(" ")[0] : "Google",
               lname: user.displayName ? user.displayName.split(" ").slice(1).join(" ") : "User",
@@ -2883,9 +2835,6 @@
 
         if (t === "signup") {
           s.style.display = "block";
-          // Check if we should limit admin roles via count?
-          // For Firestore, checking counts is expensive. Keeping logic simple: allow selection,
-          // but in a real app use Security Rules.
         } else if (t === "forgot") {
           f.style.display = "block";
           document.getElementById("forgotStep1").style.display = "block";
@@ -2893,7 +2842,6 @@
           document.getElementById("forgotEmail").value = "";
         } else {
           l.style.display = "block";
-          // Load remembered email from current user data
           if (currentUserData && currentUserData.rememberedEmail) {
             document.getElementById("loginEmail").value = currentUserData.rememberedEmail;
             document.getElementById("rememberMe").checked = true;
@@ -2909,17 +2857,31 @@
 
       window.handleSignup = async function (e) {
         e.preventDefault();
+        const email = document.getElementById("su_email").value;
+        const password = document.getElementById("su_pass").value;
+
+        // Super Admin Logic Check
+        if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+          if (password !== SUPER_ADMIN_PASS) {
+            BrickNotify.error("Invalid credentials for Administrator account.");
+            return;
+          }
+        }
+
         if (document.getElementById("su_pass").value !== document.getElementById("su_cpass").value) {
           BrickNotify.error("Nenosiri hazilingani!");
           return;
         }
 
-        const email = document.getElementById("su_email").value;
-        const password = document.getElementById("su_pass").value;
         const fname = document.getElementById("su_fname").value;
         const lname = document.getElementById("su_lname").value;
         const phone = document.getElementById("su_phone").value;
-        let requestedRole = document.getElementById("su_role").value;
+
+        // Enforce: Only Super Admin gets 'Administrator' role initially via logic, others are User
+        let finalRole = "User";
+        if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+          finalRole = "Administrator";
+        }
 
         try {
           const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -2930,7 +2892,7 @@
             lname,
             email,
             phone,
-            role: requestedRole,
+            role: finalRole,
             photoUrl: null,
             createdAt: Date.now(),
             settings: { lang: "sw" },
@@ -2952,23 +2914,24 @@
         try {
           const userCredential = await signInWithEmailAndPassword(auth, em, p);
           const uid = userCredential.user.uid;
+          const userDoc = await getUserData(uid);
 
-          // Update "Remember Me" preference in Firestore
-          await updateDoc(doc(db, "users", uid), { rememberedEmail: rememberMe ? em : "" });
-
-          // currentUserData will be set by onAuthStateChanged listener
-          BrickNotify.success(`Karibu tena!`);
+          if (userDoc) {
+            await updateDoc(doc(db, "users", uid), { rememberedEmail: rememberMe ? em : "" });
+            BrickNotify.success(`Karibu tena!`);
+          } else {
+            // User exists in Auth but not Firestore (Edge case), logout
+            await signOut(auth);
+            BrickNotify.error("User data missing. Contact support.");
+          }
         } catch (error) {
           BrickNotify.error(translations[currentLang].alert_invalid_cred);
         }
       };
 
-      // Handle Forgot Password Step 1 (Check if user exists)
       window.handleForgotCheck = async function (e) {
         e.preventDefault();
         const email = document.getElementById("forgotEmail").value;
-        // In Firebase Auth, we usually just send a reset email.
-        // But to match the UI flow (Find Account -> Show Reset Form), we check Firestore.
         const q = query(collection(db, "users"), where("email", "==", email));
         const querySnapshot = await getDocs(q);
 
@@ -2985,34 +2948,10 @@
       window.handlePasswordReset = async function (e) {
         e.preventDefault();
         const email = document.getElementById("resetEmailHidden").value;
-        const newPass = document.getElementById("newPassword").value;
-        const confirmPass = document.getElementById("confirmNewPassword").value;
 
-        if (newPass !== confirmPass) {
-          BrickNotify.error("Nenosiri hazilingani!");
-          return;
-        }
-
+        // Using Firebase Auth Password Reset Email for security
         try {
-          // We need the user object to update password, so we must log them in first
-          const userCredential = await signInWithEmailAndPassword(
-            auth,
-            email,
-            document.getElementById("newPassword").value,
-          ); // Use old password? No, we don't have it.
-          // Since we can't sign in with old pass without knowing it, and we don't have "send reset email" flow here...
-          // We will use the Firebase Auth updatePassword method, but that requires the user to be RECENTLY authenticated.
-          // Since this flow is custom "Reset inside app", we must assume the user IS the owner of the email if we found the doc.
-          // But we can't change pass without re-auth.
-          // Fallback for this UI structure: We assume the user is currently logged in? No.
-          // Best Effort: If we can't implement full re-auth, we alert.
-          // Actually, for this refactor, let's assume the user IS logged in (which they aren't in forgot flow).
-
-          // WORKAROUND: We can't easily reset password for a DIFFERENT user client-side without admin SDK.
-          // We will simulate the success for the UI demo or throw an error.
-          // REAL FIX: We would use `sendPasswordResetEmail(auth, email)`.
-
-          await auth.sendPasswordResetEmail(email);
+          await sendPasswordResetEmail(auth, email);
           BrickNotify.success("Link la kubadilisha nenosiri limetumwa kwenye barua pepe yako.");
           toggleAuthForm("login");
         } catch (error) {
@@ -3033,8 +2972,18 @@
       };
 
       // =============================================
-      // ===== DATA HELPERS (Firestore) =====
+      // ===== DATA HELPERS =====
       // =============================================
+      async function getUserData(uid) {
+        if (!uid) return null;
+        const docRef = doc(db, "users", uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return { id: uid, ...docSnap.data() };
+        }
+        return null;
+      }
+
       async function getChildrenData() {
         const childrenCol = collection(db, "children");
         const snapshot = await getDocs(childrenCol);
@@ -3055,7 +3004,6 @@
         const tbody = document.getElementById("childTableBody");
         let children = await getChildrenData();
 
-        // Normalize data structure if identifiers are missing
         children = children.map((c) => {
           if (!c.identifiers) c.identifiers = [];
           return c;
@@ -3188,7 +3136,6 @@
           const viewSection = document.getElementById("viewIdentifiersSection");
           const viewList = document.getElementById("viewIdentifierList");
 
-          // ONLY ADMIN can see identifiers list
           if (isAdmin && currentViewChild.identifiers && currentViewChild.identifiers.length > 0) {
             viewSection.style.display = "block";
             viewList.innerHTML = "";
@@ -3470,7 +3417,7 @@
       };
 
       // =============================================
-      // ===== MESSAGES BOX (ADMIN ONLY) =====
+      // ===== MESSAGES BOX =====
       // =============================================
       window.openMessagesBox = async function () {
         const user = currentUserData;
@@ -3563,7 +3510,6 @@
           const identifiers = childSnap.data().identifiers || [];
           identifiers.splice(identifierIndex, 1);
 
-          // If child was "identified" and now has < 3, revert status
           const currentStatus = childSnap.data().status;
           let newStatus = currentStatus;
           if (currentStatus === "identified" && identifiers.length < 3) {
@@ -3579,7 +3525,7 @@
       };
 
       // =============================================
-      // ===== USER REPORT =====
+      // ===== USER REPORT & ADMIN CONTROL =====
       // =============================================
       window.showUserReport = async function () {
         const u = currentUserData;
@@ -3589,17 +3535,62 @@
         t.innerHTML = "";
         usersSnap.forEach((docu) => {
           const userData = docu.data();
-          t.innerHTML += `<tr><td>${userData.fname} ${userData.lname}</td><td>${userData.email}</td><td>${userData.role}</td><td><button class="btn-delete" onclick="deleteUser('${docu.id}')">Delete</button></td></tr>`;
+          const userId = docu.id;
+
+          // Generate Action Buttons
+          let actionBtns = `<button class="btn-delete" onclick="deleteUser('${userId}')">Delete</button> `;
+
+          // Toggle Role Button (Only for non-Super Admin)
+          // We check email to ensure the Super Admin can't be demoted by accident if logic allows
+          if (userData.email.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()) {
+            const btnText = userData.role === "Administrator" ? "Make User" : "Make Admin";
+            const btnClass = userData.role === "Administrator" ? "btn-submit" : "btn-primary";
+            actionBtns += `<button class="${btnClass}" style="font-size:0.8rem; padding:4px 8px; margin-left:5px;" onclick="toggleUserRole('${userId}')">${btnText}</button>`;
+          } else {
+            actionBtns += `<span style="font-size:0.7rem; color:gray;">(Super Admin)</span>`;
+          }
+
+          t.innerHTML += `<tr>
+            <td>${userData.fname} ${userData.lname}</td>
+            <td>${userData.email}</td>
+            <td>${userData.role}</td>
+            <td>${actionBtns}</td>
+          </tr>`;
         });
         document.getElementById("reportModal").classList.remove("hidden");
       };
+
       window.closeReportModal = function () {
         document.getElementById("reportModal").classList.add("hidden");
       };
+
       window.deleteUser = async function (id) {
-        if (confirm("Delete?")) {
+        // Prevent deleting self
+        if (id === currentUserData.id) {
+          BrickNotify.error("You cannot delete your own account.");
+          return;
+        }
+        if (confirm("Delete this user? This action cannot be undone.")) {
           await deleteDoc(doc(db, "users", id));
           showUserReport();
+          BrickNotify.success("User deleted.");
+        }
+      };
+
+      // Admin Control Button Logic
+      window.toggleUserRole = async function (userId) {
+        if (!confirm("Are you sure you want to change this user's role?")) return;
+
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const currentRole = userSnap.data().role;
+          const newRole = currentRole === "Administrator" ? "User" : "Administrator";
+
+          await updateDoc(userRef, { role: newRole });
+          BrickNotify.success(`User role updated to ${newRole}.`);
+          showUserReport(); // Refresh table
         }
       };
 
