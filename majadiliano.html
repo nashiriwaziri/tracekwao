@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Majadiliano - Together Safe Network</title>
     <!-- Icons (FontAwesome) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async="" defer=""></script>
 
     <style>
       :root {
@@ -102,7 +111,7 @@
         width: 100%;
         padding: 12px;
         margin: 10px 0;
-        border: 1px solid #ccc;
+        border:1px solid #ccc;
         border-radius: 5px;
       }
       .auth-toggle {
@@ -692,7 +701,6 @@
       }
       .toast.show {
         opacity: 1;
-        bottom: 40px;
       }
 
       /* --- RESPONSIVE --- */
@@ -738,8 +746,11 @@
         }
       }
     </style>
-  </head>
+</head>
   <body>
+    <!-- ===== RED BRICK NOTIFICATION CONTAINER ===== -->
+    <div class="brick-notify-container" id="brickNotifyContainer"></div>
+
     <!-- AUTH SCREEN -->
     <div id="authScreen" style="display: flex">
       <div class="auth-box">
@@ -747,9 +758,7 @@
         <h3 id="authTitle">Kuingia (Login)</h3>
         <input type="text" id="authUser" placeholder="Jina la mtumiaji (Username)" />
         <input type="password" id="authPass" placeholder="Neno la siri (Password)" />
-        <button class="btn btn-primary" style="width: 100%; margin-top: 10px" onclick="window.handleAuth()">
-          Endelea
-        </button>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px" onclick="window.handleAuth()">Endelea</button>
         <div class="auth-toggle" onclick="window.toggleAuthMode()">Huna akaunti? Jisajili Sasa</div>
       </div>
     </div>
@@ -1002,24 +1011,35 @@
     <!-- Toast -->
     <div class="toast" id="toast">Ujumbe hapa</div>
 
-    <!-- MAIN JAVASCRIPT LOGIC -->
+    <!-- MAIN JAVASCRIPT LOGIC (UPDATED FOR FIREBASE) -->
     <script type="module">
       // =====================
       // IMPORT FIREBASE SDKs
       // =====================
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-      import {
-        getFirestore,
-        collection,
-        addDoc,
-        getDocs,
-        getDoc,
-        doc,
-        updateDoc,
-        deleteDoc,
-        query,
-        where,
-        orderBy,
+      import { 
+        getAuth, 
+        onAuthStateChanged,
+        signOut,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        GoogleAuthProvider,
+        signInWithCredential,
+        updateProfile
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+      import { 
+        getFirestore, 
+        collection, 
+        addDoc, 
+        getDocs, 
+        getDoc, 
+        updateDoc, 
+        deleteDoc, 
+        doc, 
+        query, 
+        where, 
+        orderBy 
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
       // =====================
@@ -1035,14 +1055,14 @@
         measurementId: "G-1GLSLPKQK5",
       };
 
-      // Initialize Firebase
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
+      const auth = getAuth(app);
 
       // =====================
       // GLOBAL STATE
       // =====================
-      let currentUser = null;
+      let currentUser = null; // Merged Auth User + Firestore Data
       let selectedFiles = [];
       let chatPartnerId = null;
       let postToDeleteId = null;
@@ -1052,14 +1072,14 @@
       let usersCache = [];
 
       // =====================
-      // FIREBASE HELPERS
+      // DATA HELPERS (Replaces LocalStorage)
       // =====================
-
+      
       // --- USERS ---
       async function fetchUsers() {
         const q = query(collection(db, "users"));
         const snapshot = await getDocs(q);
-        usersCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        usersCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         return usersCache;
       }
 
@@ -1067,7 +1087,7 @@
         const q = query(collection(db, "users"), where("name", "==", name));
         const snap = await getDocs(q);
         if (!snap.empty) {
-          return { id: snap.docs[0].id, ...snap.docs[0].data() };
+            return { id: snap.docs[0].id, ...snap.docs[0].data() };
         }
         return null;
       }
@@ -1075,7 +1095,6 @@
       async function createUser(userData) {
         userData.following = [];
         userData.friends = [];
-        userData.requests = [];
         const docRef = await addDoc(collection(db, "users"), userData);
         return { id: docRef.id, ...userData };
       }
@@ -1084,180 +1103,166 @@
       async function fetchPosts() {
         const q = query(collection(db, "posts"), orderBy("date", "desc"));
         const snapshot = await getDocs(q);
-        postsCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        postsCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         return postsCache;
       }
 
       async function createPost(postData) {
-        await addDoc(collection(db, "posts"), postData);
+          await addDoc(collection(db, "posts"), postData);
       }
 
       async function deletePostById(id) {
-        await deleteDoc(doc(db, "posts", id));
+          await deleteDoc(doc(db, "posts", id));
       }
 
       // --- MESSAGES ---
       async function fetchMessages() {
-        // Fetch all messages (demo scale) to avoid complex indexes
-        const q = query(collection(db, "messages"), orderBy("time", "asc"));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map((d) => d.data());
+          // Fetch all messages (demo scale) to avoid complex indexes
+          const q = query(collection(db, "messages"), orderBy("time", "asc"));
+          const snapshot = await getDocs(q);
+          return snapshot.docs.map(d => d.data());
       }
 
       async function createMessage(msgData) {
-        await addDoc(collection(db, "messages"), msgData);
-      }
-
-      async function deleteMessagesBetween(id1, id2) {
-        // Warning: In a production app, use a deleteBatch or a Cloud Function
-        // For this refactor, we fetch all, filter, and delete individually.
-        const allMsgs = await fetchMessages(); // Helper re-used
-        const toDelete = allMsgs.filter((m) => (m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1));
-
-        const batch = toDelete.map((m) => deleteDoc(doc(db, "messages", m.id))); // Note: we don't have IDs here, we need IDs.
-
-        // Correction: fetchMessages returns data, not ID.
-        // Re-query to get IDs is expensive.
-        // Let's use the snapshot approach for deletion to get IDs.
-        const snap = await getDocs(q);
-        const promises = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          if ((data.from == id1 && data.to == id2) || (data.from == id2 && data.to == id1)) {
-            promises.push(deleteDoc(doc(db, "messages", d.id)));
-          }
-        });
-        await Promise.all(promises);
+          await addDoc(collection(db, "messages"), msgData);
       }
 
       // =====================
       // SESSION LOGIC
       // =====================
       function saveSession(user) {
-        localStorage.setItem("majadiliano_session_uid", user.id);
-        currentUser = user;
+          localStorage.setItem("majadiliano_session_uid", user.id);
+          currentUser = user;
       }
 
       async function loadSession() {
-        const uid = localStorage.getItem("majadiliano_session_uid");
-        if (uid) {
-          const docRef = doc(db, "users", uid);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            currentUser = { id: uid, ...snap.data() };
+          const uid = localStorage.getItem("majadiliano_session_uid");
+          if (uid) {
+              const docRef = doc(db, "users", uid);
+              const snap = await getDoc(docRef);
+              if (snap.exists()) {
+                  currentUser = { id: uid, ...snap.data() };
+              }
           }
-        }
       }
 
       // =====================
       // INITIALIZATION
       // =====================
       async function initApp() {
-        await loadSession();
-        if (currentUser) {
-          showMainApp();
-        } else {
-          document.getElementById("authScreen").style.display = "flex";
-          document.getElementById("mainApp").style.display = "none";
-        }
+          await loadSession();
+          if (currentUser) {
+              showMainApp();
+          } else {
+              document.getElementById('authScreen').style.display = 'flex';
+              document.getElementById('mainApp').style.display = 'none';
+          }
       }
 
-      // Expose global functions for HTML event handlers
-      window.toggleAuthMode = function () {
-        isSigningUp = !isSigningUp;
-        document.getElementById("authTitle").innerText = isSigningUp ? "Jisajili (Sign Up)" : "Kuingia (Login)";
-        document.querySelector(".auth-toggle").innerText = isSigningUp
-          ? "Tayari una akaunti? Ingia"
-          : "Huna akaunti? Jisajili Sasa";
+      window.toggleAuthMode = function() {
+          isSigningUp = !isSigningUp;
+          document.getElementById('authTitle').innerText = isSigningUp ? "Jisajili (Sign Up)" : "Kuingia (Login)";
+          document.querySelector('.auth-toggle').innerText = isSigningUp ? "Tayari una akaunti? Ingia" : "Huna akaunti? Jisajili Sasa";
       };
 
-      window.handleAuth = async function () {
-        const nameInput = document.getElementById("authUser").value.trim();
-        const passInput = document.getElementById("authPass").value.trim();
+      window.handleAuth = async function() {
+          const nameInput = document.getElementById('authUser').value.trim();
+          const passInput = document.getElementById('authPass').value.trim();
 
-        if (!nameInput || !passInput) {
-          showToast("Weka jina na neno la siri");
-          return;
-        }
+          if(!nameInput || !passInput) { showToast("Weka jina na neno la siri"); return; }
 
-        if (isSigningUp) {
-          const existing = await getUserByName(nameInput);
-          if (existing) {
-            showToast("Jina limechukuliwa tayari!");
-            return;
-          }
-          const newUser = {
-            name: nameInput,
-            password: passInput, // In prod, hash this!
-            avatar: nameInput.substring(0, 2).toUpperCase(),
-            createdAt: new Date().toISOString(),
-          };
-          const createdUser = await createUser(newUser);
-          loginUser(createdUser);
-        } else {
-          const user = await getUserByName(nameInput);
-          if (user && user.password === passInput) {
-            loginUser(user);
+          if (isSigningUp) {
+              const existing = await getUserByName(nameInput);
+              if(existing) {
+                  showToast("Jina limechukuliwa tayari!");
+                  return;
+              }
+              const newUser = {
+                  name: nameInput,
+                  password: passInput, // In prod, hash this!
+                  avatar: nameInput.substring(0,2).toUpperCase(),
+                  createdAt: Date.now()
+              };
+              const createdUser = await createUser(newUser);
+              loginUser(createdUser);
           } else {
-            showToast("Jina au neno la siri si sahihi.");
+              const user = await getUserByName(nameInput);
+              if(user && user.password === passInput) {
+                  loginUser(user);
+              } else {
+                  showToast("Jina au neno la siri si sahihi.");
+              }
           }
-        }
       };
 
       function loginUser(user) {
-        saveSession(user);
-        document.getElementById("authScreen").style.display = "none";
-        showMainApp();
+          saveSession(user);
+          document.getElementById('authScreen').style.display = 'none';
+          showMainApp();
       }
 
-      window.logout = function () {
-        localStorage.removeItem("majadiliano_session_uid");
-        currentUser = null;
-        location.reload();
+      window.logout = async function() {
+          await signOut(auth);
+          localStorage.removeItem("majadiliano_session_uid");
+          currentUser = null;
+          location.reload();
       };
 
       async function showMainApp() {
-        document.getElementById("mainApp").style.display = "block";
-        document.getElementById("sidebarUsername").innerText = currentUser.name;
-        document.getElementById("feedAvatar").innerText = currentUser.avatar;
-        document.getElementById("sidebarAvatar").innerText = currentUser.avatar;
-        document.getElementById("myAvatar").innerText = currentUser.avatar;
+          document.getElementById('mainApp').style.display = 'block';
+          document.getElementById('sidebarUsername').innerText = currentUser.name;
+          document.getElementById('feedAvatar').innerText = currentUser.avatar;
+          document.getElementById('sidebarAvatar').innerText = currentUser.avatar;
+          document.getElementById('myAvatar').innerText = currentUser.avatar;
 
-        // Check Admin
-        if (currentUser.name === "Nashiri Waziri" && currentUser.password === "123") {
-          document.getElementById("adminPanelBtn").style.display = "flex";
-        }
+          // Check Super Admin Credentials (One Administrator Rule)
+          // Note: Enforce that ONLY Nashiri Waziri gets the Admin Dashboard button
+          if (currentUser.name === "Nashiri Waziri") {
+              document.getElementById('adminPanelBtn').style.display = 'flex';
+              // Ensure user has admin role in DB if they are Nashiri Waziri, just in case they signed up as regular user but should be admin.
+              if (currentUser.role !== 'Administrator') {
+                  await updateDoc(doc(db, "users", currentUser.id), { role: "Administrator" });
+                  currentUser.role = "Administrator'; // Update local state immediately
+              }
+          } else if (currentUser.role === 'Administrator') {
+              document.getElementById('adminPanelBtn').style.display = 'flex';
+          } else {
+              document.getElementById('adminPanelBtn').style.display = 'none';
+          }
 
-        await loadPosts();
-        renderUserList();
+          await loadPosts();
+          renderUserList();
       }
 
       // =====================
       // UI RENDERING
       // =====================
       async function renderUserList() {
-        const users = await fetchUsers();
-        const container = document.getElementById("usersListContainer");
-        container.innerHTML = "";
-        document.getElementById("userCount").innerText = users.length;
+          const users = await fetchUsers();
+          const container = document.getElementById('usersListContainer');
+          container.innerHTML = "";
+          document.getElementById('userCount').innerText = users.length;
 
-        users.forEach((u) => {
-          if (u.id === currentUser.id) return;
+          users.forEach(u => {
+              if(u.id === currentUser.id) return;
 
-          const isFollowing = currentUser.following.includes(u.id);
-          const isFriend = currentUser.friends.includes(u.id);
-          const hasRequested = u.requests.includes(currentUser.id);
+              const isFollowing = currentUser.following.includes(u.id);
+              const isFriend = currentUser.friends.includes(u.id);
+              const hasRequested = u.requests.includes(currentUser.id);
 
-          let actionBtn = "";
-          if (isFriend) {
-            actionBtn = `<button class="active" title="Rafiki"><i class="fas fa-user-check"></i></button>`;
-          } else if (hasRequested) {
-            actionBtn = `<button title="Imetumwa"><i class="fas fa-clock"></i></button>`;
-          } else {
-            actionBtn = `<button onclick="window.sendFriendRequest('${u.id}')" title="Add Friend"><i class="fas fa-user-plus"></i></button>`;
-          }
+              let actionBtn = "";
+              if(isFriend) {
+                  actionBtn = `<button class="active" title="Rafiki"><i class="fas fa-user-check"></i></button>`;
+              } else if (hasRequested) {
+                  actionBtn = `<button title="Imetumwa"><i class="fas fa-clock"></i></button>`;
+              } else {
+                  // Admin Logic: Only Admin can "Add" or effectively manage all users. 
+                  // We expose a function to add users for the Admin if they use the console or a specific tool.
+                  // Standard users can follow/friend others.
+                  actionBtn = `<button onclick="window.sendFriendRequest('${u.id}')" title="Add Friend"><i class="fas fa-user-plus"></i></button>`;
+              }
 
-          const html = `
+              const html = `
               <div class="user-list-item">
                   <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="window.openChatWith('${u.id}')">
                       <div class="avatar-placeholder" style="width:30px; height:30px; font-size:10px;">${u.avatar}</div>
@@ -1267,191 +1272,257 @@
                       </div>
                   </div>
                   <div class="user-actions">
-                      <button class="${isFollowing ? "active" : ""}" onclick="window.toggleFollow('${u.id}')" title="Follow">
-                          <i class="fas ${isFollowing ? "fa-user-minus" : "fa-user-plus"}"></i>
+                      <button class="${isFollowing ? 'active' : ''}" onclick="window.toggleFollow('${u.id}')" title="Follow">
+                          <i class="fas ${isFollowing ? 'fa-user-minus' : 'fa-user-plus'}"></i>
                       </button>
                       ${actionBtn}
                       <button onclick="window.openChatWith('${u.id}')" title="Message"><i class="fas fa-comment-dots"></i></button>
                   </div>
               </div>
               `;
-          container.innerHTML += html;
-        });
+              container.innerHTML += html;
+          });
       }
 
       // Social Actions (Update then Reload)
-      window.toggleFollow = async function (targetId) {
-        const q = query(collection(db, "users"), where("name", "==", currentUser.name)); // Find self by name to get ref
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const myRef = snap.docs[0].ref;
-          let myData = snap.docs[0].data();
-          let following = myData.following || [];
-
-          if (following.includes(targetId)) {
-            following = following.filter((id) => id !== targetId);
-            showToast("Umefuta ufuatilio.");
-          } else {
-            following.push(targetId);
-            showToast("Unamfuata sasa hivi.");
-          }
-
-          await updateDoc(myRef, { following: following });
-          // Refresh local state
-          currentUser.following = following;
-          renderUserList();
-        }
-      };
-
-      window.sendFriendRequest = async function (targetId) {
-        const q = query(collection(db, "users"), where("name", "==", currentUser.name));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const targetRef = doc(db, "users", targetId);
-          const targetSnap = await getDoc(targetRef);
-          if (targetSnap.exists()) {
-            let requests = targetSnap.data().requests || [];
-            if (!requests.includes(currentUser.id)) {
-              requests.push(currentUser.id);
-              await updateDoc(targetRef, { requests });
-              showToast("Ombi la urafiki limetumwa.");
+      window.toggleFollow = async function(targetId) {
+          const q = query(collection(db, "users"), where("name", "==", currentUser.name)); // Find self by name to get ref
+          const snap = await getDocs(q);
+          if(!snap.empty) {
+              const myRef = snap.docs[0].ref;
+              let myData = snap.docs[0].data();
+              let following = myData.following || [];
+              
+              if(following.includes(targetId)) {
+                  following = following.filter(id => id !== targetId);
+                  showToast("Umefuta ufuatilio.");
+              } else {
+                  following.push(targetId);
+                  showToast("Unamfuata sasa hivi.");
+              }
+              
+              await updateDoc(myRef, { following: following });
+              // Refresh local state
+              currentUser.following = following;
               renderUserList();
-            }
           }
-        }
       };
+
+      window.sendFriendRequest = async function(targetId) {
+          const q = query(collection(db, "users"), where("name", "==", currentUser.name));
+          const snap = await getDocs(q);
+          if(!snap.empty) {
+              const targetRef = doc(db, "users", targetId);
+              const targetSnap = await getDoc(targetRef);
+              if(targetSnap.exists()) {
+                  let requests = targetSnap.data().requests || [];
+                  if(!requests.includes(currentUser.id)) {
+                      requests.push(currentUser.id);
+                      await updateDoc(targetRef, { requests: requests });
+                      showToast("Ombi la urafiki limetumwa.");
+                      renderUserList();
+                  }
+              }
+          }
+      };
+
+      // =====================
+      // MESSAGING (INBOX)
+      // =====================
+      window.openChatWith = async function(userId) {
+          chatPartnerId = userId;
+          // Find partner in cache (avoid extra read)
+          const partner = usersCache.find(u => u.id === userId);
+          document.getElementById('chatTitle').innerText = `Chat na ${partner ? partner.name : 'User'}`;
+          document.getElementById('chatWindow').style.display = 'flex';
+          renderChat();
+      };
+
+      window.closeChat = function() {
+          document.getElementById('chatWindow').style.display = 'none';
+          chatPartnerId = null;
+      };
+
+      window.sendMessage = async function() {
+          const input = document.getElementById('chatInput');
+          const text = input.value.trim();
+          if(!text || !chatPartnerId) return;
+
+          await createMessage({
+              from: currentUser.id,
+              to: chatPartnerId,
+              text: text,
+              time: new Date().toLocaleString()
+          });
+          
+          input.value = "";
+          renderChat();
+      };
+
+      async function renderChat() {
+          const container = document.getElementById('chatBody');
+          container.innerHTML = "";
+          
+          const allMsgs = await fetchMessages();
+          const chatHistory = allMsgs.filter(m =>
+              (m.from === currentUser.id && m.to === chatPartnerId) ||
+              (m.from === chatPartnerId && m.to === currentUser.id)
+          );
+
+          if(chatHistory.length === 0) {
+              container.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px;">Hakuna ujumbe bado. Anza mazungumzo!</div>`;
+              return;
+          }
+
+          chatHistory.forEach(msg => {
+              const isMine = msg.from === currentUser.id;
+              container.innerHTML += `
+                  <div class="cw-msg ${isMine ? 'mine' : 'theirs'}">
+                      ${msg.text}
+                  </div>
+              `;
+          });
+          container.scrollTop = container.scrollHeight;
+      }
 
       // =====================
       // POSTS SYSTEM
       // =====================
-      window.handleFileSelect = function (event) {
-        const allFiles = [];
-        const fileInput = document.getElementById("fileInput");
-        const audioInput = document.getElementById("audioInput");
+      window.handleFileSelect = function(event) {
+          const allFiles = [];
+          const fileInput = document.getElementById("fileInput");
+          const audioInput = document.getElementById("audioInput");
 
-        if (fileInput.files.length > 0) Array.from(fileInput.files).forEach((f) => allFiles.push(f));
-        if (audioInput.files.length > 0) Array.from(audioInput.files).forEach((f) => allFiles.push(f));
+          if (fileInput.files.length > 0) Array.from(fileInput.files).forEach(f => allFiles.push(f));
+          if (audioInput.files.length > 0) Array.from(audioInput.files).forEach(f => allFiles.push(f));
 
-        selectedFiles = allFiles;
+          selectedFiles = allFiles;
 
-        const previewArea = document.getElementById("filePreviewArea");
-        previewArea.innerHTML = "";
+          const previewArea = document.getElementById("filePreviewArea");
+          previewArea.innerHTML = "";
 
-        allFiles.forEach((file, index) => {
-          const reader = new FileReader();
-          reader.onload = function (e) {
-            const div = document.createElement("div");
-            div.className = "preview-item";
-            let mediaHtml = "";
-            if (file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
-            else if (file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
-            else if (file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
-            else
-              mediaHtml = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:10px;text-align:center;">FILE</div>`;
+          allFiles.forEach((file, index) => {
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                  const div = document.createElement("div");
+                  div.className = "preview-item";
+                  let mediaHtml = "";
+                  if(file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
+                  else if(file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
+                  else if(file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
+                  else mediaHtml = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:10px;text-align:center;">FILE</div>`;
 
-            div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${index})">&times;</div>`;
-            previewArea.appendChild(div);
-          };
-          reader.readAsDataURL(file);
-        });
-      };
-
-      window.removeFile = function (index) {
-        selectedFiles.splice(index, 1);
-        document.getElementById("fileInput").value = "";
-        document.getElementById("audioInput").value = "";
-
-        const previewArea = document.getElementById("filePreviewArea");
-        previewArea.innerHTML = "";
-        selectedFiles.forEach((file, idx) => {
-          const reader = new FileReader();
-          reader.onload = function (e) {
-            const div = document.createElement("div");
-            div.className = "preview-item";
-            let mediaHtml = "";
-            if (file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
-            else if (file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
-            else if (file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
-            div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${idx})">&times;</div>`;
-            previewArea.appendChild(div);
-          };
-          reader.readAsDataURL(file);
-        });
-      };
-
-      window.addPost = async function () {
-        let content = document.getElementById("content").value;
-        if (content == "" && selectedFiles.length == 0) {
-          showToast("Andika kitu au weka picha!");
-          return;
-        }
-
-        let filePromises = selectedFiles.map((file) => {
-          return new Promise((resolve) => {
-            let reader = new FileReader();
-            reader.onload = (e) => resolve({ name: file.name, type: file.type, data: e.target.result });
-            reader.readAsDataURL(file);
+                  div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${index})">&times;</div>`;
+                  previewArea.appendChild(div);
+              };
+              reader.readAsDataURL(file);
           });
-        });
-
-        const filesData = await Promise.all(filePromises);
-
-        const newPost = {
-          authorId: currentUser.id,
-          authorName: currentUser.name,
-          authorAvatar: currentUser.avatar,
-          content: content,
-          files: filesData,
-          date: new Date().toLocaleString(),
-          reactions: { like: 0, love: 0, laugh: 0, angry: 0, sad: 0 },
-          comments: [],
-        };
-
-        await createPost(newPost);
-
-        document.getElementById("content").value = "";
-        document.getElementById("fileInput").value = "";
-        document.getElementById("audioInput").value = "";
-        document.getElementById("filePreviewArea").innerHTML = "";
-        selectedFiles = [];
-
-        await loadPosts();
-        showToast("Post Imechapishwa!");
       };
+
+      window.removeFile = function(index) {
+          selectedFiles.splice(index, 1);
+          // Clear inputs to ensure change event fires if we re-add same file
+          document.getElementById("fileInput").value = "";
+          document.getElementById("audioInput").value = "";
+
+          // Re-render based on current array logic would be complex with separate inputs,
+          // so we simply clear visual here
+          // and rely on `selectedFiles` array being correct on submit.
+          // To fix the visual sync properly:
+          const previewArea = document.getElementById("filePreviewArea");
+          previewArea.innerHTML = "";
+          selectedFiles.forEach((file, idx) => {
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                   const div = document.createElement("div");
+                  div.className = "preview-item";
+                  let mediaHtml = "";
+                  if(file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
+                  else if(file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
+                  else if(file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
+
+                  div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${idx})">&times;</div>`;
+                  previewArea.appendChild(div);
+              }
+              reader.readAsDataURL(file);
+          });
+      };
+
+      window.addPost = async function() {
+          let content = document.getElementById("content").value;
+          if(content == "" && selectedFiles.length == 0){ showToast("Andika kitu au weka picha!"); return; }
+
+          let filePromises = selectedFiles.map(file => {
+              return new Promise((resolve) => {
+                  let reader = new FileReader();
+                  reader.onload = (e) => resolve({ name: file.name, type: file.type, data: e.target.result });
+                  reader.readAsDataURL(file);
+              });
+          });
+
+          try {
+              const filesData = await Promise.all(filePromises);
+              
+              const newPost = {
+                  id: Date.now(),
+                  authorId: currentUser.id,
+                  authorName: currentUser.name,
+                  authorAvatar: currentUser.avatar,
+                  content: content,
+                  files: filesData,
+                  date: new Date().toLocaleString(),
+                  reactions: { like: 0, love: 0, laugh: 0, angry: 0, sad: 0 },
+                  comments: []
+              };
+
+              await createPost(newPost);
+
+              document.getElementById("content").value = "";
+              document.getElementById("fileInput").value = "";
+              document.getElementById("audioInput").value = "";
+              document.getElementById("filePreviewArea").innerHTML = "";
+              selectedFiles = [];
+
+              await loadPosts();
+              showToast("Post Imechapishwa!");
+          } catch (e) {
+              console.error(e);
+              showToast("Error adding post: " + e.message);
+          }
+      };
+
 
       async function loadPosts() {
-        let container = document.getElementById("postsContainer");
-        container.innerHTML = "";
+          let container = document.getElementById("postsContainer");
+          container.innerHTML = "";
+          
+          const posts = await fetchPosts();
+          postsCache = posts;
 
-        const posts = await fetchPosts();
-        postsCache = posts;
+          posts.forEach(p => {
+              let mediaHTML = "";
+              p.files.forEach(f => {
+                  if(f.type.startsWith("image")) mediaHTML += `<img src="${f.data}">`;
+                  else if(f.type.startsWith("video")) mediaHTML += `<video controls src="${f.data}"></video>`;
+                  else if(f.type.startsWith("audio")) mediaHTML += `<div style="background:#f0f2f5; padding:10px; border-radius:8px; margin-top:5px;"><audio controls src="${f.data}" style="width:100%;"></audio></div>`;
+                  else mediaHTML += `<a href="${f.data}" download="${f.name}" class="download-link">📄 Download ${f.name}</a>`;
+              });
 
-        posts.forEach((p) => {
-          let mediaHTML = "";
-          p.files.forEach((f) => {
-            if (f.type.startsWith("image")) mediaHTML += `<img src="${f.data}">`;
-            else if (f.type.startsWith("video")) mediaHTML += `<video controls src="${f.data}"></video>`;
-            else if (f.type.startsWith("audio"))
-              mediaHTML += `<div style="background:#f0f2f5; padding:10px; border-radius:8px; margin-top:5px;"><audio controls src="${f.data}" style="width:100%;"></audio></div>`;
-            else
-              mediaHTML += `<a href="${f.data}" download="${f.name}" class="download-link">📄 Download ${f.name}</a>`;
-          });
-
-          let commentsHtml = "";
-          if (p.comments) {
-            p.comments.forEach((c) => {
-              commentsHtml += `
+              let commentsHtml = "";
+              if(p.comments) {
+                  p.comments.forEach(c => {
+                      commentsHtml += `
                           <div class="comment">
-                              <div class="avatar-placeholder" style="width:32px; height:32px; font-size:10px;">${c.user.substring(0, 2).toUpperCase()}</div>
+                              <div class="avatar-placeholder" style="width:32px; height:32px; font-size:10px;">${c.user.substring(0,2).toUpperCase()}</div>
                               <div class="comment-bubble"><b>${c.user}</b> ${c.text}</div>
                           </div>`;
-            });
-          }
+                  });
+              }
 
-          const totalReactions = Object.values(p.reactions).reduce((a, b) => a + b, 0);
-          const isMyPost = p.authorId === currentUser.id;
+              const totalReactions = Object.values(p.reactions).reduce((a, b) => a + b, 0);
+              const isMyPost = p.authorId === currentUser.id;
 
-          const html = `
+              const html = `
               <article class="post">
                   <div class="post-header">
                       <div class="post-user">
@@ -1461,14 +1532,10 @@
                               <span>${p.date}</span>
                           </div>
                       </div>
-                      ${
-                        isMyPost
-                          ? `
+                      ${isMyPost ? `
                       <div class="btn-ghost" onclick="window.initiateDelete('${p.id}')" style="font-size:12px; color:var(--danger);">
                           <i class="fas fa-trash"></i>
-                      </div>`
-                          : ""
-                      }
+                      </div>` : ''}
                   </div>
 
                   <div class="post-content">
@@ -1477,7 +1544,7 @@
                   </div>
 
                   <div class="post-stats">
-                      <span>${totalReactions > 0 ? '<i class="fas fa-thumbs-up" style="color:var(--primary)"></i> ' + totalReactions : ""}</span>
+                      <span>${totalReactions > 0 ? '<i class="fas fa-thumbs-up" style="color:var(--primary)"></i> ' + totalReactions : ''}</span>
                       <span>${p.comments ? p.comments.length : 0} maoni</span>
                   </div>
 
@@ -1509,290 +1576,268 @@
                   </div>
               </article>
               `;
-          container.innerHTML += html;
-        });
+              container.innerHTML += html;
+          });
       }
 
       // Post Actions
-      window.addReaction = async function (postId, type) {
-        const postRef = doc(db, "posts", postId);
-        const snap = await getDoc(postRef);
-        if (snap.exists()) {
-          const data = snap.data();
-          const reactions = data.reactions || {};
-          reactions[type] = (reactions[type] || 0) + 1;
-          await updateDoc(postRef, { reactions });
-          await loadPosts();
-        }
-      };
-
-      window.toggleComments = function (id) {
-        document.getElementById(`comments-${id}`).classList.toggle("open");
-      };
-
-      window.hideReactions = function (id) {
-        // Optional: hide bar logic
-      };
-
-      window.handleComment = async function (e, id) {
-        if (e.key === "Enter") {
-          const text = e.target.value;
-          if (text) {
-            const postRef = doc(db, "posts", id);
-            const snap = await getDoc(postRef);
-            if (snap.exists()) {
-              const comments = snap.data().comments || [];
-              comments.push({ user: currentUser.name, text: text });
-              await updateDoc(postRef, { comments });
+      window.addReaction = async function(postId, type) {
+          const postRef = doc(db, "posts", postId);
+          const snap = await getDoc(postRef);
+          if(snap.exists()){
+              const data = snap.data();
+              const reactions = data.reactions || {};
+              reactions[type] = (reactions[type] || 0) + 1;
+              await updateDoc(postRef, { reactions: reactions });
               await loadPosts();
-              setTimeout(() => document.getElementById(`comments-${id}`).classList.add("open"), 50);
-            }
           }
-        }
       };
 
-      window.sharePost = async function (id) {
-        const post = postsCache.find((p) => p.id === id);
-        navigator.clipboard.writeText(`${post.content} - Kuangalia zaidi tembelea Majadiliano Network.`).then(() => {
-          showToast("Imenakiliwa!");
-        });
+      window.toggleComments = function(id) {
+          document.getElementById(`comments-${id}`).classList.toggle('open');
       };
 
-      window.initiateDelete = function (id) {
-        const post = postsCache.find((p) => p.id === id);
-        if (post.authorId !== currentUser.id) {
-          postToDeleteId = id;
-          document.getElementById("adminPassInput").value = "";
-          document.getElementById("passwordModal").classList.add("active");
-        } else {
-          if (confirm("Unafuta posti yako?")) {
-            deletePostById(id);
-            loadPosts();
-            showToast("Post imefutwa.");
+      window.hideReactions = function(id) {
+          // Optional: hide bar logic
+      };
+
+      window.handleComment = async function(e, id) {
+          if(e.key === 'Enter') {
+              const text = e.target.value;
+              if(text) {
+                  const postRef = doc(db, "posts", id);
+                  const snap = await getDoc(postRef);
+                  if(snap.exists()) {
+                      const comments = snap.data().comments || [];
+                      comments.push({ user: currentUser.name, text: text });
+                      await updateDoc(postRef, { comments });
+                      await loadPosts();
+                      setTimeout(() => document.getElementById(`comments-${id}`).classList.add('open'), 50);
+                  }
+              }
           }
-        }
       };
 
-      window.confirmDelete = async function () {
-        const pass = document.getElementById("adminPassInput").value;
-        if (pass === "WAZIRI2015") {
-          await deletePostById(postToDeleteId);
-          await loadPosts();
-          showToast("Post imefutwa (Admin)");
-          closeModal("passwordModal");
-        } else {
-          showToast("Neno la siri la Admin si sahihi!");
-        }
+      window.sharePost = async function(id) {
+          const post = postsCache.find(p => p.id === id);
+          navigator.clipboard.writeText(`${post.content} - Kuangalia zaidi tembelea Majadiliano Network.`).then(() => {
+              showToast("Imenakiliwa!");
+          });
       };
 
-      // =====================
-      // MESSAGING SYSTEM
-      // =====================
-      window.openChatWith = async function (userId) {
-        chatPartnerId = userId;
-        // Find partner in cache (avoid extra read)
-        const partner = usersCache.find((u) => u.id === userId);
-        document.getElementById("chatTitle").innerText = `Chat na ${partner ? partner.name : "User"}`;
-        document.getElementById("chatWindow").style.display = "flex";
-        renderChat();
+      window.initiateDelete = function(id) {
+          const post = postsCache.find(p => p.id === id);
+
+          // Super Admin Check: Only Nashiri Waziri can delete ANY post. 
+          // Standard Admins can only delete their OWN posts (enforced "role of adding user" interpretation: Admins can add users, so they have control).
+          if (currentUser.name !== "Nashiri Waziri") {
+              if (currentUser.role === "Administrator") {
+                  // Standard Admins: Can only delete their own posts
+                  if (post.authorId !== currentUser.id) {
+                      showToast("You can only delete your own posts.");
+                      return;
+                  }
+              } else {
+                  if(confirm("Unafuta posti yako?")) {
+                      deletePostById(id);
+                      await loadPosts();
+                      showToast("Post imefutwa.");
+                  }
+              }
+          } else {
+              // Super Admin Logic
+              // Can delete ANY post, but must verify password if it belongs to someone else?
+              // For simplicity in this refactor: We allow Super Admins to delete anything immediately.
+              if(confirm("Hakikisha: Unafuta posti hii?")) {
+                  deletePostById(id);
+                  loadPosts();
+                  showToast("Post imefutwa (Admin).");
+              }
+          }
       };
 
-      window.closeChat = function () {
-        document.getElementById("chatWindow").style.display = "none";
-        chatPartnerId = null;
+      window.confirmDelete = async function() {
+          const pass = document.getElementById('adminPassInput').value;
+          // Super Admin Check
+          if (pass === "WAZIRI2015") {
+              // Delete post regardless of ownership
+              deletePostById(postToDeleteId);
+              loadPosts();
+              showToast("Post imefutwa (Admin).");
+              closeModal('passwordModal');
+          } else {
+              showToast("Neno la siri la Admin si sahihi!");
+          }
       };
-
-      window.sendMessage = async function () {
-        const input = document.getElementById("chatInput");
-        const text = input.value.trim();
-        if (!text || !chatPartnerId) return;
-
-        await createMessage({
-          from: currentUser.id,
-          to: chatPartnerId,
-          text: text,
-          time: new Date().toLocaleString(),
-        });
-
-        input.value = "";
-        renderChat();
-      };
-
-      async function renderChat() {
-        const container = document.getElementById("chatBody");
-        container.innerHTML = "";
-
-        const allMsgs = await fetchMessages();
-        const chatHistory = allMsgs.filter(
-          (m) =>
-            (m.from === currentUser.id && m.to === chatPartnerId) ||
-            (m.from === chatPartnerId && m.to === currentUser.id),
-        );
-
-        if (chatHistory.length === 0) {
-          container.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px;">Hakuna ujumbe bado. Anza mazungumzo!</div>`;
-          return;
-        }
-
-        chatHistory.forEach((msg) => {
-          const isMine = msg.from === currentUser.id;
-          container.innerHTML += `
-                  <div class="cw-msg ${isMine ? "mine" : "theirs"}">
-                      ${msg.text}
-                  </div>
-              `;
-        });
-        container.scrollTop = container.scrollHeight;
-      }
 
       // =====================
       // MANAGEMENT & ADMIN
       // =====================
-      window.openManagement = function () {
-        document.getElementById("manageUserDisplay").innerText = `Logged in as: ${currentUser.name}`;
-        document.getElementById("manageModal").classList.add("active");
+      window.openManagement = function() {
+          document.getElementById('manageUserDisplay').innerText = `Logged in as: ${currentUser.name}`;
+          document.getElementById('manageModal').classList.add('active');
+      };
+      window.closeModal = function(id) {
+          document.getElementById(id).classList.remove('active');
       };
 
-      window.deleteMyPosts = async function () {
-        if (confirm("HAHATARI: Unafuta posti ZAKO ZOTE?")) {
-          const posts = await fetchPosts();
-          const myPosts = posts.filter((p) => p.authorId === currentUser.id);
-
-          const promises = myPosts.map((p) => deletePostById(p.id));
-          await Promise.all(promises);
-
-          loadPosts();
-          showToast("Posti zako zote zimefutwa.");
-          closeModal("manageModal");
-        }
+      window.deleteMyPosts = async function() {
+          if(confirm("HAHATARI: Unafuta posti ZAKO ZOTE?")) {
+              const posts = await fetchPosts();
+              const myPosts = posts.filter(p => p.authorId === currentUser.id);
+              
+              const promises = myPosts.map(p => deleteDoc(doc(db, "posts", p.id));
+              await Promise.all(promises);
+              
+              loadPosts();
+              showToast("Posti zako zote zimefutwa.");
+              closeModal('manageModal');
+          }
       };
 
-      window.openAdminChatControl = async function () {
-        if (!currentUser || (currentUser.name !== "Nashiri Waziri" && currentUser.password !== "123")) {
-          showToast("Haki zako hazitoshi.");
-          return;
-        }
-        document.getElementById("adminChatModal").classList.add("active");
-        loadAdminChatList();
+      // =====================
+      // ADMIN CHAT CONTROL SYSTEM
+      // =====================
+      window.openAdminChatControl = async function() {
+          // Only Administrators can access this.
+          if (!currentUser || currentUser.role !== "Administrator" && currentUser.name !== "Nashiri Waziri") {
+              showToast("Haki zako hazitoshi.");
+              return;
+          }
+          document.getElementById('adminChatModal').classList.add('active');
+          loadAdminChatList();
       };
 
       async function loadAdminChatList() {
-        const listContainer = document.getElementById("adminChatList");
-        listContainer.innerHTML = "";
+          const listContainer = document.getElementById('adminChatList');
+          listContainer.innerHTML = "";
 
-        const allMsgs = await fetchMessages();
-        const pairs = new Set();
-        allMsgs.forEach((m) => {
-          const pairKey = [m.from, m.to].sort((a, b) => a - b).join("-");
-          pairs.add(pairKey);
-        });
+          // Identify unique conversation pairs
+          // We create a unique key for each pair: "id1-id2" (sorted)
+          const pairs = new Set();
+          const messages = await fetchMessages(); // Cache messages first
+          
+          messages.forEach(m => {
+              const pairKey = [m.from, m.to].sort((a,b) => a - b).join('-');
+              pairs.add(pairKey);
+          });
 
-        if (pairs.size === 0) {
-          listContainer.innerHTML = "<div style='padding:10px; color:#777;'>Hakuna mazungumzo yaliyorekodiwa.</div>";
-          return;
-        }
+          if(pairs.size === 0) {
+              listContainer.innerHTML = "<div style='padding:10px; color:#777;'>Hakuna mazungumzo yaliyorekodiwa.</div>";
+              return;
+          }
 
-        const users = await fetchUsers();
+          pairs.forEach(pair => {
+              const [id1, id2] = pair.split('-'); // Strings
+              const user1 = usersCache.find(u => u.id == id1);
+              const user2 = usersCache.find(u => u.id == id2);
 
-        pairs.forEach((pair) => {
-          const [id1, id2] = pair.split("-"); // Strings
-          const user1 = users.find((u) => u.id == id1);
-          const user2 = users.find((u) => u.id == id2);
-
-          if (user1 && user2) {
-            const div = document.createElement("div");
-            div.className = "admin-chat-item";
-            div.innerHTML = `
+              if(user1 && user2) {
+                  const div = document.createElement('div');
+                  div.className = 'admin-chat-item';
+                  div.innerHTML = `
                       <div style="font-weight:bold; font-size:14px;">${user1.name} <i class="fas fa-exchange-alt" style="font-size:10px; color:#888;"></i> ${user2.name}</div>
                       <div style="font-size:11px; color:#666;">ID: ${pair}</div>
                   `;
-            div.onclick = () => loadAdminChatView(pair, `${user1.name} & ${user2.name}`);
-            listContainer.appendChild(div);
-          }
-        });
+                  div.onclick = () => loadAdminChatView(pair, `${user1.name} & ${user2.name}`);
+                  listContainer.appendChild(div);
+              } else {
+                  // Fallback in case users haven't loaded yet
+                  const div = document.createElement('div');
+                  div.className = 'admin-chat-item';
+                  div.innerHTML = `
+                      <div style="font-weight:bold; font-size:14px;">Unknown User</div>
+                      <div style="font-size:11px; color:#666;">ID: ${pair}</div>
+                  `;
+                  listContainer.appendChild(div);
+              }
+          });
       }
 
-      async function loadAdminChatView(pairKey, title) {
-        currentAdminPairId = pairKey;
-        document.getElementById("adminChatHeader").innerText = `Mazungumzo: ${title}`;
-        document.getElementById("adminControlBtnContainer").style.display = "block";
+      function loadAdminChatView(pairKey, title) {
+          currentAdminPairId = pairKey;
+          document.getElementById('adminChatHeader').innerText = `Mazungumzo: ${title}`;
+          document.getElementById('adminControlBtnContainer').style.display = 'block';
 
-        const body = document.getElementById("adminChatBody");
-        body.innerHTML = "";
+          const body = document.getElementById('adminChatBody');
+          body.innerHTML = "";
+          
+          const [id1, id2] = pairKey.split('-'); // Strings from Set
 
-        const allMsgs = await fetchMessages();
-        const [id1, id2] = pairKey.split("-");
+          // Filter messages
+          const chatHistory = messages.filter(m =>
+              (m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1)
+          );
 
-        const chatHistory = allMsgs.filter((m) => (m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1));
+          if(chatHistory.length === 0) {
+              body.innerHTML = "<div style='text-align:center; padding:20px; color:#888;'>Hakuna ujumbe.</div>";
+              return;
+          }
 
-        if (chatHistory.length === 0) {
-          body.innerHTML = "<div style='text-align:center; padding:20px; color:#888;'>Hakuna ujumbe.</div>";
-          return;
-        }
+          chatHistory.forEach(msg => {
+              const sender = usersCache.find(u => u.id == msg.from) || currentUser;
+              const isLeft = msg.from == id1; // Just to alternate visuals loosely
 
-        const users = await fetchUsers();
-
-        chatHistory.forEach((msg) => {
-          const sender = users.find((u) => u.id == msg.from);
-          const isLeft = msg.from == id1;
-
-          body.innerHTML += `
-                  <div style="display:flex; flex-direction:column; align-items: ${isLeft ? "flex-start" : "flex-end"}; margin-bottom:5px;">
-                      <div style="font-size:10px; color:#666; margin:0 5px;">${sender ? sender.name : "Unknown"}</div>
-                      <div class="cw-msg ${isLeft ? "theirs" : "mine"}" style="position:relative;">
+              body.innerHTML += `
+                  <div style="display:flex; flex-direction:column; align-items: ${isLeft ? 'flex-start' : 'flex-end'}; margin-bottom:5px;">
+                      <div style="font-size:0.75rem; color:#666; margin:0 0 5px;">${sender ? sender.name : 'Unknown'}</div>
+                      <div class="cw-msg ${isLeft ? 'theirs' : 'mine'}" style="position:relative;">
                           ${msg.text}
                       </div>
                   </div>
               `;
-        });
-        body.scrollTop = body.scrollHeight;
+          });
+          body.scrollTop = body.scrollHeight;
       }
 
-      window.clearSelectedChat = async function () {
-        if (!currentAdminPairId) return;
-        if (!confirm("UNAFUTA MAZUNGUMZO HAYA KAMILI? HAIWEZI RUDISHWA.")) return;
+      window.clearSelectedChat = async function() {
+          if(!currentAdminPairId) return;
+          if(!confirm("UNAFUTA MAZUNGUMZO HAYA KAMILI? HAIWEZI RUDISHWA.") return;
 
-        const [id1, id2] = currentAdminPairId.split("-");
+          const [id1, id2] = currentAdminPairId.split('-');
 
-        // Efficient delete: fetch snapshot
-        const q = query(collection(db, "messages"), orderBy("time", "asc"));
-        const snap = await getDocs(q);
-        const promises = [];
-        snap.forEach((d) => {
-          const m = d.data();
-          if ((m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1)) {
-            promises.push(deleteDoc(d.ref));
-          }
-        });
-        await Promise.all(promises);
+          // Remove messages where (from==id1 AND to==id2) OR (from==id2 AND to==id1)
+          // In a production app, use a deleteBatch or Cloud Function.
+          // For this refactor, we fetch all, filter, and delete individually.
+          const allMsgs = await fetchMessages(); // Helper re-used
+          const toDelete = allMsgs.filter(m => 
+              ((m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1))
+          );
 
-        document.getElementById("adminChatBody").innerHTML = "";
-        document.getElementById("adminControlBtnContainer").style.display = "none";
-        document.getElementById("adminChatHeader").innerText = "Mazungumzo yamefutwa.";
-        loadAdminChatList();
-        showToast("Mazungumzo yametolewa.");
-      };
+          const batch = toDelete.map(m => deleteDoc(doc(db, "messages", m.id));
+          await Promise.all(batch);
+
+          document.getElementById('adminChatBody').innerHTML = "";
+          document.getElementById('adminControlBtnContainer').style.display = 'none';
+          document.getElementById('adminChatHeader').innerText = "Mazungumzo yamefutwa.";
+          loadAdminChatList(); // Refresh list
+          showToast("Mazungumzo yametolewa.");
+      }
 
       // =====================
-      // UTILS
+      // UTILITIES
       // =====================
-      window.closeModal = function (id) {
-        document.getElementById(id).classList.remove("active");
-      };
-
       function showToast(message) {
-        const toast = document.getElementById("toast");
-        toast.innerText = message;
-        toast.classList.add("show");
-        setTimeout(() => toast.classList.remove("show"), 3000);
+          const toast = document.getElementById("toast");
+          toast.innerText = message;
+          toast.classList.add("show");
+          setTimeout(() => toast.classList.remove("show"), 3000);
       }
 
-      window.scrollToTop = function () {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      };
+      window.scrollToTop = function() { window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
-      // Initialize on Load
+      // Close menu on outside click
+      document.addEventListener('click', (e) => {
+          const menu = document.getElementById('contextMenu');
+          const menuBtn = document.querySelector('.chat-header .fa-ellipsis-v');
+          if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
+              menu.style.display = 'none';
+          }
+      });
+
+      // Initialize App
       document.addEventListener("DOMContentLoaded", initApp);
+
     </script>
   </body>
 </html>
