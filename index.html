@@ -1554,7 +1554,7 @@
             </a>
             <a href="#" onclick="showUserReport()">
               <i class="fas fa-users-cog"></i>
-              User Report
+              Manage Users
             </a>
             <a href="#" onclick="openContactSupport()">
               <i class="fas fa-headset"></i>
@@ -2187,7 +2187,19 @@
     <div id="reportModal" class="modal-overlay hidden">
       <div class="modal-content" style="max-width: 900px">
         <button class="close-modal" onclick="closeReportModal()">×</button>
-        <div class="modal-header"><h2 data-translate="header_users">Users</h2></div>
+        <div class="modal-header">
+          <h2 data-translate="header_users">Manage Users</h2>
+          <!-- Super Admin Only: Delete All Users Button -->
+          <div
+            id="superAdminControls"
+            style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: none"
+          >
+            <button class="btn-delete" onclick="deleteAllUsers()" style="width: 100%; padding: 12px; font-size: 1rem">
+              <i class="fas fa-exclamation-triangle"></i>
+              DELETE ALL USERS (Super Admin Only)
+            </button>
+          </div>
+        </div>
         <div style="overflow-x: auto">
           <table class="report-table" style="width: 100%">
             <thead>
@@ -2201,6 +2213,44 @@
             <tbody id="userReportBody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- EDIT USER MODAL -->
+    <div id="editUserModal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <button class="close-modal" onclick="closeEditUserModal()">×</button>
+        <div class="modal-header"><h2>Edit User</h2></div>
+        <form onsubmit="handleEditUserSave(event)">
+          <input type="hidden" id="edit_user_id" />
+          <div class="user-form-grid" style="grid-template-columns: 1fr">
+            <div class="form-group full-width">
+              <label>First Name</label>
+              <input type="text" id="edit_fname" required="" />
+            </div>
+            <div class="form-group full-width">
+              <label>Last Name</label>
+              <input type="text" id="edit_lname" required="" />
+            </div>
+            <div class="form-group full-width">
+              <label>Email</label>
+              <input type="email" id="edit_email" disabled="" style="background: #f8f9fa; cursor: not-allowed" />
+            </div>
+            <div class="form-group full-width">
+              <label>Phone</label>
+              <input type="text" id="edit_phone" />
+            </div>
+            <div class="form-group full-width">
+              <label>Role</label>
+              <select id="edit_role">
+                <option value="User">User</option>
+                <option value="Assistant Administrator">Assistant Administrator</option>
+                <option value="Administrator">Administrator</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-submit">Save Changes</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -2340,6 +2390,7 @@
         query,
         where,
         orderBy,
+        writeBatch,
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
       const firebaseConfig = {
@@ -2357,13 +2408,70 @@
       const db = getFirestore(app);
 
       // Super Admin Credentials (Hardcoded for logic check)
-      // UPDATED EMAIL AS REQUESTED: nashiriwaziri@gmail.com
       const SUPER_ADMIN_EMAIL = "nashiriwaziri@gmail.com";
       const SUPER_ADMIN_PASS = "WAZIRI2015";
 
       // Global State
       let currentUserData = null;
       let currentLang = "sw";
+
+      // =============================================
+      // ===== EXPOSE FUNCTIONS TO WINDOW =====
+      // =============================================
+      window.BrickNotify = {}; // Defined below
+      window.changeLanguage = changeLanguage;
+      window.togglePass = togglePass;
+      window.searchTable = searchTable;
+      window.toggleUserMenu = toggleUserMenu;
+      window.logoutUser = logoutUser;
+      window.openModal = openModal;
+      window.closeModal = closeModal;
+      window.toggleAuthForm = toggleAuthForm;
+      window.toggleForgotForm = toggleForgotForm;
+      window.handleSignup = handleSignup;
+      window.handleLogin = handleLogin;
+      window.handleForgotCheck = handleForgotCheck;
+      window.handlePasswordReset = handlePasswordReset;
+      window.openContactSupport = openContactSupport;
+      window.closeContactSupport = closeContactSupport;
+      window.handleContactSupport = handleContactSupport;
+      window.openAddChildModal = openAddChildModal;
+      window.closeAddChildModal = closeAddChildModal;
+      window.handleAddChild = handleAddChild;
+      window.deleteChild = deleteChild;
+      window.openViewChildModal = openViewChildModal;
+      window.closeViewChildModal = closeViewChildModal;
+      window.saveAdminReply = saveAdminReply;
+      window.setPosterRatio = setPosterRatio;
+      window.downloadPoster = downloadPoster;
+      window.openNotificationModal = openNotificationModal;
+      window.closeNotificationModal = closeNotificationModal;
+      window.handleNotification = handleNotification;
+      window.showNotificationReport = showNotificationReport;
+      window.closeNotificationReportModal = closeNotificationReportModal;
+      window.openMessagesBox = openMessagesBox;
+      window.closeMessagesBox = closeMessagesBox;
+      window.initiateCall = initiateCall;
+      window.copyContactNumber = copyContactNumber;
+      window.deleteMessage = deleteMessage;
+      window.showUserReport = showUserReport;
+      window.closeReportModal = closeReportModal;
+      window.deleteUser = deleteUser;
+      window.toggleUserRole = toggleUserRole; // Renamed to reflect new logic
+      window.openEditUserModal = openEditUserModal; // New
+      window.closeEditUserModal = closeEditUserModal; // New
+      window.handleEditUserSave = handleEditUserSave; // New
+      window.deleteAllUsers = deleteAllUsers; // New
+      window.showDashboard = showDashboard;
+      window.closeDashboard = closeDashboard;
+      window.downloadChart = downloadChart;
+      window.exportPDF = exportPDF;
+      window.exportExcel = exportExcel;
+      window.exportPPT = exportPPT;
+      window.exportWord = exportWord;
+      window.printReport = printReport;
+      window.exportIdentifiersPDF = exportIdentifiersPDF;
+      window.handleCredentialResponse = handleCredentialResponse;
 
       // Role Helper Functions
       const isSuperAdmin = (user) => user && user.email === SUPER_ADMIN_EMAIL;
@@ -2374,28 +2482,28 @@
       // =============================================
       // ===== RED BRICK NOTIFICATION SYSTEM =====
       // =============================================
-      const BrickNotify = {
-        container: null,
-        maxVisible: 4,
-        defaultDuration: 5000,
+      const BrickNotify = window.BrickNotify;
+      BrickNotify.container = null;
+      BrickNotify.maxVisible = 4;
+      BrickNotify.defaultDuration = 5000;
 
-        init() {
-          this.container = document.getElementById("brickNotifyContainer");
-        },
+      BrickNotify.init = function () {
+        this.container = document.getElementById("brickNotifyContainer");
+      };
 
-        show(options = {}) {
-          if (!this.container) this.init();
+      BrickNotify.show = function (options = {}) {
+        if (!this.container) this.init();
 
-          const title = options.title || "ARIFA";
-          const message = options.message || "";
-          const icon = options.icon || "fa-bell";
-          const duration = options.duration || this.defaultDuration;
-          const onClose = options.onClose || null;
-          const showTimer = options.showTimer !== false;
+        const title = options.title || "ARIFA";
+        const message = options.message || "";
+        const icon = options.icon || "fa-bell";
+        const duration = options.duration || this.defaultDuration;
+        const onClose = options.onClose || null;
+        const showTimer = options.showTimer !== false;
 
-          const notifyEl = document.createElement("div");
-          notifyEl.className = "brick-notify";
-          notifyEl.innerHTML = `
+        const notifyEl = document.createElement("div");
+        notifyEl.className = "brick-notify";
+        notifyEl.innerHTML = `
                     <div class="brick-icon"><i class="fas ${icon}"></i></div>
                     <div class="brick-content">
                         <div class="brick-title">${title}</div>
@@ -2405,82 +2513,81 @@
                     ${showTimer ? `<div class="brick-timer-bar" style="animation-duration: ${duration}ms;"></div>` : ""}
                 `;
 
-          this.container.appendChild(notifyEl);
+        this.container.appendChild(notifyEl);
 
-          const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
-          if (allNotifies.length > this.maxVisible) {
-            this._dismiss(allNotifies[0], false);
-          }
+        const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
+        if (allNotifies.length > this.maxVisible) {
+          this._dismiss(allNotifies[0], false);
+        }
 
-          const autoTimer = setTimeout(() => {
-            this._dismiss(notifyEl, false);
-            if (onClose) onClose();
-          }, duration);
+        const autoTimer = setTimeout(() => {
+          this._dismiss(notifyEl, false);
+          if (onClose) onClose();
+        }, duration);
 
-          notifyEl._autoTimer = autoTimer;
-        },
+        notifyEl._autoTimer = autoTimer;
+      };
 
-        _dismiss(element, manual) {
-          if (!element || element.classList.contains("removing")) return;
-          if (element._autoTimer) clearTimeout(element._autoTimer);
-          element.classList.add("removing");
-          setTimeout(() => {
-            if (element.parentElement) element.parentElement.removeChild(element);
-          }, 650);
-        },
+      BrickNotify._dismiss = function (element, manual) {
+        if (!element || element.classList.contains("removing")) return;
+        if (element._autoTimer) clearTimeout(element._autoTimer);
+        element.classList.add("removing");
+        setTimeout(() => {
+          if (element.parentElement) element.parentElement.removeChild(element);
+        }, 650);
+      };
 
-        success(message, title) {
-          this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
-        },
-        error(message, title) {
-          this.show({ title: title || "MAKOSA", message, icon: "fa-times-circle", duration: 6000 });
-        },
-        info(message, title) {
-          this.show({ title: title || "MAELEZO", message, icon: "fa-info-circle" });
-        },
-        warning(message, title) {
-          this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
-        },
+      BrickNotify.success = function (message, title) {
+        this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
+      };
+      BrickNotify.error = function (message, title) {
+        this.show({ title: title || "MAKOSA", message, icon: "fa-times-circle", duration: 6000 });
+      };
+      BrickNotify.info = function (message, title) {
+        this.show({ title: title || "MAELEZO", message, icon: "fa-info-circle" });
+      };
+      BrickNotify.warning = function (message, title) {
+        this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
+      };
 
-        identifierSent(childName) {
-          this.show({
-            title: "UTAMBULISHO UMEWASILISHWA",
-            message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama.`,
-            icon: "fa-user-shield",
-            duration: 6000,
-          });
-        },
-        adminReceived(childName, identifierName) {
-          this.show({
-            title: "UJUMBE MPYA KUTOKA MTAMBULISHI",
-            message: `Mtambulishi <strong>${identifierName}</strong> amewasilisha taarifa za utambulisho kwa mtoto <strong>${childName}</strong>. Angalia Sanduku la Ujumbe.`,
-            icon: "fa-envelope-open-text",
-            duration: 7000,
-          });
-        },
-        adminFullyIdentified(childName) {
-          this.show({
-            title: "MTOTO AMETAMBULIWA KIKAMILIFU",
-            message: `Mtoto <strong>${childName}</strong> ameatambuliwa na watambulishi 3. Hali imesasishwa kuwa "Ametambuliwa".`,
-            icon: "fa-check-double",
-            duration: 8000,
-          });
-        },
-        privacyWarning() {
-          this.show({
-            title: "ULINZI WA FARAGHA",
-            message: "Hauwezi kuona maelezo ya watambulishi wengine. Kila mtambulishi ana faragha kamili.",
-            icon: "fa-user-lock",
-            duration: 5000,
-          });
-        },
-        clearAll() {
-          if (!this.container) return;
-          const all = this.container.querySelectorAll(".brick-notify");
-          all.forEach((el, i) => {
-            setTimeout(() => this._dismiss(el, false), i * 100);
-          });
-        },
+      BrickNotify.identifierSent = function (childName) {
+        this.show({
+          title: "UTAMBULISHO UMEWASILISHWA",
+          message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama.`,
+          icon: "fa-user-shield",
+          duration: 6000,
+        });
+      };
+      BrickNotify.adminReceived = function (childName, identifierName) {
+        this.show({
+          title: "UJUMBE MPYA KUTOKA MTAMBULISHI",
+          message: `Mtambulishi <strong>${identifierName}</strong> amewasilisha taarifa za utambulisho kwa mtoto <strong>${childName}</strong>. Angalia Sanduku la Ujumbe.`,
+          icon: "fa-envelope-open-text",
+          duration: 7000,
+        });
+      };
+      BrickNotify.adminFullyIdentified = function (childName) {
+        this.show({
+          title: "MTOTO AMETAMBULIWA KIKAMILIFU",
+          message: `Mtoto <strong>${childName}</strong> ameatambuliwa na watambulishi 3. Hali imesasishwa kuwa "Ametambuliwa".`,
+          icon: "fa-check-double",
+          duration: 8000,
+        });
+      };
+      BrickNotify.privacyWarning = function () {
+        this.show({
+          title: "ULINZI WA FARAGHA",
+          message: "Hauwezi kuona maelezo ya watambulishi wengine. Kila mtambulishi ana faragha kamili.",
+          icon: "fa-user-lock",
+          duration: 5000,
+        });
+      };
+      BrickNotify.clearAll = function () {
+        if (!this.container) return;
+        const all = this.container.querySelectorAll(".brick-notify");
+        all.forEach((el, i) => {
+          setTimeout(() => this._dismiss(el, false), i * 100);
+        });
       };
 
       // =============================================
@@ -2624,8 +2731,9 @@
 
       // =============================================
       // ===== INITIALIZATION =====
-      // =============================================
-      window.togglePass = function (i, ic) {
+      // function togglePass(i, ic) ... (already attached to window) ...
+
+      function togglePass(i, ic) {
         const el = document.getElementById(i);
         if (el.type === "password") {
           el.type = "text";
@@ -2634,11 +2742,11 @@
           el.type = "password";
           ic.textContent = "👁️";
         }
-      };
+      }
 
-      window.searchTable = function () {
+      function searchTable() {
         renderChildrenTable(document.getElementById("myInput").value);
-      };
+      }
 
       window.onload = async function () {
         BrickNotify.init();
@@ -2670,7 +2778,7 @@
       // =============================================
       // ===== GOOGLE AUTH =====
       // =============================================
-      window.handleCredentialResponse = async function (response) {
+      async function handleCredentialResponse(response) {
         try {
           const credential = GoogleAuthProvider.credential(response.credential);
           const result = await signInWithCredential(auth, credential);
@@ -2682,7 +2790,7 @@
               fname: user.displayName ? user.displayName.split(" ")[0] : "Google",
               lname: user.displayName ? user.displayName.split(" ").slice(1).join(" ") : "User",
               email: user.email,
-              role: "User",
+              role: "User", // Default role
               photoUrl: user.photoURL,
               phone: "",
               createdAt: Date.now(),
@@ -2701,7 +2809,7 @@
           console.error(error);
           BrickNotify.error("Google Login Failed: " + error.message);
         }
-      };
+      }
 
       // =============================================
       // ===== UI & NAV LOGIC =====
@@ -2739,11 +2847,11 @@
         });
       }
 
-      window.toggleUserMenu = function () {
+      function toggleUserMenu() {
         document.getElementById("userDropdownMenu").classList.toggle("show");
-      };
+      }
 
-      window.enforceLogin = function () {
+      function enforceLogin() {
         document.getElementById("authModal").classList.remove("hidden");
         document.getElementById("mainSiteContent").style.display = "none";
         document.getElementById("closeModalBtn").classList.add("forced");
@@ -2756,7 +2864,7 @@
         document.getElementById("contactSupportBtn").style.display = "none";
         document.getElementById("userProfileWidget").style.display = "none";
         document.getElementById("messagesBtn").style.display = "none";
-      };
+      }
 
       async function showSite(user) {
         document.getElementById("authModal").classList.add("hidden");
@@ -2843,26 +2951,26 @@
         }
       }
 
-      window.logoutUser = async function () {
+      async function logoutUser() {
         await signOut(auth);
         BrickNotify.clearAll();
         currentUserData = null;
         enforceLogin();
-      };
+      }
 
       // =============================================
       // ===== AUTH LOGIC =====
       // =============================================
-      window.openModal = function (t) {
+      function openModal(t) {
         document.getElementById("authModal").classList.remove("hidden");
         document.getElementById("closeModalBtn").classList.remove("forced");
         toggleAuthForm(t);
-      };
-      window.closeModal = function () {
+      }
+      function closeModal() {
         if (currentUserData) document.getElementById("authModal").classList.add("hidden");
-      };
+      }
 
-      window.toggleAuthForm = async function (t) {
+      function toggleAuthForm(t) {
         const l = document.getElementById("loginFormContainer");
         const s = document.getElementById("signupFormContainer");
         const f = document.getElementById("forgotFormContainer");
@@ -2887,17 +2995,17 @@
             document.getElementById("rememberMe").checked = false;
           }
         }
-      };
-      window.toggleForgotForm = function () {
+      }
+      function toggleForgotForm() {
         toggleAuthForm("forgot");
-      };
+      }
 
-      window.handleSignup = async function (e) {
+      async function handleSignup(e) {
         e.preventDefault();
         const email = document.getElementById("su_email").value;
         const password = document.getElementById("su_pass").value;
 
-        // Prevent direct signup as Super Admin (must be manually assigned or logic handled)
+        // Prevent direct signup as Super Admin
         if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
           BrickNotify.error("Please contact system administrator to setup Super Admin account.");
           return;
@@ -2935,9 +3043,9 @@
         } catch (error) {
           BrickNotify.error("Usajili umeshindikana: " + error.message);
         }
-      };
+      }
 
-      window.handleLogin = async function (e) {
+      async function handleLogin(e) {
         e.preventDefault();
         const em = document.getElementById("loginEmail").value;
         const p = document.getElementById("loginPassword").value;
@@ -2976,9 +3084,9 @@
         } catch (error) {
           BrickNotify.error(translations[currentLang].alert_invalid_cred);
         }
-      };
+      }
 
-      window.handleForgotCheck = async function (e) {
+      async function handleForgotCheck(e) {
         e.preventDefault();
         const email = document.getElementById("forgotEmail").value;
         const q = query(collection(db, "users"), where("email", "==", email));
@@ -2992,9 +3100,9 @@
         } else {
           BrickNotify.error("Akaunti haipatikani.");
         }
-      };
+      }
 
-      window.handlePasswordReset = async function (e) {
+      async function handlePasswordReset(e) {
         e.preventDefault();
         const email = document.getElementById("resetEmailHidden").value;
 
@@ -3005,19 +3113,19 @@
         } catch (error) {
           BrickNotify.error("Hitilafu: " + error.message);
         }
-      };
+      }
 
-      window.openContactSupport = function () {
+      function openContactSupport() {
         document.getElementById("contactModal").classList.remove("hidden");
-      };
-      window.closeContactSupport = function () {
+      }
+      function closeContactSupport() {
         document.getElementById("contactModal").classList.add("hidden");
-      };
-      window.handleContactSupport = function (e) {
+      }
+      function handleContactSupport(e) {
         e.preventDefault();
         BrickNotify.success("Ombi la msaada limetumwa.");
         closeContactSupport();
-      };
+      }
 
       // =============================================
       // ===== DATA HELPERS =====
@@ -3048,7 +3156,7 @@
       // =============================================
       // ===== CHILDREN TABLE RENDERING =====
       // =============================================
-      window.renderChildrenTable = async function (queryStr = "") {
+      async function renderChildrenTable(queryStr = "") {
         const tbody = document.getElementById("childTableBody");
         let children = await getChildrenData();
 
@@ -3118,16 +3226,16 @@
                     ${deleteBtnHtml}
                 </tr>`;
         });
-      };
+      }
 
-      window.openAddChildModal = function () {
+      function openAddChildModal() {
         document.getElementById("addChildModal").classList.remove("hidden");
-      };
-      window.closeAddChildModal = function () {
+      }
+      function closeAddChildModal() {
         document.getElementById("addChildModal").classList.add("hidden");
-      };
+      }
 
-      window.handleAddChild = async function (e) {
+      async function handleAddChild(e) {
         e.preventDefault();
         const fi = document.getElementById("child_image");
         if (fi.files && fi.files[0]) {
@@ -3135,7 +3243,7 @@
           reader.onload = async (evt) => await saveChildData(evt.target.result);
           reader.readAsDataURL(fi.files[0]);
         } else await saveChildData(null);
-      };
+      }
 
       async function saveChildData(imgData) {
         const newChild = {
@@ -3165,7 +3273,7 @@
         }
       }
 
-      window.deleteChild = async function (id) {
+      async function deleteChild(id) {
         // Security Check: Only Super Admin
         if (!isSuperAdmin(currentUserData)) {
           BrickNotify.error("Hakikisha ruhusa.");
@@ -3175,7 +3283,7 @@
           await deleteDoc(doc(db, "children", id));
           await renderChildrenTable();
         }
-      };
+      }
 
       // =============================================
       // ===== VIEW CHILD & POSTER =====
@@ -3184,7 +3292,7 @@
       let currentPosterRatio = "1:1";
       const canvasWidth = 1080;
 
-      window.openViewChildModal = async function (id) {
+      async function openViewChildModal(id) {
         currentViewChild = await getOneChild(id);
         if (currentViewChild) {
           document.getElementById("viewChildModal").classList.remove("hidden");
@@ -3223,12 +3331,12 @@
             viewSection.style.display = "none";
           }
         }
-      };
-      window.closeViewChildModal = function () {
+      }
+      function closeViewChildModal() {
         document.getElementById("viewChildModal").classList.add("hidden");
-      };
+      }
 
-      window.saveAdminReply = async function (childId, identifierIndex) {
+      async function saveAdminReply(childId, identifierIndex) {
         const input = document.getElementById(`reply-${identifierIndex}`);
         const message = input.value;
         if (!message) return;
@@ -3244,14 +3352,14 @@
             openViewChildModal(childId);
           }
         }
-      };
+      }
 
-      window.setPosterRatio = function (r) {
+      function setPosterRatio(r) {
         currentPosterRatio = r;
         document.querySelectorAll(".ratio-btn").forEach((b) => b.classList.remove("active"));
         if (event.target) event.target.classList.add("active");
         drawChildPoster();
-      };
+      }
 
       function drawChildPoster() {
         if (!currentViewChild) return;
@@ -3337,18 +3445,18 @@
         ctx.fillText("From: NATIONAL CHILD REUNIFICATION SYSTEM", canvas.width / 2, canvas.height - 40);
       }
 
-      window.downloadPoster = function (format) {
+      function downloadPoster(format) {
         const canvas = document.getElementById("posterCanvas");
         const link = document.createElement("a");
         link.download = `${currentViewChild.name}_poster.${format}`;
         link.href = canvas.toDataURL(`image/${format}`, 0.9);
         link.click();
-      };
+      }
 
       // =============================================
       // ===== IDENTIFICATION / NOTIFICATION =====
       // =============================================
-      window.openNotificationModal = async function (childId) {
+      async function openNotificationModal(childId) {
         let child = await getOneChild(childId);
         if (child) {
           if (!child.identifiers) child.identifiers = [];
@@ -3386,12 +3494,12 @@
 
           document.getElementById("notificationModal").classList.remove("hidden");
         }
-      };
-      window.closeNotificationModal = function () {
+      }
+      function closeNotificationModal() {
         document.getElementById("notificationModal").classList.add("hidden");
-      };
+      }
 
-      window.handleNotification = async function (e) {
+      async function handleNotification(e) {
         e.preventDefault();
         const childId = document.getElementById("notify_child_id").value;
         const childSnap = await getDoc(doc(db, "children", childId));
@@ -3453,9 +3561,9 @@
           updateMessagesBadge();
           await renderChildrenTable();
         }
-      };
+      }
 
-      window.showNotificationReport = async function () {
+      async function showNotificationReport() {
         const user = currentUserData;
         if (!hasAdminAccess(user)) return;
         const t = document.getElementById("notificationTableBody");
@@ -3472,15 +3580,15 @@
         });
         if (!hasRecords) t.innerHTML = `<tr><td colspan="5" style="text-align:center">No records.</td></tr>`;
         document.getElementById("notificationReportModal").classList.remove("hidden");
-      };
-      window.closeNotificationReportModal = function () {
+      }
+      function closeNotificationReportModal() {
         document.getElementById("notificationReportModal").classList.add("hidden");
-      };
+      }
 
       // =============================================
       // ===== MESSAGES BOX =====
       // =============================================
-      window.openMessagesBox = async function () {
+      async function openMessagesBox() {
         const user = currentUserData;
         if (!hasAdminAccess(user)) return;
 
@@ -3536,21 +3644,21 @@
         }
 
         document.getElementById("messagesModal").classList.remove("hidden");
-      };
+      }
 
-      window.closeMessagesBox = function () {
+      function closeMessagesBox() {
         document.getElementById("messagesModal").classList.add("hidden");
-      };
+      }
 
-      window.initiateCall = function (phone) {
+      function initiateCall(phone) {
         if (phone) {
           window.location.href = "tel:" + phone;
         } else {
           BrickNotify.warning("Hakuna namba ya simu iliyotolewa.");
         }
-      };
+      }
 
-      window.copyContactNumber = function (phone) {
+      function copyContactNumber(phone) {
         if (!phone) return;
         navigator.clipboard
           .writeText(phone)
@@ -3566,9 +3674,9 @@
             document.body.removeChild(textArea);
             BrickNotify.info("Namba ime nakiliwa: " + phone);
           });
-      };
+      }
 
-      window.deleteMessage = async function (childId, identifierIndex) {
+      async function deleteMessage(childId, identifierIndex) {
         if (!isSuperAdmin(currentUserData)) {
           BrickNotify.error("Only Super Administrator can delete messages.");
           return;
@@ -3593,12 +3701,12 @@
           updateMessagesBadge();
           await renderChildrenTable();
         }
-      };
+      }
 
       // =============================================
       // ===== USER REPORT & ADMIN CONTROL =====
       // =============================================
-      window.showUserReport = async function () {
+      async function showUserReport() {
         const u = currentUserData;
         if (!hasAdminAccess(u)) return;
         const t = document.getElementById("userReportBody");
@@ -3606,6 +3714,14 @@
         t.innerHTML = "";
 
         const isSuper = isSuperAdmin(u);
+
+        // Show Delete All Button for Super Admin
+        const superControls = document.getElementById("superAdminControls");
+        if (isSuper) {
+          superControls.style.display = "block";
+        } else {
+          superControls.style.display = "none";
+        }
 
         usersSnap.forEach((docu) => {
           const userData = docu.data();
@@ -3615,29 +3731,24 @@
 
           if (isSuper) {
             // SUPER ADMIN CONTROLS
+
+            // Delete Button
             if (userId !== u.id) {
               actionBtns += `<button class="btn-delete" onclick="deleteUser('${userId}')">Delete</button> `;
             }
 
-            // Toggle Role Button (Only for non-Super Admin)
+            // Edit Button
             if (userData.email.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()) {
-              const btnText =
-                userData.role === "Administrator" || userData.role === "Assistant Administrator"
-                  ? "Make User"
-                  : "Make Assistant";
-              // Simple toggle: User <-> Assistant Admin
-              if (userData.role === "Administrator") {
-                // Super Admins created via hardcoded check shouldn't be demoted easily,
-                // but we handle "Assistant Admin" assignment here.
-                actionBtns += `<button class="btn-primary" style="font-size:0.8rem; padding:4px 8px; margin-left:5px; background:var(--accent); border:none; color:white;" onclick="toggleUserRole('${userId}')">Make Assistant</button>`;
-              } else if (userData.role === "Assistant Administrator") {
-                actionBtns += `<button class="btn-primary" style="font-size:0.8rem; padding:4px 8px; margin-left:5px; background:var(--secondary); border:none; color:white;" onclick="toggleUserRole('${userId}')">Make User</button>`;
-              } else {
-                // User
-                actionBtns += `<button class="btn-primary" style="font-size:0.8rem; padding:4px 8px; margin-left:5px;" onclick="toggleUserRole('${userId}')">Make Assistant</button>`;
-              }
+              actionBtns += `<button class="btn-primary" style="font-size:0.8rem; padding:4px 8px; margin-left:5px; background:var(--accent); border:none; color:white;" onclick="openEditUserModal('${userId}')">Edit</button> `;
             } else {
               actionBtns += `<span style="font-size:0.7rem; color:var(--secondary); font-weight:bold;">(Super Admin)</span>`;
+            }
+
+            // Assign Task Button (Toggle Role)
+            if (userData.email.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()) {
+              const btnText =
+                userData.role === "Assistant Administrator" || userData.role === "Administrator" ? "Demote" : "Promote";
+              actionBtns += `<button class="btn-primary" style="font-size:0.8rem; padding:4px 8px; margin-left:5px;" onclick="openEditUserModal('${userId}')">${btnText}</button>`;
             }
           } else {
             // ASSISTANT ADMIN VIEW ONLY
@@ -3652,13 +3763,13 @@
           </tr>`;
         });
         document.getElementById("reportModal").classList.remove("hidden");
-      };
+      }
 
-      window.closeReportModal = function () {
+      function closeReportModal() {
         document.getElementById("reportModal").classList.add("hidden");
-      };
+      }
 
-      window.deleteUser = async function (id) {
+      async function deleteUser(id) {
         // Security: Only Super Admin can delete
         if (!isSuperAdmin(currentUserData)) {
           BrickNotify.error("Permission Denied.");
@@ -3674,36 +3785,94 @@
           showUserReport();
           BrickNotify.success("User deleted.");
         }
-      };
+      }
 
-      // Admin Control Button Logic
-      window.toggleUserRole = async function (userId) {
-        if (!isSuperAdmin(currentUserData)) return;
+      // NEW: DELETE ALL USERS
+      async function deleteAllUsers() {
+        if (!isSuperAdmin(currentUserData)) {
+          BrickNotify.error("Unauthorized.");
+          return;
+        }
+        if (
+          confirm(
+            "CRITICAL WARNING: This will delete ALL user accounts (except yours). This cannot be undone. Proceed?",
+          )
+        ) {
+          const usersSnap = await getDocs(collection(db, "users"));
+          const batch = writeBatch(db);
+          let count = 0;
+          usersSnap.forEach((docSnap) => {
+            if (docSnap.id !== currentUserData.id) {
+              batch.delete(doc(db, "users", docSnap.id));
+              count++;
+            }
+          });
+          await batch.commit();
+          BrickNotify.success(`${count} users deleted successfully.`);
+          showUserReport();
+        }
+      }
 
-        const userRef = doc(db, "users", userId);
-        const userSnap = await getDoc(userRef);
+      // NEW: OPEN EDIT USER MODAL
+      async function openEditUserModal(userId) {
+        const userDoc = await getDoc(doc(db, "users", userId));
+        if (userDoc.exists()) {
+          const u = userDoc.data();
+          document.getElementById("edit_user_id").value = userId;
+          document.getElementById("edit_fname").value = u.fname;
+          document.getElementById("edit_lname").value = u.lname;
+          document.getElementById("edit_email").value = u.email;
+          document.getElementById("edit_phone").value = u.phone || "";
+          document.getElementById("edit_role").value = u.role;
 
-        if (userSnap.exists()) {
-          const currentRole = userSnap.data().role;
-          let newRole = "User";
-
-          if (currentRole === "User") {
-            newRole = "Assistant Administrator";
+          // If not super admin, disable role edit
+          const roleSelect = document.getElementById("edit_role");
+          if (!isSuperAdmin(currentUserData)) {
+            roleSelect.disabled = true;
           } else {
-            newRole = "User";
+            roleSelect.disabled = false;
           }
 
-          await updateDoc(userRef, { role: newRole });
-          BrickNotify.success(`User role updated to ${newRole}.`);
-          showUserReport(); // Refresh table
+          document.getElementById("editUserModal").classList.remove("hidden");
         }
-      };
+      }
+
+      function closeEditUserModal() {
+        document.getElementById("editUserModal").classList.add("hidden");
+      }
+
+      // NEW: SAVE EDIT USER
+      async function handleEditUserSave(e) {
+        e.preventDefault();
+        const userId = document.getElementById("edit_user_id").value;
+        const fname = document.getElementById("edit_fname").value;
+        const lname = document.getElementById("edit_lname").value;
+        const phone = document.getElementById("edit_phone").value;
+        const role = document.getElementById("edit_role").value;
+
+        try {
+          const userRef = doc(db, "users", userId);
+
+          // Only update role if Super Admin
+          if (isSuperAdmin(currentUserData)) {
+            await updateDoc(userRef, { fname, lname, phone, role });
+          } else {
+            await updateDoc(userRef, { fname, lname, phone });
+          }
+
+          BrickNotify.success("User details updated.");
+          closeEditUserModal();
+          showUserReport(); // Refresh table
+        } catch (err) {
+          BrickNotify.error("Error updating user: " + err.message);
+        }
+      }
 
       // =============================================
       // ===== DASHBOARD =====
       // =============================================
       const charts = {};
-      window.showDashboard = async function () {
+      async function showDashboard() {
         const user = currentUserData;
         if (!hasAdminAccess(user)) {
           BrickNotify.error("Hakikisha ruhusa.");
@@ -3711,11 +3880,11 @@
         }
         document.getElementById("dashboardModal").classList.remove("hidden");
         await loadDashboardData();
-      };
-      window.closeDashboard = function () {
+      }
+      function closeDashboard() {
         document.getElementById("dashboardModal").classList.add("hidden");
-      };
-      window.downloadChart = function (chartId) {
+      }
+      function downloadChart(chartId) {
         const chartInstance = charts[chartId];
         if (chartInstance) {
           const link = document.createElement("a");
@@ -3723,7 +3892,7 @@
           link.href = chartInstance.toBase64Image();
           link.click();
         }
-      };
+      }
 
       async function loadDashboardData() {
         const children = await getChildrenData();
@@ -3880,7 +4049,7 @@
         return { headers, data };
       }
 
-      window.exportPDF = async function () {
+      async function exportPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         doc.text("NCRS Report", 14, 20);
@@ -3918,24 +4087,24 @@
           );
         }
         doc.save("NCRS_Report.pdf");
-      };
+      }
 
-      window.exportExcel = async function () {
+      async function exportExcel() {
         const { headers, data } = await getTableData();
         const ws = XLSX.utils.aoa_to_sheet([...headers, ...data]);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Report");
         XLSX.writeFile(wb, "NCRS_Report.xlsx");
-      };
-      window.exportPPT = async function () {
+      }
+      async function exportPPT() {
         let pptx = new PptxGenJS();
         let slide = pptx.addSlide();
         slide.title = "NCRS Report";
         const { headers, data } = await getTableData();
         slide.addTable([...headers, ...data], { x: 0.5, y: 1.0, w: 9.0 });
         pptx.writeFile("NCRS_Report.pptx");
-      };
-      window.exportWord = async function () {
+      }
+      async function exportWord() {
         const { headers, data } = await getTableData();
         let html = `<table border="1" style="border-collapse:collapse;width:100%">`;
         html += "<tr>" + headers[0].map((h) => `<th>${h}</th>`).join("") + "</tr>";
@@ -3948,12 +4117,12 @@
         link.href = URL.createObjectURL(blob);
         link.download = "NCRS_Report.doc";
         link.click();
-      };
-      window.printReport = function () {
+      }
+      function printReport() {
         window.print();
-      };
+      }
 
-      window.exportIdentifiersPDF = async function () {
+      async function exportIdentifiersPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         doc.text("Child Identifiers Registry", 14, 20);
@@ -4002,7 +4171,7 @@
           );
         }
         doc.save("Identifiers_Registry.pdf");
-      };
+      }
     </script>
   </body>
 </html>
