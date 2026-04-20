@@ -1,369 +1,651 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sw">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Group &amp; Admin Management</title>
-    <!-- Using FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <title>Majadiliano - Together Safe Network</title>
+    <!-- Icons (FontAwesome) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async="" defer=""></script>
 
     <style>
       :root {
-        --primary-color: #00a884;
-        --secondary-color: #008069;
-        --bg-color: #d1d7db;
-        --chat-bg: #efeae2;
+        --primary: #1877f2;
+        --bg: #f0f2f5;
         --white: #ffffff;
-        --text-primary: #111b21;
-        --text-secondary: #667781;
-        --incoming-bubble: #ffffff;
-        --outgoing-bubble: #d9fdd3;
-        --danger: #ef5350;
-        --gold: #ffc107;
+        --text: #050505;
+        --text-sec: #65676b;
+        --hover: #e4e6eb;
+        --border: #ced0d4;
+        --success: #42b72a;
+        --danger: #f02849;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        --header-h: 60px;
+        --admin-gold: #f1c40f;
       }
 
       * {
-        box-sizing: border-box;
         margin: 0;
         padding: 0;
-        font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       }
 
       body {
-        background-color: var(--bg-color);
-        height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        overflow: hidden;
+        background-color: var(--bg);
+        color: var(--text);
+        padding-top: var(--header-h);
+        padding-bottom: 60px;
+        overflow-x: hidden;
       }
 
-      /* --- App Container --- */
-      .app-container {
-        display: flex;
+      /* --- UTILITIES --- */
+      .btn {
+        border: none;
+        outline: none;
+        cursor: pointer;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-weight: 600;
+        transition: 0.2s;
+        font-size: 14px;
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #166fe5;
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--text-sec);
+      }
+      .btn-ghost:hover {
+        background: var(--hover);
+      }
+      .btn-sm {
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+      .btn-danger {
+        background: var(--danger);
+        color: white;
+      }
+      .btn-danger:hover {
+        background: #d61e3a;
+      }
+
+      /* --- AUTH SCREEN --- */
+      #authScreen {
+        position: fixed;
+        top: 0;
+        left: 0;
         width: 100%;
-        height: 100%;
-        max-width: 1600px;
-        background: var(--white);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        position: relative;
-      }
-
-      /* --- Sidebar (Left Panel) --- */
-      .sidebar {
-        width: 30%;
-        min-width: 300px;
-        border-right: 1px solid #e9edef;
-        display: flex;
+        height: 100vh;
+        background: var(--bg);
+        z-index: 5000;
+        display: none; /* Toggled by JS */
         flex-direction: column;
-        background: var(--white);
-        transition: transform 0.3s ease;
+        align-items: center;
+        justify-content: center;
+      }
+      .auth-box {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        width: 90%;
+        max-width: 400px;
+        text-align: center;
+      }
+      .auth-box input {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+      .auth-toggle {
+        margin-top: 15px;
+        font-size: 13px;
+        color: var(--primary);
+        cursor: pointer;
       }
 
-      .sidebar-header {
-        padding: 10px 16px;
-        background: #f0f2f5;
+      /* --- NAVBAR --- */
+      .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: var(--header-h);
+        background: var(--white);
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
         display: flex;
         justify-content: space-between;
         align-items: center;
-        height: 60px;
+        padding: 0 20px;
+        z-index: 1000;
+      }
+      .logo {
+        font-size: 24px;
+        font-weight: bold;
+        color: var(--primary);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+      }
+      .nav-icons {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+      }
+      .nav-icon {
+        width: 40px;
+        height: 40px;
+        background: var(--hover);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        cursor: pointer;
+        position: relative;
+      }
+      .badge {
+        position: absolute;
+        top: 0;
+        right: 0;
+        background: var(--danger);
+        color: white;
+        font-size: 10px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
-      .user-avatar {
+      /* --- LAYOUT GRID --- */
+      .container {
+        display: grid;
+        grid-template-columns: 1fr 2fr 1fr;
+        gap: 20px;
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 0 15px;
+      }
+
+      /* --- SIDEBARS --- */
+      .sidebar-left,
+      .sidebar-right {
+        height: calc(100vh - 80px);
+        position: sticky;
+        top: 80px;
+        overflow-y: auto;
+      }
+      .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: 0.2s;
+        color: var(--text);
+        text-decoration: none;
+      }
+      .menu-item:hover {
+        background: var(--hover);
+      }
+      .menu-item i {
+        font-size: 20px;
+        color: var(--primary);
+        width: 30px;
+        text-align: center;
+      }
+      .menu-item.admin-item {
+        color: var(--admin-gold);
+        font-weight: bold;
+        display: none;
+      } /* Hidden by default */
+      .menu-item.admin-item i {
+        color: var(--admin-gold);
+      }
+
+      /* User List Item Styling */
+      .user-list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 10px;
+        border-radius: 8px;
+        margin-bottom: 5px;
+      }
+      .user-list-item:hover {
+        background: var(--hover);
+      }
+      .user-actions button {
+        background: var(--bg);
+        border: none;
+        padding: 5px;
+        border-radius: 50%;
+        cursor: pointer;
+        margin-left: 3px;
+        color: var(--text-sec);
+        transition: 0.2s;
+      }
+      .user-actions button:hover {
+        background: #d0d2d6;
+        color: var(--primary);
+      }
+      .user-actions button.active {
+        color: var(--success);
+      }
+
+      /* --- FEED (MAIN) --- */
+      .feed {
+        width: 100%;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .create-post {
+        background: var(--white);
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: var(--shadow);
+        margin-bottom: 20px;
+      }
+      .cp-top {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+      .avatar-placeholder {
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        object-fit: cover;
-        cursor: pointer;
+        background: #ddd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: #555;
       }
-
-      .sidebar-icons .icon-btn {
-        background: none;
+      .cp-input {
+        width: 100%;
+        background: var(--bg);
+        border-radius: 20px;
+        padding: 10px 15px;
         border: none;
-        color: #54656f;
-        font-size: 1.2rem;
-        margin-left: 15px;
-        cursor: pointer;
+        outline: none;
+        resize: none;
+        min-height: 40px;
+        display: block;
       }
 
-      /* Advertisement Area in Sidebar */
-      .ad-banner {
-        background: #fff3cd;
-        color: #856404;
-        padding: 10px;
-        font-size: 0.85rem;
+      .file-preview {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .preview-item {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #ddd;
+        background: #eee;
+      }
+      .preview-item img,
+      .preview-item video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .preview-item audio {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        padding: 5px;
+      }
+      .remove-preview {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
         text-align: center;
-        border-bottom: 1px solid #ffeeba;
+        line-height: 20px;
+        font-size: 12px;
+        cursor: pointer;
+        z-index: 10;
+      }
+
+      .cp-actions {
+        display: flex;
+        justify-content: space-between;
+        border-top: 1px solid var(--hover);
+        padding-top: 10px;
+        margin-top: 10px;
+      }
+      .cp-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-sec);
+        font-weight: 600;
+        padding: 8px;
+        border-radius: 5px;
+      }
+      .cp-btn:hover {
+        background: var(--hover);
+      }
+
+      /* Post Card */
+      .post {
+        background: var(--white);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        margin-bottom: 20px;
+        animation: fadeIn 0.3s ease;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .post-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+      }
+      .post-user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .user-info h4 {
+        font-size: 15px;
+        margin-bottom: 2px;
+      }
+      .user-info span {
+        font-size: 12px;
+        color: var(--text-sec);
+      }
+
+      .post-content {
+        padding: 0 15px 15px;
+        font-size: 15px;
+        white-space: pre-wrap;
+      }
+
+      .post-media {
+        width: 100%;
+        margin-top: 10px;
+        display: grid;
+        gap: 5px;
+      }
+      .post-media img,
+      .post-media video {
+        width: 100%;
+        max-height: 400px;
+        object-fit: cover;
+        border-radius: 8px;
+        display: block;
+      }
+      .post-media audio {
+        width: 100%;
+        margin-top: 5px;
+      }
+      .post-media .download-link {
+        background: #f0f2f5;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 5px;
+        display: inline-block;
+        font-size: 14px;
+      }
+
+      /* Stats & Actions */
+      .post-stats {
+        padding: 10px 15px;
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--hover);
+        color: var(--text-sec);
+        font-size: 13px;
+      }
+      .post-actions {
+        display: flex;
+        padding: 5px;
+        border-bottom: 1px solid var(--hover);
+      }
+      .action-btn {
+        flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-      }
-
-      .ad-badge {
-        background: #ffc107;
-        color: #000;
-        font-size: 0.6rem;
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-weight: bold;
-      }
-
-      .search-bar {
-        padding: 8px 12px;
-        border-bottom: 1px solid #e9edef;
-        background: var(--white);
-      }
-
-      .search-input {
-        width: 100%;
-        background: #f0f2f5;
-        border: none;
-        padding: 8px 12px;
-        border-radius: 8px;
-        outline: none;
-      }
-
-      .chat-list {
-        flex: 1;
-        overflow-y: auto;
-      }
-
-      .chat-item {
-        display: flex;
-        padding: 12px 15px;
+        padding: 10px;
+        border-radius: 5px;
         cursor: pointer;
-        border-bottom: 1px solid #f0f2f5;
-        transition: background 0.2s;
-      }
-
-      .chat-item:hover {
-        background: #f5f6f6;
-      }
-
-      .chat-item.active {
-        background: #f0f2f5;
-      }
-
-      .chat-info {
-        margin-left: 15px;
-        flex: 1;
-      }
-
-      .chat-name {
-        font-weight: 500;
-        color: var(--text-primary);
-        margin-bottom: 4px;
-        display: flex;
-        justify-content: space-between;
-      }
-
-      .chat-last-msg {
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 200px;
-      }
-
-      .time-stamp {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-        font-weight: 400;
-      }
-
-      /* --- Main Chat Area (Right Panel) --- */
-      .main-chat {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        background: var(--chat-bg);
+        color: var(--text-sec);
+        transition: 0.2s;
+        font-weight: 600;
         position: relative;
       }
+      .action-btn:hover {
+        background: var(--hover);
+      }
 
-      /* Chat Header */
-      .chat-header {
-        padding: 10px 16px;
-        background: #f0f2f5;
+      .reactions-bar {
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        padding: 5px;
+        border-radius: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 60px;
-        border-left: 1px solid #d1d7db;
+        gap: 5px;
+        opacity: 0;
+        pointer-events: none;
+        transition: 0.2s;
+        margin-bottom: 8px;
       }
-
-      .chat-header-info {
-        display: flex;
-        align-items: center;
-        cursor: pointer;
-      }
-
-      .chat-header-text {
-        margin-left: 15px;
-      }
-
-      .chat-header-name {
-        font-weight: 500;
-        color: var(--text-primary);
-      }
-
-      .chat-header-status {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-      }
-
-      /* --- Message Area --- */
-      .message-container {
-        flex: 1;
-        padding: 20px 5%;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        background-image: url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
-        background-repeat: repeat;
+      .action-btn:hover .reactions-bar {
         opacity: 1;
+        pointer-events: auto;
+        bottom: 110%;
+      }
+      .reaction-emoji {
+        font-size: 20px;
+        cursor: pointer;
+        transition: transform 0.2s;
+      }
+      .reaction-emoji:hover {
+        transform: scale(1.3);
       }
 
-      .message {
-        max-width: 65%;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        position: relative;
-        box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
-        word-wrap: break-word;
+      /* Comments */
+      .comments-section {
+        padding: 10px 15px;
+        background: var(--bg);
+        display: none;
       }
-
-      .message.incoming {
-        align-self: flex-start;
-        background: var(--incoming-bubble);
-        border-top-left-radius: 0;
-      }
-
-      .message.outgoing {
-        align-self: flex-end;
-        background: var(--outgoing-bubble);
-        border-top-right-radius: 0;
-      }
-
-      .msg-meta {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        margin-top: 4px;
-        gap: 4px;
-      }
-
-      .msg-time {
-        font-size: 0.7rem;
-        color: rgba(0, 0, 0, 0.45);
-      }
-
-      .msg-tick {
-        font-size: 0.7rem;
-        color: #53bdeb; /* Blue ticks */
-      }
-
-      /* File Attachments Styles */
-      .file-preview {
-        max-width: 100%;
-        border-radius: 6px;
-        margin-bottom: 5px;
+      .comments-section.open {
         display: block;
       }
-      .file-preview img {
-        max-width: 100%;
-        border-radius: 6px;
-        cursor: pointer;
-      }
-      .file-preview video {
-        max-width: 100%;
-        max-height: 300px;
-        border-radius: 6px;
-      }
-      .file-attachment {
+      .comment {
         display: flex;
-        align-items: center;
         gap: 10px;
-        background: rgba(0, 0, 0, 0.05);
-        padding: 10px;
-        border-radius: 6px;
+        margin-bottom: 10px;
       }
-
-      /* --- Input Area --- */
-      .chat-input-area {
-        padding: 10px 16px;
-        background: #f0f2f5;
+      .comment-bubble {
+        background: var(--white);
+        padding: 8px 12px;
+        border-radius: 15px;
+        font-size: 13px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+      .comment-input-area {
         display: flex;
-        align-items: center;
         gap: 10px;
-        z-index: 10;
+        margin-top: 10px;
       }
-
-      .icon-btn {
-        background: none;
-        border: none;
-        color: #54656f;
-        font-size: 1.2rem;
-        cursor: pointer;
-        padding: 5px;
-      }
-
-      .input-box {
+      .comment-input-area input {
         flex: 1;
-        padding: 12px;
-        border-radius: 8px;
+        padding: 8px 12px;
+        border-radius: 20px;
         border: none;
         outline: none;
-        font-size: 0.95rem;
       }
 
-      /* --- Context Menu (From Image Description) --- */
-      .context-menu {
-        position: absolute;
-        top: 60px; /* Below header */
-        right: 10px;
-        width: 250px;
+      /* --- CHAT WINDOW (Inbox) --- */
+      #chatWindow {
+        position: fixed;
+        bottom: 0;
+        right: 20px;
+        width: 320px;
+        height: 450px;
         background: white;
-        border-radius: 4px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        z-index: 1000;
-        display: none; /* Hidden by default */
+        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
+        border-radius: 10px 10px 0 0;
+        display: none;
         flex-direction: column;
+        z-index: 2000;
+      }
+      .cw-header {
+        background: var(--primary);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 10px 10px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+      .cw-body {
+        flex: 1;
+        padding: 15px;
+        overflow-y: auto;
+        background: #e4e6eb;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .cw-msg {
+        padding: 8px 12px;
+        border-radius: 15px;
+        max-width: 80%;
+        font-size: 13px;
+        word-break: break-word;
+      }
+      .cw-msg.mine {
+        background: var(--primary);
+        color: white;
+        align-self: flex-end;
+        border-bottom-right-radius: 2px;
+      }
+      .cw-msg.theirs {
+        background: white;
+        align-self: flex-start;
+        border-bottom-left-radius: 2px;
+      }
+      .cw-footer {
+        padding: 10px;
+        border-top: 1px solid #ddd;
+        display: flex;
+        gap: 5px;
+        background: white;
+      }
+
+      /* --- ADMIN CHAT CONTROL MODAL --- */
+      .modal-lg {
+        width: 90%;
+        max-width: 800px;
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .admin-layout {
+        display: flex;
+        height: 100%;
         overflow: hidden;
       }
-
-      .menu-item {
-        padding: 12px 16px;
+      .admin-sidebar {
+        width: 35%;
+        border-right: 1px solid #ddd;
+        overflow-y: auto;
+        background: #f9f9f9;
+      }
+      .admin-chat-view {
+        width: 65%;
         display: flex;
-        align-items: center;
-        gap: 15px;
+        flex-direction: column;
+        background: white;
+        position: relative;
+      }
+      .admin-chat-item {
+        padding: 15px;
+        border-bottom: 1px solid #eee;
         cursor: pointer;
-        color: var(--text-primary);
-        font-size: 0.9rem;
-        transition: background 0.1s;
+        transition: 0.2s;
+      }
+      .admin-chat-item:hover {
+        background: #eee;
+      }
+      .admin-chat-item.active {
+        background: #e3f2fd;
+        border-left: 4px solid var(--primary);
+      }
+      .admin-msg-container {
+        flex: 1;
+        padding: 15px;
+        overflow-y: auto;
+        background: #e4e6eb;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .admin-controls {
+        padding: 10px;
+        border-top: 1px solid #ddd;
+        display: flex;
+        justify-content: flex-end;
+        background: white;
       }
 
-      .menu-item:hover {
-        background: #f5f6f6;
-      }
-
-      .menu-item i {
-        color: #54656f;
-        width: 20px;
-        text-align: center;
-      }
-
-      .menu-item.danger {
-        color: var(--danger);
-      }
-      .menu-item.danger i {
-        color: var(--danger);
-      }
-
-      /* --- Modals --- */
+      /* --- MODAL --- */
       .modal-overlay {
         position: fixed;
         top: 0;
@@ -371,355 +653,382 @@
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.5);
+        z-index: 3000;
         display: none;
-        justify-content: center;
         align-items: center;
-        z-index: 2000;
+        justify-content: center;
       }
-
-      .modal {
+      .modal-overlay.active {
+        display: flex;
+      }
+      .modal-box {
         background: white;
-        padding: 24px;
-        border-radius: 8px;
+        padding: 25px;
+        border-radius: 10px;
         width: 90%;
         max-width: 400px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
       }
-
-      .modal h3 {
-        margin-bottom: 16px;
-        color: var(--text-primary);
+      .modal-box input {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ccc;
+        border-radius: 5px;
       }
-
-      .modal-body {
-        margin-bottom: 20px;
-        color: var(--text-secondary);
-      }
-
       .modal-actions {
         display: flex;
-        justify-content: flex-end;
         gap: 10px;
+        justify-content: center;
+        margin-top: 15px;
       }
 
-      .btn {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: 500;
-      }
-
-      .btn-cancel {
-        background: transparent;
-        color: var(--text-secondary);
-      }
-
-      .btn-primary {
-        background: var(--primary-color);
-        color: white;
-      }
-
-      .btn-danger {
-        background: var(--danger);
-        color: white;
-      }
-
-      .btn-gold {
-        background: var(--gold);
-        color: #333;
-      }
-
-      /* --- Toast Notification --- */
+      /* --- TOAST --- */
       .toast {
         position: fixed;
         bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
-        background: #323232;
+        background: #333;
         color: white;
         padding: 10px 20px;
-        border-radius: 4px;
-        font-size: 0.9rem;
+        border-radius: 5px;
         opacity: 0;
-        transition: opacity 0.3s;
+        transition: 0.3s;
         pointer-events: none;
-        z-index: 3000;
+        z-index: 4000;
       }
-
       .toast.show {
         opacity: 1;
       }
 
-      /* --- Admin Badge --- */
-      .admin-badge {
-        background: var(--gold);
-        color: black;
-        font-size: 0.6rem;
-        padding: 2px 4px;
-        border-radius: 3px;
-        margin-left: 5px;
-        text-transform: uppercase;
-      }
-
-      /* Mobile Responsive */
-      @media (max-width: 768px) {
-        .app-container {
+      /* --- RESPONSIVE --- */
+      @media (max-width: 900px) {
+        .container {
+          grid-template-columns: 1fr 2fr;
+        }
+        .sidebar-right {
+          display: none;
+        }
+        .modal-lg {
+          width: 95%;
+          height: 90vh;
+        }
+        .admin-layout {
           flex-direction: column;
         }
-        .sidebar {
+        .admin-sidebar {
           width: 100%;
-          height: 100%;
-          position: absolute;
-          z-index: 50;
-          transform: translateX(0);
+          height: 40%;
+          border-right: none;
+          border-bottom: 1px solid #ddd;
         }
-        .sidebar.hidden {
-          transform: translateX(-100%);
-        }
-        .main-chat {
+        .admin-chat-view {
           width: 100%;
-          height: 100%;
-        }
-        .back-btn {
-          display: block !important;
-          margin-right: 10px;
-          color: #54656f;
-          font-size: 1.2rem;
-          cursor: pointer;
+          height: 60%;
         }
       }
-      .back-btn {
-        display: none;
-      }
-
-      /* List for adding members */
-      .member-list {
-        max-height: 200px;
-        overflow-y: auto;
-        border: 1px solid #e9edef;
-        margin-top: 10px;
-      }
-      .member-item {
-        padding: 10px;
-        border-bottom: 1px solid #f0f2f5;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .member-item input {
-        cursor: pointer;
+      @media (max-width: 700px) {
+        .container {
+          grid-template-columns: 1fr;
+          padding-bottom: 60px;
+        }
+        .sidebar-left {
+          display: none;
+        }
+        #chatWindow {
+          width: 100%;
+          height: 100vh;
+          right: 0;
+          bottom: 0;
+          border-radius: 0;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="app-container">
-      <!-- Sidebar -->
-      <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-          <img src="" alt="My Profile" class="user-avatar" id="sidebarAvatar" title="My Profile" />
-          <div class="sidebar-icons">
-            <button class="icon-btn" title="New Group" onclick="window.openCreateGroupModal()">
-              <i class="fas fa-user-plus"></i>
-            </button>
-            <button class="icon-btn" title="Status"><i class="fas fa-circle-notch"></i></button>
-            <button class="icon-btn" title="Chat"><i class="fas fa-comment-dots"></i></button>
-            <button class="icon-btn" title="Menu"><i class="fas fa-ellipsis-v"></i></button>
-          </div>
-        </div>
+    <!-- ===== RED BRICK NOTIFICATION CONTAINER ===== -->
+    <div class="brick-notify-container" id="brickNotifyContainer"></div>
 
-        <!-- Advertisement Banner -->
-        <div class="ad-banner">
-          <span class="ad-badge">AD</span>
-          Upgrade to Premium for extra storage!
-        </div>
-
-        <div class="search-bar">
-          <input
-            type="text"
-            class="search-input"
-            placeholder="Search or start new chat"
-            id="searchInput"
-            onkeyup="window.filterGroups(this.value)"
-          />
-        </div>
-
-        <div class="chat-list" id="chatList">
-          <!-- Chat items rendered here via JS -->
-        </div>
+    <!-- AUTH SCREEN -->
+    <div id="authScreen" style="display: flex">
+      <div class="auth-box">
+        <h2 style="color: var(--primary); margin-bottom: 10px">Majadiliano</h2>
+        <h3 id="authTitle">Kuingia (Login)</h3>
+        <input type="text" id="authUser" placeholder="Jina la mtumiaji (Username)" />
+        <input type="password" id="authPass" placeholder="Neno la siri (Password)" />
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px" onclick="window.handleAuth()">
+          Endelea
+        </button>
+        <div class="auth-toggle" onclick="window.toggleAuthMode()">Huna akaunti? Jisajili Sasa</div>
       </div>
+    </div>
 
-      <!-- Main Chat Area -->
-      <div class="main-chat" id="mainChat">
-        <!-- Header -->
-        <div class="chat-header">
-          <div class="chat-header-info">
-            <i class="fas fa-arrow-left back-btn" onclick="window.toggleSidebar(true)"></i>
-            <img src="" alt="Group Icon" class="user-avatar" id="currentChatAvatar" />
-            <div class="chat-header-text">
-              <div class="chat-header-name" id="currentChatName">Select a Group</div>
-              <div class="chat-header-status" id="currentChatStatus">Click a chat to start messaging</div>
+    <!-- MAIN APP -->
+    <div id="mainApp" style="display: none">
+      <!-- Navbar -->
+      <nav class="navbar">
+        <div class="logo" onclick="window.closeChat()">
+          <i class="fas fa-shield-alt"></i>
+          <span>Majadiliano</span>
+        </div>
+        <div class="nav-icons">
+          <div class="nav-icon"><i class="fas fa-bell"></i></div>
+          <div class="nav-icon" onclick="window.scrollToTop()"><i class="fas fa-home"></i></div>
+          <div class="avatar-placeholder" id="myAvatar">ME</div>
+        </div>
+      </nav>
+
+      <!-- Main Layout -->
+      <div class="container">
+        <!-- Sidebar Left -->
+        <aside class="sidebar-left">
+          <div class="menu-item">
+            <div class="avatar-placeholder" id="sidebarAvatar" style="width: 30px; height: 30px; font-size: 12px">
+              ME
+            </div>
+            <span id="sidebarUsername">Juma Mtu</span>
+          </div>
+
+          <!-- Admin Only Button -->
+          <div class="menu-item admin-item" id="adminPanelBtn" onclick="window.openAdminChatControl()">
+            <i class="fas fa-user-shield"></i>
+            <span>Dashboard ya Waziri (Admin)</span>
+          </div>
+
+          <div class="menu-item" onclick="window.openManagement()">
+            <i class="fas fa-cogs"></i>
+            <span>Manage Account</span>
+          </div>
+
+          <!-- LINKS START HERE -->
+          <a href="kundi.html" class="menu-item">
+            <i class="fas fa-users"></i>
+            <span>Kundi</span>
+          </a>
+
+          <a href="rafiki.html" class="menu-item">
+            <i class="fas fa-user-friends"></i>
+            <span>Rafiki</span>
+          </a>
+          <!-- LINKS END HERE -->
+
+          <!-- Sign Out Button -->
+          <div class="menu-item" onclick="window.logout()" style="color: var(--danger)">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Ondoka (Sign Out)</span>
+          </div>
+        </aside>
+
+        <!-- Main Feed -->
+        <main class="feed">
+          <!-- Create Post -->
+          <div class="create-post">
+            <div class="cp-top">
+              <div class="avatar-placeholder" id="feedAvatar">ME</div>
+              <div class="cp-input-group">
+                <textarea id="content" class="cp-input" placeholder="Una nini akilini, Nashiri?"></textarea>
+              </div>
+            </div>
+
+            <!-- File Preview Area -->
+            <div id="filePreviewArea" class="file-preview"></div>
+
+            <div class="cp-actions">
+              <div style="display: flex; gap: 5px">
+                <label class="cp-btn" style="color: #45bd62">
+                  <i class="fas fa-images"></i>
+                  Picha/Video
+                  <input
+                    type="file"
+                    id="fileInput"
+                    multiple=""
+                    accept="image/*,video/*"
+                    style="display: none"
+                    onchange="window.handleFileSelect(event)"
+                  />
+                </label>
+                <!-- Audio Upload Button -->
+                <label class="cp-btn" style="color: #e07a5f">
+                  <i class="fas fa-microphone"></i>
+                  Sauti/Audio
+                  <input
+                    type="file"
+                    id="audioInput"
+                    accept="audio/*"
+                    style="display: none"
+                    onchange="window.handleFileSelect(event)"
+                  />
+                </label>
+              </div>
+              <button class="btn btn-primary" onclick="window.addPost()">Tuma Posti</button>
             </div>
           </div>
-          <div class="sidebar-icons">
-            <!-- The Menu Button that triggers to specific menu -->
-            <button class="icon-btn" onclick="window.toggleContextMenu()"><i class="fas fa-ellipsis-v"></i></button>
+
+          <!-- Posts Container -->
+          <div id="postsContainer"></div>
+
+          <!-- Footer Link -->
+          <div
+            class="footer-nav"
+            style="text-align: center; padding: 20px; color: var(--text-sec); font-size: 14px; margin-top: 30px"
+          >
+            &lt;&lt; ©
+            <a href="Index.html" style="color: var(--primary); text-decoration: none; font-weight: bold">
+              Back to Home Page
+            </a>
+            &gt;&gt;
           </div>
+        </main>
+
+        <!-- Sidebar Right (Users List) -->
+        <aside class="sidebar-right">
+          <div
+            style="
+              padding: 10px;
+              font-weight: bold;
+              color: var(--text-sec);
+              border-bottom: 1px solid #ddd;
+              display: flex;
+              justify-content: space-between;
+            "
+          >
+            <span>Watumiaji (Walio Karibu)</span>
+            <span id="userCount">0</span>
+          </div>
+          <div id="usersListContainer">
+            <!-- Users generated by JS -->
+          </div>
+        </aside>
+      </div>
+
+      <!-- Chat Window (Inbox) -->
+      <div id="chatWindow">
+        <div class="cw-header" onclick="window.closeChat()">
+          <span id="chatTitle">Inbox</span>
+          <i class="fas fa-times"></i>
         </div>
-
-        <!-- Context Menu (Based on Image Description) -->
-        <div class="context-menu" id="contextMenu">
-          <div class="menu-item" onclick="window.handleMenuAction('Group info')">
-            <i class="fas fa-info-circle"></i>
-            Group info
-          </div>
-          <div class="menu-item" onclick="window.handleMenuAction('Search')">
-            <i class="fas fa-search"></i>
-            Search
-          </div>
-          <div class="menu-item" onclick="window.handleMenuAction('Select messages')">
-            <i class="fas fa-check-square"></i>
-            Select messages
-          </div>
-          <div class="menu-item" onclick="window.handleMenuAction('Mute notifications')">
-            <i class="fas fa-bell-slash"></i>
-            Mute notifications
-          </div>
-          <div class="menu-item" onclick="window.handleMenuAction('Disappearing messages')">
-            <i class="fas fa-clock"></i>
-            Disappearing messages
-          </div>
-          <div class="menu-item" onclick="window.handleMenuAction('Add to favourites')">
-            <i class="fas fa-star"></i>
-            Add to favourites
-          </div>
-          <div class="menu-item" onclick="window.handleMenuAction('Close chat')">
-            <i class="fas fa-times"></i>
-            Close chat
-          </div>
-          <div class="menu-item" onclick="window.clearChat()">
-            <i class="fas fa-trash-alt"></i>
-            Clear chat
-          </div>
-          <div class="menu-item danger" onclick="window.exitGroup()">
-            <i class="fas fa-sign-out-alt"></i>
-            Exit group
-          </div>
+        <div class="cw-body" id="chatBody">
+          <!-- Messages go here -->
+          <div style="text-align: center; color: #888; margin-top: 50px">Chagua mtumiaji kuandika ujumbe.</div>
         </div>
-
-        <!-- Messages -->
-        <div class="message-container" id="messageContainer">
-          <div style="text-align: center; margin-top: 50px; color: #667781">
-            <i class="fas fa-comments" style="font-size: 3rem; margin-bottom: 10px"></i>
-            <p>Send and receive messages without keeping your phone online.</p>
-          </div>
-        </div>
-
-        <!-- Input Area -->
-        <div class="chat-input-area" id="inputArea" style="display: none">
-          <button class="icon-btn" onclick="document.getElementById('fileInput').click()">
-            <i class="fas fa-paperclip"></i>
-          </button>
-          <input type="file" id="fileInput" hidden="" onchange="window.handleFileUpload(this)" />
-
+        <div class="cw-footer">
           <input
             type="text"
-            class="input-box"
-            id="messageInput"
-            placeholder="Type a message"
-            onkeypress="window.handleEnter(event)"
+            id="chatInput"
+            placeholder="Andika ujumbe... (Private)"
+            style="flex: 1; border: none; outline: none; padding: 5px"
           />
-
-          <button class="icon-btn"><i class="far fa-smile"></i></button>
-          <button class="icon-btn" onclick="window.sendMessage()"><i class="fas fa-paper-plane"></i></button>
+          <button class="btn btn-ghost" onclick="window.sendMessage()">
+            <i class="fas fa-paper-plane" style="color: var(--primary)"></i>
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Modals -->
 
-    <!-- Create Group Modal -->
-    <div class="modal-overlay" id="createGroupModal">
-      <div class="modal">
-        <h3>Create New Group</h3>
-        <div class="modal-body">
-          <input
-            type="text"
-            id="newGroupName"
-            class="input-box"
-            placeholder="Group subject"
-            style="width: 100%; margin-bottom: 10px"
-          />
-          <p>Add Members:</p>
-          <div class="member-list" id="availableUsersList">
-            <!-- Populated by JS -->
-          </div>
-        </div>
+    <!-- Admin Delete Modal -->
+    <div class="modal-overlay" id="passwordModal">
+      <div class="modal-box">
+        <h3>Admin Check</h3>
+        <p style="font-size: 13px; color: #666; margin-bottom: 10px">Weka Neno la siri la WAZIRI2015</p>
+        <input type="password" id="adminPassInput" placeholder="Neno la siri..." />
         <div class="modal-actions">
-          <button class="btn btn-cancel" onclick="window.closeModal('createGroupModal')">Cancel</button>
-          <button class="btn btn-primary" onclick="window.createGroup()">Create</button>
+          <button class="btn btn-ghost" onclick="window.closeModal('passwordModal')">Cancel</button>
+          <button class="btn btn-primary" onclick="window.confirmDelete()">Delete</button>
         </div>
       </div>
     </div>
 
-    <!-- Super Admin Controls Modal -->
-    <div class="modal-overlay" id="adminModal">
-      <div class="modal">
-        <h3>Super Admin Control Panel</h3>
-        <div class="modal-body">
-          <p>Manage this group effectively.</p>
-          <br />
-          <button
-            class="btn btn-primary"
-            style="width: 100%; margin-bottom: 10px"
-            onclick="window.openAddMemberModal()"
-          >
-            <i class="fas fa-user-plus"></i>
-            Add Members from Accounts
-          </button>
-          <br />
-          <button class="btn btn-gold" style="width: 100%; margin-bottom: 10px" onclick="window.requestPremium()">
-            <i class="fas fa-crown"></i>
-            Ask Admins for Premium
-          </button>
-          <br />
-          <button class="btn btn-danger" style="width: 100%" onclick="window.deleteGroup()">
+    <!-- Account Management Modal -->
+    <div class="modal-overlay" id="manageModal">
+      <div class="modal-box">
+        <h3>Manage Account</h3>
+        <p id="manageUserDisplay" style="font-weight: bold; margin: 10px 0"></p>
+        <div style="text-align: left; background: #f9f9f9; padding: 10px; border-radius: 5px; margin-bottom: 15px">
+          <div style="margin-bottom: 10px">
             <i class="fas fa-trash"></i>
-            Delete Group
+            Futa posti zangu zote
+          </div>
+          <button class="btn btn-sm" style="background: var(--danger); color: white" onclick="window.deleteMyPosts()">
+            Futa Posti Zangu
           </button>
         </div>
         <div class="modal-actions">
-          <button class="btn btn-cancel" onclick="window.closeModal('adminModal')">Close</button>
+          <button class="btn btn-ghost" onclick="window.closeModal('manageModal')">Funga</button>
         </div>
       </div>
     </div>
 
-    <!-- Add Member Modal -->
-    <div class="modal-overlay" id="addMemberModal">
-      <div class="modal">
-        <h3>Add Participants</h3>
-        <div class="modal-body">
-          <p>Select users to add to this group:</p>
-          <div class="member-list" id="addUserList">
+    <!-- ADMIN CHAT CONTROL MODAL -->
+    <div class="modal-overlay" id="adminChatModal">
+      <div class="modal-box modal-lg">
+        <h3
+          style="
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <span>
+            <i class="fas fa-user-secret"></i>
+            Admin Chat Control
+          </span>
+          <button class="btn btn-sm btn-ghost" onclick="window.closeModal('adminChatModal')">
+            <i class="fas fa-times"></i>
+          </button>
+        </h3>
+        <div class="admin-layout">
+          <!-- List of active chats -->
+          <div class="admin-sidebar" id="adminChatList">
             <!-- Populated by JS -->
           </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" onclick="window.closeModal('addMemberModal')">Cancel</button>
-          <button class="btn btn-primary" onclick="window.confirmAddMembers()">Add</button>
+          <!-- Chat View -->
+          <div class="admin-chat-view">
+            <div
+              style="padding: 10px; background: white; font-weight: bold; border-bottom: 1px solid #eee"
+              id="adminChatHeader"
+            >
+              Chagua mazungumzo kutoka kushoto
+            </div>
+            <div class="admin-msg-container" id="adminChatBody">
+              <!-- Messages -->
+            </div>
+            <!-- Control Button -->
+            <div class="admin-controls" id="adminControlBtnContainer" style="display: none">
+              <button class="btn btn-danger" onclick="window.clearSelectedChat()">
+                <i class="fas fa-trash"></i>
+                Futa Mazungumzo (Clear Chat)
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Toast -->
-    <div class="toast" id="toast">Action Successful</div>
+    <div class="toast" id="toast">Ujumbe hapa</div>
 
+    <!-- MAIN JAVASCRIPT LOGIC (UPDATED FOR FIREBASE) -->
     <script type="module">
       // =====================
       // IMPORT FIREBASE SDKs
       // =====================
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-      import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signOut,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        GoogleAuthProvider,
+        signInWithCredential,
+        updateProfile
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
       import {
         getFirestore,
@@ -731,8 +1040,8 @@
         deleteDoc,
         doc,
         query,
-        orderBy,
         where,
+        orderBy
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
       // =====================
@@ -744,11 +1053,10 @@
         projectId: "ncrs-aeb43",
         storageBucket: "ncrs-aeb43.firebasestorage.app",
         messagingSenderId: "786434442929",
-        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-        measurementId: "G-ZYB71RY8J5",
+        appId: "1:786434442929:web:7c91cb67f71a23904b4490",
+        measurementId: "G-1GLSLPKQK5",
       };
 
-      // Initialize Firebase
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
       const auth = getAuth(app);
@@ -756,514 +1064,781 @@
       // =====================
       // GLOBAL STATE
       // =====================
-      let currentUser = null;
+      let currentUser = null; // Merged Auth User + Firestore Data
+      let selectedFiles = [];
+      let chatPartnerId = null;
+      let postToDeleteId = null;
+      let isSigningUp = false;
+      let currentAdminPairId = null;
+      let postsCache = [];
       let usersCache = [];
-      let groupsCache = [];
-      let activeGroupId = null;
 
       // =====================
-      // AUTH SESSION HANDLING
+      // DATA HELPERS (Replaces LocalStorage)
+      // =====================
+
+      // --- USERS ---
+      async function fetchUsers() {
+        const q = query(collection(db, "users"));
+        const snapshot = await getDocs(q);
+        usersCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        return usersCache;
+      }
+
+      async function getUserByName(name) {
+        const q = query(collection(db, "users"), where("name", "==", name));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+            return { id: snap.docs[0].id, ...snap.docs[0].data() };
+        }
+        return null;
+      }
+
+      async function createUser(userData) {
+        userData.following = [];
+        userData.friends = [];
+        const docRef = await addDoc(collection(db, "users"), userData);
+        return { id: docRef.id, ...userData };
+      }
+
+      // --- POSTS ---
+      async function fetchPosts() {
+        const q = query(collection(db, "posts"), orderBy("date", "desc"));
+        const snapshot = await getDocs(q);
+        postsCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        return postsCache;
+      }
+
+      async function createPost(postData) {
+          await addDoc(collection(db, "posts"), postData);
+      }
+
+      async function deletePostById(id) {
+          await deleteDoc(doc(db, "posts", id));
+      }
+
+      // --- MESSAGES ---
+      async function fetchMessages() {
+          // Fetch all messages (demo scale) to avoid complex indexes
+          const q = query(collection(db, "messages"), orderBy("time", "asc"));
+          const snapshot = await getDocs(q);
+          return snapshot.docs.map(d => d.data());
+      }
+
+      async function createMessage(msgData) {
+          await addDoc(collection(db, "messages"), msgData);
+      }
+
+      // =====================
+      // SESSION LOGIC
+      // =====================
+      function saveSession(user) {
+          localStorage.setItem("majadiliano_session_uid", user.id);
+          currentUser = user;
+      }
+
+      async function loadSession() {
+          const uid = localStorage.getItem("majadiliano_session_uid");
+          if (uid) {
+              const docRef = doc(db, "users", uid);
+              const snap = await getDoc(docRef);
+              if (snap.exists()) {
+                  currentUser = { id: uid, ...snap.data() };
+              }
+          }
+      }
+
+      // =====================
+      // INITIALIZATION
       // =====================
       async function initApp() {
-        onAuthStateChanged(auth, async (user) => {
-          if (user) {
-            // Fetch user details from Firestore
-            const userDoc = await getDoc(doc(db, "users", user.uid));
-            if (userDoc.exists()) {
-              currentUser = { id: user.uid, ...userDoc.data() };
-              updateUIForUser(currentUser);
-              await fetchGroups(); // Load groups once logged in
-              await fetchUsers(); // Load users
-            } else {
-              // User is auth'd but no profile data -> create basic
-              const defaultUser = {
-                name: "New User",
-                avatar: "https://picsum.photos/seed/me/40/40",
-                role: "user",
-              };
-              await setDoc(doc(db, "users", user.uid), defaultUser);
-              currentUser = { id: user.uid, ...defaultUser };
-              updateUIForUser(currentUser);
-              await fetchGroups();
-              await fetchUsers();
-            }
+          await loadSession();
+          if (currentUser) {
+              showMainApp();
           } else {
-            // No User Logged In
-            // Redirect to Majadiliano (Login Page) for consistency
-            window.location.href = "majadiliano.html";
+              document.getElementById('authScreen').style.display = 'flex';
+              document.getElementById('mainApp').style.display = 'none';
           }
-        });
       }
 
-      function updateUIForUser(user) {
-        document.getElementById("sidebarAvatar").src = user.avatar || "https://picsum.photos/seed/me/40/40";
-      }
-
-      window.logout = async function () {
-        await signOut(auth);
-        window.location.href = "majadiliano.html";
+      window.toggleAuthMode = function() {
+          isSigningUp = !isSigningUp;
+          document.getElementById('authTitle').innerText = isSigningUp ? "Jisajili (Sign Up)" : "Kuingia (Login)";
+          document.querySelector('.auth-toggle').innerText = isSigningUp ? "Tayari una akaunti? Ingia" : "Huna akaunti? Jisajili Sasa";
       };
 
-      // =====================
-      // DATA FETCHING
-      // =====================
+      window.handleAuth = async function() {
+          const nameInput = document.getElementById('authUser').value.trim();
+          const passInput = document.getElementById('authPass').value.trim();
 
-      async function fetchUsers() {
-        const snap = await getDocs(collection(db, "users"));
-        usersCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          if(!nameInput || !passInput) { showToast("Weka jina na neno la siri"); return; }
+
+          if (isSigningUp) {
+              const existing = await getUserByName(nameInput);
+              if(existing) {
+                  showToast("Jina limechukuliwa tayari!");
+                  return;
+              }
+              const newUser = {
+                  name: nameInput,
+                  password: passInput, // In prod, hash this!
+                  avatar: nameInput.substring(0,2).toUpperCase(),
+                  createdAt: Date.now()
+              };
+              const createdUser = await createUser(newUser);
+              loginUser(createdUser);
+          } else {
+              const user = await getUserByName(nameInput);
+              if(user && user.password === passInput) {
+                  loginUser(user);
+              } else {
+                  showToast("Jina au neno la siri si sahihi.");
+              }
+          }
+      };
+
+      function loginUser(user) {
+          saveSession(user);
+          document.getElementById('authScreen').style.display = 'none';
+          showMainApp();
       }
 
-      async function fetchGroups() {
-        const snap = await getDocs(collection(db, "groups"));
-        // Map to objects
-        const allGroups = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        // Filter: User must be in 'members' array
-        groupsCache = allGroups.filter((g) => g.members && g.members.includes(currentUser.id));
-        renderChatList();
-      }
+      window.logout = async function() {
+          await signOut(auth);
+          localStorage.removeItem("majadiliano_session_uid");
+          currentUser = null;
+          location.reload();
+      };
 
-      async function fetchMessagesForGroup(groupId) {
-        const q = query(collection(db, "groups", groupId, "messages"), orderBy("time", "asc"));
-        const snap = await getDocs(q);
-        return snap.docs.map((d) => d.data());
+      async function showMainApp() {
+          document.getElementById('mainApp').style.display = 'block';
+          document.getElementById('sidebarUsername').innerText = currentUser.name;
+          document.getElementById('feedAvatar').innerText = currentUser.avatar;
+          document.getElementById('sidebarAvatar').innerText = currentUser.avatar;
+          document.getElementById('myAvatar').innerText = currentUser.avatar;
+
+          // Check Super Admin Credentials (One Administrator Rule)
+          // Note: Enforce that ONLY Nashiri Waziri gets the Admin Dashboard button
+          if (currentUser.name === "Nashiri Waziri") {
+              document.getElementById('adminPanelBtn').style.display = 'flex';
+              // Ensure user has admin role in DB if they are Nashiri Waziri, just in case they signed up as regular user but should be admin.
+              if (currentUser.role !== 'Administrator') {
+                  await updateDoc(doc(db, "users", currentUser.id), { role: "Administrator" });
+                  currentUser.role = "Administrator'; // Update local state immediately
+              }
+          } else if (currentUser.role === 'Administrator') {
+              document.getElementById('adminPanelBtn').style.display = 'flex';
+          } else {
+              document.getElementById('adminPanelBtn').style.display = 'none';
+          }
+
+          await loadPosts();
+          renderUserList();
       }
 
       // =====================
       // UI RENDERING
       // =====================
+      async function renderUserList() {
+          const users = await fetchUsers();
+          const container = document.getElementById('usersListContainer');
+          container.innerHTML = "";
+          document.getElementById('userCount').innerText = users.length;
 
-      window.filterGroups = function (queryString) {
-        const list = document.getElementById("chatList");
-        list.innerHTML = "";
+          users.forEach(u => {
+              if(u.id === currentUser.id) return;
 
-        const lowerQuery = queryString.toLowerCase();
-        const filtered = groupsCache.filter((g) => g.name.toLowerCase().includes(lowerQuery));
+              const isFollowing = currentUser.following.includes(u.id);
+              const isFriend = currentUser.friends.includes(u.id);
+              const hasRequested = u.requests.includes(currentUser.id);
 
-        if (filtered.length === 0) {
-          list.innerHTML = '<div style="padding:15px; text-align:center; color:#888;">No groups found</div>';
-          return;
-        }
+              let actionBtn = "";
+              if(isFriend) {
+                  actionBtn = `<button class="active" title="Rafiki"><i class="fas fa-user-check"></i></button>`;
+              } else if (hasRequested) {
+                  actionBtn = `<button title="Imetumwa"><i class="fas fa-clock"></i></button>`;
+              } else {
+                  // Admin Logic: Only Admin can "Add" or effectively manage all users.
+                  // We expose a function to add users for the Admin if they use the console or a specific tool.
+                  // Standard users can follow/friend others.
+                  actionBtn = `<button onclick="window.sendFriendRequest('${u.id}')" title="Add Friend"><i class="fas fa-user-plus"></i></button>`;
+              }
 
-        filtered.forEach((group) => {
-          // Need to get last message?
-          // To keep this performant without complex composite queries, we'll skip last message preview or fetch it separately
-          // For this refactor, we will use generic preview.
-          const isActive = group.id === activeGroupId ? "active" : "";
-
-          const html = `
-                <div class="chat-item ${isActive}" onclick="window.openGroup('${group.id}')">
-                    <img src="${group.avatar}" class="user-avatar">
-                    <div class="chat-info">
-                        <div class="chat-name">
-                            ${group.name}
-                        </div>
-                        <div style="display:flex; justify-content:space-between; width:100%;">
-                            <span class="chat-last-msg">Tap to view messages</span>
-                            <span class="time-stamp"></span>
-                        </div>
-                    </div>
-                </div>
-            `;
-          list.innerHTML += html;
-        });
-      };
-
-      function renderChatList() {
-        window.filterGroups(document.getElementById("searchInput").value);
+              const html = `
+              <div class="user-list-item">
+                  <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="window.openChatWith('${u.id}')">
+                      <div class="avatar-placeholder" style="width:30px; height:30px; font-size:10px;">${u.avatar}</div>
+                      <div>
+                          <div style="font-size:14px; font-weight:600;">${u.name}</div>
+                          <div style="font-size:11px; color:#666;">Mutaboa wa karibu</div>
+                      </div>
+                  </div>
+                  <div class="user-actions">
+                      <button class="${isFollowing ? 'active' : ''}" onclick="window.toggleFollow('${u.id}')" title="Follow">
+                          <i class="fas ${isFollowing ? 'fa-user-minus' : 'fa-user-plus'}"></i>
+                      </button>
+                      ${actionBtn}
+                      <button onclick="window.openChatWith('${u.id}')" title="Message"><i class="fas fa-comment-dots"></i></button>
+                  </div>
+              </div>
+              `;
+              container.innerHTML += html;
+          });
       }
 
-      window.openGroup = async function (groupId) {
-        activeGroupId = groupId;
-        const group = groupsCache.find((g) => g.id === groupId);
-
-        // UI Updates
-        toggleSidebar(false); // On mobile, hide sidebar
-        renderChatList(); // Update active state
-
-        document.getElementById("currentChatAvatar").src = group.avatar;
-        const isAdmin = group.admins && group.admins.includes(currentUser.id);
-
-        document.getElementById("currentChatName").innerHTML =
-          `${group.name} ${isAdmin ? '<span class="admin-badge">Admin</span>' : ""}`;
-        document.getElementById("currentChatStatus").innerText =
-          `${group.members ? group.members.length : 0} participants`;
-        document.getElementById("inputArea").style.display = "flex";
-
-        // Super Admin Button Logic
-        const headerIcons = document.querySelector(".chat-header .sidebar-icons");
-        headerIcons.innerHTML = ""; // Clear previous
-
-        // Menu Button (Always there)
-        const menuBtn = document.createElement("button");
-        menuBtn.className = "icon-btn";
-        menuBtn.innerHTML = '<i class="fas fa-ellipsis-v"></i>';
-        menuBtn.onclick = toggleContextMenu;
-        headerIcons.appendChild(menuBtn);
-
-        // Super Admin Management Button (Only if Super Admin)
-        if (currentUser.role === "super_admin") {
-          const adminBtn = document.createElement("button");
-          adminBtn.className = "icon-btn";
-          adminBtn.style.color = "var(--primary-color)";
-          adminBtn.innerHTML = '<i class="fas fa-shield-alt"></i>';
-          adminBtn.title = "Super Admin Controls";
-          adminBtn.onclick = () => openModal("adminModal");
-          headerIcons.insertBefore(adminBtn, menuBtn);
-        }
-
-        renderMessages();
-      };
-
-      async function renderMessages() {
-        const container = document.getElementById("messageContainer");
-        container.innerHTML = "";
-
-        if (!activeGroupId) return;
-
-        const messages = await fetchMessagesForGroup(activeGroupId);
-
-        if (messages.length === 0) {
-          container.innerHTML = `<div style="text-align: center; margin-top: 50px; color: #888;">No messages in this group yet.</div>`;
-          return;
-        }
-
-        messages.forEach((msg) => {
-          const isMe = msg.senderId === currentUser.id;
-          const sender = usersCache.find((u) => u.id === msg.senderId) || currentUser;
-
-          let contentHtml = "";
-
-          if (msg.type === "text") {
-            contentHtml = msg.content;
-          } else if (msg.type === "file") {
-            if (msg.fileType.startsWith("image/")) {
-              contentHtml = `<div class="file-preview"><img src="${msg.fileData}" onclick="window.viewImage(this.src)"></div>${msg.content}</div>`;
-            } else if (msg.fileType.startsWith("video/")) {
-              contentHtml = `<div class="file-preview"><video controls src="${msg.fileData}"></video></div>`;
-            } else {
-              contentHtml = `
-                        <div class="file-attachment">
-                            <i class="fas fa-file-alt" style="font-size:24px; color:#54656f;"></i>
-                            <div>
-                                <div style="font-weight:bold;">${msg.fileName}</div>
-                                <div style="font-size:0.75rem; color:#667781;">${(msg.fileSize / 1024).toFixed(1)} KB</div>
-                            </div>
-                        </div>
-                    `;
-            }
-          }
-
-          const html = `
-                <div class="message ${isMe ? "outgoing" : "incoming"}">
-                    ${!isMe ? `<div style="font-size:0.75rem; font-weight:bold; margin-bottom:2px; color:#d85c27;">${sender.name}</div>` : ""}
-                    ${contentHtml}
-                    <div class="msg-meta">
-                        <span class="msg-time">${msg.time}</span>
-                        ${isMe ? '<i class="fas fa-check-double msg-tick"></i>' : ""}
-                    </div>
-                </div>
-            `;
-          container.innerHTML += html;
-        });
-
-        // Scroll to bottom
-        container.scrollTop = container.scrollHeight;
-      }
-
-      // =====================
-      // MESSAGING LOGIC
-      // =====================
-      window.handleEnter = function (e) {
-        if (e.key === "Enter") sendMessage();
-      };
-
-      window.sendMessage = async function () {
-        const input = document.getElementById("messageInput");
-        const text = input.value.trim();
-        if (!text || !activeGroupId) return;
-
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-        const newMsg = {
-          id: Date.now(),
-          senderId: currentUser.id,
-          type: "text",
-          content: text,
-          time: timeString,
-        };
-
-        // Write to Firestore Subcollection
-        await addDoc(collection(db, "groups", activeGroupId, "messages"), newMsg);
-
-        input.value = "";
-        renderMessages();
-        renderChatList(); // Update preview if we implemented one
-      };
-
-      window.handleFileUpload = function (input) {
-        const file = input.files[0];
-        if (!file || !activeGroupId) return;
-
-        const reader = new FileReader();
-        reader.onload = async function (e) {
-          const now = new Date();
-          const timeString = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-          const newMsg = {
-            id: Date.now(),
-            senderId: currentUser.id,
-            type: "file",
-            content: file.name, // Caption
-            fileName: file.name,
-            fileSize: file.size,
-            fileType: file.type,
-            fileData: e.target.result, // Base64
-            time: timeString,
-          };
-
-          // Write to Firestore Subcollection
-          await addDoc(collection(db, "groups", activeGroupId, "messages"), newMsg);
-          renderMessages();
-        };
-        reader.readAsDataURL(file);
-        input.value = ""; // Reset input
-      };
-
-      // =====================
-      // MENU ACTIONS
-      // =====================
-      window.toggleContextMenu = function () {
-        const menu = document.getElementById("contextMenu");
-        menu.style.display = menu.style.display === "flex" ? "none" : "flex";
-      };
-
-      window.handleMenuAction = function (action) {
-        toggleContextMenu();
-        showToast(action + " clicked (Demo)");
-
-        if (action === "Close chat") {
-          activeGroupId = null;
-          document.getElementById("messageContainer").innerHTML = `
-                <div style="text-align: center; margin-top: 50px; color: #667781;">
-                    <i class="fas fa-comments" style="font-size: 3rem; margin-bottom: 10px;"></i>
-                    <p>Select a group from the left sidebar.</p>
-                </div>
-            `;
-          document.getElementById("inputArea").style.display = "none";
-          document.getElementById("currentChatName").innerText = "Select a Group";
-          document.getElementById("currentChatStatus").innerText = "";
-          renderChatList();
-        }
-      };
-
-      window.clearChat = async function () {
-        toggleContextMenu();
-        if (activeGroupId) {
-          // Fetch all messages then delete them individually (client-side delete limitation)
-          // Or better: just use a system message "Chat Cleared" in UI,
-          // but for a real delete, we need to iterate.
-          const q = query(collection(db, "groups", activeGroupId, "messages"));
+      // Social Actions (Update then Reload)
+      window.toggleFollow = async function(targetId) {
+          const q = query(collection(db, "users"), where("name", "==", currentUser.name)); // Find self by name to get ref
           const snap = await getDocs(q);
-          const promises = [];
-          snap.forEach((d) => {
-            promises.push(deleteDoc(d.ref));
-          });
-          await Promise.all(promises);
-          renderMessages();
-          showToast("Chat cleared");
-        }
-      };
+          if(!snap.empty) {
+              const myRef = snap.docs[0].ref;
+              let myData = snap.docs[0].data();
+              let following = myData.following || [];
 
-      window.exitGroup = async function () {
-        toggleContextMenu();
-        if (confirm("Are you sure you want to exit this group?")) {
-          const groupRef = doc(db, "groups", activeGroupId);
-          const snap = await getDoc(groupRef);
-          if (snap.exists()) {
-            const members = snap.data().members || [];
-            const newMembers = members.filter((id) => id !== currentUser.id);
-            await updateDoc(groupRef, { members: newMembers });
+              if(following.includes(targetId)) {
+                  following = following.filter(id => id !== targetId);
+                  showToast("Umefuta ufuatilio.");
+              } else {
+                  following.push(targetId);
+                  showToast("Unamfuata sasa hivi.");
+              }
 
-            // Refresh list
-            await fetchGroups();
-            handleMenuAction("Close chat");
-            showToast("Exited group");
+              await updateDoc(myRef, { following: following });
+              // Refresh local state
+              currentUser.following = following;
+              renderUserList();
           }
-        }
+      };
+
+      window.sendFriendRequest = async function(targetId) {
+          const q = query(collection(db, "users"), where("name", "==", currentUser.name));
+          const snap = await getDocs(q);
+          if(!snap.empty) {
+              const targetRef = doc(db, "users", targetId);
+              const targetSnap = await getDoc(targetRef);
+              if(targetSnap.exists()) {
+                  let requests = targetSnap.data().requests || [];
+                  if(!requests.includes(currentUser.id)) {
+                      requests.push(currentUser.id);
+                      await updateDoc(targetRef, { requests: requests });
+                      showToast("Ombi la urafiki limetumwa.");
+                      renderUserList();
+                  }
+              }
+          }
       };
 
       // =====================
-      // GROUP MANAGEMENT
+      // MESSAGING (INBOX)
       // =====================
-
-      window.openCreateGroupModal = async function () {
-        const list = document.getElementById("availableUsersList");
-        list.innerHTML = "";
-
-        // Fetch users if not cached
-        if (usersCache.length === 0) await fetchUsers();
-
-        usersCache.forEach((u) => {
-          if (u.id === currentUser.id) return;
-          list.innerHTML += `
-                <div class="member-item">
-                    <input type="checkbox" value="${u.id}" id="user_${u.id}">
-                    <img src="${u.avatar}" style="width:30px; height:30px; border-radius:50%;">
-                    <span>${u.name}</span>
-                </div>
-            `;
-        });
-        openModal("createGroupModal");
+      window.openChatWith = async function(userId) {
+          chatPartnerId = userId;
+          // Find partner in cache (avoid extra read)
+          const partner = usersCache.find(u => u.id === userId);
+          document.getElementById('chatTitle').innerText = `Chat na ${partner ? partner.name : 'User'}`;
+          document.getElementById('chatWindow').style.display = 'flex';
+          renderChat();
       };
 
-      window.createGroup = async function () {
-        const name = document.getElementById("newGroupName").value;
-        if (!name) return alert("Please enter a group name");
-
-        const checkboxes = document.querySelectorAll("#availableUsersList input:checked");
-        const selectedIds = Array.from(checkboxes).map((cb) => cb.value);
-        selectedIds.push(currentUser.id); // Add creator
-
-        const newGroup = {
-          id: "g" + Date.now(), // ID logic for immediate UI use, Firestore creates ID automatically
-          name: name,
-          avatar: `https://picsum.photos/seed/${name}/40/40`,
-          admins: [currentUser.id],
-          members: selectedIds,
-          createdAt: new Date().toISOString(),
-        };
-
-        await addDoc(collection(db, "groups"), newGroup);
-        closeModal("createGroupModal");
-        await fetchGroups(); // Reload list
-        // Find the new group ID logic is tricky with auto-ids, better to just re-fetch
-        showToast("Group created successfully");
+      window.closeChat = function() {
+          document.getElementById('chatWindow').style.display = 'none';
+          chatPartnerId = null;
       };
 
-      window.openAddMemberModal = async function () {
-        const list = document.getElementById("addUserList");
-        list.innerHTML = "";
+      window.sendMessage = async function() {
+          const input = document.getElementById('chatInput');
+          const text = input.value.trim();
+          if(!text || !chatPartnerId) return;
 
-        // Get current group
-        const groupRef = doc(db, "groups", activeGroupId);
-        const groupSnap = await getDoc(groupRef);
-        if (!groupSnap.exists()) return;
-        const currentGroup = groupSnap.data();
-
-        // Show users not currently in group
-        const availableUsers = usersCache.filter((u) => !currentGroup.members.includes(u.id));
-
-        if (availableUsers.length === 0) {
-          list.innerHTML = '<div style="padding:10px; color:#666;">All users are already in this group.</div>';
-        } else {
-          availableUsers.forEach((u) => {
-            list.innerHTML += `
-                    <div class="member-item">
-                        <input type="checkbox" value="${u.id}" id="add_user_${u.id}">
-                        <img src="${u.avatar}" style="width:30px; height:30px; border-radius:50%;">
-                        <span>${u.name}</span>
-                    </div>
-                `;
+          await createMessage({
+              from: currentUser.id,
+              to: chatPartnerId,
+              text: text,
+              time: new Date().toLocaleString()
           });
-        }
-        closeModal("adminModal"); // Close admin panel to show this modal
-        openModal("addMemberModal");
+
+          input.value = "";
+          renderChat();
       };
 
-      window.confirmAddMembers = async function () {
-        const groupRef = doc(db, "groups", activeGroupId);
-        const groupSnap = await getDoc(groupRef);
-        if (!groupSnap.exists()) return;
-        const currentGroup = groupSnap.data();
+      async function renderChat() {
+          const container = document.getElementById('chatBody');
+          container.innerHTML = "";
 
-        const checkboxes = document.querySelectorAll("#addUserList input:checked");
+          const allMsgs = await fetchMessages();
+          const chatHistory = allMsgs.filter(m =>
+              (m.from === currentUser.id && m.to === chatPartnerId) ||
+              (m.from === chatPartnerId && m.to === currentUser.id)
+          );
 
-        checkboxes.forEach((cb) => {
-          currentGroup.members.push(cb.value);
-          // Notify via message
-          addDoc(collection(db, "groups", activeGroupId, "messages"), {
-            id: Date.now() + Math.random(),
-            senderId: "system",
-            type: "text",
-            content: `Added user ${usersCache.find((u) => u.id === cb.value).name} to the group.`,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          if(chatHistory.length === 0) {
+              container.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px;">Hakuna ujumbe bado. Anza mazungumzo!</div>`;
+              return;
+          }
+
+          chatHistory.forEach(msg => {
+              const isMine = msg.from === currentUser.id;
+              container.innerHTML += `
+                  <div class="cw-msg ${isMine ? 'mine' : 'theirs'}">
+                      ${msg.text}
+                  </div>
+              `;
           });
-        });
+          container.scrollTop = container.scrollHeight;
+      }
 
-        await updateDoc(groupRef, { members: currentGroup.members });
-        closeModal("addMemberModal");
-        renderMessages(); // Show system message
-        openGroup(activeGroupId); // Refresh header
-        showToast("Members added");
+      // =====================
+      // POSTS SYSTEM
+      // =====================
+      window.handleFileSelect = function(event) {
+          const allFiles = [];
+          const fileInput = document.getElementById("fileInput");
+          const audioInput = document.getElementById("audioInput");
+
+          if (fileInput.files.length > 0) Array.from(fileInput.files).forEach(f => allFiles.push(f));
+          if (audioInput.files.length > 0) Array.from(audioInput.files).forEach(f => allFiles.push(f));
+
+          selectedFiles = allFiles;
+
+          const previewArea = document.getElementById("filePreviewArea");
+          previewArea.innerHTML = "";
+
+          allFiles.forEach((file, index) => {
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                  const div = document.createElement("div");
+                  div.className = "preview-item";
+                  let mediaHtml = "";
+                  if(file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
+                  else if(file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
+                  else if(file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
+                  else mediaHtml = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:10px;text-align:center;">FILE</div>`;
+
+                  div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${index})">&times;</div>`;
+                  previewArea.appendChild(div);
+              };
+              reader.readAsDataURL(file);
+          });
       };
 
-      window.requestPremium = async function () {
-        // Send a system message asking for premium
-        await addDoc(collection(db, "groups", activeGroupId, "messages"), {
-          id: Date.now(),
-          senderId: "system",
-          type: "text",
-          content:
-            "👑 <b>Super Admin Request:</b> Group Administrators are requested to upgrade to Premium Services for advanced analytics and storage.",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        });
-        closeModal("adminModal");
-        renderMessages();
-        showToast("Premium request sent to Admins");
+      window.removeFile = function(index) {
+          selectedFiles.splice(index, 1);
+          // Clear inputs to ensure change event fires if we re-add same file
+          document.getElementById("fileInput").value = "";
+          document.getElementById("audioInput").value = "";
+
+          // Re-render based on current array logic would be complex with separate inputs,
+          // so we simply clear visual here
+          // and rely on `selectedFiles` array being correct on submit.
+          // To fix the visual sync properly:
+          const previewArea = document.getElementById("filePreviewArea");
+          previewArea.innerHTML = "";
+          selectedFiles.forEach((file, idx) => {
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                   const div = document.createElement("div");
+                  div.className = "preview-item";
+                  let mediaHtml = "";
+                  if(file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
+                  else if(file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
+                  else if(file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
+
+                  div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${idx})">&times;</div>`;
+                  previewArea.appendChild(div);
+              }
+              reader.readAsDataURL(file);
+          });
       };
 
-      window.deleteGroup = async function () {
-        if (confirm("SUPER ADMIN ACTION: Are you sure you want to DELETE this group permanently?")) {
-          await deleteDoc(doc(db, "groups", activeGroupId));
-          activeGroupId = null;
-          closeModal("adminModal");
-          handleMenuAction("Close chat");
-          showToast("Group Deleted");
-          await fetchGroups(); // Refresh sidebar
-        }
+      window.addPost = async function() {
+          let content = document.getElementById("content").value;
+          if(content == "" && selectedFiles.length == 0){ showToast("Andika kitu au weka picha!"); return; }
+
+          let filePromises = selectedFiles.map(file => {
+              return new Promise((resolve) => {
+                  let reader = new FileReader();
+                  reader.onload = (e) => resolve({ name: file.name, type: file.type, data: e.target.result });
+                  reader.readAsDataURL(file);
+              });
+          });
+
+          try {
+              const filesData = await Promise.all(filePromises);
+
+              const newPost = {
+                  id: Date.now(),
+                  authorId: currentUser.id,
+                  authorName: currentUser.name,
+                  authorAvatar: currentUser.avatar,
+                  content: content,
+                  files: filesData,
+                  date: new Date().toLocaleString(),
+                  reactions: { like: 0, love: 0, laugh: 0, angry: 0, sad: 0 },
+                  comments: []
+              };
+
+              await createPost(newPost);
+
+              document.getElementById("content").value = "";
+              document.getElementById("fileInput").value = "";
+              document.getElementById("audioInput").value = "";
+              document.getElementById("filePreviewArea").innerHTML = "";
+              selectedFiles = [];
+
+              await loadPosts();
+              showToast("Post Imechapishwa!");
+          } catch (e) {
+              console.error(e);
+              showToast("Error adding post: " + e.message);
+          }
       };
+
+
+      async function loadPosts() {
+          let container = document.getElementById("postsContainer");
+          container.innerHTML = "";
+
+          const posts = await fetchPosts();
+          postsCache = posts;
+
+          posts.forEach(p => {
+              let mediaHTML = "";
+              p.files.forEach(f => {
+                  if(f.type.startsWith("image")) mediaHTML += `<img src="${f.data}">`;
+                  else if(f.type.startsWith("video")) mediaHTML += `<video controls src="${f.data}"></video>`;
+                  else if(f.type.startsWith("audio")) mediaHTML += `<div style="background:#f0f2f5; padding:10px; border-radius:8px; margin-top:5px;"><audio controls src="${f.data}" style="width:100%;"></audio></div>`;
+                  else mediaHTML += `<a href="${f.data}" download="${f.name}" class="download-link">📄 Download ${f.name}</a>`;
+              });
+
+              let commentsHtml = "";
+              if(p.comments) {
+                  p.comments.forEach(c => {
+                      commentsHtml += `
+                          <div class="comment">
+                              <div class="avatar-placeholder" style="width:32px; height:32px; font-size:10px;">${c.user.substring(0,2).toUpperCase()}</div>
+                              <div class="comment-bubble"><b>${c.user}</b> ${c.text}</div>
+                          </div>`;
+                  });
+              }
+
+              const totalReactions = Object.values(p.reactions).reduce((a, b) => a + b, 0);
+              const isMyPost = p.authorId === currentUser.id;
+
+              const html = `
+              <article class="post">
+                  <div class="post-header">
+                      <div class="post-user">
+                          <div class="avatar-placeholder">${p.authorAvatar}</div>
+                          <div class="user-info">
+                              <h4>${p.authorName}</h4>
+                              <span>${p.date}</span>
+                          </div>
+                      </div>
+                      ${isMyPost ? `
+                      <div class="btn-ghost" onclick="window.initiateDelete('${p.id}')" style="font-size:12px; color:var(--danger);">
+                          <i class="fas fa-trash"></i>
+                      </div>` : ''}
+                  </div>
+
+                  <div class="post-content">
+                      <p>${p.content}</p>
+                      <div class="post-media">${mediaHTML}</div>
+                  </div>
+
+                  <div class="post-stats">
+                      <span>${totalReactions > 0 ? '<i class="fas fa-thumbs-up" style="color:var(--primary)"></i> ' + totalReactions : ''}</span>
+                      <span>${p.comments ? p.comments.length : 0} maoni</span>
+                  </div>
+
+                  <div class="post-actions">
+                      <div class="action-btn" onmouseleave="window.hideReactions('${p.id}')">
+                          <div class="reactions-bar" id="react-bar-${p.id}">
+                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'like')">👍</span>
+                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'love')">❤️</span>
+                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'laugh')">😂</span>
+                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'angry')">😡</span>
+                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'sad')">😢</span>
+                          </div>
+                          <i class="far fa-thumbs-up"></i> Penda
+                      </div>
+                      <div class="action-btn" onclick="window.toggleComments('${p.id}')">
+                          <i class="far fa-comment-alt"></i> Maoni
+                      </div>
+                      <div class="action-btn" onclick="window.sharePost('${p.id}')">
+                          <i class="fas fa-share"></i> Shiriki
+                      </div>
+                  </div>
+
+                  <div class="comments-section" id="comments-${p.id}">
+                      <div id="comments-list-${p.id}">${commentsHtml}</div>
+                      <div class="comment-input-area">
+                          <div class="avatar-placeholder" style="width:32px; height:32px; font-size:10px;">ME</div>
+                          <input type="text" placeholder="Andika maoni..." onkeypress="window.handleComment(event, '${p.id}')">
+                      </div>
+                  </div>
+              </article>
+              `;
+              container.innerHTML += html;
+          });
+      }
+
+      // Post Actions
+      window.addReaction = async function(postId, type) {
+          const postRef = doc(db, "posts", postId);
+          const snap = await getDoc(postRef);
+          if(snap.exists()){
+              const data = snap.data();
+              const reactions = data.reactions || {};
+              reactions[type] = (reactions[type] || 0) + 1;
+              await updateDoc(postRef, { reactions: reactions });
+              await loadPosts();
+          }
+      };
+
+      window.toggleComments = function(id) {
+          document.getElementById(`comments-${id}`).classList.toggle('open');
+      };
+
+      window.hideReactions = function(id) {
+          // Optional: hide bar logic
+      };
+
+      window.handleComment = async function(e, id) {
+          if(e.key === 'Enter') {
+              const text = e.target.value;
+              if(text) {
+                  const postRef = doc(db, "posts", id);
+                  const snap = await getDoc(postRef);
+                  if(snap.exists()) {
+                      const comments = snap.data().comments || [];
+                      comments.push({ user: currentUser.name, text: text });
+                      await updateDoc(postRef, { comments });
+                      await loadPosts();
+                      setTimeout(() => document.getElementById(`comments-${id}`).classList.add('open'), 50);
+                  }
+              }
+          }
+      };
+
+      window.sharePost = async function(id) {
+          const post = postsCache.find(p => p.id === id);
+          navigator.clipboard.writeText(`${post.content} - Kuangalia zaidi tembelea Majadiliano Network.`).then(() => {
+              showToast("Imenakiliwa!");
+          });
+      };
+
+      window.initiateDelete = function(id) {
+          const post = postsCache.find(p => p.id === id);
+
+          // Super Admin Check: Only Nashiri Waziri can delete ANY post.
+          // Standard Admins can only delete their OWN posts (enforced "role of adding user" interpretation: Admins can add users, so they have control).
+          if (currentUser.name !== "Nashiri Waziri") {
+              if (currentUser.role === "Administrator") {
+                  // Standard Admins: Can only delete their own posts
+                  if (post.authorId !== currentUser.id) {
+                      showToast("You can only delete your own posts.");
+                      return;
+                  }
+              } else {
+                  if(confirm("Unafuta posti yako?")) {
+                      deletePostById(id);
+                      await loadPosts();
+                      showToast("Post imefutwa.");
+                  }
+              }
+          } else {
+              // Super Admin Logic
+              // Can delete ANY post, but must verify password if it belongs to someone else?
+              // For simplicity in this refactor: We allow Super Admins to delete anything immediately.
+              if(confirm("Hakikisha: Unafuta posti hii?")) {
+                  deletePostById(id);
+                  loadPosts();
+                  showToast("Post imefutwa (Admin).");
+              }
+          }
+      };
+
+      window.confirmDelete = async function() {
+          const pass = document.getElementById('adminPassInput').value;
+          // Super Admin Check
+          if (pass === "WAZIRI2015") {
+              // Delete post regardless of ownership
+              deletePostById(postToDeleteId);
+              loadPosts();
+              showToast("Post imefutwa (Admin).");
+              closeModal('passwordModal');
+          } else {
+              showToast("Neno la siri la Admin si sahihi!");
+          }
+      };
+
+      // =====================
+      // MANAGEMENT & ADMIN
+      // =====================
+      window.openManagement = function() {
+          document.getElementById('manageUserDisplay').innerText = `Logged in as: ${currentUser.name}`;
+          document.getElementById('manageModal').classList.add('active');
+      };
+      window.closeModal = function(id) {
+          document.getElementById(id).classList.remove('active');
+      };
+
+      window.deleteMyPosts = async function() {
+          if(confirm("HAHATARI: Unafuta posti ZAKO ZOTE?")) {
+              const posts = await fetchPosts();
+              const myPosts = posts.filter(p => p.authorId === currentUser.id);
+
+              const promises = myPosts.map(p => deleteDoc(doc(db, "posts", p.id));
+              await Promise.all(promises);
+
+              loadPosts();
+              showToast("Posti zako zote zimefutwa.");
+              closeModal('manageModal');
+          }
+      };
+
+      // =====================
+      // ADMIN CHAT CONTROL SYSTEM
+      // =====================
+      window.openAdminChatControl = async function() {
+          // Only Administrators can access this.
+          if (!currentUser || currentUser.role !== "Administrator" && currentUser.name !== "Nashiri Waziri") {
+              showToast("Haki zako hazitoshi.");
+              return;
+          }
+          document.getElementById('adminChatModal').classList.add('active');
+          loadAdminChatList();
+      };
+
+      async function loadAdminChatList() {
+          const listContainer = document.getElementById('adminChatList');
+          listContainer.innerHTML = "";
+
+          // Identify unique conversation pairs
+          // We create a unique key for each pair: "id1-id2" (sorted)
+          const pairs = new Set();
+          const messages = await fetchMessages(); // Cache messages first
+
+          messages.forEach(m => {
+              const pairKey = [m.from, m.to].sort((a,b) => a - b).join('-');
+              pairs.add(pairKey);
+          });
+
+          if(pairs.size === 0) {
+              listContainer.innerHTML = "<div style='padding:10px; color:#777;'>Hakuna mazungumzo yaliyorekodiwa.</div>";
+              return;
+          }
+
+          pairs.forEach(pair => {
+              const [id1, id2] = pair.split('-'); // Strings
+              const user1 = usersCache.find(u => u.id == id1);
+              const user2 = usersCache.find(u => u.id == id2);
+
+              if(user1 && user2) {
+                  const div = document.createElement('div');
+                  div.className = 'admin-chat-item';
+                  div.innerHTML = `
+                      <div style="font-weight:bold; font-size:14px;">${user1.name} <i class="fas fa-exchange-alt" style="font-size:10px; color:#888;"></i> ${user2.name}</div>
+                      <div style="font-size:11px; color:#666;">ID: ${pair}</div>
+                  `;
+                  div.onclick = () => loadAdminChatView(pair, `${user1.name} & ${user2.name}`);
+                  listContainer.appendChild(div);
+              } else {
+                  // Fallback in case users haven't loaded yet
+                  const div = document.createElement('div');
+                  div.className = 'admin-chat-item';
+                  div.innerHTML = `
+                      <div style="font-weight:bold; font-size:14px;">Unknown User</div>
+                      <div style="font-size:11px; color:#666;">ID: ${pair}</div>
+                  `;
+                  listContainer.appendChild(div);
+              }
+          });
+      }
+
+      function loadAdminChatView(pairKey, title) {
+          currentAdminPairId = pairKey;
+          document.getElementById('adminChatHeader').innerText = `Mazungumzo: ${title}`;
+          document.getElementById('adminControlBtnContainer').style.display = 'block';
+
+          const body = document.getElementById('adminChatBody');
+          body.innerHTML = "";
+
+          const [id1, id2] = pairKey.split('-'); // Strings from Set
+
+          // Filter messages
+          const chatHistory = messages.filter(m =>
+              (m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1)
+          );
+
+          if(chatHistory.length === 0) {
+              body.innerHTML = "<div style='text-align:center; padding:20px; color:#888;'>Hakuna ujumbe.</div>";
+              return;
+          }
+
+          chatHistory.forEach(msg => {
+              const sender = usersCache.find(u => u.id == msg.from) || currentUser;
+              const isLeft = msg.from == id1; // Just to alternate visuals loosely
+
+              body.innerHTML += `
+                  <div style="display:flex; flex-direction:column; align-items: ${isLeft ? 'flex-start' : 'flex-end'}; margin-bottom:5px;">
+                      <div style="font-size:0.75rem; color:#666; margin:0 0 5px;">${sender ? sender.name : 'Unknown'}</div>
+                      <div class="cw-msg ${isLeft ? 'theirs' : 'mine'}" style="position:relative;">
+                          ${msg.text}
+                      </div>
+                  </div>
+              `;
+          });
+          body.scrollTop = body.scrollHeight;
+      }
+
+      window.clearSelectedChat = async function() {
+          if(!currentAdminPairId) return;
+          if(!confirm("UNAFUTA MAZUNGUMZO HAYA KAMILI? HAIWEZI RUDISHWA.") return;
+
+          const [id1, id2] = currentAdminPairId.split('-');
+
+          // Remove messages where (from==id1 AND to==id2) OR (from==id2 AND to==id1)
+          // In a production app, use a deleteBatch or Cloud Function.
+          // For this refactor, we fetch all, filter, and delete individually.
+          const allMsgs = await fetchMessages(); // Helper re-used
+          const toDelete = allMsgs.filter(m =>
+              ((m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1))
+          );
+
+          const batch = toDelete.map(m => deleteDoc(doc(db, "messages", m.id));
+          await Promise.all(batch);
+
+          document.getElementById('adminChatBody').innerHTML = "";
+          document.getElementById('adminControlBtnContainer').style.display = 'none';
+          document.getElementById('adminChatHeader').innerText = "Mazungumzo yamefutwa.";
+          loadAdminChatList(); // Refresh list
+          showToast("Mazungumzo yametolewa.");
+      }
 
       // =====================
       // UTILITIES
       // =====================
-      window.openModal = function (id) {
-        document.getElementById(id).style.display = "flex";
-      };
-
-      window.closeModal = function (id) {
-        document.getElementById(id).style.display = "none";
-      };
-
-      function showToast(msg) {
-        const toast = document.getElementById("toast");
-        toast.innerText = msg;
-        toast.classList.add("show");
-        setTimeout(() => toast.classList.remove("show"), 3000);
+      function showToast(message) {
+          const toast = document.getElementById("toast");
+          toast.innerText = message;
+          toast.classList.add("show");
+          setTimeout(() => toast.classList.remove("show"), 3000);
       }
 
-      window.toggleSidebar = function (show) {
-        const sidebar = document.getElementById("sidebar");
-        if (show) {
-          sidebar.classList.remove("hidden");
-        } else {
-          if (window.innerWidth <= 768) {
-            sidebar.classList.add("hidden");
-          }
-        }
-      };
+      window.scrollToTop = function() { window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
       // Close menu on outside click
-      document.addEventListener("click", (e) => {
-        const menu = document.getElementById("contextMenu");
-        const menuBtn = document.querySelector(".chat-header .fa-ellipsis-v");
-        if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
-          menu.style.display = "none";
-        }
+      document.addEventListener('click', (e) => {
+          const menu = document.getElementById('contextMenu');
+          const menuBtn = document.querySelector('.chat-header .fa-ellipsis-v');
+          if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
+              menu.style.display = 'none';
+          }
       });
 
       // Initialize App
-      initApp();
+      document.addEventListener("DOMContentLoaded", initApp);
     </script>
   </body>
 </html>
