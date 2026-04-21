@@ -1643,7 +1643,7 @@
         <h1 data-translate="hero_title">When a child goes missing, Every Minute Matters.</h1>
         <p data-translate="hero_subtitle">
           NCRS is a system dedicated to protecting missing children by quickly reuniting them with their families after
-          being found and reported to the police.
+          being found and reported to police.
         </p>
         <div class="hero-buttons">
           <a href="#search" class="btn-primary">
@@ -1982,7 +1982,7 @@
               style="display: none"
               onclick="window.deleteCurrentChild()"
             >
-              Delete Child Record
+              Delete Child Record (Tatuta Mtoto)
             </button>
           </div>
         </form>
@@ -2391,6 +2391,7 @@
         query,
         where,
         serverTimestamp,
+        onSnapshot,
       } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
       const firebaseConfig = {
@@ -2651,8 +2652,9 @@
 
       // State
       let currentLang = "sw";
-      let childrenCache = []; // Local cache for performance
+      let childrenCache = [];
       let usersCache = [];
+      let unsubscribeChildren = null; // For realtime listener
 
       // =============================================
       // ===== FIREBASE HELPERS =====
@@ -2709,6 +2711,41 @@
           opt.innerText = "Administrator";
           roleSelect.appendChild(opt);
         }
+      }
+
+      // Real-time listener for notifications
+      function startRealtimeListener() {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) return;
+
+        if (unsubscribeChildren) unsubscribeChildren(); // Avoid duplicates
+
+        unsubscribeChildren = onSnapshot(collection(db, "children"), (snapshot) => {
+          let totalIdentifiers = 0;
+          const newNotifications = [];
+
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === "modified" || change.type === "added") {
+              const data = change.doc.data();
+              const prevData = change.doc.metadata.hasPendingWrites ? null : null;
+
+              // Check if identifiers array grew
+              if (data.identifiers && data.identifiers.length > 0) {
+                // Simple heuristic: if modified and has identifiers, notify.
+                // A more complex diff check would compare prevData.identifiers vs data.identifiers
+                // For this scope, we trigger on any modification containing identifiers
+                if (data.identifiers.length > 0) {
+                  // To avoid spamming on every slight edit, we check the last entry
+                  const lastId = data.identifiers[data.identifiers.length - 1];
+                  // Assuming the notification just happened recently (within last 10s) avoids old alerts
+                  // However, simpler: just alert on modification.
+                  BrickNotify.adminReceived(data.name, lastId.name);
+                  updateMessagesBadge();
+                }
+              }
+            }
+          });
+        });
       }
 
       // =============================================
@@ -2816,6 +2853,8 @@
 
         const dropdown = document.getElementById("reportDropdown");
         if (dropdown) dropdown.classList.remove("show-btn");
+
+        if (unsubscribeChildren) unsubscribeChildren();
       };
 
       window.showSite = async function (user) {
@@ -2851,6 +2890,7 @@
           document.getElementById("manageUsersLink").style.display = "flex";
           updateAdminBadge();
           updateMessagesBadge();
+          startRealtimeListener(); // Start real-time listener for admin
         } else {
           document.getElementById("reportBtn").style.display = "none";
           document.getElementById("actionHeader").style.display = "none";
@@ -2858,6 +2898,7 @@
           document.getElementById("navDashboardLink").style.display = "none";
           document.getElementById("messagesBtn").style.display = "none";
           document.getElementById("manageUsersLink").style.display = "none";
+          if (unsubscribeChildren) unsubscribeChildren();
         }
         renderChildrenTable();
       };
@@ -2910,6 +2951,7 @@
         if (typeof google !== "undefined" && google.accounts) {
           google.accounts.id.disableAutoSelect();
         }
+        if (unsubscribeChildren) unsubscribeChildren();
         enforceLogin();
       };
 
@@ -3175,7 +3217,6 @@
             }
           }
 
-          // Edit/Delete Actions for Admin
           let actionHtml = "";
           if (isAdmin) {
             actionHtml = `
@@ -3201,7 +3242,6 @@
 
       // Open Modal for Adding Child
       window.openAddChildModal = function () {
-        // Reset Form
         document.querySelector('form[onsubmit="window.handleChildSubmit(event)"]').reset();
         document.getElementById("child_edit_id").value = "";
         document.getElementById("img_edit_hint").style.display = "none";
@@ -3392,7 +3432,6 @@
       };
 
       window.saveAdminReply = async function (childId, identifierIndex) {
-        // Handle ID based on timestamp string or index if timestamp missing
         let inputId = `reply-${currentViewChild.identifiers[identifierIndex].timestamp}`;
         if (!currentViewChild.identifiers[identifierIndex].timestamp) {
           inputId = `reply-${identifierIndex}`;
@@ -3447,34 +3486,70 @@
           subText = "Identified";
         }
 
+        // Load NCRS Logo to Canvas
+        const logoSrc = document.getElementById("mainLogo")
+          ? document.getElementById("mainLogo").src
+          : "brand-icon.svg.svg";
+
+        // Draw Header Background
         ctx.fillStyle = statusColor;
         ctx.fillRect(0, 0, canvas.width, 220);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 80px Montserrat, Arial, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(statusText, canvas.width / 2, 130);
-        ctx.font = "bold 35px Roboto, Arial, sans-serif";
-        ctx.fillText(subText, canvas.width / 2, 180);
 
+        // Draw Logo
+        const logoImg = new Image();
+        logoImg.crossOrigin = "Anonymous";
+        logoImg.src = logoSrc;
+        logoImg.onload = function () {
+          // Draw logo top left or top center
+          // Let's put it top left with margin
+          ctx.drawImage(logoImg, 20, 20, 80, 80);
+
+          // Draw Status Text next to logo or centered
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 80px Montserrat, Arial, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(statusText, canvas.width / 2, 100);
+          ctx.font = "bold 35px Roboto, Arial, sans-serif";
+          ctx.fillText(subText, canvas.width / 2, 150);
+
+          // Now draw child image and text below header
+          drawPosterBody(ctx, canvas, 220);
+        };
+        logoImg.onerror = function () {
+          // Fallback if logo fails
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 80px Montserrat, Arial, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(statusText, canvas.width / 2, 100);
+          ctx.font = "bold 35px Roboto, Arial, sans-serif";
+          ctx.fillText(subText, canvas.width / 2, 150);
+          drawPosterBody(ctx, canvas, 220);
+        };
+      };
+
+      function drawPosterBody(ctx, canvas, startY) {
+        const c = currentViewChild;
+
+        // Draw Child Photo
         const img = new Image();
         img.crossOrigin = "Anonymous";
-        img.src = currentViewChild.img || "https://via.placeholder.com/150";
+        img.src = c.img || "https://via.placeholder.com/150";
         img.onload = function () {
           const imgSize = canvasWidth - 200;
           const imgX = 100;
-          const imgY = 240;
+          const imgY = startY + 20; // Below header
           ctx.drawImage(img, imgX, imgY, imgSize, imgSize);
           drawPosterText(ctx, canvas, imgY + imgSize + 50);
         };
         img.onerror = function () {
           ctx.fillStyle = "#eeeeee";
-          ctx.fillRect(100, 240, canvasWidth - 200, canvasWidth - 200);
+          ctx.fillRect(100, startY + 20, canvasWidth - 200, canvasWidth - 200);
           ctx.fillStyle = "#aaaaaa";
           ctx.font = "40px sans-serif";
-          ctx.fillText("Hakuna Picha", canvas.width / 2, 240 + (canvasWidth - 200) / 2);
-          drawPosterText(ctx, canvas, 240 + (canvasWidth - 200) + 50);
+          ctx.fillText("Hakuna Picha", canvas.width / 2, startY + 20 + (canvasWidth - 200) / 2);
+          drawPosterText(ctx, canvas, startY + 20 + (canvasWidth - 200) + 50);
         };
-      };
+      }
 
       window.drawPosterText = function (ctx, canvas, startY) {
         const c = currentViewChild;
