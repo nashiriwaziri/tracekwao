@@ -3593,7 +3593,8 @@
           const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
 
           if (isAdmin) {
-            BrickNotify.identifierSent(child.name);
+            BrickNotify.identifier
+              Sent(child.name);
             if (becameIdentified) {
               setTimeout(() => {
                 BrickNotify.adminFullyIdentified(child.name);
@@ -3950,28 +3951,48 @@
           listContainer.appendChild(item);
         });
       }
+function processInstagramImage(file, callback) {
+  const img = new Image();
+  const reader = new FileReader();
 
-      window.handleAddAdvert = async function (e) {
-        e.preventDefault();
-        const fileInput = document.getElementById("adImage");
-        if (fileInput.files && fileInput.files[0]) {
-          const reader = new FileReader();
-          reader.onload = async (evt) => {
-            const base64 = evt.target.result;
+  reader.onload = function (e) {
+    img.src = e.target.result;
+  };
 
-            // Size Check (Firestore limit 5MB)
-            if (base64.length > 1000000) {
-              BrickNotify.error("Image too large. Please use a smaller image.");
-              return;
-            }
+  img.onload = function () {
+    const canvas = document.createElement("canvas");
+    const size = 1080;
 
-            await addDoc(collection(db, "adverts"), {
-              title: document.getElementById("adTitle").value,
-              description: document.getElementById("adDescription").value,
-              image: base64,
-              isActive: true,
-              createdAt: serverTimestamp(),
-            });
+    canvas.width = size;
+    canvas.height = size;
+
+    const ctx = canvas.getContext("2d");
+
+    // ✅ Crop center (Instagram style)
+    const minSide = Math.min(img.width, img.height);
+    const sx = (img.width - minSide) / 2;
+    const sy = (img.height - minSide) / 2;
+
+    ctx.drawImage(
+      img,
+      sx,
+      sy,
+      minSide,
+      minSide,
+      0,
+      0,
+      size,
+      size
+    );
+
+    // ✅ Compress (balance quality + size)
+    const base64 = canvas.toDataURL("image/jpeg", 0.8);
+
+    callback(base64);
+  };
+
+  reader.readAsDataURL(file);
+}
 
             document.querySelector('form[onsubmit="window.handleAddAdvert(event)"]').reset();
             BrickNotify.success("Advert added successfully.");
