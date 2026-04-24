@@ -3613,18 +3613,35 @@
           if (!c.identifiers) c.identifiers = [];
           return c;
         });
-        const user = JSON.parse(sessionStorage.getItem("currentUser"));
-        const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
-        const isLoggedIn = user ? true : false;
+        const user = JSON.parse(sessionStorage.getItem("currentUser") || "{}");
 
-        tbody.innerHTML = "";
-        let filteredChild = queryStr
-          ? child.filter((c) => c.name.toLowerCase().includes(queryStr.toLowerCase()))
-          : child;
-        if (filteredChild.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding: 20px;">No data found.</td></tr>`;
-          return;
-        }
+const isAdmin =
+  user &&
+  (user.role === "Administrator" || user.role === "Super Administrator");
+
+const isLoggedIn = !!user && !!user.role;
+
+tbody.innerHTML = "";
+
+// Ensure child is always an array
+const data = Array.isArray(child) ? child : [];
+
+const filteredChild = queryStr
+  ? data.filter((c) =>
+      (c.name || "").toLowerCase().includes(queryStr.toLowerCase())
+    )
+  : data;
+
+if (filteredChild.length === 0) {
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="13" style="text-align:center; padding: 20px;">
+        No data found.
+      </td>
+    </tr>
+  `;
+  return;
+}
 
         filteredChild.forEach((c) => {
           let statusText = translations[currentLang].status_missing;
@@ -3933,91 +3950,200 @@
         }
       };
 
-      // Admin Ad Messages Control
-      window.openAdMessageControl = async function () {
-        const u = JSON.parse(sessionStorage.getItem("currentUser"));
-        if (!u || (u.role !== "Administrator" && u.role !== "Super Administrator")) return;
+// Admin Ad Messages Control
+window.openAdMessageControl = async function () {
+  const u = JSON.parse(sessionStorage.getItem("currentUser") || "{}");
 
-        document.getElementById("adMessagesControlModal").classList.remove("hidden");
-        const snap = await getDocs(collection(db, "ad_messages"));
-        const messages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const tbody = document.getElementById("adMessagesTableBody");
-        tbody.innerHTML = "";
+  // 🔐 Role protection (strict check)
+  const allowedRoles = ["Administrator", "Super Administrator"];
 
-        if (messages.length === 0) {
-          tbody.innerHTML = "<tr><td colspan='4' style='text-align:center; padding:20px;'>No messages yet.</td></tr>";
-          return;
-        }
+  if (!u.role || !allowedRoles.includes(u.role)) {
+    console.log("Access denied:", u.role);
+    return;
+  }
 
-        messages.forEach((msg) => {
-          tbody.innerHTML += `
-                <tr style="border-bottom:1px solid #eee;">
-                    <td style="padding:10px;">${msg.adTitle}</td>
-                    <td style="padding:10px;">${msg.name}</td>
-                    <td style="padding:10px;">${msg.contactInfo}</td>
-                    <td style="padding:10px;">${msg.message}</td>
-                </tr>
-            `;
-        });
+  const modal = document.getElementById("adMessagesControlModal");
+  if (!modal) {
+    console.error("Modal not found: adMessagesControlModal");
+    return;
+  }
+
+  modal.classList.remove("hidden");
+
+  try {
+    const snap = await getDocs(collection(db, "ad_messages"));
+
+    let messages = snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+
+    // 🔽 Optional: latest first
+    messages.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    const tbody = document.getElementById("adMessagesTableBody");
+    if (!tbody) {
+      console.error("Table body not found: adMessagesTableBody");
+      return;
+    }
+
+    tbody.innerHTML = "";
+
+    if (messages.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" style="text-align:center; padding:20px;">
+            No messages yet.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    messages.forEach((msg) => {
+      tbody.innerHTML += `
+        <tr style="border-bottom:1px solid #eee;">
+          <td style="padding:10px;">${msg.adTitle || "N/A"}</td>
+          <td style="padding:10px;">${msg.name || "N/A"}</td>
+          <td style="padding:10px;">
+            ${
+              msg.contactInfo
+                ? `<a href="https://wa.me/${msg.contactInfo}" target="_blank">${msg.contactInfo}</a>`
+                : "N/A"
+            }
+          </td>
+          <td style="padding:10px;">${msg.message || "N/A"}</td>
+        </tr>
+      `;
+    });
+  } catch (error) {
+    console.error("Failed to load ad messages:", error);
+    alert("Error loading messages.");
+  }
       };
       window.closeAdMessageControl = function () {
         document.getElementById("adMessagesControlModal").classList.add("hidden");
       };
 
-      // ... [Rest of existing JS: View Child, Notification, Dashboard, etc. kept as is] ...
-      // Note: Due to length, I'm assuming standard functionality continues.
-      // I will include the critical missing functions from the previous snippet for completeness.
-
-      window.openViewChildModal = async function (id) {
-        const docRef = doc(db, "child", id);
-        const docSnap = await getDoc(docRef);
-        let child = null;
-        if (docSnap.exists()) {
-          child = { id: docSnap.id, ...docSnap.data() };
-        }
-        if (child) {
-          currentViewChild = child;
-          document.getElementById("viewChildModal").classList.remove("hidden");
-          document.querySelectorAll(".ratio-btn").forEach((b) => b.classList.remove("active"));
-          document.querySelector(".ratio-btn").classList.add("active");
-          currentPosterRatio = "1:1";
-          drawChildPoster();
-          // ... identifier logic ...
-        }
-      };
       let currentViewChild = null;
-      let currentPosterRatio = "1:1";
-      const canvasWidth = 1080;
-      window.closeViewChildModal = function () {
-        document.getElementById("viewChildModal").classList.add("hidden");
-      };
-      window.setPosterRatio = function (r) {
-        currentPosterRatio = r;
-        document.querySelectorAll(".ratio-btn").forEach((b) => b.classList.remove("active"));
-        if (event.target) event.target.classList.add("active");
-        drawChildPoster();
-      };
-      window.drawChildPoster = function () {
-        if (!currentViewChild) return;
-        const canvas = document.getElementById("posterCanvas");
-        const ctx = canvas.getContext("2d");
-        let height = currentPosterRatio === "4:5" ? canvasWidth * 1.25 : canvasWidth;
-        canvas.width = canvasWidth;
-        canvas.height = height;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+let currentPosterRatio = "1:1";
+const canvasWidth = 1080;
 
-        let statusColor = "#e63946";
-        let statusText = "Mtoto Amepotea";
-        let subText = "Missing Child";
-        if (currentViewChild.status === "found") {
-          statusColor = "#2b8a3e";
-          statusText = "Mtoto Amepatikana";
-          subText = "Found Child";
-        } else if (currentViewChild.identifiers && currentViewChild.identifiers.length >= 3) {
-          statusColor = "#f4a261";
-          statusText = "Ametambuliwa";
-          subText = "Identified";
+// OPEN CHILD MODAL
+window.openViewChildModal = async function (id) {
+  try {
+    const docRef = doc(db, "child", id);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) return;
+
+    currentViewChild = { id: docSnap.id, ...docSnap.data() };
+
+    const modal = document.getElementById("viewChildModal");
+    if (modal) modal.classList.remove("hidden");
+
+    // reset ratio buttons safely
+    document.querySelectorAll(".ratio-btn").forEach((b) =>
+      b.classList.remove("active")
+    );
+
+    const firstBtn = document.querySelector(".ratio-btn");
+    if (firstBtn) firstBtn.classList.add("active");
+
+    currentPosterRatio = "1:1";
+
+    drawChildPoster();
+  } catch (error) {
+    console.error("Error loading child:", error);
+  }
+};
+
+// CLOSE MODAL
+window.closeViewChildModal = function () {
+  document.getElementById("viewChildModal").classList.add("hidden");
+};
+
+// CHANGE RATIO (FIXED)
+window.setPosterRatio = function (r, el) {
+  currentPosterRatio = r;
+
+  document.querySelectorAll(".ratio-btn").forEach((b) =>
+    b.classList.remove("active")
+  );
+
+  if (el) el.classList.add("active");
+
+  drawChildPoster();
+};
+
+// DRAW POSTER (COMPLETE FIXED VERSION)
+window.drawChildPoster = function () {
+  if (!currentViewChild) return;
+
+  const canvas = document.getElementById("posterCanvas");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+
+  let height =
+    currentPosterRatio === "4:5"
+      ? canvasWidth * 1.25
+      : canvasWidth;
+
+  canvas.width = canvasWidth;
+  canvas.height = height;
+
+  // BACKGROUND
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // STATUS DEFAULT
+  let statusColor = "#e63946";
+  let statusText = "Mtoto Amepotea";
+  let subText = "Missing Child";
+
+  // STATUS LOGIC
+  if (currentViewChild.status === "found") {
+    statusColor = "#2b8a3e";
+    statusText = "Mtoto Amepatikana";
+    subText = "Found Child";
+
+  } else if (
+    currentViewChild.identifiers &&
+    currentViewChild.identifiers.length >= 3
+  ) {
+    statusColor = "#f4a261";
+    statusText = "Ametambuliwa";
+    subText = "Identified";
+  }
+
+  // HEADER BAR
+  ctx.fillStyle = statusColor;
+  ctx.fillRect(0, 0, canvas.width, 120);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 40px Arial";
+  ctx.fillText(statusText, 40, 70);
+
+  ctx.font = "24px Arial";
+  ctx.fillText(subText, 40, 105);
+
+  // CHILD NAME
+  ctx.fillStyle = "#000";
+  ctx.font = "bold 36px Arial";
+  ctx.fillText(currentViewChild.name || "Unknown Child", 40, 200);
+
+  // OPTIONAL IDENTIFIER INFO
+  if (currentViewChild.identifierName) {
+    ctx.font = "20px Arial";
+    ctx.fillText(
+      "Identifier: " + currentViewChild.identifierName,
+      40,
+      250
+    );
+  }
+};
+
         }
 
         ctx.fillStyle = statusColor;
