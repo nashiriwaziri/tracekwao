@@ -2661,346 +2661,292 @@
         </div>
       </div>
     </div>
-<!-- MAIN LOGIC SCRIPT -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import {
-    getFirestore,
-    collection,
-    addDoc,
-    serverTimestamp
-  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-    authDomain: "ncrs-aeb43.firebaseapp.com",
-    projectId: "ncrs-aeb43",
-    storageBucket: "ncrs-aeb43.firebasestorage.app",
-    messagingSenderId: "786434442929",
-    appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-    measurementId: "G-ZYB71RY8J5",
-  };
+    <!-- MAIN LOGIC SCRIPT -->
+    <script type="module">
+      // =============================================
+      // ===== FIREBASE IMPORTS & CONFIG =====
+      // =============================================
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import {
+        getFirestore,
+        collection,
+        addDoc,
+        getDocs,
+        getDoc,
+        doc,
+        setDoc,
+        updateDoc,
+        deleteDoc,
+        query,
+        where,
+        serverTimestamp,
+        onSnapshot,
+        orderBy,
+        increment,
+      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+      const firebaseConfig = {
+        apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+        authDomain: "ncrs-aeb43.firebaseapp.com",
+        projectId: "ncrs-aeb43",
+        storageBucket: "ncrs-aeb43.firebasestorage.app",
+        messagingSenderId: "786434442929",
+        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+        measurementId: "G-ZYB71RY8J5",
+      };
 
-  // =============================================
-  // ===== FORM SUBMIT LOGIC =====
-  // =============================================
-  window.addEventListener("DOMContentLoaded", () => {
-    const form = document.getElementById("formId");
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
 
-    if (!form) {
-      console.error("Form haijapatikana (formId)");
-      return;
-    }
+      // =============================================
+      // ===== GLOBAL UTILITIES (Exposed to Window) =====
+      // =============================================
+      window.BrickNotify = {
+        container: null,
+        maxVisible: 4,
+        defaultDuration: 5000,
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+        init() {
+          this.container = document.getElementById("brickNotifyContainer");
+        },
 
-      const jina = document.getElementById("name")?.value || "";
-      const simu = document.getElementById("phone")?.value || "";
-      const ujumbe = document.getElementById("message")?.value || "";
+        show(options = {}) {
+          if (!this.container) this.init();
+          const title = options.title || "ARIFA";
+          const message = options.message || "";
+          const icon = options.icon || "fa-bell";
+          const duration = options.duration || this.defaultDuration;
+          const onClose = options.onClose || null;
+          const showTimer = options.showTimer !== false;
 
-      try {
-        await addDoc(collection(db, "identifications"), {
-          name: jina,
-          phone: simu,
-          message: ujumbe,
-          createdAt: serverTimestamp()
-        });
+          const notifyEl = document.createElement("div");
+          notifyEl.className = "brick-notify";
+          notifyEl.innerHTML = `
+                    <div class="brick-icon"><i class="fas ${icon}"></i></div>
+                    <div class="brick-content">
+                        <div class="brick-title">${title}</div>
+                        <div class="brick-message">${message}</div>
+                    </div>
+                    <button class="brick-close" onclick="BrickNotify._dismiss(this.parentElement, true)">&times;</button>
+                    ${showTimer ? `<div class="brick-timer-bar" style="animation-duration: ${duration}ms;"></div>` : ""}
+                `;
 
-        alert("Utambulisho umetumwa kikamilifu");
-        form.reset();
+          this.container.appendChild(notifyEl);
 
-        // optional notification
-        if (window.BrickNotify) {
-          BrickNotify.success("Data imetumwa vizuri!");
-        }
+          const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
+          if (allNotifies.length > this.maxVisible) {
+            this._dismiss(allNotifies[0], false);
+          }
 
-      } catch (error) {
-        console.error(error);
-        alert("Kuna tatizo: " + error.message);
-      }
-    });
-  });
+          const autoTimer = setTimeout(() => {
+            this._dismiss(notifyEl, false);
+            if (onClose) onClose();
+          }, duration);
 
-  // =============================================
-  // ===== GLOBAL NOTIFICATION SYSTEM =====
-  // =============================================
-  window.BrickNotify = {
-    container: null,
-    maxVisible: 4,
-    defaultDuration: 5000,
+          notifyEl._autoTimer = autoTimer;
+        },
 
-    init() {
-      this.container = document.getElementById("brickNotifyContainer");
-    },
+        _dismiss(element, manual) {
+          if (!element || element.classList.contains("removing")) return;
+          if (element._autoTimer) clearTimeout(element._autoTimer);
+          element.classList.add("removing");
+          setTimeout(() => {
+            if (element.parentElement) element.parentElement.removeChild(element);
+          }, 650);
+        },
 
-    show(options = {}) {
-      if (!this.container) this.init();
+        success(message, title) {
+          this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
+        },
+        error(message, title) {
+          this.show({ title: title || "MAKOSA", message, icon: "fa-times-circle", duration: 6000 });
+        },
+        info(message, title) {
+          this.show({ title: title || "MAELEZO", message, icon: "fa-info-circle" });
+        },
+        warning(message, title) {
+          this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
+        },
 
-      const title = options.title || "ARIFA";
-      const message = options.message || "";
-      const icon = options.icon || "fa-bell";
-      const duration = options.duration || this.defaultDuration;
-      const onClose = options.onClose || null;
-      const showTimer = options.showTimer !== false;
+        identifierSent(childName) {
+          this.show({
+            title: "UTAMBULISHO UMEWASILISHWA",
+            message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama. Usipoonekana na mtambulishi mwingine yeyote.`,
+            icon: "fa-user-shield",
+            duration: 6000,
+          });
+        },
+        adminReceived(childName, identifierName) {
+          this.show({
+            title: "UJUMBE MPYA KUTOKA MTAMBULISHI",
+            message: `Mtambulishi <strong>${identifierName}</strong> amewasilisha taarifa za utambulisho kwa mtoto <strong>${childName}</strong>. Angalia Sanduku la Ujumbe.`,
+            icon: "fa-envelope-open-text",
+            duration: 7000,
+          });
+        },
+        adminFullyIdentified(childName) {
+          this.show({
+            title: "MTOTO AMETAMBULIWA KIKAMILIFU",
+            message: `Mtoto <strong>${childName}</strong> ameatambuliwa na watambulishi 3. Hali imesasishwa kuwa "Ametambuliwa".`,
+            icon: "fa-check-double",
+            duration: 8000,
+          });
+        },
+        privacyWarning() {
+          this.show({
+            title: "ULINZI WA FARAGHA",
+            message: "Hauwezi kuona maelezo ya watambulishi wengine. Kila mtambulishi ana faragha kamili.",
+            icon: "fa-user-lock",
+            duration: 5000,
+          });
+        },
+        clearAll() {
+          if (!this.container) return;
+          const all = this.container.querySelectorAll(".brick-notify");
+          all.forEach((el, i) => {
+            setTimeout(() => this._dismiss(el, false), i * 100);
+          });
+        },
+      };
 
-      const notifyEl = document.createElement("div");
-      notifyEl.className = "brick-notify";
+      const GOOGLE_CLIENT_ID = "797676326076-09rpnb9c1amicstl4db8bkiiqt1et2g2.apps.googleusercontent.com";
 
-      notifyEl.innerHTML = `
-        <div class="brick-icon"><i class="fas ${icon}"></i></div>
-        <div class="brick-content">
-          <div class="brick-title">${title}</div>
-          <div class="brick-message">${message}</div>
-        </div>
-        <button class="brick-close" onclick="BrickNotify._dismiss(this.parentElement, true)">&times;</button>
-        ${showTimer ? `<div class="brick-timer-bar" style="animation-duration:${duration}ms;"></div>` : ""}
-      `;
+      // Translation Logic
+      const translations = {
+        en: {
+          hotline: "Hotline",
+          nav_home: "Home",
+          nav_search: "Find Child",
+          nav_edu: "Education",
+          nav_join: "Join Us",
+          btn_login: "Sign In",
+          btn_logout: "Sign Out",
+          btn_report: "User Report",
+          btn_get_report: "Get Report",
+          hero_title: "When a child goes missing, Every Minute Matters.",
+          hero_subtitle:
+            "NCRS is a system dedicated to protecting missing child by quickly reuniting them with their families after being found and reported to police.",
+          btn_find_child: "Find Child",
+          btn_report_new: "Report New Child",
+          search_title: "Search for Missing Child",
+          search_placeholder: "Type child's name...",
+          th_police_rb: "Police RB",
+          th_photo: "Photo",
+          th_name: "Name",
+          th_age: "Age",
+          th_gender: "Gender",
+          th_region: "Region",
+          th_district: "District",
+          th_ward: "Ward",
+          th_location: "Location",
+          th_status: "Status",
+          th_remarks: "Remarks",
+          th_actions: "Actions",
+          th_identify: "Identify",
+          status_missing: "Missing",
+          status_found: "Found",
+          status_identified: "Identified",
+          footer_rights: "All Rights Reserved.",
+          modal_signin: "Sign In",
+          modal_create: "Create Account",
+          modal_report_child: "Report Child",
+          label_police_rb: "Police RB Number",
+          label_name: "Name",
+          label_age: "Age",
+          label_gender: "Gender",
+          label_region: "Region",
+          label_district: "District",
+          label_ward: "Ward",
+          label_status: "Status",
+          label_image: "Image",
+          label_remarks: "Remarks",
+          btn_submit_report: "Submit Report",
+          alert_child_added: "Added!",
+          alert_invalid_cred: "Invalid credentials.",
+          alert_notify_success: "Notification Sent!",
+          alert_identified: "This child has been marked as Identified.",
+          dashboard_title: "Analytics Dashboard",
+          metric_total: "Total Records",
+          metric_missing: "Missing",
+          metric_found: "Found",
+          metric_avg_age: "Avg Age",
+          chart_age: "Age Histogram",
+          chart_status: "Status",
+          chart_gender: "Gender",
+          chart_region: "Region",
+          header_users: "Users",
+        },
+        sw: {
+          hotline: "Hotline",
+          nav_home: "Nyumbani",
+          nav_search: "Tafuta Mtoto",
+          nav_edu: "Elimu",
+          nav_join: "Jiunge Nasi",
+          btn_login: "Ingia",
+          btn_logout: "Toka",
+          btn_report: "Ripoti ya Watumiaji",
+          btn_get_report: "Pata Ripoti",
+          hero_title: "Mtoto akipotea na Kutoonekana, Kila Sekunde Ni Muhimu.",
+          hero_subtitle:
+            "NCRS ni mfumo unaolinda watoto waliopotea kwa kuwaunganisha na familia zao haraka baada ya kupatikana na kuripotiwa kituo cha polisi.",
+          btn_find_child: "Tafuta Mtoto",
+          btn_report_new: "Ripoti Mtoto Mpya",
+          search_title: "Utafutaji Mtoto Aliyepotea",
+          search_placeholder: "Andika jina la mtoto...",
+          th_police_rb: "RB Polisi",
+          th_photo: "Picha",
+          th_name: "Jina",
+          th_age: "Umri",
+          th_gender: "Jinsi",
+          th_region: "Mkoa",
+          th_district: "Wilaya",
+          th_ward: "Kata",
+          th_location: "Eneo",
+          th_status: "Hali",
+          th_remarks: "Maelezo",
+          th_actions: "Hatua",
+          th_identify: "Tambua",
+          status_missing: "Hajapatikana",
+          status_found: "Amepatikana",
+          status_identified: "Ametambuliwa",
+          footer_rights: "Haki Zote Zimehifadhiwa.",
+          modal_signin: "Ingia",
+          modal_create: "Fungua Akaunti",
+          modal_report_child: "Ripoti Mtoto",
+          label_police_rb: "Namba ya RB Polisi",
+          label_name: "Jina",
+          label_age: "Umri",
+          label_gender: "Jinsi",
+          label_region: "Mkoa",
+          label_district: "Wilaya",
+          label_ward: "Kata",
+          label_status: "Hali",
+          label_image: "Picha",
+          label_remarks: "Maelezo",
+          btn_submit_report: "Wasilisha Ripoti",
+          alert_child_added: "Ameongezwa!",
+          alert_invalid_cred: "Taarifa sio sahihi.",
+          alert_notify_success: "Ujumbe Umetumwa!",
+          alert_identified: "Mtoto huyu ametambuliwa rasmi.",
+          dashboard_title: "Dashibodi ya Uchambuzi",
+          metric_total: "Jumla ya Ripoti",
+          metric_missing: "Waliopotea",
+          metric_found: "Waliofurushiwa",
+          metric_avg_age: "Wastani wa Umri",
+          chart_age: "Historogamu ya Umri",
+          chart_status: "Hali",
+          chart_gender: "Jinsi",
+          chart_region: "Mkoa",
+          header_users: "Watumiaji",
+        },
+      };
 
-      this.container.appendChild(notifyEl);
-
-      const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
-      if (allNotifies.length > this.maxVisible) {
-        this._dismiss(allNotifies[0], false);
-      }
-
-      const autoTimer = setTimeout(() => {
-        this._dismiss(notifyEl, false);
-        if (onClose) onClose();
-      }, duration);
-
-      notifyEl._autoTimer = autoTimer;
-    },
-
-    _dismiss(element) {
-      if (!element || element.classList.contains("removing")) return;
-
-      if (element._autoTimer) clearTimeout(element._autoTimer);
-
-      element.classList.add("removing");
-
-      setTimeout(() => {
-        element?.parentElement?.removeChild(element);
-      }, 650);
-    },
-
-    success(message, title) {
-      this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
-    },
-
-    error(message, title) {
-      this.show({ title: title || "MAKOSA", message, icon: "fa-times-circle", duration: 6000 });
-    },
-
-    info(message, title) {
-      this.show({ title: title || "MAELEZO", message, icon: "fa-info-circle" });
-    },
-
-    warning(message, title) {
-      this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
-    }
-  };
-       window.BrickNotify = {
-  container: null,
-  maxVisible: 4,
-  defaultDuration: 5000,
-
-  init() {
-    this.container = document.getElementById("brickNotifyContainer");
-  },
-
-  show(options = {}) {
-    if (!this.container) this.init();
-
-    const title = options.title || "ARIFA";
-    const message = options.message || "";
-    const icon = options.icon || "fa-bell";
-    const duration = options.duration || this.defaultDuration;
-
-    const notifyEl = document.createElement("div");
-    notifyEl.className = "brick-notify";
-
-    notifyEl.innerHTML = `
-      <div class="brick-icon"><i class="fas ${icon}"></i></div>
-      <div class="brick-content">
-        <div class="brick-title">${title}</div>
-        <div class="brick-message">${message}</div>
-      </div>
-      <button class="brick-close" onclick="BrickNotify._dismiss(this.parentElement, true)">&times;</button>
-      <div class="brick-timer-bar" style="animation-duration:${duration}ms;"></div>
-    `;
-
-    this.container.appendChild(notifyEl);
-
-    const autoTimer = setTimeout(() => {
-      this._dismiss(notifyEl);
-    }, duration);
-
-    notifyEl._autoTimer = autoTimer;
-  },
-
-  _dismiss(element) {
-    if (!element) return;
-    if (element._autoTimer) clearTimeout(element._autoTimer);
-
-    element.classList.add("removing");
-
-    setTimeout(() => {
-      element?.remove();
-    }, 500);
-  },
-
-  // =========================
-  // FIXED METHODS SECTION
-  // =========================
-
-  success(message, title) {
-    this.show({
-      title: title || "MAFANIKIO",
-      message,
-      icon: "fa-check-circle"
-    });
-  },
-
-  error(message, title) {
-    this.show({
-      title: title || "MAKOSA",
-      message,
-      icon: "fa-times-circle",
-      duration: 6000
-    });
-  },
-
-  info(message, title) {
-    this.show({
-      title: title || "MAELEZO",
-      message,
-      icon: "fa-info-circle"
-    });
-  },
-
-  warning(message, title) {
-    this.show({
-      title: title || "ONYO",
-      message,
-      icon: "fa-exclamation-triangle",
-      duration: 6000
-    });
-  },
-
-  // =========================
-  // BUSINESS LOGIC NOTIFICATIONS
-  // =========================
-
-  identifierSent(childName) {
-    this.show({
-      title: "UTAMBULISHO UMEWASILISHWA",
-      message: `Taarifa zako kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi.`,
-      icon: "fa-user-shield",
-      duration: 6000
-    });
-  },
-
-  adminReceived(childName, identifierName) {
-    this.show({
-      title: "UJUMBE MPYA",
-      message: `Mtambulishi <strong>${identifierName}</strong> ametuma taarifa za <strong>${childName}</strong>.`,
-      icon: "fa-envelope-open-text",
-      duration: 7000
-    });
-  },
-
-  adminFullyIdentified(childName) {
-    this.show({
-      title: "KIKAMILIFU",
-      message: `Mtoto <strong>${childName}</strong> ametambuliwa kikamilifu.`,
-      icon: "fa-check-double",
-      duration: 8000
-    });
-  },
-
-  privacyWarning() {
-    this.show({
-      title: "ULINZI WA FARAGHA",
-      message: "Watambulishi wengine hawaonekani.",
-      icon: "fa-user-lock",
-      duration: 5000
-    });
-  },
-// =========================
-// BRICK NOTIFY SYSTEM END
-// =========================
-clearAll() {
-  if (!this.container) return;
-
-  const all = this.container.querySelectorAll(".brick-notify");
-  all.forEach((el, i) => {
-    setTimeout(() => this._dismiss(el), i * 100);
-  });
-}
-};
-
-// =========================
-// GOOGLE CLIENT ID
-// =========================
-const GOOGLE_CLIENT_ID = "797676326076-09rpnb9c1amicstl4db8bkiiqt1et2g2.apps.googleusercontent.com";
-
-// =========================
-// TRANSLATION SYSTEM
-// =========================
-const translations = {
-  en: {
-    hello: "Hello",
-    hotline: "Hotline",
-    nav_home: "Home",
-    nav_search: "Find Child",
-    nav_edu: "Education",
-    nav_join: "Join Us",
-    btn_login: "Sign In",
-    btn_logout: "Sign Out",
-    btn_report: "User Report",
-    btn_get_report: "Get Report",
-    hero_title: "When a child goes missing, Every Minute Matters.",
-    hero_subtitle:
-      "NCRS is a system dedicated to protecting missing child by quickly reuniting them with their families after being found.",
-    btn_find_child: "Find Child",
-    btn_report_new: "Report New Child",
-    search_title: "Search for Missing Child",
-    search_placeholder: "Type child's name..."
-  },
-
-  sw: {
-    hello: "Hujambo",
-    hotline: "Hotline",
-    nav_home: "Nyumbani",
-    nav_search: "Tafuta Mtoto",
-    nav_edu: "Elimu",
-    nav_join: "Jiunge Nasi",
-    btn_login: "Ingia",
-    btn_logout: "Toka",
-    btn_report: "Ripoti ya Watumiaji",
-    btn_get_report: "Pata Ripoti",
-    hero_title: "Mtoto akipotea, kila sekunde ni muhimu.",
-    hero_subtitle:
-      "NCRS ni mfumo wa kusaidia watoto waliopotea kuunganishwa na familia zao haraka.",
-    btn_find_child: "Tafuta Mtoto",
-    btn_report_new: "Ripoti Mtoto Mpya",
-    search_title: "Utafutaji Mtoto Aliyepotea",
-    search_placeholder: "Andika jina la mtoto..."
-  }
-};
-
-// =========================
-// STATE
-// =========================
-let currentLang = "sw";
-let childCache = [];
-let usersCache = [];
-let currentNewsItem = null;
-
+      // State
+      let currentLang = "sw";
+      let childCache = []; // Local cache for performance
+      let usersCache = [];
+      let currentNewsItem = null; // For Modal
 
       // =============================================
       // ===== FIREBASE HELPERS =====
@@ -3098,49 +3044,27 @@ let currentNewsItem = null;
         }
       }
 
-  // =============================================
-// ===== UI LOGIC (Exposed to Window) =====
-// =============================================
-window.changeLanguage = async function (lang) {
-  currentLang = lang;
+      // =============================================
+      // ===== UI LOGIC (Exposed to Window) =====
+      // =============================================
+      window.changeLanguage = async function (lang) {
+        currentLang = lang;
+        // Save preference to Firestore (generic settings doc)
+        await setDoc(doc(db, "appData", "settings"), { lang: lang }, { merge: true });
 
-  // Save preference to Firestore
-  await setDoc(doc(db, "appData", "settings"), { lang: lang }, { merge: true });
-
-  // Toggle buttons
-  document.getElementById("btn-en").classList.toggle("active", lang === "en");
-  document.getElementById("btn-sw").classList.toggle("active", lang === "sw");
-
-  // Set HTML lang
-  document.documentElement.lang = lang;
-
-  // Translate text
-  document.querySelectorAll("[data-translate]").forEach((el) => {
-    const k = el.getAttribute("data-translate");
-    if (translations[lang][k]) el.innerHTML = translations[lang][k];
-  });
-
-  // Translate placeholders
-  document.querySelectorAll("[data-translate-placeholder]").forEach((el) => {
-    const k = el.getAttribute("data-translate-placeholder");
-    if (translations[lang][k]) el.placeholder = translations[lang][k];
-  });
-
-  // Re-render table
-  const input = document.getElementById("myInput");
-  if (input && typeof renderChildTable === "function") {
-    renderChildTable(input.value);
-  }
-};
-
-// =============================================
-// ===== FORM SUBMIT =====
-// =============================================
-document.getElementById("formId").addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  // your submit logic here
-});
+        document.getElementById("btn-en").classList.toggle("active", lang === "en");
+        document.getElementById("btn-sw").classList.toggle("active", lang === "sw");
+        document.documentElement.lang = lang;
+        document.querySelectorAll("[data-translate]").forEach((el) => {
+          const k = el.getAttribute("data-translate");
+          if (translations[lang][k]) el.innerHTML = translations[lang][k];
+        });
+        document.querySelectorAll("[data-translate-placeholder]").forEach((el) => {
+          const k = el.getAttribute("data-translate-placeholder");
+          if (translations[lang][k]) el.placeholder = translations[lang][k];
+        });
+        renderChildTable(document.getElementById("myInput").value);
+      };
 
       window.onload = async function () {
         ensureSuperAdmin();
