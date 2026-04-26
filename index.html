@@ -2695,6 +2695,124 @@
 
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
+      const newsRef = collection(db, "news");
+      /* =========================
+   1. ENSURE DUMMY DATA
+========================= */
+async function ensureNewsData() {
+  const snap = await getDocs(newsRef);
+
+  if (snap.empty) {
+    const dummyNews = [
+      {
+        title: "NCRS Kuzindua Mfumo wa Simu",
+        description: "Program mpya ya kusaidia utafutaji wa watoto waliopotea.",
+        image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/imageadvert2.jpg",
+        createdAt: serverTimestamp(),
+        likes: 12,
+        hidden: false,
+      },
+    ];
+
+    for (const news of dummyNews) {
+      await addDoc(newsRef, news);
+    }
+  }
+}
+
+/* =========================
+   2. REALTIME RENDER (NO loadNews)
+========================= */
+function listenNews() {
+  onSnapshot(newsRef, (snapshot) => {
+    const container = document.getElementById("newsContainer");
+    container.innerHTML = "";
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const id = docSnap.id;
+
+      // Skip hidden posts
+      if (data.hidden) return;
+
+      container.innerHTML += `
+        <div class="news-card">
+          <img src="${data.image}" />
+          <h3>${data.title}</h3>
+          <p>${data.description}</p>
+
+          <button onclick="editNews('${id}', '${data.title}', '${data.description}')">Edit</button>
+          <button onclick="deleteNews('${id}')">Delete</button>
+          <button onclick="toggleHide('${id}', true)">Hide</button>
+        </div>
+      `;
+    });
+  });
+}
+
+/* =========================
+   3. ADD NEWS
+========================= */
+window.addNews = async function (title, description, image) {
+  await addDoc(newsRef, {
+    title,
+    description,
+    image,
+    createdAt: serverTimestamp(),
+    likes: 0,
+    hidden: false,
+  });
+};
+
+/* =========================
+   4. DELETE NEWS
+========================= */
+window.deleteNews = async function (id) {
+  await deleteDoc(doc(db, "news", id));
+};
+
+/* =========================
+   5. EDIT NEWS
+========================= */
+window.editNews = async function (id, oldTitle, oldDesc) {
+  const newTitle = prompt("Edit Title:", oldTitle);
+  const newDesc = prompt("Edit Description:", oldDesc);
+
+  if (!newTitle || !newDesc) return;
+
+  await updateDoc(doc(db, "news", id), {
+    title: newTitle,
+    description: newDesc,
+  });
+};
+
+/* =========================
+   6. HIDE / UNHIDE NEWS
+========================= */
+window.toggleHide = async function (id, hide = true) {
+  await updateDoc(doc(db, "news", id), {
+    hidden: hide,
+  });
+};
+
+/* =========================
+   7. SHOW ALL AGAIN (UNHIDE ALL OPTIONAL)
+========================= */
+window.unhideAll = async function () {
+  const snap = await getDocs(newsRef);
+
+  snap.forEach(async (d) => {
+    await updateDoc(doc(db, "news", d.id), {
+      hidden: false,
+    });
+  });
+};
+
+/* =========================
+   START APP
+========================= */
+ensureNewsData();
+listenNews();
 
       // =============================================
       // ===== GLOBAL UTILITIES (Exposed to Window) =====
