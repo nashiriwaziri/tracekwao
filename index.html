@@ -703,7 +703,7 @@
       .news-title:hover {
         color: var(--secondary);
       }
-      .news-description-preview {
+      .news-desc-preview {
         font-size: 0.95rem;
         color: var(--text);
         margin-bottom: 20px;
@@ -1946,7 +1946,7 @@
           <div id="modalNewsDate" style="color: var(--muted); font-size: 0.85rem; margin-bottom: 20px"></div>
           <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 20px" />
           <div
-            id="modalNewsDescription"
+            id="modalNewsDesc"
             style="line-height: 1.8; color: #333; margin-bottom: 30px; white-space: pre-wrap"
           ></div>
 
@@ -2948,99 +2948,117 @@
       // =============================================
       // ===== FIREBASE HELPERS =====
       // =============================================
-      async function ensureSuperAdmin() {
-        const snap = await getDocs(collection(db, "users"));
-        let users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // ===============================
+// FIREBASE IMPORTS (CDN)
+// ===============================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  deleteDoc,
+  doc,
+  addDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        const targetEmail = "nashiriwaziri29@gmail.com";
-        const targetPassword = "WAZIRI2015";
+// ===============================
+// FIREBASE CONFIG (REPLACE WITH YOURS)
+// ===============================
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+};
 
-        const superAdmin = {
-          fname: "Nashiri",
-          lname: "Waziri",
-          email: targetEmail,
-          password: targetPassword,
-          phone: "+255714864117",
-          role: "Super Administrator", // Ensure role is Super Admin
-          photoUrl: null,
-          createdAt: Date.now(),
-        };
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-        const adminIndex = users.findIndex((u) => u.email === targetEmail);
+// ===============================
+// RESET + START FRESH SYSTEM
+// ===============================
+async function startFresh() {
+  const newsRef = collection(db, "news");
 
-        if (adminIndex !== -1) {
-          superAdmin.id = users[adminIndex].id;
-          // Merge to ensure fields exist
-          await setDoc(doc(db, "users", superAdmin.id), superAdmin);
-        } else {
-          await addDoc(collection(db, "users"), superAdmin);
-        }
-        console.log("Super Administrator access ensured.");
+  const snap = await getDocs(newsRef);
+
+  for (const item of snap.docs) {
+    await deleteDoc(doc(db, "news", item.id));
+  }
+
+  console.log("Old data cleared");
+
+  await ensureNewsData();
+}
+
+// ===============================
+// ADD DEFAULT NEWS DATA
+// ===============================
+async function ensureNewsData() {
+  const snap = await getDocs(collection(db, "news"));
+
+  if (snap.empty) {
+    const dummyNews = [
+      {
+        title: "NCRS Kuzindua Mfumo wa Simu (CP New App)",
+        description: "Programu mpya kusaidia utafutaji wa watoto waliopotea.",
+        image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/imageadvert2.jpg",
+        createdAt: serverTimestamp(),
+        likes: 12,
+      },
+      {
+        title: "Tangazo la Mfumo kwa Wananchi wote",
+        description: "Hafla ya ulinzi wa mtoto itafanyika Jumamosi.",
+        image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/image.jpeg",
+        createdAt: serverTimestamp(),
+        likes: 6590,
       }
+    ];
 
-      // Ensure Dummy News Data Exists
-      async function ensureNewsData() {
-        const snap = await getDocs(query(collection(db, "news")));
-        if (snap.empty) {
-          const dummyNews = [
-            {
-              title: "NCRS Kuzindua Mfumo wa Simu (CP New App )",
-              description: "Tunafurahi kutangaza kuwa hivi karibuni tutakamilisha programu mpya ya simu ili kusaidia katika utafutaji wa watoto waliopotea.Maelekezo ya kupakua programu hiyo yatakuwa katika Android na iOS, maelekezo yote yatatolewa hapa.",
-              image: "https://github.com/nashiriwaziri/tracekwao/blob/main/imageadvert2.jpg",
-              createdAt: serverTimestamp(),
-              likes: 12,
-            },
-            {
-              title: "Tangazo la Mfumo kwa Wananchi wote",
-              description: " Ewe Mwananchi, Kaa tayari, Muda wowote Tutakualika kwenye hafla ya kuhamasisha jamii kuhusu ulinzi wa mtoto, itakayofanyika Jumamosi ijayo ukumbi wa Jiji la Dar es Salaam. Tafadhali kuwa tayari, kuja pamoja na familia yako ndio mafanikio ya shughuli yetu.",
-             image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/image.jpeg",
-              createdAt: serverTimestamp(),
-              likes: 6590,
-            },
-            {
-              title: "Success Story: Mtoto Juma Aunganishwa Katika Familia yake ",
-              description: "Juma (miaka 5) aliyekuwa amepotea kwa mwezi mmoja amepatikana sasa kutokana na mfumo wetu wa NCRS. Asante kwa wote waliwasiliana.",
-              image: "https://github.com/nashiriwaziri/tracekwao/blob/main/imageadvert2.jpg",
-              createdAt: serverTimestamp(),
-              likes: 7543,
-            },
-          ];
+    for (const news of dummyNews) {
+      await addDoc(collection(db, "news"), news);
+    }
 
-          for (const news of dummyNews) {
-            await addDoc(collection(db, "news"), news);
-          }
-          console.log("Dummy news data added.");
-        }
-      }
+    console.log("Dummy news added.");
+  }
+}
 
-      async function loadRolesForSignup() {
-        const roleSelect = document.getElementById("su_role");
-        // Clear existing options except default
-        roleSelect.innerHTML = '<option value="User">Standard User</option>';
+// ===============================
+// LOAD ROLES FOR SIGNUP
+// ===============================
+async function loadRolesForSignup() {
+  const roleSelect = document.getElementById("su_role");
 
-        const snap = await getDocs(collection(db, "users"));
-        const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  roleSelect.innerHTML = '<option value="User">Standard User</option>';
 
-        const superAdminCount = users.filter((u) => u.role === "Super Administrator").length;
-        const adminCount = users.filter((u) => u.role === "Administrator").length;
+  const snap = await getDocs(collection(db, "users"));
+  const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // Add Super Admin option ONLY if 0 exist
-        if (superAdminCount === 0) {
-          const opt = document.createElement("option");
-          opt.value = "Super Administrator";
-          opt.innerText = "Super Administrator";
-          roleSelect.appendChild(opt);
-        }
+  const superAdminCount = users.filter(u => u.role === "Super Administrator").length;
+  const adminCount = users.filter(u => u.role === "Administrator").length;
 
-        // Add Admin option ONLY if 0 exist
-        if (adminCount === 0) {
-          const opt = document.createElement("option");
-          opt.value = "Administrator";
-          opt.innerText = "Administrator";
-          roleSelect.appendChild(opt);
-        }
-      }
+  if (superAdminCount === 0) {
+    const opt = document.createElement("option");
+    opt.value = "Super Administrator";
+    opt.innerText = "Super Administrator";
+    roleSelect.appendChild(opt);
+  }
 
+  if (adminCount === 0) {
+    const opt = document.createElement("option");
+    opt.value = "Administrator";
+    opt.innerText = "Administrator";
+    roleSelect.appendChild(opt);
+  }
+}
+
+// ===============================
+// RUN ON PAGE LOAD
+// ===============================
+window.onload = () => {
+  ensureNewsData();
+  loadRolesForSignup();
+};
       // =============================================
       // ===== UI LOGIC (Exposed to Window) =====
       // =============================================
@@ -3474,7 +3492,7 @@
       // ===== NEWS SYSTEM LOGIC (NEW) =====
       // =============================================
       function initNewsSystem() {
-        const q = query(collection(db, "news"), orderBy("createdAt", "description"));
+        const q = query(collection(db, "news"), orderBy("createdAt", "desc"));
         onSnapshot(q, (snapshot) => {
           const grid = document.getElementById("newsGrid");
           grid.innerHTML = "";
@@ -3497,7 +3515,7 @@
                   <span><i class="far fa-calendar-alt"></i> ${date}</span>
                 </div>
                 <div class="news-title" onclick="window.openNewsModal('${news.id}')">${news.title}</div>
-                <div class="news-description-preview">${news.description}</div>
+                <div class="news-desc-preview">${news.desc}</div>
                 <div class="news-actions">
                   <button class="like-btn" onclick="event.stopPropagation(); window.likeNews('${news.id}')">
                     <i class="fas fa-thumbs-up"></i> <span class="like-count">${news.likes || 0}</span>
@@ -3527,7 +3545,7 @@
 
           document.getElementById("modalNewsImg").src = news.image;
           document.getElementById("modalNewsTitle").innerText = news.title;
-          document.getElementById("modalNewsDescription").innerText = news.description;
+          document.getElementById("modalNewsDesc").innerText = news.desc;
           document.getElementById("modalNewsDate").innerText = news.createdAt
             ? new Date(news.createdAt.seconds * 1000).toLocaleString()
             : "";
