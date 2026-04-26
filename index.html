@@ -2014,11 +2014,7 @@
 
         <!-- Existing Ads List -->
         <div style="padding: 20px">
-
-      <section id="newsSection" class="news-section">
-        <h2 style="text-align: center; color: var(--primary); margin-bottom: 30px">Existing Adverts</h2>
-        <div id="newsGrid" class="news-grid">
-          <!-- Adverts Cards Injected via JS -->
+          <h4 style="margin-bottom: 15px; color: var(--primary)">Existing Adverts</h4>
           <div
             id="adminAdList"
             style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto"
@@ -4293,180 +4289,226 @@
       window.closeMessagesBox = function () {
         document.getElementById("messagesModal").classList.add("hidden");
       };
-// ================================
-// ====== GLOBAL STATE ============
-// ================================
-let adInterval;
-let adIndex = 0;
-let adList = [];
 
-// ================================
-// ====== INIT SYSTEM ============
-// ================================
-function initAdvertsSystem() {
-  const q = query(
-    collection(db, "adverts"),
-    orderBy("createdAt", "desc")
-  );
+     // =============================================
+    // ===== ADVERTISEMENT SYSTEM LOGIC =====
+      // =============================================
+      function initAdvertsSystem() {
+        const q = query(collection(db, "adverts"), orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+          const grid = document.getElementById("advertsGrid");
+          grid.innerHTML = "";
+          const advertsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-  onSnapshot(q, (snapshot) => {
-    const grid = document.getElementById("advertsGrid");
-    grid.innerHTML = "";
+          if (advertsList.length === 0) {
+            grid.innerHTML = "<p style='text-align:center; color:#888;'>No adverts updates yet.</p>";
+            return;
+          }
 
-    adList = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+          AdvertsList.forEach((adverts) => {
+            const date = adverts.createdAt ? advert Date(adverts.createdAt.seconds * 1000).toLocaleDateString() : "";
 
-    // ================================
-    // ===== GRID DISPLAY ============
-    // ================================
-    if (adList.length === 0) {
-      grid.innerHTML =
-        "<p style='text-align:center; color:#888;'>No adverts updates yet.</p>";
+            const card = document.createElement("div");
+            card.className = "adverts-card";
+            card.innerHTML = `
+              <img src="${adverts.image}" class="adverts-img" alt="Adverts Image">
+              <div class="Adverts-body">
+                <div class="adverts-meta">
+                  <span><i class="far fa-calendar-alt"></i> ${date}</span>
+                </div>
+                <div class="adverts-title" onclick="window.openAdvertsModal('${adverts.id}')">${Adverts.title}</div>
+                <div class="adverts-desc-preview">${adverts.desc}</div>
+                <div class="adverts-actions">
+                  <button class="like-btn" onclick="event.stopPropagation(); window.likeNews('${adverts.id}')">
+                    <i class="fas fa-thumbs-up"></i> <span class="like-count">${adverts.likes || 0}</span>
+                  </button>
+                  <div class="share-buttons">
+                     <button class="share-btn wa" onclick="event.stopPropagation(); window.shareCardToWA('${encodeURIComponent(ade.title)}', '${encodeURIComponent(window.location.href)}')">
+                       <i class="fab fa-whatsapp"></i>
+                     </button>
+                     <button class="share-btn fb" onclick="event.stopPropagation(); window.shareCardToFB('${encodeURIComponent(window.location.href)}')">
+                       <i class="fab fa-facebook-f"></i>
+                     </button>
+                  </div>
+                </div>
+              </div>
+            `;
+            grid.appendChild(card);
+          });
+      
+      }
+      function renderAdSlider() {
+        const container = document.getElementById("ad-slider-wrapper");
+        container.innerHTML = "";
 
-      document.getElementById("ad-bar-container").style.display = "none";
-      return;
-    }
+        adList.forEach((ad, idx) => {
+          const div = document.createElement("div");
+          div.className = `ad-slide ${idx === 0 ? "active" : ""}`;
+          div.innerHTML = `
+                  <div style="flex:1; display:flex; align-items:center; gap:15px;">
+                   <div style="display:flex; gap:12px; align-items:flex-start;">
+ 
+  <img src="${ad.image}" style="
+    width: 160px;
+    height: 160px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  ">
 
-    adList.forEach((ad) => {
-      const date = ad.createdAt
-        ? new Date(ad.createdAt.seconds * 1000).toLocaleDateString()
-        : "";
+  <div>
+    <h4 style="margin:0; color:var(--primary); font-size: 1.1rem;">
+      ${ad.title}
+    </h4>
+    <p style="margin:5px 0 0; color:#666; font-size: 0.9rem;">
+      ${ad.description}
+    </p>
+  </div>
 
-      const card = document.createElement("div");
-      card.className = "adverts-card";
+</div>
+              `;
+          container.appendChild(div);
+        });
 
-      card.innerHTML = `
-        <img src="${ad.image}" class="adverts-img" alt="Advert Image">
-        <div class="adverts-body">
-          <div class="adverts-meta">
-            <span><i class="far fa-calendar-alt"></i> ${date}</span>
-          </div>
+        startAdRotation();
+      }
 
-          <div class="adverts-title" onclick="window.openAdvertsModal('${ad.id}')">
-            ${ad.title}
-          </div>
+      function startAdRotation() {
+        clearInterval(adInterval);
+        if (adList.length <= 1) return;
 
-          <div class="adverts-desc-preview">
-            ${ad.description || ""}
-          </div>
+        const progress = document.getElementById("ad-progress");
+        adIndex = 0;
 
-          <div class="adverts-actions">
-            <button class="like-btn"
-              onclick="event.stopPropagation(); window.likeNews('${ad.id}')">
-              <i class="fas fa-thumbs-up"></i>
-              <span class="like-count">${ad.likes || 0}</span>
-            </button>
+        // Reset Progress
+        progress.style.transition = "none";
+        progress.style.width = "0%";
+        setTimeout(() => {
+          progress.style.transition = "width 5s linear";
+          progress.style.width = "100%";
+        }, 50);
 
-            <div class="share-buttons">
-              <button class="share-btn wa"
-                onclick="event.stopPropagation();
-                window.shareCardToWA('${encodeURIComponent(ad.title)}','${encodeURIComponent(window.location.href)}')">
-                <i class="fab fa-whatsapp"></i>
-              </button>
+        adInterval = setInterval(() => {
+          const slides = document.querySelectorAll(".ad-slide");
+          slides[adIndex].classList.remove("active");
 
-              <button class="share-btn fb"
-                onclick="event.stopPropagation();
-                window.shareCardToFB('${encodeURIComponent(window.location.href)}')">
-                <i class="fab fa-facebook-f"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
+          adIndex = (adIndex + 1) % adList.length;
 
-      grid.appendChild(card);
-    });
+          slides[adIndex].classList.add("active");
 
-    // ================================
-    // ===== SLIDER DISPLAY ===========
-    // ================================
-    const activeAds = adList.filter((ad) => ad.isActive);
+          // Reset Progress loop
+          progress.style.transition = "none";
+          progress.style.width = "0%";
+          setTimeout(() => {
+            progress.style.transition = "width 5s linear";
+            progress.style.width = "100%";
+          }, 50);
+        }, 5000);
+      }
 
-    if (activeAds.length === 0) {
-      document.getElementById("ad-bar-container").style.display = "none";
-    } else {
-      document.getElementById("ad-bar-container").style.display = "flex";
-      renderAdSlider(activeAds);
-    }
-  });
-}
+      window.closeAdBar = function () {
+        document.getElementById("ad-bar-container").style.display = "none";
+      };
 
-// ================================
-// ====== SLIDER ==================
-// ================================
-function renderAdSlider(activeAds) {
-  const container = document.getElementById("ad-slider-wrapper");
-  container.innerHTML = "";
+      // Admin Functions
+      window.openManageAdverts = async function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+          BrickNotify.error("Access Denied.");
+          return;
+        }
+        document.getElementById("manageAdvertsModal").classList.remove("hidden");
+        loadAdminAdList();
+      };
 
-  activeAds.forEach((ad, idx) => {
-    const div = document.createElement("div");
-    div.className = `ad-slide ${idx === 0 ? "active" : ""}`;
+      window.closeManageAdverts = function () {
+        document.getElementById("manageAdvertsModal").classList.add("hidden");
+      };
 
-    div.innerHTML = `
-      <div style="display:flex; gap:12px; align-items:center;">
-        <img src="${ad.image}" style="
-          width:160px;
-          height:160px;
-          object-fit:cover;
-          border-radius:12px;
-        ">
+      async function loadAdminAdList() {
+        const listContainer = document.getElementById("adminAdList");
+        listContainer.innerHTML = "Loading...";
 
-        <div>
-          <h4 style="margin:0; color:var(--primary);">${ad.title}</h4>
-          <p style="margin:5px 0; color:#666;">
-            ${ad.description || ""}
-          </p>
-        </div>
-      </div>
-    `;
+        const snap = await getDocs(collection(db, "adverts"));
+        const adverts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    container.appendChild(div);
-  });
+        listContainer.innerHTML = "";
+        if (adverts.length === 0)
+          listContainer.innerHTML = "<p style='color:#999; text-align:center;'>No adverts found.</p>";
 
-  startAdRotation(activeAds.length);
-}
+        adverts.forEach((ad) => {
+          const item = document.createElement("div");
+          item.className = "admin-ad-item";
+          item.style.display = "flex";
+          item.style.gap = "10px";
+          item.style.padding = "10px";
+          item.style.border = "1px solid #eee";
+          item.style.borderRadius = "8px";
+          item.style.alignItems = "center";
 
-// ================================
-// ====== ROTATION ================
-// ================================
-function startAdRotation(total) {
-  clearInterval(adInterval);
-  if (total <= 1) return;
+          item.innerHTML = `
+                  <img src="${ad.image}" style="width:60px; height:60px; object-fit:contain; border-radius:4px; border:1px solid #ddd;">
+                  <div style="flex:1; padding:0 10px;">
+                      <h5 style="margin:0; font-weight:bold;">${ad.title}</h5>
+                      <p style="margin:0; font-size:0.8rem; color:#666;">${ad.description.substring(0, 50)}...</p>
+                      <span class="status-badge ${ad.isActive ? "found" : "missing"}" style="font-size:0.7rem; padding:2px 6px;">
+                          ${ad.isActive ? "Active" : "Disabled"}
+                      </span>
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:5px;">
+                      <button class="btn-xs ${ad.isActive ? "btn-delete" : "btn-view"}" onclick="window.toggleAdvert('${ad.id}', ${ad.isActive})">
+                          ${ad.isActive ? "Disable" : "Enable"}
+                      </button>
+                      <button class="btn-xs btn-delete" onclick="window.deleteAdvert('${ad.id}')">
+                          <i class="fas fa-trash"></i>
+                      </button>
+                  </div>
+              `;
+          listContainer.appendChild(item);
+        });
+      }
 
-  const progress = document.getElementById("ad-progress");
-  adIndex = 0;
+      window.handleAddAdvert = async function (e) {
+        e.preventDefault();
+        const fileInput = document.getElementById("adImage");
+        if (fileInput.files && fileInput.files[0]) {
+          const reader = new FileReader();
+          reader.onload = async (evt) => {
+            const base64 = evt.target.result;
 
-  function resetProgress() {
-    progress.style.transition = "none";
-    progress.style.width = "0%";
+            // Size Check (Firestore limit 5MB) - strict validation
+            if (base64.length > 1000000) {
+              BrickNotify.error("Image too large. Please use a smaller image.");
+              return;
+            }
 
-    setTimeout(() => {
-      progress.style.transition = "width 5s linear";
-      progress.style.width = "100%";
-    }, 50);
-  }
+            await addDoc(collection(db, "adverts"), {
+              title: document.getElementById("adTitle").value,
+              description: document.getElementById("adDescription").value,
+              image: base64,
+              isActive: true,
+              createdAt: serverTimestamp(),
+            });
 
-  resetProgress();
+            document.querySelector('form[onsubmit="window.handleAddAdvert(event)"]').reset();
+            BrickNotify.success("Advert added successfully.");
+            loadAdminAdList();
+          };
+          reader.readAsDataURL(fileInput.files[0]);
+        }
+      };
 
-  adInterval = setInterval(() => {
-    const slides = document.querySelectorAll(".ad-slide");
+      window.toggleAdvert = async function (id, currentStatus) {
+        await updateDoc(doc(db, "adverts", id), { isActive: !currentStatus });
+        loadAdminAdList();
+      };
 
-    slides[adIndex].classList.remove("active");
-    adIndex = (adIndex + 1) % total;
-    slides[adIndex].classList.add("active");
-
-    resetProgress();
-  }, 5000);
-}
-
-// ================================
-// ====== CLOSE BAR ==============
-// ================================
-window.closeAdBar = function () {
-  document.getElementById("ad-bar-container").style.display = "none";
-};
+      window.deleteAdvert = async function (id) {
+        if (confirm("Are you sure you want to delete this advert?")) {
+          await deleteDoc(doc(db, "adverts", id));
+          loadAdminAdList();
+        }
+      };
     </script>
   </body>
 </html>
