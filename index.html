@@ -3047,24 +3047,51 @@
       // =============================================
       // ===== UI LOGIC (Exposed to Window) =====
       // =============================================
-      window.changeLanguage = async function (lang) {
-        currentLang = lang;
-        // Save preference to Firestore (generic settings doc)
-        await setDoc(doc(db, "appData", "settings"), { lang: lang }, { merge: true });
+     window.changeLanguage = async function (lang) {
+  try {
+    currentLang = lang;
 
-        document.getElementById("btn-en").classList.toggle("active", lang === "en");
-        document.getElementById("btn-sw").classList.toggle("active", lang === "sw");
-        document.documentElement.lang = lang;
-        document.querySelectorAll("[data-translate]").forEach((el) => {
-          const k = el.getAttribute("data-translate");
-          if (translations[lang][k]) el.innerHTML = translations[lang][k];
-        });
-        document.querySelectorAll("[data-translate-placeholder]").forEach((el) => {
-          const k = el.getAttribute("data-translate-placeholder");
-          if (translations[lang][k]) el.placeholder = translations[lang][k];
-        });
-        renderChildTable(document.getElementById("myInput").value);
-      };
+    // ✅ Save preference to Firestore (safe)
+    if (typeof db !== "undefined") {
+      await setDoc(doc(db, "appData", "settings"), { lang: lang }, { merge: true });
+    }
+
+    // ✅ Toggle active buttons (safe check)
+    const btnEn = document.getElementById("btn-en");
+    const btnSw = document.getElementById("btn-sw");
+
+    if (btnEn) btnEn.classList.toggle("active", lang === "en");
+    if (btnSw) btnSw.classList.toggle("active", lang === "sw");
+
+    // ✅ Set HTML language
+    document.documentElement.lang = lang;
+
+    // ✅ Translate text content
+    document.querySelectorAll("[data-translate]").forEach((el) => {
+      const key = el.getAttribute("data-translate");
+      if (translations?.[lang]?.[key]) {
+        el.innerHTML = translations[lang][key];
+      }
+    });
+
+    // ✅ Translate placeholders
+    document.querySelectorAll("[data-translate-placeholder]").forEach((el) => {
+      const key = el.getAttribute("data-translate-placeholder");
+      if (translations?.[lang]?.[key]) {
+        el.placeholder = translations[lang][key];
+      }
+    });
+
+    // ✅ Re-render table safely
+    const input = document.getElementById("myInput");
+    if (input && typeof renderChildTable === "function") {
+      renderChildTable(input.value);
+    }
+
+  } catch (error) {
+    console.error("Language change error:", error);
+  }
+};
 
       window.onload = async function () {
         ensureSuperAdmin();
