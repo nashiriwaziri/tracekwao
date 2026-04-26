@@ -1641,112 +1641,9 @@
         left: 0;
         transition: width 0.1s linear;
       }
-      .ads-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  padding: 20px;
-}
-
-.ad-card {
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  text-align: center;
-  transition: transform 0.2s ease;
-}
-
-.ad-card:hover {
-  transform: scale(1.03);
-}
-
-.ad-card img {
-  width: 100%;
-  height: 150px;
-  object-fit: cover;
-}
-
-.ad-card h3 {
-  margin: 10px 0 5px;
-  font-size: 18px;
-}
-
-.ad-card p {
-  font-size: 14px;
-  color: #555;
-  padding: 0 10px;
-}
-
-.ad-card button {
-  margin: 10px 0 15px;
-  padding: 8px 16px;
-  border: none;
-  background: #007bff;
-  color: white;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.ad-card button:hover {
-  background: #0056b3;
-}
-    .ad-slider-container {
-      width: 100%;
-      overflow: hidden;
-      margin-bottom: 20px;
-    }
-
-    .ad-slider {
-      display: flex;
-      transition: transform 0.5s ease-in-out;
-    }
-
-    .ad-card {
-      min-width: 100%;
-      position: relative;
-    }
-
-    .ad-card img {
-      width: 100%;
-      height: 250px;
-      object-fit: cover;
-      cursor: pointer;
-    }
-
-    /* MODAL */
-    .ad-modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.8);
-    }
-
-    .ad-modal-content {
-      background: #fff;
-      margin: 10% auto;
-      padding: 20px;
-      width: 80%;
-      border-radius: 10px;
-    }
-
-    .ad-modal img {
-      width: 100%;
-      border-radius: 10px;
-    }
-
-    .close-btn {
-      float: right;
-      font-size: 25px;
-      cursor: pointer;
-    }
-
-  </style>
-</head>
-<body>
+    </style>
+  </head>
+  <body>
     <!-- ===== RED BRICK NOTIFICATION CONTAINER ===== -->
     <div class="brick-notify-container" id="brickNotifyContainer"></div>
 
@@ -2765,245 +2662,120 @@
       </div>
     </div>
 
-    // =============================================
-// ===== FIREBASE IMPORTS & CONFIG =====
-// =============================================
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  getDocs,
-  getDoc,
-  doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  serverTimestamp,
-  onSnapshot,
-  orderBy,
-  increment,
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    <!-- MAIN LOGIC SCRIPT -->
+    <script type="module">
+      // =============================================
+      // ===== FIREBASE IMPORTS & CONFIG =====
+      // =============================================
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import {
+        getFirestore,
+        collection,
+        addDoc,
+        getDocs,
+        getDoc,
+        doc,
+        setDoc,
+        updateDoc,
+        deleteDoc,
+        query,
+        where,
+        serverTimestamp,
+        onSnapshot,
+        orderBy,
+        increment,
+      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// =============================================
-// ===== FIREBASE INIT =====
-// =============================================
-const firebaseConfig = {
-  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-  authDomain: "ncrs-aeb43.firebaseapp.com",
-  projectId: "ncrs-aeb43",
-  storageBucket: "ncrs-aeb43.firebasestorage.app",
-  messagingSenderId: "786434442929",
-  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-  measurementId: "G-ZYB71RY8J5",
-};
+      const firebaseConfig = {
+        apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+        authDomain: "ncrs-aeb43.firebaseapp.com",
+        projectId: "ncrs-aeb43",
+        storageBucket: "ncrs-aeb43.firebasestorage.app",
+        messagingSenderId: "786434442929",
+        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+        measurementId: "G-ZYB71RY8J5",
+      };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
 
-// =============================================
-// ===== TILED ADS LOADER =====
-// =============================================
-async function loadAds() {
-  const container = document.querySelector(".ads-grid");
+      // =============================================
+      // ===== GLOBAL UTILITIES (Exposed to Window) =====
+      // =============================================
+      window.BrickNotify = {
+        container: null,
+        maxVisible: 4,
+        defaultDuration: 5000,
 
-  if (!container) {
-    console.warn("ads-grid container not found in HTML");
-    return;
-  }
+        init() {
+          this.container = document.getElementById("brickNotifyContainer");
+        },
 
-  container.innerHTML = ""; // clear old ads
+        show(options = {}) {
+          if (!this.container) this.init();
+          const title = options.title || "ARIFA";
+          const message = options.message || "";
+          const icon = options.icon || "fa-bell";
+          const duration = options.duration || this.defaultDuration;
+          const onClose = options.onClose || null;
+          const showTimer = options.showTimer !== false;
 
-  try {
-    const q = query(collection(db, "ads"), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
+          const notifyEl = document.createElement("div");
+          notifyEl.className = "brick-notify";
+          notifyEl.innerHTML = `
+                    <div class="brick-icon"><i class="fas ${icon}"></i></div>
+                    <div class="brick-content">
+                        <div class="brick-title">${title}</div>
+                        <div class="brick-message">${message}</div>
+                    </div>
+                    <button class="brick-close" onclick="BrickNotify._dismiss(this.parentElement, true)">&times;</button>
+                    ${showTimer ? `<div class="brick-timer-bar" style="animation-duration: ${duration}ms;"></div>` : ""}
+                `;
 
-    querySnapshot.forEach((docSnap) => {
-      const ad = docSnap.data();
+          this.container.appendChild(notifyEl);
 
-      container.innerHTML += `
-        <div class="ad-card">
-          <img src="${ad.image || "https://via.placeholder.com/300"}" />
-          <h3>${ad.title || "No Title"}</h3>
-          <p>${ad.description || ""}</p>
-          <button onclick="window.open('${ad.link || "#"}', '_blank')">
-            Learn More
-          </button>
-        </div>
-      `;
-    });
-  } catch (error) {
-    console.error("Error loading ads:", error);
-  }
-}
+          const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
+          if (allNotifies.length > this.maxVisible) {
+            this._dismiss(allNotifies[0], false);
+          }
 
-// =============================================
-// ===== REAL-TIME ADS (OPTIONAL BUT POWERFUL) =====
-// =============================================
-function listenToAds() {
-  const container = document.querySelector(".ads-grid");
+          const autoTimer = setTimeout(() => {
+            this._dismiss(notifyEl, false);
+            if (onClose) onClose();
+          }, duration);
 
-  if (!container) return;
+          notifyEl._autoTimer = autoTimer;
+        },
 
-  const q = query(collection(db, "ads"), orderBy("createdAt", "desc"));
+        _dismiss(element, manual) {
+          if (!element || element.classList.contains("removing")) return;
+          if (element._autoTimer) clearTimeout(element._autoTimer);
+          element.classList.add("removing");
+          setTimeout(() => {
+            if (element.parentElement) element.parentElement.removeChild(element);
+          }, 650);
+        },
 
-  onSnapshot(q, (snapshot) => {
-    container.innerHTML = "";
+        success(message, title) {
+          this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
+        },
+        error(message, title) {
+          this.show({ title: title || "MAKOSA", message, icon: "fa-times-circle", duration: 6000 });
+        },
+        info(message, title) {
+          this.show({ title: title || "MAELEZO", message, icon: "fa-info-circle" });
+        },
+        warning(message, title) {
+          this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
+        },
 
-    snapshot.forEach((docSnap) => {
-      const ad = docSnap.data();
-
-      container.innerHTML += `
-        <div class="ad-card">
-          <img src="${ad.image || "https://via.placeholder.com/300"}" />
-          <h3>${ad.title || "No Title"}</h3>
-          <p>${ad.description || ""}</p>
-          <button onclick="window.open('${ad.link || "#"}', '_blank')">
-            Learn More
-          </button>
-        </div>
-      `;
-    });
-  });
-}
-<!-- =============================================
-===== ADS SYSTEM =====
-============================================= -->
-<script type="module">
-
-  import {
-    collection,
-    onSnapshot
-  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-  // =============================================
-  // ===== RUN ADS SYSTEM =====
-  // =============================================
-  function loadAds() {
-    onSnapshot(collection(db, "adverts"), (snapshot) => {
-      const container = document.getElementById("adContainer");
-      container.innerHTML = "";
-
-      snapshot.forEach((docItem) => {
-        const data = docItem.data();
-        const id = docItem.id;
-
-        container.innerHTML += `
-          <div class="ad-card">
-
-            <img src="${data.image}" />
-
-            <h3>${data.title}</h3>
-            <p>${data.description}</p>
-
-            <button onclick="openAd('${id}')">
-              Learn More
-            </button>
-
-          </div>
-        `;
-      });
-    });
-  }
-
-  // RUN SYSTEM
-  loadAds();
-
-</script>
-
-<!-- =============================================
-===== BRICK NOTIFY SYSTEM =====
-============================================= -->
-<script>
-
-window.BrickNotify = {
-  container: null,
-  maxVisible: 4,
-  defaultDuration: 5000,
-
-  init() {
-    this.container = document.getElementById("brickNotifyContainer");
-  },
-
-  show(options = {}) {
-    if (!this.container) this.init();
-
-    const title = options.title || "ARIFA";
-    const message = options.message || "";
-    const icon = options.icon || "fa-bell";
-    const duration = options.duration || this.defaultDuration;
-    const onClose = options.onClose || null;
-    const showTimer = options.showTimer !== false;
-
-    const notifyEl = document.createElement("div");
-    notifyEl.className = "brick-notify";
-
-    notifyEl.innerHTML = `
-      <div class="brick-icon"><i class="fas ${icon}"></i></div>
-      <div class="brick-content">
-        <div class="brick-title">${title}</div>
-        <div class="brick-message">${message}</div>
-      </div>
-      <button class="brick-close" onclick="BrickNotify._dismiss(this.parentElement, true)">&times;</button>
-      ${showTimer ? `<div class="brick-timer-bar" style="animation-duration: ${duration}ms;"></div>` : ""}
-    `;
-
-    this.container.appendChild(notifyEl);
-
-    const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
-    if (allNotifies.length > this.maxVisible) {
-      this._dismiss(allNotifies[0], false);
-    }
-
-    const autoTimer = setTimeout(() => {
-      this._dismiss(notifyEl, false);
-      if (onClose) onClose();
-    }, duration);
-
-    notifyEl._autoTimer = autoTimer;
-  },
-
-  _dismiss(element, manual) {
-    if (!element || element.classList.contains("removing")) return;
-
-    if (element._autoTimer) clearTimeout(element._autoTimer);
-
-    element.classList.add("removing");
-
-    setTimeout(() => {
-      if (element.parentElement) {
-        element.parentElement.removeChild(element);
-      }
-    }, 650);
-  },
-
-  success(message, title) {
-    this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
-  },
-
-  error(message, title) {
-    this.show({ title: title || "MAKOSA", message, icon: "fa-times-circle", duration: 6000 });
-  },
-
-  info(message, title) {
-    this.show({ title: title || "MAELEZO", message, icon: "fa-info-circle" });
-  },
-
-  warning(message, title) {
-    this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
-  },
-
-  identifierSent(childName) {
-    this.show({
-      title: "UTAMBULISHO UMEWASILISHWA",
-      message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama.`,
-      icon: "fa-user-shield",
-      duration: 6000,
-    });
-  }
-};
+        identifierSent(childName) {
+          this.show({
+            title: "UTAMBULISHO UMEWASILISHWA",
+            message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama. Usipoonekana na mtambulishi mwingine yeyote.`,
+            icon: "fa-user-shield",
+            duration: 6000,
+          });
         },
         adminReceived(childName, identifierName) {
           this.show({
