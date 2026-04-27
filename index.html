@@ -3166,7 +3166,7 @@
       </div>
     </div>
 
-    <!-- MAIN LOGIC SCRIPT -->
+    ```javascript
     <script type="module">
       // =============================================
       // ===== FIREBASE IMPORTS & CONFIG =====
@@ -3497,14 +3497,16 @@
             },
             {
               title: "Tangazo la Mfumo kwa Wananchi wote",
-              description:"Ewe Mwananchi, Kaa tayari, Muda wowote Tutakualika kwenye hafla ya kuhamasisha jamii kuhusu ulinzi wa mtoto.",
+              description:
+                "Ewe Mwananchi, Kaa tayari, Muda wowote Tutakualika kwenye hafla ya kuhamasisha jamii kuhusu ulinzi wa mtoto.",
               image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/bangoncrs.jpg",
               createdAt: serverTimestamp(),
               likes: 6590,
             },
             {
               title: "Success Story: Mtoto Juma Aunganishwa Katika Familia yake ",
-              description: "Juma (miaka 5) aliyekuwa amepotea kwa mwezi mmoja amepatikana sasa kutokana na mfumo wetu wa NCRS.",
+              description:
+                "Juma (miaka 5) aliyekuwa amepotea kwa mwezi mmoja amepatikana sasa kutokana na mfumo wetu wa NCRS.",
               image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/imageadvert2.jpg",
               createdAt: serverTimestamp(),
               likes: 7543,
@@ -3593,9 +3595,7 @@
             document
               .querySelectorAll(".nav-dropdown.show-dropdown, .dropdown.show-dropdown")
               .forEach((openDropdown) => {
-                if (openDropdown !== container) {
-                  openDropdown.classList.remove("show-dropdown");
-                }
+                if (openDropdown !== container) openDropdown.classList.remove("show-dropdown");
               });
             container.classList.toggle("show-dropdown");
           });
@@ -3630,8 +3630,7 @@
           if (el) el.style.display = val;
         };
 
-        const el = document.getElementById("authModal");
-        if (el) el.classList.remove("hidden");
+        document.getElementById("authModal").classList.remove("hidden");
 
         hide("mainSiteContent");
         hide("logoutBtn");
@@ -3643,9 +3642,9 @@
         hide("messagesBtn");
         hide("manageUsersLink");
         hide("manageAdvertsLink");
-        hide("msgAdminBtn");       // NEW: hide identifier buttons
-        hide("myMessagesBtn");     // NEW: hide identifier buttons
-        hide("myMessagesDropdownLink"); // NEW
+        hide("msgAdminBtn");
+        hide("myMessagesBtn");
+        hide("myMessagesDropdownLink");
 
         show("loginBtn");
 
@@ -3689,9 +3688,9 @@
           document.getElementById("messagesBtn").style.display = "inline-flex";
           document.getElementById("manageUsersLink").style.display = "flex";
           document.getElementById("manageAdvertsLink").style.display = "flex";
-          document.getElementById("msgAdminBtn").style.display = "none";          // Admin doesn't need this
-          document.getElementById("myMessagesBtn").style.display = "none";        // Admin doesn't need this
-          document.getElementById("myMessagesDropdownLink").style.display = "none"; // Admin doesn't need this
+          document.getElementById("msgAdminBtn").style.display = "none";
+          document.getElementById("myMessagesBtn").style.display = "none";
+          document.getElementById("myMessagesDropdownLink").style.display = "none";
           updateAdminBadge();
           updateMessagesBadge();
           listenForInboxUnread(); // Real-time inbox unread count for admin
@@ -3731,7 +3730,6 @@
       window.updateAdminBadge = async function () {
         const snap = await getDocs(collection(db, "child"));
         const child = snap.docs.map((d) => d.data());
-
         const hasIdentifications = child.some((c) => c.identifiers && c.identifiers.length > 0);
         const badge = document.getElementById("adminNotifyBadge");
         if (hasIdentifications) badge.style.display = "block";
@@ -3741,7 +3739,6 @@
       window.updateMessagesBadge = async function () {
         const snap = await getDocs(collection(db, "child"));
         const child = snap.docs.map((d) => d.data());
-
         let count = 0;
         child.forEach((c) => {
           if (c.identifiers) count += c.identifiers.length;
@@ -3862,9 +3859,7 @@
         let existingIndex = -1;
         const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-        if (snap.size > 0) {
-          existingIndex = users.findIndex((u) => u.email === googleUser.email);
-        }
+        if (snap.size > 0) existingIndex = users.findIndex((u) => u.email === googleUser.email);
 
         if (existingIndex === -1) {
           await addDoc(collection(db, "users"), googleUser);
@@ -3889,7 +3884,1183 @@
         let base64Url = token.split(".")[1];
         let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
         let jsonPayload = decodeURIComponent(
-          at
+          atob(base64)
+            .split("")
+            .map(function (c) {
+              return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+            })
+            .join(""),
+        );
+        return JSON.parse(jsonPayload);
+      }
+
+      window.handleLogin = async function (e) {
+        e.preventDefault();
+        const em = document.getElementById("loginEmail").value;
+        const p = document.getElementById("loginPassword").value;
+
+        const q = query(collection(db, "users"), where("email", "==", em), where("password", "==", p));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const user = snap.docs[0].data();
+          user.id = snap.docs[0].id;
+
+          if (document.getElementById("rememberMe").checked) {
+            await setDoc(doc(db, "appData", "rememberedEmail"), { email: em });
+          }
+
+          sessionStorage.setItem("currentUser", JSON.stringify(user));
+          showSite(user);
+        } else {
+          BrickNotify.error("Invalid credentials.");
+        }
+      };
+
+      window.handleForgotCheck = async function (e) {
+        e.preventDefault();
+        const email = document.getElementById("forgotEmail").value;
+        const q = query(collection(db, "users"), where("email", "==", email));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          document.getElementById("forgotStep1").style.display = "none";
+          document.getElementById("forgotStep2").style.display = "block";
+          document.getElementById("resetEmailDisplay").innerText = email;
+          document.getElementById("resetEmailHidden").value = email;
+        } else {
+          BrickNotify.error("Akaunti haipatikani.");
+        }
+      };
+
+      window.handlePasswordReset = async function (e) {
+        e.preventDefault();
+        const email = document.getElementById("resetEmailHidden").value;
+        const newPass = document.getElementById("newPassword").value;
+        const confirmPass = document.getElementById("confirmNewPassword").value;
+
+        if (newPass !== confirmPass) {
+          BrickNotify.error("Nenosiri hazilingani!");
+          return;
+        }
+
+        const q = query(collection(db, "users"), where("email", "==", email));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const userId = snap.docs[0].id;
+          await updateDoc(doc(db, "users", userId), { password: newPass });
+          BrickNotify.success("Nenosiri limebadilishwa kikamilifu.");
+          toggleAuthForm("login");
+        }
+      };
+
+      window.openContactSupport = function () {
+        document.getElementById("contactModal").classList.remove("hidden");
+      };
+      window.closeContactSupport = function () {
+        document.getElementById("contactModal").classList.add("hidden");
+      };
+      window.handleContactSupport = function (e) {
+        e.preventDefault();
+        BrickNotify.success("Ombi la msaada limetumwa.");
+        closeContactSupport();
+      };
+
+      // =============================================
+      // ===== NEWS SYSTEM LOGIC =====
+      // =============================================
+      function initNewsSystem() {
+        const q = query(collection(db, "news"), orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+          const grid = document.getElementById("newsGrid");
+          grid.innerHTML = "";
+          const newsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+          if (newsList.length === 0) {
+            grid.innerHTML = "<p style='text-align:center; color:#888;'>No news updates yet.</p>";
+            return;
+          }
+
+          newsList.forEach((news) => {
+            const date = news.createdAt ? new Date(news.createdAt.seconds * 1000).toLocaleDateString() : "";
+            const card = document.createElement("div");
+            card.className = "news-card";
+            card.innerHTML = `
+              <img src="${news.image}" class="news-img" alt="News Image">
+              <div class="news-body">
+                <div class="news-meta"><span><i class="far fa-calendar-alt"></i> ${date}</span></div>
+                <div class="news-title" onclick="window.openNewsModal('${news.id}')">${news.title}</div>
+                <div class="news-desc-preview">${news.desc}</div>
+                <div class="news-actions">
+                  <button class="like-btn" onclick="event.stopPropagation(); window.likeNews('${news.id}')">
+                    <i class="fas fa-thumbs-up"></i> <span class="like-count">${news.likes || 0}</span>
+                  </button>
+                  <div class="share-buttons">
+                     <button class="share-btn wa" onclick="event.stopPropagation(); window.shareCardToWA('${encodeURIComponent(news.title)}', '${encodeURIComponent(window.location.href)}')"><i class="fab fa-whatsapp"></i></button>
+                     <button class="share-btn fb" onclick="event.stopPropagation(); window.shareCardToFB('${encodeURIComponent(window.location.href)}')"><i class="fab fa-facebook-f"></i></button>
+                  </div>
+                </div>
+              </div>`;
+            grid.appendChild(card);
+          });
+        });
+      }
+
+      window.openNewsModal = async function (newsId) {
+        const docRef = doc(db, "news", newsId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const news = docSnap.data();
+          currentNewsItem = { id: newsId, ...news };
+          document.getElementById("modalNewsImg").src = news.image;
+          document.getElementById("modalNewsTitle").innerText = news.title;
+          document.getElementById("modalNewsDesc").innerText = news.desc;
+          document.getElementById("modalNewsDate").innerText = news.createdAt
+            ? new Date(news.createdAt.seconds * 1000).toLocaleString()
+            : "";
+          document.getElementById("modalLikeCount").innerText = (news.likes || 0) + " Likes";
+          document.getElementById("newsModal").classList.remove("hidden");
+        }
+      };
+      window.closeNewsModal = function () {
+        document.getElementById("newsModal").classList.add("hidden");
+      };
+      window.likeNews = async function (newsId) {
+        await updateDoc(doc(db, "news", newsId), { likes: increment(1) });
+        BrickNotify.success("Thanks for liking!");
+      };
+      window.handleLikeFromModal = function () {
+        if (currentNewsItem) window.likeNews(currentNewsItem.id);
+      };
+      window.shareCardToWA = function (title, url) {
+        window.open(`https://wa.me/?text=${title} ${url}`, "_blank");
+      };
+      window.shareCardToFB = function (url) {
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, "_blank");
+      };
+      window.shareToWA = function () {
+        if (currentNewsItem)
+          window.shareCardToWA(encodeURIComponent(currentNewsItem.title), encodeURIComponent(window.location.href));
+      };
+      window.shareToFB = function () {
+        if (currentNewsItem) window.shareCardToFB(encodeURIComponent(window.location.href));
+      };
+
+      // =============================================
+      // ===== CHILD CRUD (FIRESTORE) =====
+      // =============================================
+      window.renderChildTable = async function (queryStr = "") {
+        const tbody = document.getElementById("childTableBody");
+        const snap = await getDocs(collection(db, "child"));
+        let child = snap.docs.map((doc) => ({ docId: doc.id, ...doc.data() }));
+        child = child.map((c) => {
+          if (!c.identifiers) c.identifiers = [];
+          return c;
+        });
+
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
+        const isLoggedIn = user ? true : false;
+
+        tbody.innerHTML = "";
+        let filteredChild = queryStr
+          ? child.filter((c) => c.name.toLowerCase().includes(queryStr.toLowerCase()))
+          : child;
+        if (filteredChild.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding: 20px;">No data found.</td></tr>`;
+          return;
+        }
+
+        filteredChild.forEach((c) => {
+          let statusText = translations[currentLang].status_missing;
+          let statusClass = "missing";
+          if (c.status === "found") {
+            statusText = translations[currentLang].status_found;
+            statusClass = "found";
+          } else if (c.identifiers && c.identifiers.length >= 3) {
+            statusText = translations[currentLang].status_identified;
+            statusClass = "identified";
+          }
+
+          const statusHtml = `<span class="status-badge ${statusClass}">${statusText}</span>`;
+          const imgSrc = c.img || "https://via.placeholder.com/60";
+          const isNew = Date.now() - (c.createdAt || 0) < 86400000;
+          const newBadge = isNew ? `<span class="new-badge">NEW</span>` : "";
+
+          let identifyBtnHtml = "";
+          if (isLoggedIn) {
+            const count = c.identifiers ? c.identifiers.length : 0;
+            if (count >= 3) {
+              identifyBtnHtml = `<button class="btn-xs" disabled style="background:#ffc107; color:black; cursor:not-allowed;">Identified (3/3)</button>`;
+            } else {
+              if (isAdmin)
+                identifyBtnHtml = `<button class="btn-xs btn-notify-admin" onclick="openNotificationModal('${c.docId}')"><i class="fas fa-bell"></i> Identify (${count}/3)</button>`;
+              else
+                identifyBtnHtml = `<button class="btn-xs btn-notify" onclick="openNotificationModal('${c.docId}')"><i class="fas fa-bell"></i> Tambua Mtoto</button>`;
+            }
+          }
+
+          const imgCellHtml = `<img src="${imgSrc}" class="table-img" onclick="openViewChildModal('${c.docId}')">`;
+          tbody.innerHTML += `<tr>
+                    <td>${c.policeRb || "-"}</td><td>${imgCellHtml}</td><td><strong>${c.name}</strong> ${newBadge}</td>
+                    <td>${c.age}</td><td>${c.gender}</td><td>${c.region || "-"}</td><td>${c.district || "-"}</td>
+                    <td>${c.ward || "-"}</td><td>${c.location || "-"}</td><td>${statusHtml}</td>
+                    <td style="font-size:0.85rem">${c.remarks || "-"}</td><td>${identifyBtnHtml}</td>
+                 ${isAdmin ? `<td style="text-align:center;"><button class="btn-delete" onclick="deleteChild('${c.docId}')"><i class="fas fa-trash"></i></button></td>` : ""}
+                </tr>`;
+        });
+      };
+
+      window.searchTable = function () {
+        renderChildTable(document.getElementById("myInput").value);
+      };
+      window.openAddChildModal = function () {
+        document.getElementById("addChildModal").classList.remove("hidden");
+      };
+      window.closeAddChildModal = function () {
+        document.getElementById("addChildModal").classList.add("hidden");
+      };
+
+      window.handleAddChild = function (e) {
+        e.preventDefault();
+        const fi = document.getElementById("child_image");
+        if (fi.files && fi.files[0]) {
+          const reader = new FileReader();
+          reader.onload = (evt) => saveChildData(evt.target.result);
+          reader.readAsDataURL(fi.files[0]);
+        } else saveChildData(null);
+      };
+
+      async function saveChildData(imgData) {
+        const newChild = {
+          id: Date.now(),
+          policeRb: document.getElementById("child_police_rb").value,
+          name: document.getElementById("child_name").value,
+          age: parseInt(document.getElementById("child_age").value) || 0,
+          gender: document.getElementById("child_gender").value,
+          region: document.getElementById("child_region").value,
+          district: document.getElementById("child_district").value,
+          ward: document.getElementById("child_ward").value,
+          location: document.getElementById("child_location").value,
+          status: document.getElementById("child_status").value,
+          remarks: document.getElementById("child_remarks").value,
+          img: imgData,
+          createdAt: serverTimestamp(),
+          identifiers: [],
+        };
+        await addDoc(collection(db, "child"), newChild);
+        closeAddChildModal();
+        document.querySelector('form[onsubmit="handleAddChild(event)"]').reset();
+        BrickNotify.success(translations[currentLang].alert_child_added);
+        renderChildTable();
+      }
+
+      window.deleteChild = async function (id) {
+        if (confirm("Are you sure you want to delete this child?")) {
+          await deleteDoc(doc(db, "child", id));
+          BrickNotify.success("Child deleted.");
+          renderChildTable();
+        }
+      };
+
+      // =============================================
+      // ===== VIEW CHILD & POSTER =====
+      // =============================================
+      let currentViewChild = null;
+      let currentPosterRatio = "1:1";
+      const canvasWidth = 1080;
+
+      window.openViewChildModal = async function (id) {
+        const docRef = doc(db, "child", id);
+        const docSnap = await getDoc(docRef);
+        let child = null;
+        if (docSnap.exists()) child = { id: docSnap.id, ...docSnap.data() };
+
+        if (child) {
+          currentViewChild = child;
+          document.getElementById("viewChildModal").classList.remove("hidden");
+          document.querySelectorAll(".ratio-btn").forEach((b) => b.classList.remove("active"));
+          document.querySelector(".ratio-btn").classList.add("active");
+          currentPosterRatio = "1:1";
+          drawChildPoster();
+
+          const user = JSON.parse(sessionStorage.getItem("currentUser"));
+          const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
+          const viewSection = document.getElementById("viewIdentifiersSection");
+          const viewList = document.getElementById("viewIdentifierList");
+
+          if (isAdmin && currentViewChild.identifiers && currentViewChild.identifiers.length > 0) {
+            viewSection.style.display = "block";
+            viewList.innerHTML = "";
+            currentViewChild.identifiers.forEach((id, index) => {
+              const reply = id.adminReply || "";
+              viewList.innerHTML += `
+                <div class="identifier-item">
+                    <strong>#${index + 1} ${id.name}</strong><br>
+                    <span>Contact: ${id.contact}</span><br>
+                    <span style="font-style:italic;">"${id.message}"</span><br>
+                    <small>${new Date(id.timestamp.seconds ? id.timestamp.seconds * 1000 : id.timestamp).toLocaleString()}</small>
+                    <div class="identifier-actions">
+                        ${
+                          reply
+                            ? `<div class="reply-display"><strong>Admin Reply:</strong> ${reply}</div>`
+                            : `
+                        <input type="text" class="admin-reply-input" id="reply-${index}" placeholder="Type reply...">
+                        <button class="reply-btn" onclick="saveAdminReply('${currentViewChild.id}', ${index})">Send Reply</button>`
+                        }
+                    </div>
+                </div>`;
+            });
+          } else {
+            viewSection.style.display = "none";
+          }
+        }
+      };
+
+      window.closeViewChildModal = function () {
+        document.getElementById("viewChildModal").classList.add("hidden");
+      };
+
+      window.saveAdminReply = async function (childId, identifierIndex) {
+        const input = document.getElementById(`reply-${identifierIndex}`);
+        const message = input.value;
+        if (!message) return;
+        const childRef = doc(db, "child", childId);
+        const childSnap = await getDoc(childRef);
+        if (childSnap.exists()) {
+          const data = childSnap.data();
+          const identifiers = data.identifiers || [];
+          if (identifiers[identifierIndex]) {
+            identifiers[identifierIndex].adminReply = message;
+            await updateDoc(childRef, { identifiers: identifiers });
+            BrickNotify.success("Jibu limehifadhiwa.");
+            openViewChildModal(childId);
+          }
+        }
+      };
+
+      window.setPosterRatio = function (r, event) {
+        currentPosterRatio = r;
+        document.querySelectorAll(".ratio-btn").forEach((b) => b.classList.remove("active"));
+        if (event?.target) event.target.classList.add("active");
+        drawChildPoster();
+      };
+
+      window.drawChildPoster = function () {
+        if (!currentViewChild) return;
+        const canvas = document.getElementById("posterCanvas");
+        const ctx = canvas.getContext("2d");
+        let height = currentPosterRatio === "4:5" ? canvasWidth * 1.25 : canvasWidth;
+        canvas.width = canvasWidth;
+        canvas.height = height;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        let statusColor = "#e63946";
+        let statusText = "Mtoto Amepotea";
+        let subText = "Missing Child";
+        if (currentViewChild.status === "found") {
+          statusColor = "#2b8a3e";
+          statusText = "Mtoto Amepatikana";
+          subText = "Found Child";
+        } else if (currentViewChild.identifiers && currentViewChild.identifiers.length >= 3) {
+          statusColor = "#f4a261";
+          statusText = "Ametambuliwa";
+          subText = "Identified";
+        }
+
+        ctx.fillStyle = statusColor;
+        ctx.fillRect(0, 0, canvas.width, 220);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 80px Montserrat, Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(statusText, canvas.width / 2, 130);
+        ctx.font = "bold 35px Roboto, Arial, sans-serif";
+        ctx.fillText(subText, canvas.width / 2, 180);
+
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = currentViewChild.img || "https://via.placeholder.com/150";
+        img.onload = function () {
+          const imgSize = canvasWidth - 200;
+          ctx.drawImage(img, 100, 240, imgSize, imgSize);
+          drawPosterText(ctx, canvas, 240 + imgSize + 50);
+        };
+        img.onerror = function () {
+          ctx.fillStyle = "#eeeeee";
+          ctx.fillRect(100, 240, canvasWidth - 200, canvasWidth - 200);
+          ctx.fillStyle = "#aaaaaa";
+          ctx.font = "40px sans-serif";
+          ctx.fillText("Hakuna Picha", canvas.width / 2, 240 + (canvasWidth - 200) / 2);
+          drawPosterText(ctx, canvas, 240 + (canvasWidth - 200) + 50);
+        };
+      };
+
+      window.drawPosterText = function (ctx, canvas, startY) {
+        const c = currentViewChild;
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#333333";
+        ctx.font = "bold 60px Montserrat, Arial, sans-serif";
+        ctx.fillText(c.name, canvas.width / 2, startY);
+        ctx.font = "35px Roboto, Arial, sans-serif";
+        ctx.fillStyle = "#555555";
+        let y = startY + 60;
+        const lineHeight = 50;
+        ctx.fillText(`Age: ${c.age} | Gender: ${c.gender}`, canvas.width / 2, y);
+        y += lineHeight;
+        if (c.location) {
+          ctx.fillText(`Last Seen: ${c.location}`, canvas.width / 2, y);
+          y += lineHeight;
+        }
+        if (c.region) {
+          ctx.fillText(`Region: ${c.region}, ${c.district || ""}`, canvas.width / 2, y);
+          y += lineHeight;
+        }
+        if (c.policeRb) {
+          ctx.fillStyle = "#003366";
+          ctx.fillText(`RB: ${c.policeRb}`, canvas.width / 2, y);
+          y += lineHeight;
+        }
+        ctx.fillStyle = "#003366";
+        ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 25px Roboto, Arial, sans-serif";
+        ctx.fillText("From: NATIONAL CHILD REUNIFICATION SYSTEM", canvas.width / 2, canvas.height - 40);
+      };
+
+      window.downloadPoster = function (format) {
+        const canvas = document.getElementById("posterCanvas");
+        const link = document.createElement("a");
+        link.download = `${currentViewChild.name}_poster.${format}`;
+        link.href = canvas.toDataURL(`image/${format}`, 0.9);
+        link.click();
+      };
+
+      // =============================================
+      // ===== IDENTIFICATION / NOTIFICATION =====
+      // =============================================
+      window.openNotificationModal = async function (childId) {
+        const childRef = doc(db, "child", childId);
+        const snap = await getDoc(childRef);
+        let child = null;
+        if (snap.exists()) child = { id: snap.id, ...snap.data() };
+
+        if (child) {
+          if (!child.identifiers) child.identifiers = [];
+          if (child.identifiers.length >= 3) {
+            BrickNotify.warning(translations[currentLang].alert_identified);
+            return;
+          }
+          document.getElementById("notify_child_id").value = childId;
+          const user = JSON.parse(sessionStorage.getItem("currentUser"));
+          const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
+          const privacyShield = document.getElementById("privacyShieldBlock");
+          const adminInfo = document.getElementById("adminIdentifyInfo");
+          const genericInfo = document.getElementById("genericIdentifyInfo");
+
+          if (isAdmin) {
+            privacyShield.style.display = "none";
+            adminInfo.style.display = "block";
+            genericInfo.style.display = "none";
+            document.getElementById("notifyChildName").innerText = child.name;
+            document.getElementById("identifyCounter").innerText = `Identifications: ${child.identifiers.length}/3`;
+            document.getElementById("notifyChildStatus").innerText = child.status;
+          } else {
+            privacyShield.style.display = "block";
+            adminInfo.style.display = "none";
+            genericInfo.style.display = "block";
+            document.getElementById("notifyChildNameGeneric").innerText = child.name;
+            document.getElementById("notifyChildStatusGeneric").innerText =
+              child.status === "found" ? "Amepatikana" : "Hajapatikana";
+            document.getElementById("notifyChildStatusGeneric").className =
+              `status-badge ${child.status === "found" ? "found" : "missing"}`;
+          }
+          document.getElementById("notificationModal").classList.remove("hidden");
+        }
+      };
+
+      window.closeNotificationModal = function () {
+        document.getElementById("notificationModal").classList.add("hidden");
+      };
+
+      window.handleNotification = async function (e) {
+        e.preventDefault();
+        const childId = document.getElementById("notify_child_id").value;
+        const childRef = doc(db, "child", childId);
+        const snap = await getDoc(childRef);
+
+        if (snap.exists()) {
+          let child = snap.data();
+          if (!child.identifiers) child.identifiers = [];
+          if (child.identifiers.length >= 3) {
+            BrickNotify.warning(translations[currentLang].alert_identified);
+            return;
+          }
+
+          const identifierName = document.getElementById("notify_name").value.trim();
+          const identifierContact = document.getElementById("notify_contact").value.trim();
+          const identifierMessage = document.getElementById("notify_message").value.trim();
+
+          if (!identifierName || !identifierContact || !identifierMessage) {
+            BrickNotify.error("Tafadhali jaza sehemu zote.");
+            return;
+          }
+
+          const newIdentification = {
+            name: identifierName,
+            contact: identifierContact,
+            message: identifierMessage,
+            timestamp: serverTimestamp(),
+            adminReply: null,
+          };
+          child.identifiers.push(newIdentification);
+
+          let becameIdentified = false;
+          if (child.identifiers.length >= 3) {
+            child.status = "identified";
+            becameIdentified = true;
+          }
+
+          await updateDoc(childRef, { identifiers: child.identifiers, status: child.status });
+
+          const user = JSON.parse(sessionStorage.getItem("currentUser"));
+          const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
+
+          if (isAdmin) {
+            BrickNotify.identifierSent(child.name);
+            if (becameIdentified)
+              setTimeout(() => {
+                BrickNotify.adminFullyIdentified(child.name);
+              }, 1500);
+          } else {
+            BrickNotify.identifierSent(child.name);
+            setTimeout(() => {
+              BrickNotify.privacyWarning();
+            }, 2500);
+          }
+          updateAdminBadge();
+          updateMessagesBadge();
+          renderChildTable();
+        }
+      };
+
+      function loadNotifications() {
+        const tableBody = document.getElementById("notificationTableBody");
+        onSnapshot(collection(db, "child"), (snapshot) => {
+          tableBody.innerHTML = "";
+          snapshot.forEach((docSnap) => {
+            const child = docSnap.data();
+            if (child.identifiers && child.identifiers.length > 0) {
+              child.identifiers.forEach((id) => {
+                tableBody.innerHTML += `<tr><td>${child.name}</td><td>${id.name}</td><td>${id.contact}</td><td>${id.message}</td><td>${id.timestamp?.seconds ? new Date(id.timestamp.seconds * 1000).toLocaleString() : "-"}</td></tr>`;
+              });
+            }
+          });
+        });
+      }
+      loadNotifications();
+
+      // =============================================
+      // ===== USER MANAGEMENT =====
+      // =============================================
+      window.openUserManagement = async function () {
+        const u = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!u || (u.role !== "Administrator" && u.role !== "Super Administrator")) return;
+        const snap = await getDocs(collection(db, "users"));
+        const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const tbody = document.getElementById("managementTableBody");
+        tbody.innerHTML = "";
+
+        users.forEach((user) => {
+          tbody.innerHTML += `<tr><td>${user.fname} ${user.lname}</td><td>${user.email}</td><td><span class="status-badge ${user.role === "Administrator" || user.role === "Super Administrator" ? "missing" : "found"}">${user.role}</span></td><td>${user.task || "None"}</td><td><button class="btn-xs" style="background:#17a2b8; color:white;" onclick="editUser('${user.id}')">Edit</button>${user.role !== "Super Administrator" ? `<button class="btn-xs btn-delete" onclick="deleteUser('${user.id}')">Delete</button>` : ""}</td></tr>`;
+        });
+        document.getElementById("userManagementModal").classList.remove("hidden");
+      };
+
+      window.closeUserManagement = function () {
+        document.getElementById("userManagementModal").classList.add("hidden");
+      };
+
+      window.editUser = async function (id) {
+        const snap = await getDoc(doc(db, "users", id));
+        if (snap.exists()) {
+          const user = snap.data();
+          document.getElementById("editUserId").value = id;
+          document.getElementById("editFname").value = user.fname;
+          document.getElementById("editLname").value = user.lname;
+          document.getElementById("editEmail").value = user.email;
+          document.getElementById("editRole").value = user.role;
+          document.getElementById("editTask").value = user.task || "";
+          document.getElementById("editUserModal").classList.remove("hidden");
+        }
+      };
+
+      window.closeEditUserModal = function () {
+        document.getElementById("editUserModal").classList.add("hidden");
+      };
+
+      window.saveUserEdit = async function (e) {
+        e.preventDefault();
+        const id = document.getElementById("editUserId").value;
+        const updates = {
+          fname: document.getElementById("editFname").value,
+          lname: document.getElementById("editLname").value,
+          role: document.getElementById("editRole").value,
+          task: document.getElementById("editTask").value,
+        };
+
+        const snap = await getDocs(collection(db, "users"));
+        const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const superCount = users.filter((u) => u.role === "Super Administrator").length;
+        const adminCount = users.filter((u) => u.role === "Administrator").length;
+        const currentUser = await getDoc(doc(db, "users", id));
+        const currentRole = currentUser.data().role;
+
+        if (updates.role === "Super Administrator" && superCount >= 1 && currentRole !== "Super Administrator") {
+          BrickNotify.error("Only one Super Administrator allowed.");
+          return;
+        }
+        if (updates.role === "Administrator" && adminCount >= 1 && currentRole !== "Administrator") {
+          BrickNotify.error("Only one Administrator allowed.");
+          return;
+        }
+
+        await updateDoc(doc(db, "users", id), updates);
+        BrickNotify.success("User updated successfully.");
+        closeEditUserModal();
+        openUserManagement();
+      };
+
+      window.deleteUser = async function (id) {
+        if (confirm("Are you sure?")) {
+          await deleteDoc(doc(db, "users", id));
+          BrickNotify.success("User deleted.");
+          openUserManagement();
+        }
+      };
+
+      // =============================================
+      // ===== DASHBOARD & EXPORTS =====
+      // =============================================
+      window.showNotificationReport = async function () {
+        const u = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!u || (u.role !== "Administrator" && u.role !== "Super Administrator")) return;
+        const t = document.getElementById("notificationTableBody");
+        t.innerHTML = "";
+        const snap = await getDocs(collection(db, "child"));
+        let child = snap.docs.map((d) => d.data());
+        let hasRecords = false;
+        child.forEach((child) => {
+          if (child.identifiers && child.identifiers.length > 0) {
+            hasRecords = true;
+            child.identifiers.forEach((id) => {
+              t.innerHTML += `<tr><td><strong>${child.name}</strong></td><td>${id.name || ""}</td><td>${id.contact || ""}</td><td>${id.message || ""}</td><td>${id.timestamp ? new Date(id.timestamp.seconds ? id.timestamp.seconds * 1000 : id.timestamp).toLocaleString() : ""}</td></tr>`;
+            });
+          }
+        });
+        if (!hasRecords) t.innerHTML = `<tr><td colspan="5" style="text-align:center;">No records found</td></tr>`;
+        document.getElementById("notificationReportModal").classList.remove("hidden");
+      };
+      window.closeNotificationReportModal = function () {
+        document.getElementById("notificationReportModal").classList.add("hidden");
+      };
+
+      const charts = {};
+      window.showDashboard = async function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+          BrickNotify.error("Hakikisha ruhusa.");
+          return;
+        }
+        document.getElementById("dashboardModal").classList.remove("hidden");
+        await loadDashboardData();
+      };
+      window.closeDashboard = function () {
+        document.getElementById("dashboardModal").classList.add("hidden");
+      };
+      window.downloadChart = function (chartId) {
+        const chartInstance = charts[chartId];
+        if (chartInstance) {
+          const link = document.createElement("a");
+          link.download = chartId + ".png";
+          link.href = chartInstance.toBase64Image();
+          link.click();
+        }
+      };
+      async function loadDashboardData() {
+        const snap = await getDocs(collection(db, "child"));
+        const child = snap.docs.map((doc) => doc.data());
+        document.getElementById("metricTotal").innerText = child.length;
+      }
+
+      window.getTableData = async function () {
+        const snap = await getDocs(collection(db, "child"));
+        const child = snap.docs.map((doc) => doc.data());
+        const headers = [
+          ["Police RB", "Name", "Age", "Gender", "Region", "District", "Ward", "Location", "Status", "Remarks"],
+        ];
+        const data = child.map((c) => [
+          c.policeRb,
+          c.name,
+          c.age,
+          c.gender,
+          c.region,
+          c.district,
+          c.ward,
+          c.location,
+          c.status,
+          c.remarks,
+        ]);
+        return { headers, data };
+      };
+      window.exportPDF = async function () {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.text("NCRS Report", 14, 20);
+        const { headers, data } = await getTableData();
+        doc.save("NCRS_Report.pdf");
+      };
+
+      // =============================================
+      // ===== MESSAGES BOX LOGIC (ADMIN) =====
+      // =============================================
+      window.openMessagesBox = async function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+          BrickNotify.error("Access Denied.");
+          return;
+        }
+
+        document.getElementById("messagesModal").classList.remove("hidden");
+        // Default to identifiers tab
+        switchMsgTab("identifiers");
+
+        const tbody = document.getElementById("messagesTableBody");
+        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center;'>Loading messages...</td></tr>";
+
+        try {
+          const snap = await getDocs(collection(db, "child"));
+          const children = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          tbody.innerHTML = "";
+          let messageCount = 0;
+
+          for (const child of children) {
+            if (child.identifiers && Array.isArray(child.identifiers)) {
+              child.identifiers.forEach((identifier) => {
+                messageCount++;
+                let dateStr = "";
+                if (identifier.timestamp) {
+                  const ts = identifier.timestamp.seconds ? identifier.timestamp.seconds * 1000 : identifier.timestamp;
+                  dateStr = new Date(ts).toLocaleString();
+                }
+                const replyStatus = identifier.adminReply
+                  ? `<span style="color:green; font-size:0.8em;"><i class="fas fa-check"></i> Replied</span>`
+                  : `<span style="color:orange; font-size:0.8em;">Pending</span>`;
+                tbody.innerHTML += `<tr><td><strong>${child.name}</strong></td><td>${identifier.name || ""}</td><td>${identifier.contact || ""}</td><td>${identifier.message || ""}</td><td>${dateStr}</td><td><button class="msg-action-btn call" onclick="window.location.href='tel:${identifier.contact}'"><i class="fas fa-phone"></i></button><button class="msg-action-btn copy" onclick="navigator.clipboard.writeText('${identifier.contact}');BrickNotify.success('Copied')"><i class="fas fa-copy"></i></button>${replyStatus}</td></tr>`;
+              });
+            }
+          }
+          if (messageCount === 0)
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No messages found.</td></tr>`;
+        } catch (error) {
+          console.error("Error:", error);
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red;">Error loading.</td></tr>`;
+        }
+      };
+
+      window.closeMessagesBox = function () {
+        document.getElementById("messagesModal").classList.add("hidden");
+      };
+
+      // Tab Switching for Admin Messages Modal
+      window.switchMsgTab = function (tabName) {
+        document.querySelectorAll(".msg-tab").forEach((t) => t.classList.remove("active"));
+        document.querySelectorAll(".msg-tab-panel").forEach((p) => p.classList.remove("active"));
+        if (tabName === "identifiers") {
+          document.querySelector(".msg-tab:nth-child(1)").classList.add("active");
+          document.getElementById("tabIdentifiers").classList.add("active");
+        } else {
+          document.querySelector(".msg-tab:nth-child(2)").classList.add("active");
+          document.getElementById("tabInbox").classList.add("active");
+          loadAdminInbox();
+        }
+      };
+
+      // Load Inbox for Admin
+      window.loadAdminInbox = async function () {
+        const listDiv = document.getElementById("adminInboxList");
+        listDiv.innerHTML = "<p style='text-align:center;'>Loading inbox...</p>";
+
+        try {
+          const q = query(collection(db, "inbox"), orderBy("createdAt", "desc"));
+          const snap = await getDocs(q);
+          listDiv.innerHTML = "";
+
+          if (snap.empty) {
+            listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>Inbox is empty.</p>";
+            return;
+          }
+
+          snap.forEach((d) => {
+            const msg = d.data();
+            const dateStr = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "";
+            const isReplied = !!msg.adminReply;
+            const unreadClass = !isReplied ? "unread" : "";
+
+            listDiv.innerHTML += `
+              <div class="inbox-msg-card ${unreadClass}">
+                <div class="msg-header">
+                  <div>
+                    <div class="msg-sender">${msg.senderName} <span class="msg-sender-email">(${msg.senderEmail})</span></div>
+                    ${msg.senderPhone ? `<div class="msg-phone"><i class="fas fa-phone"></i> ${msg.senderPhone}</div>` : ""}
+                  </div>
+                  <div class="msg-date">${dateStr}</div>
+                </div>
+                <div class="msg-subject">${msg.subject || "No Subject"}</div>
+                <div class="msg-body">${msg.message}</div>
+                ${
+                  isReplied
+                    ? `
+                  <div class="admin-reply-section">
+                    <div class="reply-label">Your Reply:</div>
+                    <div class="reply-text">${msg.adminReply}</div>
+                    <div class="reply-date">${msg.replyTimestamp ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}</div>
+                  </div>
+                `
+                    : `
+                  <div class="admin-reply-input-area">
+                    <textarea id="inbox-reply-${d.id}" placeholder="Type your reply..."></textarea>
+                    <button onclick="sendAdminInboxReply('${d.id}')">Reply</button>
+                  </div>
+                `
+                }
+              </div>`;
+          });
+        } catch (err) {
+          console.error(err);
+          listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading inbox.</p>";
+        }
+      };
+
+      // Admin Replies to Inbox Message
+      window.sendAdminInboxReply = async function (msgId) {
+        const textarea = document.getElementById(`inbox-reply-${msgId}`);
+        const replyText = textarea ? textarea.value.trim() : "";
+        if (!replyText) {
+          BrickNotify.error("Please type a reply first.");
+          return;
+        }
+
+        try {
+          await updateDoc(doc(db, "inbox", msgId), {
+            adminReply: replyText,
+            replyTimestamp: serverTimestamp(),
+            status: "replied",
+          });
+          BrickNotify.success("Reply sent successfully.");
+          loadAdminInbox();
+        } catch (err) {
+          console.error(err);
+          BrickNotify.error("Failed to send reply.");
+        }
+      };
+
+      // Real-time listener for Admin Inbox Unread Count
+      window.listenForInboxUnread = function () {
+        const q = query(collection(db, "inbox"), where("status", "==", "unread"));
+        onSnapshot(q, (snap) => {
+          const count = snap.size;
+          const badge = document.getElementById("inboxUnreadBadge");
+          if (count > 0) {
+            if (badge) {
+              badge.innerText = count;
+              badge.style.display = "inline-flex";
+            }
+          } else {
+            if (badge) badge.style.display = "none";
+          }
+        });
+      };
+
+      // =============================================
+      // ===== IDENTIFIER ↔ ADMIN MESSAGING =====
+      // =============================================
+
+      // 1. Open Send Message Modal
+      window.openSendMessageModal = function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user) {
+          BrickNotify.error("Please login first.");
+          return;
+        }
+        document.getElementById("inboxSubject").value = "";
+        document.getElementById("inboxPhone").value = user.phone || "";
+        document.getElementById("inboxMessage").value = "";
+        document.getElementById("sendMessageModal").classList.remove("hidden");
+      };
+      window.closeSendMessageModal = function () {
+        document.getElementById("sendMessageModal").classList.add("hidden");
+      };
+
+      // 2. Handle Send Message to Admin
+      window.handleSendAdminMessage = async function (e) {
+        e.preventDefault();
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user) {
+          BrickNotify.error("Please login first.");
+          return;
+        }
+
+        const msgData = {
+          senderId: user.id || user.email, // Handle Google Auth IDs safely
+          senderName: `${user.fname} ${user.lname}`,
+          senderEmail: user.email,
+          senderPhone: document.getElementById("inboxPhone").value.trim(),
+          subject: document.getElementById("inboxSubject").value.trim(),
+          message: document.getElementById("inboxMessage").value.trim(),
+          adminReply: null,
+          replyTimestamp: null,
+          status: "unread",
+          createdAt: serverTimestamp(),
+        };
+
+        if (!msgData.subject || !msgData.message) {
+          BrickNotify.error("Tafadhali jaza mada na ujumbe.");
+          return;
+        }
+
+        try {
+          await addDoc(collection(db, "inbox"), msgData);
+          BrickNotify.success("Ujumbe umetumwa kwa Msimamizi.");
+          closeSendMessageModal();
+        } catch (err) {
+          console.error(err);
+          BrickNotify.error("Ujumbe haukutumwa. Jaribu tena.");
+        }
+      };
+
+      // 3. Open My Messages Modal (Identifier viewing replies)
+      window.openMyMessages = async function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user) return;
+        document.getElementById("myMessagesModal").classList.remove("hidden");
+
+        const listDiv = document.getElementById("myMessagesList");
+        listDiv.innerHTML = "<p style='text-align:center;'>Loading...</p>";
+
+        try {
+          const q = query(
+            collection(db, "inbox"),
+            where("senderEmail", "==", user.email),
+            orderBy("createdAt", "desc"),
+          );
+          const snap = await getDocs(q);
+          listDiv.innerHTML = "";
+
+          if (snap.empty) {
+            listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>No messages sent yet.</p>";
+            return;
+          }
+
+          snap.forEach((d) => {
+            const msg = d.data();
+            const dateStr = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "";
+            const isReplied = !!msg.adminReply;
+
+            listDiv.innerHTML += `
+              <div class="sent-msg-card">
+                <div class="sent-header">
+                  <div class="sent-subject">${msg.subject || "No Subject"}</div>
+                  <div class="sent-date">${dateStr}</div>
+                </div>
+                <div class="sent-body">${msg.message}</div>
+                <div style="margin-top:5px;">
+                  <span class="sent-status ${isReplied ? "replied" : "pending"}">
+                    ${isReplied ? '<i class="fas fa-check-double"></i> Replied' : '<i class="fas fa-clock"></i> Pending'}
+                  </span>
+                </div>
+                ${
+                  isReplied
+                    ? `
+                  <div class="admin-reply-section">
+                    <div class="reply-label">Admin Reply:</div>
+                    <div class="reply-text">${msg.adminReply}</div>
+                    <div class="reply-date">${msg.replyTimestamp ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}</div>
+                  </div>
+                `
+                    : ""
+                }
+              </div>`;
+          });
+        } catch (err) {
+          console.error(err);
+          listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading messages.</p>";
+        }
+      };
+      window.closeMyMessages = function () {
+        document.getElementById("myMessagesModal").classList.add("hidden");
+      };
+
+      // 4. Real-time listener for Identifier's Unread Replies Badge
+      window.listenForMyMessageReplies = function (user) {
+        if (!user || !user.email) return;
+        const q = query(
+          collection(db, "inbox"),
+          where("senderEmail", "==", user.email),
+          where("status", "==", "replied"),
+        );
+        onSnapshot(q, (snap) => {
+          const count = snap.size;
+          const badge = document.getElementById("myMsgBadge");
+          const dropdownBadge = document.getElementById("myMsgDropdownBadge");
+          if (count > 0) {
+            if (badge) {
+              badge.innerText = count;
+              badge.style.display = "inline-block";
+            }
+            if (dropdownBadge) {
+              dropdownBadge.innerText = count;
+              dropdownBadge.style.display = "inline-flex";
+            }
+          } else {
+            if (badge) badge.style.display = "none";
+            if (dropdownBadge) dropdownBadge.style.display = "none";
+          }
+        });
+      };
+
+      // =============================================
+      // ===== ADVERTISEMENT SYSTEM LOGIC =====
+      // =============================================
+      let adInterval;
+      let adIndex = 0;
+      let adList = [];
+
+      function initAdSystem() {
+        const q = query(collection(db, "adverts"), where("isActive", "==", true));
+        onSnapshot(q, (snapshot) => {
+          adList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          if (adList.length === 0) {
+            document.getElementById("ad-slider-wrapper").innerHTML =
+              "<div style='width:100%; text-align:center; color:#ccc;'>No active adverts</div>";
+            document.getElementById("ad-bar-container").style.display = "none";
+          } else {
+            document.getElementById("ad-bar-container").style.display = "flex";
+            renderAdSlider();
+          }
+        });
+      }
+
+      function renderAdSlider() {
+        const container = document.getElementById("ad-slider-wrapper");
+        container.innerHTML = "";
+        adList.forEach((ad, idx) => {
+          const div = document.createElement("div");
+          div.className = `ad-slide ${idx === 0 ? "active" : ""}`;
+          div.innerHTML = `<div style="flex:1; display:flex; align-items:center; gap:15px;"><div style="display:flex; gap:12px; align-items:flex-start;"><img src="${ad.image}" style="width:160px; height:160px; object-fit:cover; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1);"><div><h4 style="margin:0; color:var(--primary); font-size:1.1rem;">${ad.title}</h4><p style="margin:5px 0 0; color:#666; font-size:0.9rem;">${ad.description}</p></div></div></div>`;
+          container.appendChild(div);
+        });
+        startAdRotation();
+      }
+
+      function startAdRotation() {
+        clearInterval(adInterval);
+        if (adList.length <= 1) return;
+        const progress = document.getElementById("ad-progress");
+        adIndex = 0;
+        progress.style.transition = "none";
+        progress.style.width = "0%";
+        setTimeout(() => {
+          progress.style.transition = "width 5s linear";
+          progress.style.width = "100%";
+        }, 50);
+        adInterval = setInterval(() => {
+          const slides = document.querySelectorAll(".ad-slide");
+          slides[adIndex].classList.remove("active");
+          adIndex = (adIndex + 1) % adList.length;
+          slides[adIndex].classList.add("active");
+          progress.style.transition = "none";
+          progress.style.width = "0%";
+          setTimeout(() => {
+            progress.style.transition = "width 5s linear";
+            progress.style.width = "100%";
+          }, 50);
+        }, 5000);
+      }
+
+      window.closeAdBar = function () {
+        document.getElementById("ad-bar-container").style.display = "none";
+      };
+
+      window.openManageAdverts = async function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+          BrickNotify.error("Access Denied.");
+          return;
+        }
+        document.getElementById("manageAdvertsModal").classList.remove("hidden");
+        loadAdminAdList();
+      };
+      window.closeManageAdverts = function () {
+        document.getElementById("manageAdvertsModal").classList.add("hidden");
+      };
+
+      async function loadAdminAdList() {
+        const listContainer = document.getElementById("adminAdList");
+        listContainer.innerHTML = "Loading...";
+        const snap = await getDocs(collection(db, "adverts"));
+        const adverts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        listContainer.innerHTML = "";
+        if (adverts.length === 0)
+          listContainer.innerHTML = "<p style='color:#999; text-align:center;'>No adverts found.</p>";
+
+        adverts.forEach((ad) => {
+          const item = document.createElement("div");
+          item.className = "admin-ad-item";
+          item.style.cssText =
+            "display:flex; gap:10px; padding:10px; border:1px solid #eee; border-radius:8px; align-items:center;";
+          item.innerHTML = `<img src="${ad.image}" style="width:60px; height:60px; object-fit:contain; border-radius:4px; border:1px solid #ddd;"><div style="flex:1; padding:0 10px;"><h5 style="margin:0; font-weight:bold;">${ad.title}</h5><p style="margin:0; font-size:0.8rem; color:#666;">${ad.description.substring(0, 50)}...</p><span class="status-badge ${ad.isActive ? "found" : "missing"}" style="font-size:0.7rem; padding:2px 6px;">${ad.isActive ? "Active" : "Disabled"}</span></div><div style="display:flex; flex-direction:column; gap:5px;"><button class="btn-xs ${ad.isActive ? "btn-delete" : "btn-view"}" onclick="window.toggleAdvert('${ad.id}', ${ad.isActive})">${ad.isActive ? "Disable" : "Enable"}</button><button class="btn-xs btn-delete" onclick="window.deleteAdvert('${ad.id}')"><i class="fas fa-trash"></i></button></div>`;
+          listContainer.appendChild(item);
+        });
+      }
+
+      window.handleAddAdvert = async function (e) {
+        e.preventDefault();
+        const fileInput = document.getElementById("adImage");
+        if (fileInput.files && fileInput.files[0]) {
+          const reader = new FileReader();
+          reader.onload = async (evt) => {
+            const base64 = evt.target.result;
+            if (base64.length > 1000000) {
+              BrickNotify.error("Image too large.");
+              return;
+            }
+            await addDoc(collection(db, "adverts"), {
+              title: document.getElementById("adTitle").value,
+              description: document.getElementById("adDescription").value,
+              image: base64,
+              isActive: true,
+              createdAt: serverTimestamp(),
+            });
+            document.querySelector('form[onsubmit="window.handleAddAdvert(event)"]').reset();
+            BrickNotify.success("Advert added.");
+            loadAdminAdList();
+          };
+          reader.readAsDataURL(fileInput.files[0]);
+        }
+      };
+
+      window.toggleAdvert = async function (id, currentStatus) {
+        await updateDoc(doc(db, "adverts", id), { isActive: !currentStatus });
+        loadAdminAdList();
+      };
+      window.deleteAdvert = async function (id) {
+        if (confirm("Are you sure?")) {
+          await deleteDoc(doc(db, "adverts", id));
+          loadAdminAdList();
+        }
+      };
     </script>
   </body>
 </html>
