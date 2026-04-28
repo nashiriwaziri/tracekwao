@@ -3235,7 +3235,9 @@
       // =============================================
       // ===== FIREBASE IMPORTS & CONFIG =====
       // =============================================
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import {
+       arrayUnion
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
       import {
         getFirestore,
         collection,
@@ -3266,6 +3268,104 @@
 
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
+       async function saveIdentifierToChild(childId, identifierData) {
+  try {
+    const childRef = doc(db, "children", childId);
+
+    await updateDoc(childRef, {
+      identifiers: arrayUnion({
+        name: identifierData.name,
+        contact: identifierData.contact,
+        message: identifierData.message,
+        timestamp: new Date(),
+      }),
+      identifyCount: increment(1),
+    });
+
+  } catch (err) {
+    console.error("Error saving identifier:", err);
+  }
+}
+window.submitIdentification = async function (e) {
+  e.preventDefault();
+
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+  const childId = sessionStorage.getItem("currentChildIdentifyId");
+
+  if (!user || !childId) {
+    BrickNotify.error("Session expired.");
+    return;
+  }
+
+  const name = document.getElementById("identifyName").value.trim();
+  const contact = document.getElementById("identifyContact").value.trim();
+  const message = document.getElementById("identifyMessage").value.trim();
+
+  if (!name || !contact || !message) {
+    BrickNotify.error("Fill all fields.");
+    return;
+  }
+
+  try {
+
+    // 1. SAVE IDENTIFIER KWENYE CHILD
+    await saveIdentifierToChild(childId, {
+      name,
+      contact,
+      message
+    });
+
+    // 2. TUMA MESSAGE KWENYE ADMIN INBOX
+    await addDoc(collection(db, "inbox"), {
+      senderId: user.id || user.email,
+      senderName: name,
+      senderEmail: user.email,
+      senderPhone: contact,
+
+      subject: "Child Identification",
+      message: message,
+
+      childId: childId,
+      type: "identification",
+
+      adminReply: null,
+      replyTimestamp: null,
+      status: "unread",
+      createdAt: serverTimestamp(),
+    });
+
+    BrickNotify.identifierSent("Mtoto");
+
+    closeIdentifyModal();
+
+    // refresh user messages
+    if (window.openMyMessages) openMyMessages();
+
+  } catch (err) {
+    console.error(err);
+    BrickNotify.error("Failed to submit.");
+  }
+};
+window.sendAdminReply = async function (msgId, replyText) {
+  if (!replyText) {
+    BrickNotify.error("Write reply first.");
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, "inbox", msgId), {
+      adminReply: replyText,
+      replyTimestamp: serverTimestamp(),
+      status: "replied",
+    });
+
+    BrickNotify.success("Reply sent");
+
+  } catch (err) {
+    console.error(err);
+    BrickNotify.error("Reply failed");
+  }
+};
 
       // =============================================
       // ===== GLOBAL UTILITIES =====
@@ -5008,7 +5108,6 @@ window.handleSendAdminMessage = async function (e) {
 // =====================================================
 // 3. OPEN MY MESSAGES (USER VIEW)
 // =====================================================
-
 window.openMyMessages = async function () {
   const user = JSON.parse(sessionStorage.getItem("currentUser"));
   if (!user) return;
@@ -5036,49 +5135,72 @@ window.openMyMessages = async function () {
     snap.forEach((d) => {
       const msg = d.data();
 
-      // ✅ SAFE DATE
+      // ===== SAFE CREATED TIME =====
       const dateStr = msg.createdAt?.seconds
         ? new Date(msg.createdAt.seconds * 1000).toLocaleString()
-        : "";
+        : "Unknown time";
 
+      // ===== REPLY CHECK =====
       const isReplied = !!msg.adminReply;
 
-      listDiv.innerHTML += `
-        <div class="sent-msg-card">
+      // ===== REPLY TIME SAFE =====
+      const replyTime = msg.replyTimestamp?.seconds
+        ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString()
+        : "";
 
-          <div class="sent-header">
-            <div class="sent-subject">${msg.subject || "No Subject"}</div>
-            <div class="sent-date">${dateStr}</div>
+      // ===== STATUS TEXT =====
+      const statusText = isReplied ? "Replied" : "Pending";
+
+      listDiv.innerHTML += `
+        <div class="sent-msg-card" style="padding:12px; border:1px solid #ddd; margin-bottom:12px; border-radius:10px; background:#fff;">
+
+          <!-- HEADER -->
+          <div class="sent-header" style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <div class="sent-subject" style="font-weight:bold;">
+              ${msg.subject || "No Subject"}
+            </div>
+            <div class="sent-date" style="font-size:12px; color:gray;">
+              ${dateStr}
+            </div>
           </div>
 
-          <div class="sent-body">${msg.message || ""}</div>
+          <!-- MESSAGE BODY -->
+          <div class="sent-body" style="margin-bottom:8px;">
+            ${msg.message || ""}
+          </div>
 
-          <div style="margin-top:5px;">
-            <span class="sent-status ${isReplied ? "replied" : "pending"}">
-              ${
-                isReplied
-                  ? '<i class="fas fa-check-double"></i> Replied'
-                  : '<i class="fas fa-clock"></i> Pending'
-              }
+          <!-- STATUS -->
+          <div>
+            <span class="sent-status ${isReplied ? "replied" : "pending"}" style="font-size:12px; padding:3px 8px; border-radius:5px; background:${isReplied ? "#d4edda" : "#fff3cd"}; color:${isReplied ? "#155724" : "#856404"};">
+              ${statusText}
             </span>
           </div>
 
+          <!-- ADMIN REPLY -->
           ${
             isReplied
               ? `
-              <div class="admin-reply-section">
-                <div class="reply-label">Admin Reply:</div>
-                <div class="reply-text">${msg.adminReply}</div>
-                <div class="reply-date">
-                  ${
-                    msg.replyTimestamp?.seconds
-                      ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString()
-                      : ""
-                  }
+              <div class="admin-reply-section" style="margin-top:10px; padding:8px; background:#f8f9fa; border-radius:8px;">
+
+                <div class="reply-label" style="font-weight:bold; margin-bottom:4px;">
+                  Admin Reply:
                 </div>
+
+                <div class="reply-text" style="margin-bottom:5px;">
+                  ${msg.adminReply}
+                </div>
+
+                <div class="reply-date" style="font-size:12px; color:gray;">
+                  ${replyTime}
+                </div>
+
               </div>
             `
-              : ""
+              : `
+              <div style="margin-top:8px; font-size:12px; color:gray;">
+                Waiting for admin reply...
+              </div>
+            `
           }
 
         </div>
@@ -5087,7 +5209,8 @@ window.openMyMessages = async function () {
 
   } catch (err) {
     console.error(err);
-    listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading messages.</p>";
+    listDiv.innerHTML =
+      "<p style='color:red; text-align:center;'>Error loading messages.</p>";
   }
 };
 
