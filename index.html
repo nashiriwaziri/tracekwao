@@ -4899,9 +4899,152 @@ const db = getFirestore(app);
                 }
               </div>`;
           });
+              // =============================================
+      // ===== IDENTIFIER ↔ ADMIN MESSAGING =====
+      // =============================================
+
+      // 1. Open Send Message Modal
+      window.openSendMessageModal = function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user) {
+          BrickNotify.error("Please login first.");
+          return;
+        }
+        document.getElementById("inboxSubject").value = "";
+        document.getElementById("inboxPhone").value = user.phone || "";
+        document.getElementById("inboxMessage").value = "";
+        document.getElementById("sendMessageModal").classList.remove("hidden");
+      };
+      window.closeSendMessageModal = function () {
+        document.getElementById("sendMessageModal").classList.add("hidden");
+      };
+
+      // 2. Handle Send Message to Admin
+      window.handleSendAdminMessage = async function (e) {
+        e.preventDefault();
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user) {
+          BrickNotify.error("Please login first.");
+          return;
+        }
+
+        const msgData = {
+          senderId: user.id || user.email, // Handle Google Auth IDs safely
+          senderName: `${user.fname} ${user.lname}`,
+          senderEmail: user.email,
+          senderPhone: document.getElementById("inboxPhone").value.trim(),
+          subject: document.getElementById("inboxSubject").value.trim(),
+          message: document.getElementById("inboxMessage").value.trim(),
+          adminReply: null,
+          replyTimestamp: null,
+          status: "unread",
+          createdAt: serverTimestamp(),
+        };
+
+        if (!msgData.subject || !msgData.message) {
+          BrickNotify.error("Tafadhali jaza mada na ujumbe.");
+          return;
+        }
+
+        try {
+          await addDoc(collection(db, "inbox"), msgData);
+          BrickNotify.success("Ujumbe umetumwa kwa Msimamizi.");
+          closeSendMessageModal();
         } catch (err) {
           console.error(err);
-          listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading messages.</p>";
+          BrickNotify.error("Ujumbe haukutumwa. Jaribu tena.");
+        }
+      };
+
+      // 3. Open My Messages Modal (Identifier viewing replies)
+      window.openMyMessages = async function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user) return;
+        document.getElementById("myMessagesModal").classList.remove("hidden");
+
+        const listDiv = document.getElementById("myMessagesList");
+        listDiv.innerHTML = "<p style='text-align:center;'>Loading...</p>";
+
+        try {
+          const q = query(
+            collection(db, "inbox"),
+            where("senderEmail", "==", user.email),
+            orderBy("createdAt", "desc"),
+          );
+          const snap = await getDocs(q);
+          listDiv.innerHTML = "";
+
+          if (snap.empty) {
+            listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>No messages sent yet.</p>";
+            return;
+          }
+
+          snap.forEach((d) => {
+            const msg = d.data();
+            const dateStr = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "";
+            const isReplied = !!msg.adminReply;
+
+            listDiv.innerHTML += `
+              <div class="sent-msg-card">
+                <div class="sent-header">
+                  <div class="sent-subject">${msg.subject || "No Subject"}</div>
+                  <div class="sent-date">${dateStr}</div>
+                </div>
+                <div class="sent-body">${msg.message}</div>
+                <div style="margin-top:5px;">
+                  <span class="sent-status ${isReplied ? "replied" : "pending"}">
+                    ${isReplied ? '<i class="fas fa-check-double"></i> Replied' : '<i class="fas fa-clock"></i> Pending'}
+                  </span>
+                </div>
+                ${
+                  isReplied
+                    ? `
+                  <div class="admin-reply-section">
+                    <div class="reply-label">Admin Reply:</div>
+                    <div class="reply-text">${msg.adminReply}</div>
+                    <div class="reply-date">${msg.replyTimestamp ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}</div>
+                  </div>
+                `
+                    : ""
+                }
+              </div>`;
+          });
+        async function loadMessages(userId) {
+  try {
+    const q = query(
+      collection(db, "messages"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
+
+    const snapshot = await getDocs(q);
+
+    const container = document.getElementById("messagesContainer");
+    container.innerHTML = "";
+
+    if (snapshot.empty) {
+      container.innerHTML = "<p>Hakuna ujumbe bado</p>";
+      return;
+    }
+
+    snapshot.forEach((docItem) => {
+      const data = docItem.data();
+
+      container.innerHTML += `
+        <div class="msg">
+          <p><b>Ujumbe:</b> ${data.message}</p>
+          <p><b>Jibu:</b> ${data.reply || "Bado hakuna jibu"}</p>
+        </div>
+      `;
+    });
+
+  } catch (error) {
+    console.error("Error loading messages:", error);
+    document.getElementById("messagesContainer").innerHTML =
+      "<p style='color:red;'>Error loading messages</p>";
+  }
+}
+
         }
       };
       window.closeMyMessages = function () {
