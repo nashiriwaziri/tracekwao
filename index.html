@@ -4717,39 +4717,191 @@
         const { headers, data } = await getTableData();
         doc.save("NCRS_Report.pdf");
       };
+
+      // =============================================
+      // ===== MESSAGES BOX LOGIC (ADMIN) =====
+      // =============================================
+      window.openMessagesBox = async function () {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+          BrickNotify.error("Access Denied.");
+          return;
+        }
+
+        document.getElementById("messagesModal").classList.remove("hidden");
+        // Default to identifiers tab
+        switchMsgTab("identifiers");
+
+        const tbody = document.getElementById("messagesTableBody");
+        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center;'>Loading messages...</td></tr>";
+
+        try {
+          const snap = await getDocs(collection(db, "child"));
+          const children = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          tbody.innerHTML = "";
+          let messageCount = 0;
+
+          for (const child of children) {
+            if (child.identifiers && Array.isArray(child.identifiers)) {
+              child.identifiers.forEach((identifier) => {
+                messageCount++;
+                let dateStr = "";
+                if (identifier.timestamp) {
+                  const ts = identifier.timestamp.seconds ? identifier.timestamp.seconds * 1000 : identifier.timestamp;
+                  dateStr = new Date(ts).toLocaleString();
+                }
+                const replyStatus = identifier.adminReply
+                  ? `<span style="color:green; font-size:0.8em;"><i class="fas fa-check"></i> Replied</span>`
+                  : `<span style="color:orange; font-size:0.8em;">Pending</span>`;
+                tbody.innerHTML += `<tr><td><strong>${child.name}</strong></td><td>${identifier.name || ""}</td><td>${identifier.contact || ""}</td><td>${identifier.message || ""}</td><td>${dateStr}</td><td><button class="msg-action-btn call" onclick="window.location.href='tel:${identifier.contact}'"><i class="fas fa-phone"></i></button><button class="msg-action-btn copy" onclick="navigator.clipboard.writeText('${identifier.contact}');BrickNotify.success('Copied')"><i class="fas fa-copy"></i></button>${replyStatus}</td></tr>`;
+              });
+            }
+          }
+          if (messageCount === 0)
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No messages found.</td></tr>`;
+        } catch (error) {
+          console.error("Error:", error);
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red;">Error loading.</td></tr>`;
+        }
+      };
+
+      window.closeMessagesBox = function () {
+        document.getElementById("messagesModal").classList.add("hidden");
+      };
+
+      // Tab Switching for Admin Messages Modal
+      window.switchMsgTab = function (tabName) {
+        document.querySelectorAll(".msg-tab").forEach((t) => t.classList.remove("active"));
+        document.querySelectorAll(".msg-tab-panel").forEach((p) => p.classList.remove("active"));
+        if (tabName === "identifiers") {
+          document.querySelector(".msg-tab:nth-child(1)").classList.add("active");
+          document.getElementById("tabIdentifiers").classList.add("active");
+        } else {
+          document.querySelector(".msg-tab:nth-child(2)").classList.add("active");
+          document.getElementById("tabInbox").classList.add("active");
+          loadAdminInbox();
+        }
+      };
+
+      // Load Inbox for Admin
+      window.loadAdminInbox = async function () {
+        const listDiv = document.getElementById("adminInboxList");
+        listDiv.innerHTML = "<p style='text-align:center;'>Loading inbox...</p>";
+
+        try {
+          const q = query(collection(db, "inbox"), orderBy("createdAt", "desc"));
+          const snap = await getDocs(q);
+          listDiv.innerHTML = "";
+
+          if (snap.empty) {
+            listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>Inbox is empty.</p>";
+            return;
+          }
+
+          snap.forEach((d) => {
+            const msg = d.data();
+            const dateStr = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "";
+            const isReplied = !!msg.adminReply;
+            const unreadClass = !isReplied ? "unread" : "";
+
+            listDiv.innerHTML += `
+              <div class="inbox-msg-card ${unreadClass}">
+                <div class="msg-header">
+                  <div>
+                    <div class="msg-sender">${msg.senderName} <span class="msg-sender-email">(${msg.senderEmail})</span></div>
+                    ${msg.senderPhone ? `<div class="msg-phone"><i class="fas fa-phone"></i> ${msg.senderPhone}</div>` : ""}
+                  </div>
+                  <div class="msg-date">${dateStr}</div>
+                </div>
+                <div class="msg-subject">${msg.subject || "No Subject"}</div>
+                <div class="msg-body">${msg.message}</div>
+                ${
+                  isReplied
+                    ? `
+                  <div class="admin-reply-section">
+                    <div class="reply-label">Your Reply:</div>
+                    <div class="reply-text">${msg.adminReply}</div>
+                    <div class="reply-date">${msg.replyTimestamp ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}</div>
+                  </div>
+                `
+                    : `
+                  <div class="admin-reply-input-area">
+                    <textarea id="inbox-reply-${d.id}" placeholder="Type your reply..."></textarea>
+                    <button onclick="sendAdminInboxReply('${d.id}')">Reply</button>
+                  </div>
+                `
+                }
+              </div>`;
+          });
+        } catch (err) {
+          console.error(err);
+          listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading inbox.</p>";
+        }
+      };
+
+      // Admin Replies to Inbox Message
+      window.sendAdminInboxReply = async function (msgId) {
+        const textarea = document.getElementById(`inbox-reply-${msgId}`);
+        const replyText = textarea ? textarea.value.trim() : "";
+        if (!replyText) {
+          BrickNotify.error("Please type a reply first.");
+          return;
+        }
+
+        try {
+          await updateDoc(doc(db, "inbox", msgId), {
+            adminReply: replyText,
+            replyTimestamp: serverTimestamp(),
+            status: "replied",
+          });
+          BrickNotify.success("Reply sent successfully.");
+          loadAdminInbox();
+        } catch (err) {
+          console.error(err);
+          BrickNotify.error("Failed to send reply.");
+        }
+      };
+
+      // Real-time listener for Admin Inbox Unread Count
+      window.listenForInboxUnread = function () {
+        const q = query(collection(db, "inbox"), where("status", "==", "unread"));
+        onSnapshot(q, (snap) => {
+          const count = snap.size;
+          const badge = document.getElementById("inboxUnreadBadge");
+          if (count > 0) {
+            if (badge) {
+              badge.innerText = count;
+              badge.style.display = "inline-flex";
+            }
+          } else {
+            if (badge) badge.style.display = "none";
+          }
+        });
+      };
+
       // =============================================
       // ===== IDENTIFIER ↔ ADMIN MESSAGING =====
       // =============================================
 
-      // =====================================================
-      // 1. OPEN / CLOSE SEND MESSAGE MODAL
-      // =====================================================
-
+      // 1. Open Send Message Modal
       window.openSendMessageModal = function () {
         const user = JSON.parse(sessionStorage.getItem("currentUser"));
         if (!user) {
           BrickNotify.error("Please login first.");
           return;
         }
-
         document.getElementById("inboxSubject").value = "";
         document.getElementById("inboxPhone").value = user.phone || "";
         document.getElementById("inboxMessage").value = "";
-
         document.getElementById("sendMessageModal").classList.remove("hidden");
       };
-
       window.closeSendMessageModal = function () {
         document.getElementById("sendMessageModal").classList.add("hidden");
       };
 
-      // =====================================================
-      // 2. SEND MESSAGE TO ADMIN
-      // =====================================================
-
+      // 2. Handle Send Message to Admin
       window.handleSendAdminMessage = async function (e) {
         e.preventDefault();
-
         const user = JSON.parse(sessionStorage.getItem("currentUser"));
         if (!user) {
           BrickNotify.error("Please login first.");
@@ -4757,13 +4909,12 @@
         }
 
         const msgData = {
-          senderId: user.id || user.email,
+          senderId: user.id || user.email, // Handle Google Auth IDs safely
           senderName: `${user.fname} ${user.lname}`,
           senderEmail: user.email,
           senderPhone: document.getElementById("inboxPhone").value.trim(),
           subject: document.getElementById("inboxSubject").value.trim(),
           message: document.getElementById("inboxMessage").value.trim(),
-
           adminReply: null,
           replyTimestamp: null,
           status: "unread",
@@ -4785,14 +4936,10 @@
         }
       };
 
-      // =====================================================
-      // 3. OPEN MY MESSAGES (USER VIEW)
-      // =====================================================
-
+      // 3. Open My Messages Modal (Identifier viewing replies)
       window.openMyMessages = async function () {
         const user = JSON.parse(sessionStorage.getItem("currentUser"));
         if (!user) return;
-
         document.getElementById("myMessagesModal").classList.remove("hidden");
 
         const listDiv = document.getElementById("myMessagesList");
@@ -4804,7 +4951,6 @@
             where("senderEmail", "==", user.email),
             orderBy("createdAt", "desc"),
           );
-
           const snap = await getDocs(q);
           listDiv.innerHTML = "";
 
@@ -4815,74 +4961,55 @@
 
           snap.forEach((d) => {
             const msg = d.data();
-
-            // ✅ SAFE DATE
-            const dateStr = msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "";
-
+            const dateStr = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "";
             const isReplied = !!msg.adminReply;
 
             listDiv.innerHTML += `
-        <div class="sent-msg-card">
-
-          <div class="sent-header">
-            <div class="sent-subject">${msg.subject || "No Subject"}</div>
-            <div class="sent-date">${dateStr}</div>
-          </div>
-
-          <div class="sent-body">${msg.message || ""}</div>
-
-          <div style="margin-top:5px;">
-            <span class="sent-status ${isReplied ? "replied" : "pending"}">
-              ${isReplied ? '<i class="fas fa-check-double"></i> Replied' : '<i class="fas fa-clock"></i> Pending'}
-            </span>
-          </div>
-
-          ${
-            isReplied
-              ? `
-              <div class="admin-reply-section">
-                <div class="reply-label">Admin Reply:</div>
-                <div class="reply-text">${msg.adminReply}</div>
-                <div class="reply-date">
-                  ${msg.replyTimestamp?.seconds ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}
+              <div class="sent-msg-card">
+                <div class="sent-header">
+                  <div class="sent-subject">${msg.subject || "No Subject"}</div>
+                  <div class="sent-date">${dateStr}</div>
                 </div>
-              </div>
-            `
-              : ""
-          }
-
-        </div>
-      `;
+                <div class="sent-body">${msg.message}</div>
+                <div style="margin-top:5px;">
+                  <span class="sent-status ${isReplied ? "replied" : "pending"}">
+                    ${isReplied ? '<i class="fas fa-check-double"></i> Replied' : '<i class="fas fa-clock"></i> Pending'}
+                  </span>
+                </div>
+                ${
+                  isReplied
+                    ? `
+                  <div class="admin-reply-section">
+                    <div class="reply-label">Admin Reply:</div>
+                    <div class="reply-text">${msg.adminReply}</div>
+                    <div class="reply-date">${msg.replyTimestamp ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}</div>
+                  </div>
+                `
+                    : ""
+                }
+              </div>`;
           });
         } catch (err) {
           console.error(err);
           listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading messages.</p>";
         }
       };
-
       window.closeMyMessages = function () {
         document.getElementById("myMessagesModal").classList.add("hidden");
       };
 
-      // =====================================================
-      // 4. REAL-TIME BADGE (USER)
-      // =====================================================
-
+      // 4. Real-time listener for Identifier's Unread Replies Badge
       window.listenForMyMessageReplies = function (user) {
         if (!user || !user.email) return;
-
         const q = query(
           collection(db, "inbox"),
           where("senderEmail", "==", user.email),
           where("status", "==", "replied"),
         );
-
         onSnapshot(q, (snap) => {
           const count = snap.size;
-
           const badge = document.getElementById("myMsgBadge");
           const dropdownBadge = document.getElementById("myMsgDropdownBadge");
-
           if (count > 0) {
             if (badge) {
               badge.innerText = count;
@@ -4897,87 +5024,6 @@
             if (dropdownBadge) dropdownBadge.style.display = "none";
           }
         });
-      };
-
-      // =====================================================
-      // 5. OPEN IDENTIFY MODAL
-      // =====================================================
-
-      window.openIdentifyModal = function (childId) {
-        const user = JSON.parse(sessionStorage.getItem("currentUser"));
-        if (!user) {
-          BrickNotify.error("Please login first.");
-          return;
-        }
-
-        sessionStorage.setItem("currentChildIdentifyId", childId);
-
-        document.getElementById("identifyName").value = `${user.fname} ${user.lname}`;
-        document.getElementById("identifyContact").value = user.phone || "";
-        document.getElementById("identifyMessage").value = "";
-
-        document.getElementById("identifyModal").classList.remove("hidden");
-      };
-
-      window.closeIdentifyModal = function () {
-        document.getElementById("identifyModal").classList.add("hidden");
-      };
-
-      // =====================================================
-      // 6. SUBMIT IDENTIFICATION → SEND TO ADMIN
-      // =====================================================
-
-      window.submitIdentification = async function (e) {
-        e.preventDefault();
-
-        const user = JSON.parse(sessionStorage.getItem("currentUser"));
-        const childId = sessionStorage.getItem("currentChildIdentifyId");
-
-        if (!user || !childId) {
-          BrickNotify.error("Session expired. Please try again.");
-          return;
-        }
-
-        const name = document.getElementById("identifyName").value.trim();
-        const contact = document.getElementById("identifyContact").value.trim();
-        const message = document.getElementById("identifyMessage").value.trim();
-
-        if (!name || !contact || !message) {
-          BrickNotify.error("Please fill all fields.");
-          return;
-        }
-
-        try {
-          await addDoc(collection(db, "inbox"), {
-            senderId: user.id || user.email,
-            senderName: name,
-            senderEmail: user.email,
-            senderPhone: contact,
-
-            subject: "Child Identification Report",
-            message: message,
-
-            childId: childId,
-            type: "identification", // ✅ FIXED
-
-            adminReply: null,
-            replyTimestamp: null,
-            status: "unread",
-            createdAt: serverTimestamp(),
-          });
-
-          BrickNotify.success("Identification sent to Admin successfully.");
-
-          closeIdentifyModal();
-
-          // OPTIONAL refresh
-          if (window.openMyMessages) {
-            openMyMessages();
-          }
-        } catch (err) {
-          console.error(err);
-          BrickNotify.error("Failed to send identification.");
-        }
       };
 
       // =============================================
