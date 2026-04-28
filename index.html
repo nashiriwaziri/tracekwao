@@ -5229,13 +5229,15 @@ anzishaMfumo();
         });
       };
 
-      // =============================================
-      // ===== ADVERTISEMENT SYSTEM LOGIC =====
-      // =============================================
-  let adInterval;
+// =============================================
+// ===== ADVERTISEMENT SYSTEM LOGIC =====
+// =============================================
+
+let adInterval;
 let adIndex = 0;
 let adList = [];
 
+// INIT SYSTEM
 function initAdSystem() {
   const q = query(collection(db, "adverts"), where("isActive", "==", true));
 
@@ -5256,7 +5258,9 @@ function initAdSystem() {
     startAdRotation();
   });
 }
-  function renderAdSlider() {
+
+// RENDER SLIDER
+function renderAdSlider() {
   const container = document.getElementById("ad-slider-wrapper");
   container.innerHTML = "";
 
@@ -5271,30 +5275,27 @@ function initAdSystem() {
         <p class="ad-desc">${ad.description}</p>
       </div>
     `;
-    div.onclick = () => funguaAdverts(ad);
 
-    // Optional UX improvement
+    div.onclick = () => funguaAdverts(ad);
     div.style.cursor = "pointer";
 
     container.appendChild(div);
   });
 }
-    container.appendChild(div);
-  });
-}
 
-      function startAdRotation() {
+// ROTATION
+function startAdRotation() {
   clearInterval(adInterval);
 
   if (adList.length <= 1) return;
 
-  const progress = document.getElementById("ad-progress");
   adIndex = 0;
-
   runProgress();
 
   adInterval = setInterval(() => {
     const slides = document.querySelectorAll(".ad-slide");
+
+    if (!slides.length) return;
 
     slides[adIndex].classList.remove("active");
     adIndex = (adIndex + 1) % adList.length;
@@ -5304,8 +5305,11 @@ function initAdSystem() {
   }, 5000);
 }
 
+// PROGRESS BAR
 function runProgress() {
   const progress = document.getElementById("ad-progress");
+
+  if (!progress) return;
 
   progress.style.transition = "none";
   progress.style.width = "0%";
@@ -5316,79 +5320,131 @@ function runProgress() {
   }, 50);
 }
 
-      window.closeAdBar = function () {
-        document.getElementById("ad-bar-container").style.display = "none";
-      };
+// CLOSE AD BAR
+window.closeAdBar = function () {
+  document.getElementById("ad-bar-container").style.display = "none";
+};
 
-      window.openManageAdverts = async function () {
-        const user = JSON.parse(sessionStorage.getItem("currentUser"));
-        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
-          BrickNotify.error("Access Denied.");
-          return;
-        }
-        document.getElementById("manageAdvertsModal").classList.remove("hidden");
-        loadAdminAdList();
-      };
-      window.closeManageAdverts = function () {
-        document.getElementById("manageAdvertsModal").classList.add("hidden");
-      };
+// OPEN ADMIN PANEL
+window.openManageAdverts = async function () {
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
 
-      async function loadAdminAdList() {
-        const listContainer = document.getElementById("adminAdList");
-        listContainer.innerHTML = "Loading...";
-        const snap = await getDocs(collection(db, "adverts"));
-        const adverts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        listContainer.innerHTML = "";
-        if (adverts.length === 0)
-          listContainer.innerHTML = "<p style='color:#999; text-align:center;'>No adverts found.</p>";
+  if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+    BrickNotify.error("Access Denied.");
+    return;
+  }
 
-        adverts.forEach((ad) => {
-          const item = document.createElement("div");
-          item.className = "admin-ad-item";
-          item.style.cssText =
-            "display:flex; gap:10px; padding:10px; border:1px solid #eee; border-radius:8px; align-items:center;";
-          item.innerHTML = `<img src="${ad.image}" style="width:60px; height:60px; object-fit:contain; border-radius:4px; border:1px solid #ddd;"><div style="flex:1; padding:0 10px;"><h5 style="margin:0; font-weight:bold;">${ad.title}</h5><p style="margin:0; font-size:0.8rem; color:#666;">${ad.description.substring(0, 50)}...</p><span class="status-badge ${ad.isActive ? "found" : "missing"}" style="font-size:0.7rem; padding:2px 6px;">${ad.isActive ? "Active" : "Disabled"}</span></div><div style="display:flex; flex-direction:column; gap:5px;"><button class="btn-xs ${ad.isActive ? "btn-delete" : "btn-view"}" onclick="window.toggleAdvert('${ad.id}', ${ad.isActive})">${ad.isActive ? "Disable" : "Enable"}</button><button class="btn-xs btn-delete" onclick="window.deleteAdvert('${ad.id}')"><i class="fas fa-trash"></i></button></div>`;
-          listContainer.appendChild(item);
-        });
-      }
+  document.getElementById("manageAdvertsModal").classList.remove("hidden");
+  loadAdminAdList();
+};
 
-      window.handleAddAdvert = async function (e) {
-        e.preventDefault();
-        const fileInput = document.getElementById("adImage");
-        if (fileInput.files && fileInput.files[0]) {
-          const reader = new FileReader();
-          reader.onload = async (evt) => {
-            const base64 = evt.target.result;
-            if (base64.length > 1000000) {
-              BrickNotify.error("Image too large.");
-              return;
-            }
-            await addDoc(collection(db, "adverts"), {
-              title: document.getElementById("adTitle").value,
-              description: document.getElementById("adDescription").value,
-              image: base64,
-              isActive: true,
-              createdAt: serverTimestamp(),
-            });
-            document.querySelector('form[onsubmit="window.handleAddAdvert(event)"]').reset();
-            BrickNotify.success("Advert added.");
-            loadAdminAdList();
-          };
-          reader.readAsDataURL(fileInput.files[0]);
-        }
-      };
+// CLOSE ADMIN PANEL
+window.closeManageAdverts = function () {
+  document.getElementById("manageAdvertsModal").classList.add("hidden");
+};
 
-      window.toggleAdvert = async function (id, currentStatus) {
-        await updateDoc(doc(db, "adverts", id), { isActive: !currentStatus });
-        loadAdminAdList();
-      };
-      window.deleteAdvert = async function (id) {
-        if (confirm("Are you sure?")) {
-          await deleteDoc(doc(db, "adverts", id));
-          loadAdminAdList();
-        }
-        // -----------------------------
-// FUNGUA ADVERTISEMENT 
+// LOAD ADMIN ADS
+async function loadAdminAdList() {
+  const listContainer = document.getElementById("adminAdList");
+  listContainer.innerHTML = "Loading...";
+
+  const snap = await getDocs(collection(db, "adverts"));
+  const adverts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  listContainer.innerHTML = "";
+
+  if (adverts.length === 0) {
+    listContainer.innerHTML =
+      "<p style='color:#999; text-align:center;'>No adverts found.</p>";
+    return;
+  }
+
+  adverts.forEach((ad) => {
+    const item = document.createElement("div");
+    item.className = "admin-ad-item";
+    item.style.cssText =
+      "display:flex; gap:10px; padding:10px; border:1px solid #eee; border-radius:8px; align-items:center;";
+
+    item.innerHTML = `
+      <img src="${ad.image}" style="width:60px; height:60px; object-fit:contain; border-radius:4px; border:1px solid #ddd;">
+      <div style="flex:1; padding:0 10px;">
+        <h5 style="margin:0;">${ad.title}</h5>
+        <p style="margin:0; font-size:0.8rem; color:#666;">
+          ${ad.description.substring(0, 50)}...
+        </p>
+        <span class="status-badge ${ad.isActive ? "found" : "missing"}">
+          ${ad.isActive ? "Active" : "Disabled"}
+        </span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:5px;">
+        <button onclick="window.toggleAdvert('${ad.id}', ${ad.isActive})">
+          ${ad.isActive ? "Disable" : "Enable"}
+        </button>
+        <button onclick="window.deleteAdvert('${ad.id}')">Delete</button>
+      </div>
+    `;
+
+    listContainer.appendChild(item);
+  });
+}
+
+// ADD ADVERT
+window.handleAddAdvert = async function (e) {
+  e.preventDefault();
+
+  const fileInput = document.getElementById("adImage");
+
+  if (!fileInput.files || !fileInput.files[0]) return;
+
+  const reader = new FileReader();
+
+  reader.onload = async (evt) => {
+    const base64 = evt.target.result;
+
+    if (base64.length > 1000000) {
+      BrickNotify.error("Image too large.");
+      return;
+    }
+
+    await addDoc(collection(db, "adverts"), {
+      title: document.getElementById("adTitle").value,
+      description: document.getElementById("adDescription").value,
+      image: base64,
+      isActive: true,
+      createdAt: serverTimestamp(),
+    });
+
+    document
+      .querySelector('form[onsubmit="window.handleAddAdvert(event)"]')
+      .reset();
+
+    BrickNotify.success("Advert added.");
+    loadAdminAdList();
+  };
+
+  reader.readAsDataURL(fileInput.files[0]);
+};
+
+// TOGGLE AD
+window.toggleAdvert = async function (id, currentStatus) {
+  await updateDoc(doc(db, "adverts", id), {
+    isActive: !currentStatus,
+  });
+
+  loadAdminAdList();
+};
+
+// DELETE AD
+window.deleteAdvert = async function (id) {
+  if (confirm("Are you sure?")) {
+    await deleteDoc(doc(db, "adverts", id));
+    loadAdminAdList();
+  }
+};
+
+// =============================
+// MODAL FUNCTIONS (FIXED PLACE)
+// =============================
 function funguaAdverts(habari) {
   document.getElementById("modalTitle").innerText = habari.title;
   document.getElementById("modalImage").src = habari.image;
@@ -5397,11 +5453,9 @@ function funguaAdverts(habari) {
   document.getElementById("advertsModal").style.display = "flex";
 }
 
-// Funga Modal
 function closeAdverts() {
   document.getElementById("advertsModal").style.display = "none";
 }
 </script>
-
-</body>
-</html>
+  </body>
+  </html>
