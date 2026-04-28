@@ -3231,7 +3231,6 @@
       </div>
     </div>
 
-    ```javascript
     <script type="module">
       // =============================================
       // ===== FIREBASE IMPORTS & CONFIG =====
@@ -5025,7 +5024,281 @@
           }
         });
       };
+        // =====================================================
+// 1. OPEN / CLOSE SEND MESSAGE MODAL
+// =====================================================
 
+window.openSendMessageModal = function () {
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+  if (!user) {
+    BrickNotify.error("Please login first.");
+    return;
+  }
+
+  document.getElementById("inboxSubject").value = "";
+  document.getElementById("inboxPhone").value = user.phone || "";
+  document.getElementById("inboxMessage").value = "";
+
+  document.getElementById("sendMessageModal").classList.remove("hidden");
+};
+
+window.closeSendMessageModal = function () {
+  document.getElementById("sendMessageModal").classList.add("hidden");
+};
+
+
+// =====================================================
+// 2. SEND MESSAGE TO ADMIN
+// =====================================================
+
+window.handleSendAdminMessage = async function (e) {
+  e.preventDefault();
+
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+  if (!user) {
+    BrickNotify.error("Please login first.");
+    return;
+  }
+
+  const msgData = {
+    senderId: user.id || user.email,
+    senderName: `${user.fname} ${user.lname}`,
+    senderEmail: user.email,
+    senderPhone: document.getElementById("inboxPhone").value.trim(),
+    subject: document.getElementById("inboxSubject").value.trim(),
+    message: document.getElementById("inboxMessage").value.trim(),
+
+    adminReply: null,
+    replyTimestamp: null,
+    status: "unread",
+    createdAt: serverTimestamp(),
+  };
+
+  if (!msgData.subject || !msgData.message) {
+    BrickNotify.error("Tafadhali jaza mada na ujumbe.");
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, "inbox"), msgData);
+    BrickNotify.success("Ujumbe umetumwa kwa Msimamizi.");
+    closeSendMessageModal();
+  } catch (err) {
+    console.error(err);
+    BrickNotify.error("Ujumbe haukutumwa. Jaribu tena.");
+  }
+};
+
+
+// =====================================================
+// 3. OPEN MY MESSAGES (USER VIEW)
+// =====================================================
+
+window.openMyMessages = async function () {
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+  if (!user) return;
+
+  document.getElementById("myMessagesModal").classList.remove("hidden");
+
+  const listDiv = document.getElementById("myMessagesList");
+  listDiv.innerHTML = "<p style='text-align:center;'>Loading...</p>";
+
+  try {
+    const q = query(
+      collection(db, "inbox"),
+      where("senderEmail", "==", user.email),
+      orderBy("createdAt", "desc")
+    );
+
+    const snap = await getDocs(q);
+    listDiv.innerHTML = "";
+
+    if (snap.empty) {
+      listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>No messages sent yet.</p>";
+      return;
+    }
+
+    snap.forEach((d) => {
+      const msg = d.data();
+
+      // ✅ SAFE DATE
+      const dateStr = msg.createdAt?.seconds
+        ? new Date(msg.createdAt.seconds * 1000).toLocaleString()
+        : "";
+
+      const isReplied = !!msg.adminReply;
+
+      listDiv.innerHTML += `
+        <div class="sent-msg-card">
+
+          <div class="sent-header">
+            <div class="sent-subject">${msg.subject || "No Subject"}</div>
+            <div class="sent-date">${dateStr}</div>
+          </div>
+
+          <div class="sent-body">${msg.message || ""}</div>
+
+          <div style="margin-top:5px;">
+            <span class="sent-status ${isReplied ? "replied" : "pending"}">
+              ${
+                isReplied
+                  ? '<i class="fas fa-check-double"></i> Replied'
+                  : '<i class="fas fa-clock"></i> Pending'
+              }
+            </span>
+          </div>
+
+          ${
+            isReplied
+              ? `
+              <div class="admin-reply-section">
+                <div class="reply-label">Admin Reply:</div>
+                <div class="reply-text">${msg.adminReply}</div>
+                <div class="reply-date">
+                  ${
+                    msg.replyTimestamp?.seconds
+                      ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString()
+                      : ""
+                  }
+                </div>
+              </div>
+            `
+              : ""
+          }
+
+        </div>
+      `;
+    });
+
+  } catch (err) {
+    console.error(err);
+    listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading messages.</p>";
+  }
+};
+
+window.closeMyMessages = function () {
+  document.getElementById("myMessagesModal").classList.add("hidden");
+};
+
+
+// =====================================================
+// 4. REAL-TIME BADGE (USER)
+// =====================================================
+
+window.listenForMyMessageReplies = function (user) {
+  if (!user || !user.email) return;
+
+  const q = query(
+    collection(db, "inbox"),
+    where("senderEmail", "==", user.email),
+    where("status", "==", "replied")
+  );
+
+  onSnapshot(q, (snap) => {
+    const count = snap.size;
+
+    const badge = document.getElementById("myMsgBadge");
+    const dropdownBadge = document.getElementById("myMsgDropdownBadge");
+
+    if (count > 0) {
+      if (badge) {
+        badge.innerText = count;
+        badge.style.display = "inline-block";
+      }
+      if (dropdownBadge) {
+        dropdownBadge.innerText = count;
+        dropdownBadge.style.display = "inline-flex";
+      }
+    } else {
+      if (badge) badge.style.display = "none";
+      if (dropdownBadge) dropdownBadge.style.display = "none";
+    }
+  });
+};
+
+
+// =====================================================
+// 5. OPEN IDENTIFY MODAL
+// =====================================================
+
+window.openIdentifyModal = function (childId) {
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+  if (!user) {
+    BrickNotify.error("Please login first.");
+    return;
+  }
+
+  sessionStorage.setItem("currentChildIdentifyId", childId);
+
+  document.getElementById("identifyName").value = `${user.fname} ${user.lname}`;
+  document.getElementById("identifyContact").value = user.phone || "";
+  document.getElementById("identifyMessage").value = "";
+
+  document.getElementById("identifyModal").classList.remove("hidden");
+};
+
+window.closeIdentifyModal = function () {
+  document.getElementById("identifyModal").classList.add("hidden");
+};
+
+
+// =====================================================
+// 6. SUBMIT IDENTIFICATION → SEND TO ADMIN
+// =====================================================
+
+window.submitIdentification = async function (e) {
+  e.preventDefault();
+
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+  const childId = sessionStorage.getItem("currentChildIdentifyId");
+
+  if (!user || !childId) {
+    BrickNotify.error("Session expired. Please try again.");
+    return;
+  }
+
+  const name = document.getElementById("identifyName").value.trim();
+  const contact = document.getElementById("identifyContact").value.trim();
+  const message = document.getElementById("identifyMessage").value.trim();
+
+  if (!name || !contact || !message) {
+    BrickNotify.error("Please fill all fields.");
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, "inbox"), {
+      senderId: user.id || user.email,
+      senderName: name,
+      senderEmail: user.email,
+      senderPhone: contact,
+
+      subject: "Child Identification Report",
+      message: message,
+
+      childId: childId,
+      type: "identification", // ✅ FIXED
+
+      adminReply: null,
+      replyTimestamp: null,
+      status: "unread",
+      createdAt: serverTimestamp(),
+    });
+
+    BrickNotify.success("Identification sent to Admin successfully.");
+
+    closeIdentifyModal();
+
+    // OPTIONAL refresh
+    if (window.openMyMessages) {
+      openMyMessages();
+    }
+
+  } catch (err) {
+    console.error(err);
+    BrickNotify.error("Failed to send identification.");
+  }
+};
       // =============================================
       // ===== ADVERTISEMENT SYSTEM LOGIC =====
       // =============================================
