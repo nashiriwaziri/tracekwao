@@ -2123,6 +2123,72 @@
     </style>
   </head>
   <body>
+<!-- SLIDER YA HABARI -->
+<div id="newsSlider" style="cursor:pointer;">
+  <img
+    id="newsImage"
+    style="width:100%; height:400px; object-fit:cover; border-radius:15px;"
+  />
+
+  <h2 id="newsTitle" style="color:#1565c0;"></h2>
+  <p id="newsDesc"></p>
+</div>
+
+<!-- MODAL YA KUSOMA ZAIDI -->
+<!-- MODAL YA KUSOMA HABARI (NEWS MODAL) -->
+<div
+  id="newsModal"
+  style="
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    padding: 20px;
+  "
+>
+  <div
+    style="
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 15px;
+      max-width: 700px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    "
+  >
+    <img
+      id="modalImage"
+      style="width: 100%; border-radius: 10px; margin-bottom: 15px;"
+    />
+
+    <h2 id="modalTitle" style="margin-bottom: 10px;"></h2>
+
+    <p id="modalText" style="line-height: 1.6;"></p>
+
+    <div style="text-align: right; margin-top: 20px;">
+      <button
+        onclick="fungaHabari()"
+        style="
+          background: #d32f2f;
+          color: white;
+          border: none;
+          padding: 10px 18px;
+          border-radius: 8px;
+          cursor: pointer;
+        "
+      >
+        Funga
+      </button>
+    </div>
+  </div>
+</div>
+
     <!-- ===== RED BRICK NOTIFICATION CONTAINER ===== -->
     <div class="brick-notify-container" id="brickNotifyContainer"></div>
 
@@ -3517,96 +3583,215 @@
       let currentNewsItem = null;
 
       // =============================================
-      // ===== FIREBASE HELPERS =====
-      // =============================================
-      async function ensureSuperAdmin() {
-        const snap = await getDocs(collection(db, "users"));
-        let users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+// ===== MSAADA WA FIREBASE (SYSTEM KAMILI) =====
+// =============================================
 
-        const targetEmail = "nashiriwaziri29@gmail.com";
-        const targetPassword = "WAZIRI2015";
+// -----------------------------
+// 1. KUHakikisha SUPER ADMIN
+// -----------------------------
+async function ensureSuperAdmin() {
+  const snap = await getDocs(collection(db, "watumiaji"));
+  let watumiaji = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-        const superAdmin = {
-          fname: "Nashiri",
-          lname: "Waziri",
-          email: targetEmail,
-          password: targetPassword,
-          phone: "+255714864117",
-          role: "Super Administrator",
-          photoUrl: null,
-          createdAt: Date.now(),
-        };
+  const baruaPepe = "nashiriwaziri29@gmail.com";
+  const nenosiri = "WAZIRI2015";
 
-        const adminIndex = users.findIndex((u) => u.email === targetEmail);
+  const superAdmin = {
+    jinaKwanza: "Nashiri",
+    jinaLaMwisho: "Waziri",
+    email: baruaPepe,
+    password: nenosiri,
+    simu: "+255714864117",
+    cheo: "Msimamizi Mkuu",
+    picha: null,
+    tareheYaKuundwa: Date.now(),
+  };
 
-        if (adminIndex !== -1) {
-          superAdmin.id = users[adminIndex].id;
-          await setDoc(doc(db, "users", superAdmin.id), superAdmin);
-        } else {
-          await addDoc(collection(db, "users"), superAdmin);
-        }
-      }
+  const index = watumiaji.findIndex((u) => u.email === baruaPepe);
 
-      async function ensureNewsData() {
-        const snap = await getDocs(query(collection(db, "news")));
-        if (snap.empty) {
-          const dummyNews = [
-            {
-              title: "NCRS Kuzindua Mfumo wa Simu (CP New App )",
-              description:
-                "Tunafurahi kutangaza kuwa hivi karibuni tutakamilisha programu mpya ya simu ili kusaidia katika utafutaji wa watoto waliopotea.",
-              image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/furahakatikafamilia.jpg",
-              createdAt: serverTimestamp(),
-              likes: 12,
-            },
-            {
-              title: "Tangazo la Mfumo kwa Wananchi wote",
-              description:
-                "Ewe Mwananchi, Kaa tayari, Muda wowote Tutakualika kwenye hafla ya kuhamasisha jamii kuhusu ulinzi wa mtoto.",
-              image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/bangoncrs.jpg",
-              createdAt: serverTimestamp(),
-              likes: 6590,
-            },
-            {
-              title: "Success Story: Mtoto Juma Aunganishwa Katika Familia yake ",
-              description:
-                "Juma (miaka 5) aliyekuwa amepotea kwa mwezi mmoja amepatikana sasa kutokana na mfumo wetu wa NCRS.",
-              image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/imageadvert2.jpg",
-              createdAt: serverTimestamp(),
-              likes: 7543,
-            },
-          ];
+  if (index !== -1) {
+    superAdmin.id = watumiaji[index].id;
+    await setDoc(doc(db, "watumiaji", superAdmin.id), superAdmin);
+  } else {
+    await addDoc(collection(db, "watumiaji"), superAdmin);
+  }
+}
 
-          for (const news of dummyNews) {
-            await addDoc(collection(db, "news"), news);
-          }
-        }
-      }
+// -----------------------------
+// 2. KUANDAA HABARI (NEWS SLIDER)
+// -----------------------------
+async function ensureNewsData() {
+  const snap = await getDocs(collection(db, "habari"));
 
-      async function loadRolesForSignup() {
-        const roleSelect = document.getElementById("su_role");
-        roleSelect.innerHTML = '<option value="User">Standard User</option>';
+  if (snap.empty) {
+    const habariZote = [
+      {
+        kichwa: "🌍 Uzinduzi wa Mfumo wa NCRS",
+        maelezo:
+          "Tunatangaza kuanzishwa kwa mfumo mpya wa simu wa kusaidia utafutaji wa watoto waliopotea.",
+        maelezoKamili:
+          "Mfumo wa NCRS umeboreshwa ili kusaidia jamii kuripoti, kufuatilia na kupata taarifa za watoto waliopotea kwa haraka zaidi.",
+        picha:
+          "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/furahakatikafamilia.jpg",
+        tarehe: serverTimestamp(),
+        likes: 12,
+      },
+      {
+        kichwa: "📢 Tangazo kwa Wananchi",
+        maelezo:
+          "Wananchi wote mnakaribishwa kwenye kampeni ya ulinzi wa mtoto.",
+        maelezoKamili:
+          "Serikali na mashirika mbalimbali yanashirikiana kuelimisha jamii kuhusu umuhimu wa kulinda watoto.",
+        picha:
+          "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/bangoncrs.jpg",
+        tarehe: serverTimestamp(),
+        likes: 6590,
+      },
+      {
+        kichwa: "🎉 Hadithi ya Mafanikio",
+        maelezo:
+          "Mtoto Juma amerudi nyumbani baada ya kupatikana.",
+        maelezoKamili:
+          "Juma mwenye umri wa miaka 5 aliyepotea kwa mwezi mmoja amepatikana na kuunganishwa tena na familia yake kupitia mfumo wa NCRS.",
+        picha:
+          "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/imageadvert2.jpg",
+        tarehe: serverTimestamp(),
+        likes: 7543,
+      },
+    ];
 
-        const snap = await getDocs(collection(db, "users"));
-        const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    for (const habari of habariZote) {
+      await addDoc(collection(db, "habari"), habari);
+    }
+  }
+}
 
-        const superAdminCount = users.filter((u) => u.role === "Super Administrator").length;
-        const adminCount = users.filter((u) => u.role === "Administrator").length;
+// -----------------------------
+// 3. KUSIMAMIA NAFASI ZA USAJILI
+// -----------------------------
+async function loadRolesForSignup() {
+  const roleSelect = document.getElementById("su_role");
 
-        if (superAdminCount === 0) {
-          const opt = document.createElement("option");
-          opt.value = "Super Administrator";
-          opt.innerText = "Super Administrator";
-          roleSelect.appendChild(opt);
-        }
+  roleSelect.innerHTML =
+    '<option value="Mtumiaji">Mtumiaji wa Kawaida</option>';
 
-        if (adminCount === 0) {
-          const opt = document.createElement("option");
-          opt.value = "Administrator";
-          opt.innerText = "Administrator";
-          roleSelect.appendChild(opt);
-        }
-      }
+  const snap = await getDocs(collection(db, "watumiaji"));
+  const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  const superAdminCount = users.filter(
+    (u) => u.cheo === "Msimamizi Mkuu"
+  ).length;
+
+  const adminCount = users.filter(
+    (u) => u.cheo === "Msimamizi"
+  ).length;
+
+  if (superAdminCount === 0) {
+    const opt = document.createElement("option");
+    opt.value = "Msimamizi Mkuu";
+    opt.innerText = "Msimamizi Mkuu";
+    roleSelect.appendChild(opt);
+  }
+
+  if (adminCount === 0) {
+    const opt = document.createElement("option");
+    opt.value = "Msimamizi";
+    opt.innerText = "Msimamizi";
+    roleSelect.appendChild(opt);
+  }
+}
+
+// =============================================
+// ===== MFUMO WA HABARI (SLIDER YA KISASA) =====
+// =============================================
+
+let indexYaHabari = 0;
+let orodhaYaHabari = [];
+
+// ELEMENTS ZA HTML
+const kichwa = document.getElementById("newsTitle");
+const maelezo = document.getElementById("newsDesc");
+const picha = document.getElementById("newsImage");
+const container = document.getElementById("newsSlider");
+
+// -----------------------------
+// KUPATA HABARI KUTOKA FIRESTORE
+// -----------------------------
+async function loadNewsSlider() {
+  const snap = await getDocs(collection(db, "habari"));
+
+  orodhaYaHabari = snap.docs.map((d) => ({
+    id: d.id,
+    ...d.data(),
+  }));
+
+  if (orodhaYaHabari.length > 0) {
+    onyeshaHabari();
+    anzaKubadilisha();
+  }
+}
+
+// -----------------------------
+// ONYESHA HABARI YA SASA
+// -----------------------------
+function onyeshaHabari() {
+  const habari = orodhaYaHabari[indexYaHabari];
+
+  kichwa.innerText = habari.kichwa;
+  maelezo.innerText = habari.maelezo;
+  picha.src = habari.picha;
+
+  container.onclick = () => funguaHabari(habari);
+}
+
+// -----------------------------
+// AUTO SLIDE (KILA SEKUNDE 3)
+// -----------------------------
+function anzaKubadilisha() {
+  setInterval(() => {
+    indexYaHabari =
+      (indexYaHabari + 1) % orodhaYaHabari.length;
+    onyeshaHabari();
+  }, 3000);
+}
+
+// -----------------------------
+// FUNGUA HABARI KAMILI
+// -----------------------------
+function funguaHabari(habari) {
+  const modal = document.getElementById("newsModal");
+
+  document.getElementById("modalTitle").innerText =
+    habari.kichwa;
+  document.getElementById("modalImage").src =
+    habari.picha;
+  document.getElementById("modalText").innerText =
+    habari.maelezoKamili;
+
+  modal.style.display = "flex";
+}
+
+// -----------------------------
+// FUNGUA MODAL
+// -----------------------------
+function fungaHabari() {
+  document.getElementById("newsModal").style.display =
+    "none";
+}
+
+// =============================================
+// ===== KUANZISHA MFUMO KAMILI =====
+// =============================================
+async function anzishaMfumo() {
+  await ensureSuperAdmin();
+  await ensureNewsData();
+  await loadRolesForSignup();
+  await loadNewsSlider();
+}
+
+// ANZA MFUMO WAKATI PAGE INA-LOAD
+anzishaMfumo();
+
 
       // =============================================
       // ===== UI LOGIC =====
