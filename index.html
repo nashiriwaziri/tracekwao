@@ -4414,27 +4414,27 @@
             timestamp: serverTimestamp(),
             adminReply: null,
           };
-             // Ensure identifiers array exists
-if (!child.identifiers) {
-  child.identifiers = [];
-}
+          // Ensure identifiers array exists
+          if (!child.identifiers) {
+            child.identifiers = [];
+          }
 
-// Add new identifier
-child.identifiers.push(newIdentification);
+          // Add new identifier
+          child.identifiers.push(newIdentification);
 
-// Check if identified
-let becameIdentified = false;
+          // Check if identified
+          let becameIdentified = false;
 
-if (child.identifiers.length >= 3) {
-  child.status = "identified";
-  becameIdentified = true;
-}
+          if (child.identifiers.length >= 3) {
+            child.status = "identified";
+            becameIdentified = true;
+          }
 
-// SAVE TO FIRESTORE
-await updateDoc(doc(db, "children", childId), {
-  identifiers: child.identifiers,
-  status: child.status
-});
+          // SAVE TO FIRESTORE
+          await updateDoc(doc(db, "children", childId), {
+            identifiers: child.identifiers,
+            status: child.status,
+          });
           const user = JSON.parse(sessionStorage.getItem("currentUser"));
           const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
 
@@ -4774,6 +4774,56 @@ await updateDoc(doc(db, "children", childId), {
         } catch (err) {
           console.error(err);
           BrickNotify.error("Failed to send reply.");
+        }
+      };
+      window.loadUserMessages = async function (userEmail) {
+        const listDiv = document.getElementById("userInboxList");
+        listDiv.innerHTML = "<p>Loading messages...</p>";
+
+        try {
+          const q = query(collection(db, "inbox"), where("senderEmail", "==", userEmail), orderBy("createdAt", "desc"));
+
+          const snap = await getDocs(q);
+          listDiv.innerHTML = "";
+
+          if (snap.empty) {
+            listDiv.innerHTML = "<p>No messages found.</p>";
+            return;
+          }
+
+          snap.forEach((docSnap) => {
+            const msg = docSnap.data();
+
+            const date = msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "No date";
+
+            listDiv.innerHTML += `
+        <div class="user-msg-card">
+
+          <div><b>Subject:</b> ${msg.subject || "No Subject"}</div>
+          <div><b>Message:</b> ${msg.message || ""}</div>
+          <div><small>${date}</small></div>
+
+          ${
+            msg.adminReply
+              ? `
+                <div class="reply-box">
+                  <b>Admin Reply:</b>
+                  <div>${msg.adminReply}</div>
+                  <small>
+                    ${msg.replyTimestamp?.seconds ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}
+                  </small>
+                </div>
+              `
+              : `<div style="color:gray;">Waiting for admin reply...</div>`
+          }
+
+        </div>
+      `;
+          });
+        } catch (err) {
+          console.error("User inbox error:", err);
+
+          listDiv.innerHTML = "<p style='color:red;'>Failed to load messages. Please refresh.</p>";
         }
       };
 
