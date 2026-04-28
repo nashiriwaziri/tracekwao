@@ -3166,7 +3166,6 @@
       </div>
     </div>
 
-    ```javascript
     <script type="module">
       // =============================================
       // ===== FIREBASE IMPORTS & CONFIG =====
@@ -4682,23 +4681,23 @@
           document.getElementById("tabIdentifiers").classList.add("active");
         } else {
           document.querySelector(".msg-tab:nth-child(2)").classList.add("active");
-          document.getElementById("tabInbox").classList.add("active");
-          loadAdminInbox();
+          document.getElementById("tabMessages").classList.add("active");
+          loadAdminMessages();
         }
       };
 
-      // Load Inbox for Admin
-      window.loadAdminInbox = async function () {
-        const listDiv = document.getElementById("adminInboxList");
-        listDiv.innerHTML = "<p style='text-align:center;'>Loading inbox...</p>";
+      // Load Message for Admin
+      window.loadAdminMessages = async function () {
+        const listDiv = document.getElementById("adminMessagesList");
+        listDiv.innerHTML = "<p style='text-align:center;'>Loading messages...</p>";
 
         try {
-          const q = query(collection(db, "inbox"), orderBy("createdAt", "desc"));
+          const q = query(collection(db, "messages"), orderBy("createdAt", "desc"));
           const snap = await getDocs(q);
           listDiv.innerHTML = "";
 
           if (snap.empty) {
-            listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>Inbox is empty.</p>";
+            listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>Messages is empty.</p>";
             return;
           }
 
@@ -4709,7 +4708,7 @@
             const unreadClass = !isReplied ? "unread" : "";
 
             listDiv.innerHTML += `
-              <div class="inbox-msg-card ${unreadClass}">
+              <div class="-msg-card ${unreadClass}">
                 <div class="msg-header">
                   <div>
                     <div class="msg-sender">${msg.senderName} <span class="msg-sender-email">(${msg.senderEmail})</span></div>
@@ -4730,8 +4729,8 @@
                 `
                     : `
                   <div class="admin-reply-input-area">
-                    <textarea id="inbox-reply-${d.id}" placeholder="Type your reply..."></textarea>
-                    <button onclick="sendAdminInboxReply('${d.id}')">Reply</button>
+                    <textarea id="messages-reply-${d.id}" placeholder="Type your reply..."></textarea>
+                    <button onclick="sendAdminmessagesReply('${d.id}')">Reply</button>
                   </div>
                 `
                 }
@@ -4739,13 +4738,13 @@
           });
         } catch (err) {
           console.error(err);
-          listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading inbox.</p>";
+          listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading messages.</p>";
         }
       };
 
       // Admin Replies to Inbox Message
-      window.sendAdminInboxReply = async function (msgId) {
-        const textarea = document.getElementById(`inbox-reply-${msgId}`);
+      window.sendAdminMessagesReply = async function (msgId) {
+        const textarea = document.getElementById(`messages-reply-${msgId}`);
         const replyText = textarea ? textarea.value.trim() : "";
         if (!replyText) {
           BrickNotify.error("Please type a reply first.");
@@ -4753,13 +4752,13 @@
         }
 
         try {
-          await updateDoc(doc(db, "inbox", msgId), {
+          await updateDoc(doc(db, "messages", msgId), {
             adminReply: replyText,
             replyTimestamp: serverTimestamp(),
             status: "replied",
           });
           BrickNotify.success("Reply sent successfully.");
-          loadAdminInbox();
+          loadAdminMessages();
         } catch (err) {
           console.error(err);
           BrickNotify.error("Failed to send reply.");
@@ -4767,11 +4766,11 @@
       };
 
       // Real-time listener for Admin Inbox Unread Count
-      window.listenForInboxUnread = function () {
-        const q = query(collection(db, "inbox"), where("status", "==", "unread"));
+      window.listenForMessagesUnread = function () {
+        const q = query(collection(db, "messages"), where("status", "==", "unread"));
         onSnapshot(q, (snap) => {
           const count = snap.size;
-          const badge = document.getElementById("inboxUnreadBadge");
+          const badge = document.getElementById("messagesUnreadBadge");
           if (count > 0) {
             if (badge) {
               badge.innerText = count;
@@ -4794,9 +4793,9 @@
           BrickNotify.error("Please login first.");
           return;
         }
-        document.getElementById("inboxSubject").value = "";
-        document.getElementById("inboxPhone").value = user.phone || "";
-        document.getElementById("inboxMessage").value = "";
+        document.getElementById("messagesSubject").value = "";
+        document.getElementById("messagesPhone").value = user.phone || "";
+        document.getElementById("messagesMessage").value = "";
         document.getElementById("sendMessageModal").classList.remove("hidden");
       };
       window.closeSendMessageModal = function () {
@@ -4816,9 +4815,9 @@
           senderId: user.id || user.email, // Handle Google Auth IDs safely
           senderName: `${user.fname} ${user.lname}`,
           senderEmail: user.email,
-          senderPhone: document.getElementById("inboxPhone").value.trim(),
-          subject: document.getElementById("inboxSubject").value.trim(),
-          message: document.getElementById("inboxMessage").value.trim(),
+          senderPhone: document.getElementById("messagesPhone").value.trim(),
+          subject: document.getElementById("messagesSubject").value.trim(),
+          message: document.getElementById("messagesMessage").value.trim(),
           adminReply: null,
           replyTimestamp: null,
           status: "unread",
@@ -4831,7 +4830,7 @@
         }
 
         try {
-          await addDoc(collection(db, "inbox"), msgData);
+          await addDoc(collection(db, "messages"), msgData);
           BrickNotify.success("Ujumbe umetumwa kwa Msimamizi.");
           closeSendMessageModal();
         } catch (err) {
@@ -4851,7 +4850,7 @@
 
         try {
           const q = query(
-            collection(db, "inbox"),
+            collection(db, "messages"),
             where("senderEmail", "==", user.email),
             orderBy("createdAt", "desc"),
           );
@@ -4906,7 +4905,7 @@
       window.listenForMyMessageReplies = function (user) {
         if (!user || !user.email) return;
         const q = query(
-          collection(db, "inbox"),
+          collection(db, "messages"),
           where("senderEmail", "==", user.email),
           where("status", "==", "replied"),
         );
