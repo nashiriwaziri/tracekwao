@@ -2123,6 +2123,71 @@
     </style>
   </head>
   <body>
+<!-- SLIDER YA HABARI -->
+<div id="newsSlider" style="cursor:pointer;">
+  <img
+    id="newsImage"
+    style="width:100%; height:400px; object-fit:cover; border-radius:15px;"
+  />
+
+  <h2 id="newsTitle" style="color:#1565c0;"></h2>
+  <p id="newsDesc"></p>
+</div>
+
+<!-- MODAL YA KUSOMA HABARI (NEWS MODAL) -->
+<div
+  id="newsModal"
+  style="
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    padding: 15px;
+  "
+>
+  <div
+    style="
+      background: #fff;
+      padding: 18px;
+      border-radius: 12px;
+      max-width: 650px;
+      width: 95%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+    "
+  >
+    <img
+      id="modalImage"
+      style="
+        width: 100%;
+        border-radius: 10px;
+        margin-bottom: 12px;
+      "
+    />
+
+    <h2 id="modalTitle" style="margin-bottom: 8px;"></h2>
+
+    <p id="modalText" style="line-height: 1.6;"></p>
+
+    <div style="text-align: right; margin-top: 15px;">
+      <button
+        onclick="fungaHabari()"
+        style="
+          background: #d32f2f;
+          color: white;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 6px;
+          cursor: pointer;
+      </button>
+    </div>
+  </div>
+</div>
+  
     <!-- ===== RED BRICK NOTIFICATION CONTAINER ===== -->
     <div class="brick-notify-container" id="brickNotifyContainer"></div>
 
@@ -3230,154 +3295,116 @@
         </div>
       </div>
     </div>
+    
     <script type="module">
-      // =============================================
-      // ===== FIREBASE IMPORTS & CONFIG =====
-      // =============================================
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-      import {
-        getFirestore,
-        collection,
-        addDoc,
-        getDocs,
-        getDoc,
-        doc,
-        setDoc,
-        updateDoc,
-        deleteDoc,
-        query,
-        where,
-        serverTimestamp,
-        onSnapshot,
-        orderBy,
-        increment,
-      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+// =============================================
+// ===== FIREBASE IMPORTS & CONFIG =====
+// =============================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  serverTimestamp,
+  onSnapshot,
+  orderBy,
+  increment,
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-      const firebaseConfig = {
-        apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-        authDomain: "ncrs-aeb43.firebaseapp.com",
-        projectId: "ncrs-aeb43",
-        storageBucket: "ncrs-aeb43.firebasestorage.app",
-        messagingSenderId: "786434442929",
-        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-        measurementId: "G-ZYB71RY8J5",
-      };
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+  authDomain: "ncrs-aeb43.firebaseapp.com",
+  projectId: "ncrs-aeb43",
+  storageBucket: "ncrs-aeb43.firebasestorage.app",
+  messagingSenderId: "786434442929",
+  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+  measurementId: "G-ZYB71RY8J5",
+};
 
-      const app = initializeApp(firebaseConfig);
-      const db = getFirestore(app);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-      // =============================================
-      // ===== GLOBAL UTILITIES =====
-      // =============================================
-      window.BrickNotify = {
-        container: null,
-        maxVisible: 4,
-        defaultDuration: 5000,
+// =============================================
+// ===== NEWS MODAL CONTROL =====
+// =============================================
+window.fungaHabari = function () {
+  document.getElementById("newsModal").style.display = "none";
+};
 
-        init() {
-          this.container = document.getElementById("brickNotifyContainer");
-        },
+// =============================================
+// ===== GLOBAL UTILITIES =====
+// =============================================
+window.BrickNotify = {
+  container: null,
+  maxVisible: 4,
+  defaultDuration: 5000,
 
-        show(options = {}) {
-          if (!this.container) this.init();
-          const title = options.title || "ARIFA";
-          const message = options.message || "";
-          const icon = options.icon || "fa-bell";
-          const duration = options.duration || this.defaultDuration;
-          const onClose = options.onClose || null;
-          const showTimer = options.showTimer !== false;
+  init() {
+    this.container = document.getElementById("brickNotifyContainer");
+  },
 
-          const notifyEl = document.createElement("div");
-          notifyEl.className = "brick-notify";
-          notifyEl.innerHTML = `
-                    <div class="brick-icon"><i class="fas ${icon}"></i></div>
-                    <div class="brick-content">
-                        <div class="brick-title">${title}</div>
-                        <div class="brick-message">${message}</div>
-                    </div>
-                    <button class="brick-close" onclick="BrickNotify._dismiss(this.parentElement, true)">&times;</button>
-                    ${showTimer ? `<div class="brick-timer-bar" style="animation-duration: ${duration}ms;"></div>` : ""}
-                `;
+  show(options = {}) {
+    if (!this.container) this.init();
 
-          this.container.appendChild(notifyEl);
+    const title = options.title || "ARIFA";
+    const message = options.message || "";
+    const icon = options.icon || "fa-bell";
+    const duration = options.duration || this.defaultDuration;
 
-          const allNotifies = this.container.querySelectorAll(".brick-notify:not(.removing)");
-          if (allNotifies.length > this.maxVisible) {
-            this._dismiss(allNotifies[0], false);
-          }
+    const notifyEl = document.createElement("div");
+    notifyEl.className = "brick-notify";
 
-          const autoTimer = setTimeout(() => {
-            this._dismiss(notifyEl, false);
-            if (onClose) onClose();
-          }, duration);
+    notifyEl.innerHTML = `
+      <div class="brick-icon"><i class="fas ${icon}"></i></div>
+      <div class="brick-content">
+        <div class="brick-title">${title}</div>
+        <div class="brick-message">${message}</div>
+      </div>
+      <button class="brick-close" onclick="BrickNotify._dismiss(this.parentElement, true)">&times;</button>
+      <div class="brick-timer-bar" style="animation-duration:${duration}ms;"></div>
+    `;
 
-          notifyEl._autoTimer = autoTimer;
-        },
+    this.container.appendChild(notifyEl);
 
-        _dismiss(element, manual) {
-          if (!element || element.classList.contains("removing")) return;
-          if (element._autoTimer) clearTimeout(element._autoTimer);
-          element.classList.add("removing");
-          setTimeout(() => {
-            if (element.parentElement) element.parentElement.removeChild(element);
-          }, 650);
-        },
+    const timer = setTimeout(() => {
+      this._dismiss(notifyEl, false);
+    }, duration);
 
-        success(message, title) {
-          this.show({ title: title || "MAFANIKIO", message, icon: "fa-check-circle" });
-        },
-        error(message, title) {
-          this.show({ title: title || "MAKOSA", message, icon: "fa-times-circle", duration: 6000 });
-        },
-        info(message, title) {
-          this.show({ title: title || "MAELEZO", message, icon: "fa-info-circle" });
-        },
-        warning(message, title) {
-          this.show({ title: title || "ONYO", message, icon: "fa-exclamation-triangle", duration: 6000 });
-        },
+    notifyEl._autoTimer = timer;
+  },
 
-        identifierSent(childName) {
-          this.show({
-            title: "UTAMBULISHO UMEWASILISHWA",
-            message: `Taarifa zako za utambulisho kwa mtoto <strong>${childName}</strong> zimehifadhiwa na kutumwa kwa Msimamizi kwa usalama.`,
-            icon: "fa-user-shield",
-            duration: 6000,
-          });
-        },
-        adminReceived(childName, identifierName) {
-          this.show({
-            title: "UJUMBE MPYA KUTOKA MTAMBULISHI",
-            message: `Mtambulishi <strong>${identifierName}</strong> amewasilisha taarifa za utambulisho kwa mtoto <strong>${childName}</strong>.`,
-            icon: "fa-envelope-open-text",
-            duration: 7000,
-          });
-        },
-        adminFullyIdentified(childName) {
-          this.show({
-            title: "MTOTO AMETAMBULIWA KIKAMILIFU",
-            message: `Mtoto <strong>${childName}</strong> ametambuliwa na watambulishi 3.`,
-            icon: "fa-check-double",
-            duration: 8000,
-          });
-        },
-        privacyWarning() {
-          this.show({
-            title: "ULINZI WA FARAGHA",
-            message: "Hauwezi kuona maelezo ya watambulishi wengine. Kila mtambulishi ana faragha kamili.",
-            icon: "fa-user-lock",
-            duration: 5000,
-          });
-        },
-        clearAll() {
-          if (!this.container) return;
-          const all = this.container.querySelectorAll(".brick-notify");
-          all.forEach((el, i) => {
-            setTimeout(() => this._dismiss(el, false), i * 100);
-          });
-        },
-      };
+  _dismiss(el) {
+    if (!el) return;
+    if (el._autoTimer) clearTimeout(el._autoTimer);
 
-      const GOOGLE_CLIENT_ID = "797676326076-09rpnb9c1amicstl4db8bkiiqt1et2g2.apps.googleusercontent.com";
+    el.classList.add("removing");
+
+    setTimeout(() => {
+      el.remove();
+    }, 500);
+  },
+
+  success(msg) {
+    this.show({ title: "MAFANIKIO", message: msg, icon: "fa-check-circle" });
+  },
+  error(msg) {
+    this.show({ title: "KOSA", message: msg, icon: "fa-times-circle", duration: 6000 });
+  }
+};
+
+// IMPORTANT CLIENT ID
+const GOOGLE_CLIENT_ID =
+  "797676326076-09rpnb9c1amicstl4db8bkiiqt1et2g2.apps.googleusercontent.com";
 
       // Translation Logic
       const translations = {
@@ -4194,6 +4221,7 @@ anzishaMfumo();
           document.getElementById("newsModal").classList.remove("hidden");
         }
       };
+      
       window.closeNewsModal = function () {
         document.getElementById("newsModal").classList.add("hidden");
       };
@@ -4217,7 +4245,7 @@ anzishaMfumo();
       window.shareToFB = function () {
         if (currentNewsItem) window.shareCardToFB(encodeURIComponent(window.location.href));
       };
-
+     
       // =============================================
       // ===== CHILD CRUD (FIRESTORE) =====
       // =============================================
