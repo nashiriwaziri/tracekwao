@@ -4610,6 +4610,9 @@ window.shareAdvertToFB = function () {
       // =============================================
 // ===== HANDLE CHILD NOTIFICATION (FIXED) =====
 // =============================================
+// =============================================
+// ===== HANDLE CHILD NOTIFICATION =====
+// =============================================
 window.handleNotification = async function (e) {
   e.preventDefault();
 
@@ -4631,18 +4634,15 @@ window.handleNotification = async function (e) {
 
     const child = snap.data();
 
-    // Ensure identifiers array exists
     const identifiers = Array.isArray(child.identifiers)
       ? child.identifiers
       : [];
 
-    // Limit check
     if (identifiers.length >= 3) {
       BrickNotify.warning(translations[currentLang].alert_identified);
       return;
     }
 
-    // Get form values
     const name = document.getElementById("notify_name").value.trim();
     const contact = document.getElementById("notify_contact").value.trim();
     const message = document.getElementById("notify_message").value.trim();
@@ -4652,7 +4652,6 @@ window.handleNotification = async function (e) {
       return;
     }
 
-    // New identification object
     const newIdentification = {
       name,
       contact,
@@ -4665,22 +4664,18 @@ window.handleNotification = async function (e) {
 
     const becameIdentified = updatedIdentifiers.length >= 3;
 
-    const updatedData = {
+    await updateDoc(childRef, {
       identifiers: updatedIdentifiers,
       status: becameIdentified ? "identified" : (child.status || "missing"),
-    };
+    });
 
-    // UPDATE FIRESTORE
-    await updateDoc(childRef, updatedData);
-
-    // USER INFO
     const user = JSON.parse(sessionStorage.getItem("currentUser"));
     const isAdmin =
       user &&
       (user.role === "Administrator" ||
         user.role === "Super Administrator");
 
-    // NOTIFICATIONS FLOW
+    // NOTIFICATION FLOW
     if (isAdmin) {
       BrickNotify.identifierSent(child.name);
 
@@ -4697,36 +4692,62 @@ window.handleNotification = async function (e) {
       }, 2500);
     }
 
-    // UI UPDATES
     updateAdminBadge();
     updateMessagesBadge();
     renderChildTable();
 
-    // OPTIONAL: clear form after success
+    // clear form
     document.getElementById("notify_name").value = "";
     document.getElementById("notify_contact").value = "";
     document.getElementById("notify_message").value = "";
+
+    closeNotificationModal();
 
   } catch (error) {
     console.error("handleNotification error:", error);
     BrickNotify.error("Kuna tatizo la kutuma taarifa.");
   }
 };
-    function loadNotifications() {
-        const tableBody = document.getElementById("notificationTableBody");
-        onSnapshot(collection(db, "child"), (snapshot) => {
-          tableBody.innerHTML = "";
-          snapshot.forEach((docSnap) => {
-            const child = docSnap.data();
-            if (child.identifiers && child.identifiers.length > 0) {
-              child.identifiers.forEach((id) => {
-                tableBody.innerHTML += `<tr><td>${child.name}</td><td>${id.name}</td><td>${id.contact}</td><td>${id.message}</td><td>${id.timestamp?.seconds ? new Date(id.timestamp.seconds * 1000).toLocaleString() : "-"}</td></tr>`;
-              });
-            }
-          });
+
+
+
+// =============================================
+// ===== LOAD ADMIN NOTIFICATIONS TABLE =====
+// =============================================
+function loadNotifications() {
+  const tableBody = document.getElementById("notificationTableBody");
+
+  onSnapshot(collection(db, "child"), (snapshot) => {
+    tableBody.innerHTML = "";
+
+    snapshot.forEach((docSnap) => {
+      const child = docSnap.data();
+
+      if (Array.isArray(child.identifiers) && child.identifiers.length > 0) {
+        child.identifiers.forEach((id) => {
+          tableBody.innerHTML += `
+            <tr>
+              <td>${child.name || "-"}</td>
+              <td>${id.name || "-"}</td>
+              <td>${id.contact || "-"}</td>
+              <td>${id.message || "-"}</td>
+              <td>
+                ${
+                  id.timestamp?.seconds
+                    ? new Date(id.timestamp.seconds * 1000).toLocaleString()
+                    : "-"
+                }
+              </td>
+            </tr>
+          `;
         });
       }
-      loadNotifications();
+    });
+  });
+}
+
+// INIT
+loadNotifications();
       // =============================================
       // ===== USER MANAGEMENT =====
       // =============================================
