@@ -4925,85 +4925,15 @@ window.shareAdvertToFB = function () {
                   <div>
                     <div class="msg-sender">${msg.senderName} <span class="msg-sender-email">(${msg.senderEmail})</span></div>
                     ${msg.senderPhone ? `<div class="msg-phone"><i class="fas fa-phone"></i> ${msg.senderPhone}</div>` : ""}
-                  </div>
-                  <div class="msg-date">${dateStr}</div>
-                </div>
-                <div class="msg-subject">${msg.subject || "No Subject"}</div>
-                <div class="msg-body">${msg.message}</div>
-                ${
-                  isReplied
-                    ? `
-                  <div class="admin-reply-section">
-                    <div class="reply-label">Your Reply:</div>
-                    <div class="reply-text">${msg.adminReply}</div>
-                    <div class="reply-date">${msg.replyTimestamp ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}</div>
-                  </div>
-                `
-                    : `
-                  <div class="admin-reply-input-area">
-                    <textarea id="inbox-reply-${d.id}" placeholder="Type your reply..."></textarea>
-                    <button onclick="sendAdminInboxReply('${d.id}')">Reply</button>
-                  </div>
-                `
-                }
-              </div>`;
-          });
-        } catch (err) {
-          console.error(err);
-          listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading inbox.</p>";
-        }
-      };
-
-      // Admin Replies to Inbox Message
-      window.sendAdminInboxReply = async function (msgId) {
-        const textarea = document.getElementById(`inbox-reply-${msgId}`);
-        const replyText = textarea ? textarea.value.trim() : "";
-        if (!replyText) {
-          BrickNotify.error("Please type a reply first.");
-          return;
-        }
-
-        try {
-          await updateDoc(doc(db, "inbox", msgId), {
-            adminReply: replyText,
-            replyTimestamp: serverTimestamp(),
-            status: "replied",
-          });
-          BrickNotify.success("Reply sent successfully.");
-          loadAdminInbox();
-        } catch (err) {
-          console.error(err);
-          BrickNotify.error("Failed to send reply.");
-        }
-      };
-
-      // Real-time listener for Admin Inbox Unread Count
-      window.listenForInboxUnread = function () {
-        const q = query(collection(db, "inbox"), where("status", "==", "unread"));
-        onSnapshot(q, (snap) => {
-          const count = snap.size;
-          const badge = document.getElementById("inboxUnreadBadge");
-          if (count > 0) {
-            if (badge) {
-              badge.innerText = count;
-              badge.style.display = "inline-flex";
-            }
-          } else {
-            if (badge) badge.style.display = "none";
-          }
-        });
-      };
-
-      // =============================================
-// ===== IDENTIFIER ↔ ADMIN MESSAGING =====
+  // =============================================
+// ===== IDENTIFIER ↔ ADMIN MESSAGING (CLEAN) =====
 // =============================================
 
 
 // =====================================================
-// 1. OPEN / CLOSE SEND MESSAGE MODAL
+// 1. OPEN IDENTIFY MODAL
 // =====================================================
-
-window.openSendMessageModal = function () {
+window.openIdentifyModal = function (child) {
   const user = JSON.parse(sessionStorage.getItem("currentUser"));
 
   if (!user) {
@@ -5011,22 +4941,76 @@ window.openSendMessageModal = function () {
     return;
   }
 
-  document.getElementById("inboxSubject").value = "";
-  document.getElementById("inboxPhone").value = user.phone || "";
-  document.getElementById("inboxMessage").value = "";
+  document.getElementById("notify_child_id").value = child.id;
 
-  document.getElementById("sendMessageModal").classList.remove("hidden");
-};
+  document.getElementById("notify_name").value =
+    `${user.fname || ""} ${user.lname || ""}`.trim();
 
-window.closeSendMessageModal = function () {
-  document.getElementById("sendMessageModal").classList.add("hidden");
+  document.getElementById("notify_contact").value = user.phone || "";
+  document.getElementById("notify_message").value = "";
+
+  document.getElementById("notificationModal").classList.remove("hidden");
 };
 
 
 // =====================================================
-// 2. SEND MESSAGE TO ADMIN
+// 2. CLOSE IDENTIFY MODAL
 // =====================================================
+window.closeNotificationModal = function () {
+  document.getElementById("notificationModal").classList.add("hidden");
+};
 
+
+// =====================================================
+// 3. SEND IDENTIFICATION → ADMIN INBOX
+// =====================================================
+window.handleNotification = async function (e) {
+  e.preventDefault();
+
+  try {
+    const user = JSON.parse(sessionStorage.getItem("currentUser"));
+    const childId = document.getElementById("notify_child_id").value;
+
+    const name = document.getElementById("notify_name").value.trim();
+    const contact = document.getElementById("notify_contact").value.trim();
+    const message = document.getElementById("notify_message").value.trim();
+
+    if (!user || !childId || !name || !contact || !message) {
+      BrickNotify.error("Please fill all fields.");
+      return;
+    }
+
+    await addDoc(collection(db, "inbox"), {
+      senderId: user.id || user.email,
+      senderName: name,
+      senderEmail: user.email,
+      senderPhone: contact,
+
+      subject: "Child Identification Report",
+      message: message,
+
+      childId: childId,
+      type: "identification",
+
+      adminReply: null,
+      replyTimestamp: null,
+      status: "unread",
+      createdAt: serverTimestamp(),
+    });
+
+    BrickNotify.success("Identification sent successfully.");
+    closeNotificationModal();
+
+  } catch (err) {
+    console.error(err);
+    BrickNotify.error("Failed to send identification.");
+  }
+};
+
+
+// =====================================================
+// 4. USER SEND MESSAGE TO ADMIN
+// =====================================================
 window.handleSendAdminMessage = async function (e) {
   e.preventDefault();
 
@@ -5037,55 +5021,143 @@ window.handleSendAdminMessage = async function (e) {
     return;
   }
 
-  const msgData = {
-    senderId: user.id || user.email,
-    senderName: `${user.fname || ""} ${user.lname || ""}`.trim(),
-    senderEmail: user.email,
-    senderPhone: document.getElementById("inboxPhone").value.trim(),
-    subject: document.getElementById("inboxSubject").value.trim(),
-    message: document.getElementById("inboxMessage").value.trim(),
+  const subject = document.getElementById("inboxSubject").value.trim();
+  const message = document.getElementById("inboxMessage").value.trim();
 
-    adminReply: null,
-    replyTimestamp: null,
-    status: "unread",
-    createdAt: serverTimestamp(),
-  };
-
-  if (!msgData.subject || !msgData.message) {
-    BrickNotify.error("Tafadhali jaza mada na ujumbe.");
+  if (!subject || !message) {
+    BrickNotify.error("Fill all fields.");
     return;
   }
 
   try {
-    await addDoc(collection(db, "inbox"), msgData);
+    await addDoc(collection(db, "inbox"), {
+      senderId: user.id || user.email,
+      senderName: `${user.fname || ""} ${user.lname || ""}`.trim(),
+      senderEmail: user.email,
+      senderPhone: document.getElementById("inboxPhone").value.trim(),
 
-    BrickNotify.success("Ujumbe umetumwa kwa Msimamizi.");
-    closeSendMessageModal();
+      subject,
+      message,
+
+      adminReply: null,
+      replyTimestamp: null,
+      status: "unread",
+      createdAt: serverTimestamp(),
+    });
+
+    BrickNotify.success("Message sent.");
+    document.getElementById("sendMessageModal").classList.add("hidden");
 
   } catch (err) {
-    console.error("SEND ERROR:", err);
-    BrickNotify.error("Ujumbe haukutumwa.");
+    console.error(err);
+    BrickNotify.error("Send failed.");
   }
 };
 
 
 // =====================================================
-// 3. LOAD USER MESSAGES (FIXED COMPLETELY)
+// 5. ADMIN LOAD INBOX
 // =====================================================
+window.loadAdminInbox = async function () {
+  const listDiv = document.getElementById("adminInboxList");
 
+  listDiv.innerHTML = "Loading...";
+
+  try {
+    const snap = await getDocs(collection(db, "inbox"));
+
+    listDiv.innerHTML = "";
+
+    if (snap.empty) {
+      listDiv.innerHTML = "No messages.";
+      return;
+    }
+
+    snap.forEach((d) => {
+      const msg = d.data();
+
+      const dateStr = msg.createdAt?.seconds
+        ? new Date(msg.createdAt.seconds * 1000).toLocaleString()
+        : "";
+
+      const isReplied = !!msg.adminReply;
+
+      listDiv.innerHTML += `
+        <div class="inbox-msg-card">
+
+          <b>${msg.senderName}</b> (${msg.senderEmail})
+          <div>${dateStr}</div>
+
+          <div><b>${msg.subject}</b></div>
+          <div>${msg.message}</div>
+
+          ${
+            isReplied
+              ? `
+              <div class="admin-reply-section">
+                <b>Reply:</b>
+                <div>${msg.adminReply}</div>
+              </div>
+              `
+              : `
+              <textarea id="reply-${d.id}"></textarea>
+              <button onclick="sendAdminReply('${d.id}')">Reply</button>
+              `
+          }
+
+        </div>
+      `;
+    });
+
+  } catch (err) {
+    console.error(err);
+    listDiv.innerHTML = "Error loading inbox.";
+  }
+};
+
+
+// =====================================================
+// 6. ADMIN SEND REPLY
+// =====================================================
+window.sendAdminReply = async function (id) {
+  const text = document.getElementById(`reply-${id}`).value.trim();
+
+  if (!text) {
+    BrickNotify.error("Type reply first.");
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, "inbox", id), {
+      adminReply: text,
+      replyTimestamp: serverTimestamp(),
+      status: "replied",
+    });
+
+    BrickNotify.success("Reply sent.");
+    loadAdminInbox();
+
+  } catch (err) {
+    console.error(err);
+    BrickNotify.error("Reply failed.");
+  }
+};
+
+
+// =====================================================
+// 7. USER VIEW REPLIES
+// =====================================================
 window.openMyMessages = async function () {
   const user = JSON.parse(sessionStorage.getItem("currentUser"));
 
   if (!user) return;
 
+  const listDiv = document.getElementById("myMessagesList");
+  listDiv.innerHTML = "Loading...";
+
   document.getElementById("myMessagesModal").classList.remove("hidden");
 
-  const listDiv = document.getElementById("myMessagesList");
-  listDiv.innerHTML = "<p style='text-align:center;'>Loading...</p>";
-
   try {
-
-    // ⚠️ IMPORTANT: if index error occurs, remove orderBy temporarily
     const q = query(
       collection(db, "inbox"),
       where("senderEmail", "==", user.email)
@@ -5095,58 +5167,21 @@ window.openMyMessages = async function () {
 
     listDiv.innerHTML = "";
 
-    if (snap.empty) {
-      listDiv.innerHTML = "<p style='text-align:center; color:var(--muted);'>No messages found.</p>";
-      return;
-    }
-
     snap.forEach((d) => {
       const msg = d.data();
-
-      // ✅ SAFE DATE FIX
-      const dateStr = msg.createdAt?.seconds
-        ? new Date(msg.createdAt.seconds * 1000).toLocaleString()
-        : "No date";
 
       const isReplied = !!msg.adminReply;
 
       listDiv.innerHTML += `
         <div class="sent-msg-card">
 
-          <div class="sent-header">
-            <div class="sent-subject">${msg.subject || "No Subject"}</div>
-            <div class="sent-date">${dateStr}</div>
-          </div>
-
-          <div class="sent-body">${msg.message || ""}</div>
-
-          <div style="margin-top:5px;">
-            <span class="sent-status ${isReplied ? "replied" : "pending"}">
-              ${
-                isReplied
-                  ? '<i class="fas fa-check-double"></i> Replied'
-                  : '<i class="fas fa-clock"></i> Pending'
-              }
-            </span>
-          </div>
+          <b>${msg.subject}</b>
+          <div>${msg.message}</div>
 
           ${
             isReplied
-              ? `
-              <div class="admin-reply-section">
-                <div class="reply-label">Admin Reply:</div>
-                <div class="reply-text">${msg.adminReply || ""}</div>
-
-                <div class="reply-date">
-                  ${
-                    msg.replyTimestamp?.seconds
-                      ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString()
-                      : ""
-                  }
-                </div>
-              </div>
-              `
-              : `<div style="color:gray;">Waiting for admin reply...</div>`
+              ? `<div style="color:green;">Reply: ${msg.adminReply}</div>`
+              : `<div style="color:gray;">Pending...</div>`
           }
 
         </div>
@@ -5154,88 +5189,10 @@ window.openMyMessages = async function () {
     });
 
   } catch (err) {
-    console.error("LOAD ERROR:", err);
-
-    listDiv.innerHTML = `
-      <p style='color:red; text-align:center;'>
-        Error loading messages.<br>
-        Check Firestore index or network.
-      </p>
-    `;
+    console.error(err);
+    listDiv.innerHTML = "Error loading messages.";
   }
 };
-
-
-window.closeMyMessages = function () {
-  document.getElementById("myMessagesModal").classList.add("hidden");
-};
-
-
-// =====================================================
-// 4. REAL-TIME REPLY BADGE (FIXED)
-// =====================================================
-
-window.listenForMyMessageReplies = function (user) {
-  if (!user || !user.email) return;
-
-  const q = query(
-    collection(db, "inbox"),
-    where("senderEmail", "==", user.email),
-    where("status", "==", "replied")
-  );
-
-  onSnapshot(q, (snap) => {
-    const count = snap.size;
-
-    const badge = document.getElementById("myMsgBadge");
-    const dropdownBadge = document.getElementById("myMsgDropdownBadge");
-
-    if (count > 0) {
-      if (badge) {
-        badge.innerText = count;
-        badge.style.display = "inline-block";
-      }
-      if (dropdownBadge) {
-        dropdownBadge.innerText = count;
-        dropdownBadge.style.display = "inline-flex";
-      }
-    } else {
-      if (badge) badge.style.display = "none";
-      if (dropdownBadge) dropdownBadge.style.display = "none";
-    }
-  });
-};
-      window.closeMyMessages = function () {
-        document.getElementById("myMessagesModal").classList.add("hidden");
-      };
-
-      // 4. Real-time listener for Identifier's Unread Replies Badge
-      window.listenForMyMessageReplies = function (user) {
-        if (!user || !user.email) return;
-        const q = query(
-          collection(db, "inbox"),
-          where("senderEmail", "==", user.email),
-          where("status", "==", "replied"),
-        );
-        onSnapshot(q, (snap) => {
-          const count = snap.size;
-          const badge = document.getElementById("myMsgBadge");
-          const dropdownBadge = document.getElementById("myMsgDropdownBadge");
-          if (count > 0) {
-            if (badge) {
-              badge.innerText = count;
-              badge.style.display = "inline-block";
-            }
-            if (dropdownBadge) {
-              dropdownBadge.innerText = count;
-              dropdownBadge.style.display = "inline-flex";
-            }
-          } else {
-            if (badge) badge.style.display = "none";
-            if (dropdownBadge) dropdownBadge.style.display = "none";
-          }
-        });
-      };
 
       // =============================================
       // ===== ADVERTISEMENT SYSTEM LOGIC =====
