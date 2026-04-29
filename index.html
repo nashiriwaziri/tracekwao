@@ -4607,11 +4607,8 @@ window.shareAdvertToFB = function () {
         document.getElementById("notificationModal").classList.add("hidden");
       };
 
-      // =============================================
-// ===== HANDLE CHILD NOTIFICATION (FIXED) =====
 // =============================================
-// =============================================
-// ===== HANDLE CHILD NOTIFICATION =====
+// ===== HANDLE CHILD NOTIFICATION (FINAL) =====
 // =============================================
 window.handleNotification = async function (e) {
   e.preventDefault();
@@ -4634,15 +4631,18 @@ window.handleNotification = async function (e) {
 
     const child = snap.data();
 
+    // Ensure identifiers array exists
     const identifiers = Array.isArray(child.identifiers)
       ? child.identifiers
       : [];
 
+    // Limit check
     if (identifiers.length >= 3) {
       BrickNotify.warning(translations[currentLang].alert_identified);
       return;
     }
 
+    // Get form values
     const name = document.getElementById("notify_name").value.trim();
     const contact = document.getElementById("notify_contact").value.trim();
     const message = document.getElementById("notify_message").value.trim();
@@ -4652,29 +4652,34 @@ window.handleNotification = async function (e) {
       return;
     }
 
-   const newIdentification = {
-  name,
-  contact,
-  message,
-  timestamp: new Date().toISOString(), // ✅ FIX
-  adminReply: null,
-};
+    // Create identification object (FIXED)
+    const newIdentification = {
+      name: name,
+      contact: contact,
+      message: message,
+      timestamp: Date.now(), // ✅ SAFE & BEST
+      adminReply: null,
+    };
+
+    // Add new record
     const updatedIdentifiers = [...identifiers, newIdentification];
 
     const becameIdentified = updatedIdentifiers.length >= 3;
 
+    // Update Firestore
     await updateDoc(childRef, {
       identifiers: updatedIdentifiers,
       status: becameIdentified ? "identified" : (child.status || "missing"),
     });
 
+    // Get user
     const user = JSON.parse(sessionStorage.getItem("currentUser"));
     const isAdmin =
       user &&
       (user.role === "Administrator" ||
         user.role === "Super Administrator");
 
-    // NOTIFICATION FLOW
+    // Notifications
     if (isAdmin) {
       BrickNotify.identifierSent(child.name);
 
@@ -4691,24 +4696,24 @@ window.handleNotification = async function (e) {
       }, 2500);
     }
 
+    // UI updates
     updateAdminBadge();
     updateMessagesBadge();
     renderChildTable();
 
-    // clear form
+    // Clear form
     document.getElementById("notify_name").value = "";
     document.getElementById("notify_contact").value = "";
     document.getElementById("notify_message").value = "";
 
+    // Close modal
     closeNotificationModal();
 
   } catch (error) {
-  console.error("🔥 FULL ERROR:", error.message, error);
-  alert(error.message);
-}
+    console.error("🔥 FULL ERROR:", error);
+    alert(error.message || "Kuna tatizo la kutuma taarifa.");
+  }
 };
-
-
 
 // =============================================
 // ===== LOAD ADMIN NOTIFICATIONS TABLE =====
