@@ -4842,15 +4842,16 @@
       };
 
      
- // =============================================
-// ===== ADVANCED DASHBOARD & EXPORTS (AI + 3D + MAP + EXPORTS)
+// =============================================
+// ===== ADVANCED DASHBOARD & EXPORTS (FINAL FIX)
 // =============================================
 
 const charts = {};
-let threeScene, threeCamera, threeRenderer;
+let dashboardData = []; // 🔥 SINGLE SOURCE OF TRUTH
+let unsubscribeRealtime = null;
 
 // =============================================
-// ===== SHOW DASHBOARD (SECURE + AI READY)
+// ===== SHOW DASHBOARD (SAFE ORDER)
 // =============================================
 
 window.showDashboard = async function () {
@@ -4862,8 +4863,12 @@ window.showDashboard = async function () {
 
   document.getElementById("dashboardModal").classList.remove("hidden");
 
-  await loadDashboardData();
-  initCharts();
+  initCharts(); // 🔥 ALWAYS FIRST
+
+  await loadDashboardData(); // 🔥 THEN DATA
+
+  initRealtimeListener(); // 🔥 LIVE FIX (NO SILENT EVER)
+
   init3DDashboard();
   initMapHeatLayer();
 
@@ -4871,91 +4876,183 @@ window.showDashboard = async function () {
 };
 
 // =============================================
-// ===== LOAD DASHBOARD DATA (REALTIME SAFE)
+// ===== LOAD DATA (ANTI-SILENT + SAFE)
 // =============================================
 
 async function loadDashboardData() {
-  const snap = await getDocs(collection(db, "child"));
-  const data = snap.docs.map((d) => d.data());
+  try {
+    console.log("🔥 Loading dashboard data...");
+
+    const snap = await getDocs(collection(db, "child"));
+
+    if (!snap || snap.empty) {
+      console.warn("⚠️ No data in Firestore");
+
+      dashboardData = [];
+      updateDashboardUI([]);
+
+      return;
+    }
+
+    dashboardData = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    console.log("✅ DATA:", dashboardData);
+
+    updateDashboardUI(dashboardData);
+
+  } catch (err) {
+    console.error("❌ LOAD ERROR:", err);
+    BrickNotify.error("Failed to load dashboard data");
+  }
+}
+
+// =============================================
+// ===== REALTIME LISTENER (KEY FIX 🔥)
+// =============================================
+
+function initRealtimeListener() {
+  if (unsubscribeRealtime) unsubscribeRealtime();
+
+  const q = query(collection(db, "child"));
+
+  unsubscribeRealtime = onSnapshot(q, (snap) => {
+    console.log("🔄 REALTIME UPDATE");
+
+    dashboardData = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    updateDashboardUI(dashboardData);
+  });
+}
+
+// =============================================
+// ===== CENTRAL UI UPDATE (NO SILENT)
+// =============================================
+
+function updateDashboardUI(data) {
+  console.log("📊 Updating UI with:", data);
 
   document.getElementById("metricTotal").innerText = data.length;
+
+  updateChartsWithRealData(data);
 
   generateAIReportSummary(data);
 }
 
 // =============================================
-// ===== CHARTS (PIE + HISTOGRAM + MODERN UI)
+// ===== CHARTS INIT (SAFE)
 // =============================================
 
 function initCharts() {
-  const ctxPie = document.getElementById("pieChart")?.getContext("2d");
-  const ctxBar = document.getElementById("barChart")?.getContext("2d");
+  const pieCtx = document.getElementById("pieChart")?.getContext("2d");
+  const barCtx = document.getElementById("barChart")?.getContext("2d");
 
-  if (!ctxPie || !ctxBar) return;
+  if (!pieCtx || !barCtx) {
+    console.warn("⚠️ Chart canvas missing");
+    return;
+  }
 
-  charts.pie = new Chart(ctxPie, {
+  charts.pie = new Chart(pieCtx, {
     type: "pie",
     data: {
       labels: ["Active", "Pending", "Resolved"],
-      datasets: [{
-        data: [40, 30, 30],
-        backgroundColor: ["#4CAF50", "#FFC107", "#F44336"]
-      }]
+      datasets: [{ data: [0, 0, 0] }]
     }
   });
 
-  charts.bar = new Chart(ctxBar, {
+  charts.bar = new Chart(barCtx, {
     type: "bar",
     data: {
-      labels: ["Jan", "Feb", "Mar", "Apr", "May"],
-      datasets: [{
-        label: "Cases",
-        data: [12, 19, 3, 5, 10],
-        backgroundColor: "#2196F3"
-      }]
+      labels: [],
+      datasets: [{ label: "Cases", data: [] }]
     }
   });
 }
 
 // =============================================
-// ===== 3D DASHBOARD (THREE.JS CUBES)
+// ===== UPDATE CHARTS (ANTI-SILENT)
+// =============================================
+
+function updateChartsWithRealData(data) {
+  if (!charts.pie || !charts.bar) {
+    console.warn("⚠️ Charts not ready");
+    return;
+  }
+
+  let active = 0, pending = 0, resolved = 0;
+
+  const monthly = {};
+
+  data.forEach(item => {
+    const status = (item.status || "").toLowerCase();
+
+    if (status === "active") active++;
+    else if (status === "pending") pending++;
+    else if (status === "resolved") resolved++;
+
+    let date = item.createdAt?.seconds
+      ? new Date(item.createdAt.seconds * 1000)
+      : new Date(item.createdAt);
+
+    if (!date || isNaN(date)) return;
+
+    const month = date.toLocaleString("default", { month: "short" });
+    monthly[month] = (monthly[month] || 0) + 1;
+  });
+
+  charts.pie.data.datasets[0].data = [active, pending, resolved];
+  charts.pie.update();
+
+  charts.bar.data.labels = Object.keys(monthly);
+  charts.bar.data.datasets[0].data = Object.values(monthly);
+  charts.bar.update();
+}
+
+// =============================================
+// ===== 3D DASHBOARD (SAFE)
 // =============================================
 
 function init3DDashboard() {
   const container = document.getElementById("threeContainer");
   if (!container || !window.THREE) return;
 
-  threeScene = new THREE.Scene();
-  threeCamera = new THREE.PerspectiveCamera(75, container.clientWidth/container.clientHeight, 0.1, 1000);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
 
-  threeRenderer = new THREE.WebGLRenderer({ alpha: true });
-  threeRenderer.setSize(container.clientWidth, container.clientHeight);
+  const renderer = new THREE.WebGLRenderer({ alpha: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+
   container.innerHTML = "";
-  container.appendChild(threeRenderer.domElement);
+  container.appendChild(renderer.domElement);
 
   const geometry = new THREE.BoxGeometry();
   const material = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
 
-  for (let i = 0; i < 10; i++) {
+  dashboardData.forEach((item, i) => {
     const cube = new THREE.Mesh(geometry, material);
     cube.position.x = i - 5;
     cube.position.y = Math.random() * 5;
-    threeScene.add(cube);
-  }
+    scene.add(cube);
+  });
 
-  threeCamera.position.z = 10;
+  camera.position.z = 10;
 
   function animate() {
     requestAnimationFrame(animate);
-    threeScene.rotation.y += 0.01;
-    threeRenderer.render(threeScene, threeCamera);
+    scene.rotation.y += 0.01;
+    renderer.render(scene, camera);
   }
 
   animate();
 }
 
 // =============================================
-// ===== GOOGLE MAPS HEATMAP TRACKING
+// ===== MAP HEATMAP (REAL DATA)
 // =============================================
 
 function initMapHeatLayer() {
@@ -4963,97 +5060,55 @@ function initMapHeatLayer() {
 
   const map = new google.maps.Map(document.getElementById("map"), {
     zoom: 6,
-    center: { lat: -6.7924, lng: 39.2083 },
+    center: { lat: -6.8, lng: 39.2 },
   });
 
-  const heatmapData = [
-    new google.maps.LatLng(-6.8, 39.2),
-    new google.maps.LatLng(-6.7, 39.3),
-  ];
+  const heatData = dashboardData
+    .filter(d => d.lat && d.lng)
+    .map(d => new google.maps.LatLng(d.lat, d.lng));
 
   new google.maps.visualization.HeatmapLayer({
-    data: heatmapData,
-    map: map,
+    data: heatData,
+    map
   });
 }
 
 // =============================================
-// ===== AI CHATBOT (GPT READY STRUCTURE)
-// =============================================
-
-window.sendAIMessage = async function (msg) {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer YOUR_OPENAI_API_KEY"
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: msg }]
-    })
-  });
-
-  const data = await res.json();
-
-  return data.choices?.[0]?.message?.content || "No response";
-};
-
-// =============================================
-// ===== AI REPORT SUMMARY ENGINE
+// ===== AI SUMMARY
 // =============================================
 
 function generateAIReportSummary(data) {
-  const summary = `
-    Total Records: ${data.length}
-    Active Trends: Increasing cases observed
-    Risk Level: Moderate
-  `;
-
-  document.getElementById("aiSummaryBox").innerText = summary;
+  document.getElementById("aiSummaryBox").innerText =
+    `Total: ${data.length} | Active cases analysis ready`;
 }
 
 // =============================================
-// ===== EXCEL EXPORT (XLSX)
+// ===== EXPORTS (NO SILENT 🔥)
 // =============================================
 
-window.exportExcel = async function () {
-  const snap = await getDocs(collection(db, "child"));
-  const data = snap.docs.map(d => d.data());
+window.exportExcel = function () {
+  if (!dashboardData.length) return BrickNotify.error("No data");
 
-  const ws = XLSX.utils.json_to_sheet(data);
+  const ws = XLSX.utils.json_to_sheet(dashboardData);
   const wb = XLSX.utils.book_new();
-
   XLSX.utils.book_append_sheet(wb, ws, "Report");
-
-  XLSX.writeFile(wb, "NCRS_Report.xlsx");
-
-  triggerAuditLog("Excel Export", "downloaded");
+  XLSX.writeFile(wb, "Report.xlsx");
 };
 
-// =============================================
-// ===== POWERPOINT EXPORT (PPTX)
-// =============================================
+window.exportPPT = function () {
+  if (!dashboardData.length) return BrickNotify.error("No data");
 
-window.exportPPT = async function () {
   const pptx = new PptxGenJS();
   const slide = pptx.addSlide();
 
-  slide.addText("NCRS DASHBOARD REPORT", {
-    x: 1, y: 1, fontSize: 24, color: "363636"
-  });
+  slide.addText("Dashboard Report", { x: 1, y: 1, fontSize: 24 });
+  slide.addText(`Total records: ${dashboardData.length}`, { x: 1, y: 2 });
 
-  slide.addText("Generated Corporate Analytics Report", {
-    x: 1, y: 2, fontSize: 14
-  });
-
-  pptx.writeFile("NCRS_Report.pptx");
-
-  triggerAuditLog("PPT Export", "downloaded");
+  pptx.writeFile("Report.pptx");
 };
 
 // =============================================
-// ===== AUDIT LOGGING SYSTEM (SECURITY)
+// ===== AUDIT LOG
 // =============================================
 
 function triggerAuditLog(action, user) {
@@ -5065,26 +5120,13 @@ function triggerAuditLog(action, user) {
 }
 
 // =============================================
-// ===== DOWNLOAD CHART IMAGE
-// =============================================
-
-window.downloadChart = function (chartId) {
-  const chartInstance = charts[chartId];
-
-  if (!chartInstance) return;
-
-  const link = document.createElement("a");
-  link.download = chartId + ".png";
-  link.href = chartInstance.toBase64Image();
-  link.click();
-};
-
-// =============================================
 // ===== CLOSE DASHBOARD
 // =============================================
 
 window.closeDashboard = function () {
   document.getElementById("dashboardModal").classList.add("hidden");
+
+  if (unsubscribeRealtime) unsubscribeRealtime(); // 🔥 STOP LISTENER
 };
 
       // =============================================
