@@ -4940,137 +4940,234 @@
         });
       };
 
-      // =============================================
-      // ===== ADVERTISEMENT SYSTEM LOGIC =====
-      // =============================================
-      let adInterval;
-      let adIndex = 0;
-      let adList = [];
+      
+// =============================================
+// ===== ADVERTISEMENT SYSTEM LOGIC =====
+// =============================================
 
-      function initAdSystem() {
-        const q = query(collection(db, "adverts"), where("isActive", "==", true));
-        onSnapshot(q, (snapshot) => {
-          adList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          if (adList.length === 0) {
-            document.getElementById("ad-slider-wrapper").innerHTML =
-              "<div style='width:100%; text-align:center; color:#ccc;'>No active adverts</div>";
-            document.getElementById("ad-bar-container").style.display = "none";
-          } else {
-            document.getElementById("ad-bar-container").style.display = "flex";
-            renderAdSlider();
-          }
-        });
-      }
+let adInterval;
+let adIndex = 0;
+let adList = [];
 
-      function renderAdSlider() {
-        const container = document.getElementById("ad-slider-wrapper");
-        container.innerHTML = "";
-        adList.forEach((ad, idx) => {
-          const div = document.createElement("div");
-          div.className = `ad-slide ${idx === 0 ? "active" : ""}`;
-          div.innerHTML = `<div style="flex:1; display:flex; align-items:center; gap:15px;"><div style="display:flex; gap:12px; align-items:flex-start;"><img src="${ad.image}" style="width:160px; height:160px; object-fit:cover; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1);"><div><h4 style="margin:0; color:var(--primary); font-size:1.1rem;">${ad.title}</h4><p style="margin:5px 0 0; color:#666; font-size:0.9rem;">${ad.description}</p></div></div></div>`;
-          container.appendChild(div);
-        });
-        startAdRotation();
-      }
+// INIT SYSTEM
+function initAdSystem() {
+  const q = query(collection(db, "adverts"), where("isActive", "==", true));
 
-      function startAdRotation() {
-        clearInterval(adInterval);
-        if (adList.length <= 1) return;
-        const progress = document.getElementById("ad-progress");
-        adIndex = 0;
-        progress.style.transition = "none";
-        progress.style.width = "0%";
-        setTimeout(() => {
-          progress.style.transition = "width 5s linear";
-          progress.style.width = "100%";
-        }, 50);
-        adInterval = setInterval(() => {
-          const slides = document.querySelectorAll(".ad-slide");
-          slides[adIndex].classList.remove("active");
-          adIndex = (adIndex + 1) % adList.length;
-          slides[adIndex].classList.add("active");
-          progress.style.transition = "none";
-          progress.style.width = "0%";
-          setTimeout(() => {
-            progress.style.transition = "width 5s linear";
-            progress.style.width = "100%";
-          }, 50);
-        }, 5000);
-      }
+  onSnapshot(q, (snapshot) => {
+    adList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-      window.closeAdBar = function () {
-        document.getElementById("ad-bar-container").style.display = "none";
-      };
+    const wrapper = document.getElementById("ad-slider-wrapper");
+    const bar = document.getElementById("ad-bar-container");
 
-      window.openManageAdverts = async function () {
-        const user = JSON.parse(sessionStorage.getItem("currentUser"));
-        if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
-          BrickNotify.error("Access Denied.");
-          return;
-        }
-        document.getElementById("manageAdvertsModal").classList.remove("hidden");
-        loadAdminAdList();
-      };
-      window.closeManageAdverts = function () {
-        document.getElementById("manageAdvertsModal").classList.add("hidden");
-      };
+    if (adList.length === 0) {
+      wrapper.innerHTML = "<p style='text-align:center;color:#aaa;'>No adverts</p>";
+      bar.style.display = "none";
+      return;
+    }
 
-      async function loadAdminAdList() {
-        const listContainer = document.getElementById("adminAdList");
-        listContainer.innerHTML = "Loading...";
-        const snap = await getDocs(collection(db, "adverts"));
-        const adverts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        listContainer.innerHTML = "";
-        if (adverts.length === 0)
-          listContainer.innerHTML = "<p style='color:#999; text-align:center;'>No adverts found.</p>";
+    bar.style.display = "flex";
+    renderAdSlider();
+    startAdRotation();
+  });
+}
 
-        adverts.forEach((ad) => {
-          const item = document.createElement("div");
-          item.className = "admin-ad-item";
-          item.style.cssText =
-            "display:flex; gap:10px; padding:10px; border:1px solid #eee; border-radius:8px; align-items:center;";
-          item.innerHTML = `<img src="${ad.image}" style="width:60px; height:60px; object-fit:contain; border-radius:4px; border:1px solid #ddd;"><div style="flex:1; padding:0 10px;"><h5 style="margin:0; font-weight:bold;">${ad.title}</h5><p style="margin:0; font-size:0.8rem; color:#666;">${ad.description.substring(0, 50)}...</p><span class="status-badge ${ad.isActive ? "found" : "missing"}" style="font-size:0.7rem; padding:2px 6px;">${ad.isActive ? "Active" : "Disabled"}</span></div><div style="display:flex; flex-direction:column; gap:5px;"><button class="btn-xs ${ad.isActive ? "btn-delete" : "btn-view"}" onclick="window.toggleAdvert('${ad.id}', ${ad.isActive})">${ad.isActive ? "Disable" : "Enable"}</button><button class="btn-xs btn-delete" onclick="window.deleteAdvert('${ad.id}')"><i class="fas fa-trash"></i></button></div>`;
-          listContainer.appendChild(item);
-        });
-      }
+// RENDER SLIDER
+function renderAdSlider() {
+  const container = document.getElementById("ad-slider-wrapper");
+  container.innerHTML = "";
 
-      window.handleAddAdvert = async function (e) {
-        e.preventDefault();
-        const fileInput = document.getElementById("adImage");
-        if (fileInput.files && fileInput.files[0]) {
-          const reader = new FileReader();
-          reader.onload = async (evt) => {
-            const base64 = evt.target.result;
-            if (base64.length > 1000000) {
-              BrickNotify.error("Image too large.");
-              return;
-            }
-            await addDoc(collection(db, "adverts"), {
-              title: document.getElementById("adTitle").value,
-              description: document.getElementById("adDescription").value,
-              image: base64,
-              isActive: true,
-              createdAt: serverTimestamp(),
-            });
-            document.querySelector('form[onsubmit="window.handleAddAdvert(event)"]').reset();
-            BrickNotify.success("Advert added.");
-            loadAdminAdList();
-          };
-          reader.readAsDataURL(fileInput.files[0]);
-        }
-      };
+  adList.forEach((ad, idx) => {
+    const div = document.createElement("div");
+    div.className = `ad-slide ${idx === 0 ? "active" : ""}`;
 
-      window.toggleAdvert = async function (id, currentStatus) {
-        await updateDoc(doc(db, "adverts", id), { isActive: !currentStatus });
-        loadAdminAdList();
-      };
-      window.deleteAdvert = async function (id) {
-        if (confirm("Are you sure?")) {
-          await deleteDoc(doc(db, "adverts", id));
-          loadAdminAdList();
-        }
-      };
-    </script>
+    div.innerHTML = `
+      <div class="ad-card">
+        <img src="${ad.image}" alt="advert">
+        <h4 class="ad-title">${ad.title}</h4>
+        <p class="ad-desc">${ad.description}</p>
+      </div>
+    `;
+
+    div.onclick = () => funguaAdverts(ad);
+    div.style.cursor = "pointer";
+
+    container.appendChild(div);
+  });
+}
+
+// ROTATION
+function startAdRotation() {
+  clearInterval(adInterval);
+
+  if (adList.length <= 1) return;
+
+  adIndex = 0;
+  runProgress();
+
+  adInterval = setInterval(() => {
+    const slides = document.querySelectorAll(".ad-slide");
+
+    if (!slides.length) return;
+
+    slides[adIndex].classList.remove("active");
+    adIndex = (adIndex + 1) % adList.length;
+    slides[adIndex].classList.add("active");
+
+    runProgress();
+  }, 5000);
+}
+
+// PROGRESS BAR
+function runProgress() {
+  const progress = document.getElementById("ad-progress");
+
+  if (!progress) return;
+
+  progress.style.transition = "none";
+  progress.style.width = "0%";
+
+  setTimeout(() => {
+    progress.style.transition = "width 5s linear";
+    progress.style.width = "100%";
+  }, 50);
+}
+
+// CLOSE AD BAR
+window.closeAdBar = function () {
+  document.getElementById("ad-bar-container").style.display = "none";
+};
+
+// OPEN ADMIN PANEL
+window.openManageAdverts = async function () {
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+
+  if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+    BrickNotify.error("Access Denied.");
+    return;
+  }
+
+  document.getElementById("manageAdvertsModal").classList.remove("hidden");
+  loadAdminAdList();
+};
+
+// CLOSE ADMIN PANEL
+window.closeManageAdverts = function () {
+  document.getElementById("manageAdvertsModal").classList.add("hidden");
+};
+
+// LOAD ADMIN ADS
+async function loadAdminAdList() {
+  const listContainer = document.getElementById("adminAdList");
+  listContainer.innerHTML = "Loading...";
+
+  const snap = await getDocs(collection(db, "adverts"));
+  const adverts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  listContainer.innerHTML = "";
+
+  if (adverts.length === 0) {
+    listContainer.innerHTML =
+      "<p style='color:#999; text-align:center;'>No adverts found.</p>";
+    return;
+  }
+
+  adverts.forEach((ad) => {
+    const item = document.createElement("div");
+    item.className = "admin-ad-item";
+    item.style.cssText =
+      "display:flex; gap:10px; padding:10px; border:1px solid #eee; border-radius:8px; align-items:center;";
+
+    item.innerHTML = `
+      <img src="${ad.image}" style="width:60px; height:60px; object-fit:contain; border-radius:4px; border:1px solid #ddd;">
+      <div style="flex:1; padding:0 10px;">
+        <h5 style="margin:0;">${ad.title}</h5>
+        <p style="margin:0; font-size:0.8rem; color:#666;">
+          ${ad.description.substring(0, 50)}...
+        </p>
+        <span class="status-badge ${ad.isActive ? "found" : "missing"}">
+          ${ad.isActive ? "Active" : "Disabled"}
+        </span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:5px;">
+        <button onclick="window.toggleAdvert('${ad.id}', ${ad.isActive})">
+          ${ad.isActive ? "Disable" : "Enable"}
+        </button>
+        <button onclick="window.deleteAdvert('${ad.id}')">Delete</button>
+      </div>
+    `;
+
+    listContainer.appendChild(item);
+  });
+}
+
+// ADD ADVERT
+window.handleAddAdvert = async function (e) {
+  e.preventDefault();
+
+  const fileInput = document.getElementById("adImage");
+
+  if (!fileInput.files || !fileInput.files[0]) return;
+
+  const reader = new FileReader();
+
+  reader.onload = async (evt) => {
+    const base64 = evt.target.result;
+
+    if (base64.length > 1000000) {
+      BrickNotify.error("Image too large.");
+      return;
+    }
+
+    await addDoc(collection(db, "adverts"), {
+      title: document.getElementById("adTitle").value,
+      description: document.getElementById("adDescription").value,
+      image: base64,
+      isActive: true,
+      createdAt: serverTimestamp(),
+    });
+
+    document
+      .querySelector('form[onsubmit="window.handleAddAdvert(event)"]')
+      .reset();
+
+    BrickNotify.success("Advert added.");
+    loadAdminAdList();
+  };
+
+  reader.readAsDataURL(fileInput.files[0]);
+};
+
+// TOGGLE AD
+window.toggleAdvert = async function (id, currentStatus) {
+  await updateDoc(doc(db, "adverts", id), {
+    isActive: !currentStatus,
+  });
+
+  loadAdminAdList();
+};
+
+// DELETE AD
+window.deleteAdvert = async function (id) {
+  if (confirm("Are you sure?")) {
+    await deleteDoc(doc(db, "adverts", id));
+    loadAdminAdList();
+  }
+};
+
+// =============================
+// MODAL FUNCTIONS (FIXED PLACE)
+// =============================
+function funguaAdverts(habari) {
+  document.getElementById("modalTitle").innerText = habari.title;
+  document.getElementById("modalImage").src = habari.image;
+  document.getElementById("modalText").innerText = habari.description;
+
+  document.getElementById("advertsModal").style.display = "flex";
+}
+
+function closeAdverts() {
+  document.getElementById("advertsModal").style.display = "none";
+}
+</script>
   </body>
-</html>
+  </html>
