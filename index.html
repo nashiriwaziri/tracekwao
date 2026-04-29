@@ -3323,13 +3323,31 @@ body {
     </div>
 
     <!-- MESSAGES BOX MODAL (ADMIN - NOW WITH TABS: Identifiers + Inbox) -->
-    <div id="messagesModal" class="modal-overlay hidden">
-      <div class="modal-content xl">
-        <button class="close-modal" onclick="closeMessagesBox()">×</button>
-        <div class="modal-header">
-          <h2>
-            <i class="fas fa-envelope"></i>
-            Messages Box
+<div id="messagesModal" class="modal-overlay hidden">
+
+  <div class="modal-content xl">
+
+    <button class="close-modal" type="button" onclick="closeMessagesBox(event)">
+      ×
+    </button>
+
+    <div class="modal-header">
+      <h2>
+        <i class="fas fa-envelope"></i>
+        Messages Box
+      </h2>
+
+      <p style="font-size: 0.85rem; color: var(--muted); margin-top: 4px">
+        Admin Messaging Center
+      </p>
+    </div>
+
+    <!-- TAB CONTENT START (placeholders safe) -->
+    <div class="modal-body">
+      <!-- your tabs here -->
+    </div>
+
+  </div>
           </h2>
           <p style="font-size: 0.85rem; color: var(--muted); margin-top: 4px">
             <i class="fas fa-shield-alt" style="color: var(--brick-red)"></i>
@@ -3990,6 +4008,183 @@ window.shareAdvertToWA = function () {
 
   const text = `${currentAdvertItem.title}\n${currentAdvertItem.description}`;
   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+};
+// =============================================
+// ===== SAFE GLOBAL VARIABLES =====
+// =============================================
+
+let charts = charts || {};
+
+
+// =============================================
+// ===== LANGUAGE SYSTEM (UNCHANGED BUT SAFE) =====
+// =============================================
+window.changeLanguage = async function (lang) {
+  currentLang = lang;
+
+  await setDoc(doc(db, "appData", "settings"), { lang }, { merge: true });
+
+  document.getElementById("btn-en")?.classList.toggle("active", lang === "en");
+  document.getElementById("btn-sw")?.classList.toggle("active", lang === "sw");
+
+  document.documentElement.lang = lang;
+
+  document.querySelectorAll("[data-translate]").forEach(el => {
+    const k = el.getAttribute("data-translate");
+    if (translations[lang]?.[k]) el.innerHTML = translations[lang][k];
+  });
+
+  document.querySelectorAll("[data-translate-placeholder]").forEach(el => {
+    const k = el.getAttribute("data-translate-placeholder");
+    if (translations[lang]?.[k]) el.placeholder = translations[lang][k];
+  });
+
+  renderChildTable(document.getElementById("myInput")?.value);
+};
+
+
+// =============================================
+// ===== DASHBOARD SHOW (FIXED) =====
+// =============================================
+window.showDashboard = function (event) {
+  if (event) event.preventDefault();
+
+  const dashboard = document.getElementById("dashboardSection");
+  if (!dashboard) return;
+
+  dashboard.style.display = "block";
+  dashboard.classList.remove("hidden");
+
+  initDashboardData?.();
+  initCharts?.();
+};
+
+
+// =============================================
+// ===== EXPORT SYSTEM (SAFE) =====
+// =============================================
+window.downloadChart = function (id) {
+  const chart = charts[id];
+  if (!chart) return BrickNotify?.error("Chart not found");
+
+  const a = document.createElement("a");
+  a.href = chart.toBase64Image();
+  a.download = `${id}.png`;
+  a.click();
+};
+
+
+// PDF
+window.exportPDF = function () {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.text("Dashboard Report", 10, 10);
+  doc.text("Generated: " + new Date().toLocaleString(), 10, 20);
+
+  doc.save("dashboard.pdf");
+};
+
+
+// EXCEL
+window.exportExcel = function () {
+  const data = [
+    ["Metric", "Value"],
+    ["Total", document.getElementById("metricTotal")?.innerText || 0],
+    ["Missing", document.getElementById("metricMissing")?.innerText || 0],
+    ["Found", document.getElementById("metricFound")?.innerText || 0]
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Dashboard");
+  XLSX.writeFile(wb, "dashboard.xlsx");
+};
+
+
+// PPT
+window.exportPPT = function () {
+  let pptx = new PptxGenJS();
+  let slide = pptx.addSlide();
+
+  slide.addText("Dashboard Report", { x: 1, y: 1, fontSize: 24 });
+  slide.addText("Generated: " + new Date().toLocaleString(), { x: 1, y: 2 });
+
+  pptx.writeFile("dashboard.pptx");
+};
+
+
+// =============================================
+// ===== CHART SYSTEM (FIXED + MATCHED IDS) =====
+// =============================================
+window.initCharts = function () {
+
+  Object.values(charts).forEach(c => c?.destroy());
+
+  // AGE (Histogram)
+  charts.ageChart = new Chart(document.getElementById("ageChart"), {
+    type: "bar",
+    data: {
+      labels: ["0-5", "6-12", "13-17", "18+"],
+      datasets: [{
+        label: "Age Distribution",
+        data: [10, 25, 40, 15],
+        backgroundColor: "#007bff"
+      }]
+    }
+  });
+
+  // STATUS (Pie)
+  charts.statusChart = new Chart(document.getElementById("statusChart"), {
+    type: "pie",
+    data: {
+      labels: ["Found", "Missing"],
+      datasets: [{
+        data: [70, 30],
+        backgroundColor: ["green", "red"]
+      }]
+    }
+  });
+
+  // IDENTIFIER (Line)
+  charts.identifierChart = new Chart(document.getElementById("identifierChart"), {
+    type: "line",
+    data: {
+      labels: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      datasets: [{
+        label: "Identifiers",
+        data: [5, 10, 8, 20, 15],
+        borderColor: "#17a2b8",
+        fill: true
+      }]
+    }
+  });
+
+  // REGION
+  charts.regionChart = new Chart(document.getElementById("regionChart"), {
+    type: "bar",
+    data: {
+      labels: ["Dar", "Arusha", "Mwanza"],
+      datasets: [{
+        label: "Cases",
+        data: [20, 15, 30],
+        backgroundColor: "#ffc107"
+      }]
+    }
+  });
+
+  // GENDER
+  charts.genderChart = new Chart(document.getElementById("genderChart"), {
+    type: "doughnut",
+    data: {
+      labels: ["Male", "Female"],
+      datasets: [{
+        data: [55, 45],
+        backgroundColor: ["blue", "pink"]
+      }]
+    }
+  });
 };
 
 window.shareAdvertToFB = function () {
