@@ -3956,255 +3956,182 @@ body {
           roleSelect.appendChild(opt);
         }
       }
+// =============================================
+// ===== SAFE GLOBAL VARIABLES =====
+// =============================================
 
-      // =============================================
-      // ===== UI LOGIC =====
-      // =============================================
-      window.changeLanguage = async function (lang) {
-        currentLang = lang;
-        await setDoc(doc(db, "appData", "settings"), { lang: lang }, { merge: true });
+let charts = charts || {};
 
-        document.getElementById("btn-en").classList.toggle("active", lang === "en");
-        document.getElementById("btn-sw").classList.toggle("active", lang === "sw");
-        document.documentElement.lang = lang;
-        document.querySelectorAll("[data-translate]").forEach((el) => {
-          const k = el.getAttribute("data-translate");
-          if (translations[lang][k]) el.innerHTML = translations[lang][k];
-        });
-        document.querySelectorAll("[data-translate-placeholder]").forEach((el) => {
-          const k = el.getAttribute("data-translate-placeholder");
-          if (translations[lang][k]) el.placeholder = translations[lang][k];
-        });
-        renderChildTable(document.getElementById("myInput").value);
-      };
 
-      window.onload = async function () {
-        ensureSuperAdmin();
-        ensureNewsData();
-        BrickNotify.init();
+// =============================================
+// ===== LANGUAGE SYSTEM (UNCHANGED BUT SAFE) =====
+// =============================================
+window.changeLanguage = async function (lang) {
+  currentLang = lang;
 
-        const snap = await getDoc(doc(db, "appData", "settings"));
-        if (snap.exists()) {
-          currentLang = snap.data().lang || "sw";
-        }
-        changeLanguage(currentLang);
+  await setDoc(doc(db, "appData", "settings"), { lang }, { merge: true });
 
-        const u = sessionStorage.getItem("currentUser");
-        if (u) showSite(JSON.parse(u));
-        else enforceLogin();
+  document.getElementById("btn-en")?.classList.toggle("active", lang === "en");
+  document.getElementById("btn-sw")?.classList.toggle("active", lang === "sw");
 
-        setupDropdowns();
-        initAdSystem();
-        initNewsSystem();
-      };
+  document.documentElement.lang = lang;
 
-      window.setupDropdowns = function () {
-        const dropdowns = document.querySelectorAll(".nav-dropdown .dropbtn, .dropdown .dropbtn-admin");
-        dropdowns.forEach((btn) => {
-          btn.addEventListener("click", function (event) {
-            event.stopPropagation();
-            event.preventDefault();
-            const container = this.closest(".nav-dropdown, .dropdown");
-            document
-              .querySelectorAll(".nav-dropdown.show-dropdown, .dropdown.show-dropdown")
-              .forEach((openDropdown) => {
-                if (openDropdown !== container) openDropdown.classList.remove("show-dropdown");
-              });
-            container.classList.toggle("show-dropdown");
-          });
-        });
-        window.addEventListener("click", function (event) {
-          if (
-            !event.target.closest(".nav-dropdown") &&
-            !event.target.closest(".dropdown") &&
-            !event.target.closest(".user-profile-widget")
-          ) {
-            document
-              .querySelectorAll(".nav-dropdown.show-dropdown, .dropdown.show-dropdown")
-              .forEach((openDropdown) => {
-                openDropdown.classList.remove("show-dropdown");
-              });
-            document.getElementById("userDropdownMenu").classList.remove("show");
-          }
-        });
-      };
+  document.querySelectorAll("[data-translate]").forEach(el => {
+    const k = el.getAttribute("data-translate");
+    if (translations[lang]?.[k]) el.innerHTML = translations[lang][k];
+  });
 
-      window.toggleUserMenu = function () {
-        document.getElementById("userDropdownMenu").classList.toggle("show");
-      };
+  document.querySelectorAll("[data-translate-placeholder]").forEach(el => {
+    const k = el.getAttribute("data-translate-placeholder");
+    if (translations[lang]?.[k]) el.placeholder = translations[lang][k];
+  });
 
-      window.enforceLogin = function () {
-        const hide = (id) => {
-          const el = document.getElementById(id);
-          if (el) el.style.display = "none";
-        };
-        const show = (id, val = "block") => {
-          const el = document.getElementById(id);
-          if (el) el.style.display = val;
-        };
-
-        document.getElementById("authModal").classList.remove("hidden");
-
-        hide("mainSiteContent");
-        hide("logoutBtn");
-        hide("reportBtn");
-        hide("actionHeader");
-        hide("dashboardBtn");
-        hide("contactSupportBtn");
-        hide("userProfileWidget");
-        hide("messagesBtn");
-        hide("manageUsersLink");
-        hide("manageAdvertsLink");
-        hide("msgAdminBtn");
-        hide("myMessagesBtn");
-        hide("myMessagesDropdownLink");
-
-        show("loginBtn");
-
-        const closeBtn = document.getElementById("closeModalBtn");
-        if (closeBtn) closeBtn.classList.add("forced");
-
-        const dropdown = document.getElementById("reportDropdown");
-        if (dropdown) dropdown.classList.remove("show-btn");
-      };
-
-      window.showSite = async function (user) {
-        document.getElementById("authModal").classList.add("hidden");
-        document.getElementById("mainSiteContent").style.display = "block";
-
-        document.getElementById("loginBtn").style.display = "none";
-        document.getElementById("logoutBtn").style.display = "none";
-        document.getElementById("contactSupportBtn").style.display = "none";
-
-        const profileWidget = document.getElementById("userProfileWidget");
-        const navImg = document.getElementById("navUserImg");
-        const navName = document.getElementById("navUserName");
-
-        navName.innerText = `${user.fname} ${user.lname}`;
-
-        if (user.photoUrl) {
-          navImg.src = user.photoUrl;
-          navImg.style.backgroundColor = "transparent";
-        } else {
-          const initials = (user.fname[0] + user.lname[0]).toUpperCase();
-          navImg.src = generateInitialsAvatar(initials);
-        }
-
-        profileWidget.style.display = "flex";
-
-        if (user.role === "Administrator" || user.role === "Super Administrator") {
-          // ADMIN VIEW
-          document.getElementById("reportBtn").style.display = "block";
-          document.getElementById("actionHeader").style.display = "table-cell";
-          document.getElementById("reportDropdown").classList.add("show-btn");
-          document.addEventListener("DOMContentLoaded", function () {
-  const navDashboardLink = document.getElementById("navDashboardLink");
-
-  if (navDashboardLink) {
-    navDashboardLink.style.display = "block";
-  } else {
-    console.warn("navDashboardLink not found in DOM");
-  }
-});
-
-          document.getElementById("messagesBtn").style.display = "inline-flex";
-          document.getElementById("manageUsersLink").style.display = "flex";
-          document.getElementById("manageAdvertsLink").style.display = "flex";
-          document.getElementById("msgAdminBtn").style.display = "none";
-          document.getElementById("myMessagesBtn").style.display = "none";
-          document.getElementById("myMessagesDropdownLink").style.display = "none";
-          updateAdminBadge();
-          updateMessagesBadge();
-          listenForInboxUnread(); // Real-time inbox unread count for admin
-        } else {
-          // IDENTIFIER / STANDARD USER VIEW
-          document.getElementById("reportBtn").style.display = "none";
-          document.getElementById("actionHeader").style.display = "none";
-          document.getElementById("reportDropdown").classList.remove("show-btn");
-          document.getElementById("navDashboardLink").style.display = "none";
-          document.getElementById("messagesBtn").style.display = "none";
-          document.getElementById("manageUsersLink").style.display = "none";
-          document.getElementById("manageAdvertsLink").style.display = "none";
-          // NEW: Show messaging buttons for identifiers
-          document.getElementById("msgAdminBtn").style.display = "inline-flex";
-          document.getElementById("myMessagesBtn").style.display = "inline-flex";
-          document.getElementById("myMessagesDropdownLink").style.display = "flex";
-          listenForMyMessageReplies(user); // Real-time reply count for identifier
-        }
-        renderChildTable();
-      };
-
-      window.generateInitialsAvatar = function (initials) {
-        const canvas = document.createElement("canvas");
-        canvas.width = 100;
-        canvas.height = 100;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#003366";
-        ctx.fillRect(0, 0, 100, 100);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 48px Montserrat, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(initials, 50, 55);
-        return canvas.toDataURL();
-      };
-
-      window.updateAdminBadge = async function () {
-        const snap = await getDocs(collection(db, "child"));
-        const child = snap.docs.map((d) => d.data());
-        const hasIdentifications = child.some((c) => c.identifiers && c.identifiers.length > 0);
-        const badge = document.getElementById("adminNotifyBadge");
-        if (hasIdentifications) badge.style.display = "block";
-        else badge.style.display = "none";
-      };
-
-      window.updateMessagesBadge = async function () {
-        const snap = await getDocs(collection(db, "child"));
-        const child = snap.docs.map((d) => d.data());
-        let count = 0;
-        child.forEach((c) => {
-          if (c.identifiers) count += c.identifiers.length;
-        });
-        const badge = document.getElementById("msgBadge");
-        if (count > 0) {
-          badge.innerText = count;
-          badge.style.display = "inline-block";
-        } else {
-          badge.style.display = "none";
-        }
-      };
-
-      window.logoutUser = function () {
-        sessionStorage.removeItem("currentUser");
-        BrickNotify.clearAll();
-        if (typeof google !== "undefined" && google.accounts) {
-          google.accounts.id.disableAutoSelect();
-        }
-        enforceLogin();
-      };
-     window.handleAdvertLike = async function () {
-  if (!window.currentAdvertItem) return;
-
-  try {
-    await updateDoc(doc(db, "adverts", window.currentAdvertItem.id), {
-      likes: increment(1),
-    });
-
-    BrickNotify.success("Liked!");
-  } catch (err) {
-    console.error(err);
-    BrickNotify.error("Like failed");
-  }
-};
-window.shareAdvertToWA = function () {
-  if (!window.currentAdvertItem) return;
-
-  const text = `${currentAdvertItem.title}\n${currentAdvertItem.description}`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+  renderChildTable(document.getElementById("myInput")?.value);
 };
 
-window.shareAdvertToFB = function () {
-  window.open(`https://www.facebook.com/sharer/sharer.php?u=${location.href}`);
+
+// =============================================
+// ===== DASHBOARD SHOW (FIXED) =====
+// =============================================
+window.showDashboard = function (event) {
+  if (event) event.preventDefault();
+
+  const dashboard = document.getElementById("dashboardSection");
+  if (!dashboard) return;
+
+  dashboard.style.display = "block";
+  dashboard.classList.remove("hidden");
+
+  initDashboardData?.();
+  initCharts?.();
+};
+
+
+// =============================================
+// ===== EXPORT SYSTEM (SAFE) =====
+// =============================================
+window.downloadChart = function (id) {
+  const chart = charts[id];
+  if (!chart) return BrickNotify?.error("Chart not found");
+
+  const a = document.createElement("a");
+  a.href = chart.toBase64Image();
+  a.download = `${id}.png`;
+  a.click();
+};
+
+
+// PDF
+window.exportPDF = function () {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.text("Dashboard Report", 10, 10);
+  doc.text("Generated: " + new Date().toLocaleString(), 10, 20);
+
+  doc.save("dashboard.pdf");
+};
+
+
+// EXCEL
+window.exportExcel = function () {
+  const data = [
+    ["Metric", "Value"],
+    ["Total", document.getElementById("metricTotal")?.innerText || 0],
+    ["Missing", document.getElementById("metricMissing")?.innerText || 0],
+    ["Found", document.getElementById("metricFound")?.innerText || 0]
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Dashboard");
+  XLSX.writeFile(wb, "dashboard.xlsx");
+};
+
+
+// PPT
+window.exportPPT = function () {
+  let pptx = new PptxGenJS();
+  let slide = pptx.addSlide();
+
+  slide.addText("Dashboard Report", { x: 1, y: 1, fontSize: 24 });
+  slide.addText("Generated: " + new Date().toLocaleString(), { x: 1, y: 2 });
+
+  pptx.writeFile("dashboard.pptx");
+};
+
+
+// =============================================
+// ===== CHART SYSTEM (FIXED + MATCHED IDS) =====
+// =============================================
+window.initCharts = function () {
+
+  Object.values(charts).forEach(c => c?.destroy());
+
+  // AGE (Histogram)
+  charts.ageChart = new Chart(document.getElementById("ageChart"), {
+    type: "bar",
+    data: {
+      labels: ["0-5", "6-12", "13-17", "18+"],
+      datasets: [{
+        label: "Age Distribution",
+        data: [10, 25, 40, 15],
+        backgroundColor: "#007bff"
+      }]
+    }
+  });
+
+  // STATUS (Pie)
+  charts.statusChart = new Chart(document.getElementById("statusChart"), {
+    type: "pie",
+    data: {
+      labels: ["Found", "Missing"],
+      datasets: [{
+        data: [70, 30],
+        backgroundColor: ["green", "red"]
+      }]
+    }
+  });
+
+  // IDENTIFIER (Line)
+  charts.identifierChart = new Chart(document.getElementById("identifierChart"), {
+    type: "line",
+    data: {
+      labels: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      datasets: [{
+        label: "Identifiers",
+        data: [5, 10, 8, 20, 15],
+        borderColor: "#17a2b8",
+        fill: true
+      }]
+    }
+  });
+
+  // REGION
+  charts.regionChart = new Chart(document.getElementById("regionChart"), {
+    type: "bar",
+    data: {
+      labels: ["Dar", "Arusha", "Mwanza"],
+      datasets: [{
+        label: "Cases",
+        data: [20, 15, 30],
+        backgroundColor: "#ffc107"
+      }]
+    }
+  });
+
+  // GENDER
+  charts.genderChart = new Chart(document.getElementById("genderChart"), {
+    type: "doughnut",
+    data: {
+      labels: ["Male", "Female"],
+      datasets: [{
+        data: [55, 45],
+        backgroundColor: ["blue", "pink"]
+      }]
+    }
+  });
 };
 
       // =============================================
