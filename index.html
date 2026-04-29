@@ -10,14 +10,16 @@
       rel="stylesheet"
     />
 
-    <!-- External Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Identity Services -->
-    <script src="https://accounts.google.com/gsi/client" async="" defer=""></script>
+    <!-- External Libraries (CLEAN VERSION ONLY ONCE) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 
     <style>
             :root {
@@ -4951,34 +4953,64 @@ window.getTableData = async function () {
   return { headers, data };
 };
 
-
 // =====================================================
-// 6. EXPORT PDF (FULLY WORKING)
+// 6. EXPORT PDF (FIXED & SAFE)
 // =====================================================
 window.exportPDF = async function () {
   try {
+    // ✅ CHECK jsPDF availability
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      BrickNotify.error("PDF library not loaded.");
+      return;
+    }
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
+    // ✅ GET DATA SAFELY
     const { headers, data } = await getTableData();
 
+    if (!data || data.length === 0) {
+      BrickNotify.error("No data to export.");
+      return;
+    }
+
+    // TITLE
+    doc.setFontSize(14);
     doc.text("NCRS CHILD REPORT", 14, 15);
 
+    // ✅ CHECK autoTable
+    if (typeof doc.autoTable !== "function") {
+      BrickNotify.error("autoTable plugin missing.");
+      return;
+    }
+
+    // TABLE
     doc.autoTable({
-      startY: 20,
+      startY: 25,
       head: headers,
       body: data,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: 255,
+      },
     });
 
+    // SAVE
     doc.save("NCRS_Report.pdf");
 
-    BrickNotify.success("PDF downloaded");
+    BrickNotify.success("PDF downloaded successfully");
 
   } catch (err) {
-    console.error(err);
+    console.error("PDF ERROR:", err);
     BrickNotify.error("Failed to export PDF");
   }
 };
+
 
 // =============================================
 // ===== MESSAGES BOX LOGIC (ADMIN - FULL UPGRADE)
