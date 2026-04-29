@@ -4875,34 +4875,53 @@ window.showDashboard = async function () {
   triggerAuditLog("Dashboard opened", user.email);
 };
 
-// =============================================
-// ===== LOAD DATA (ANTI-SILENT + SAFE)
-// =============================================
+// ================================
+// SAFE DOM UTILITY (PRO LEVEL)
+// ================================
+function safeSetText(id, value) {
+  const el = document.getElementById(id);
 
+  if (!el) {
+    console.warn(`⚠️ Element '${id}' not found in DOM`);
+    return false;
+  }
+
+  el.innerText = value;
+  return true;
+}
+
+// ================================
+// DASHBOARD DATA LOADER (ROBUST)
+// ================================
 async function loadDashboardData() {
   try {
     console.log("🔥 Loading dashboard data...");
 
+    if (!db) {
+      throw new Error("Firebase DB is not initialized");
+    }
+
     const ref = collection(db, "child");
     const snap = await getDocs(ref);
 
-    const metricEl = document.getElementById("metricTotal");
+    if (!snap) {
+      throw new Error("Firestore returned null snapshot");
+    }
 
-    if (!snap || snap.empty) {
+    if (snap.empty) {
       console.warn("⚠️ No data found in 'child' collection");
 
       dashboardData = [];
       updateDashboardUI([]);
 
-      if (metricEl) {
-        metricEl.innerText = "0";
-      } else {
-        console.warn("⚠️ metricTotal NOT FOUND (HTML issue)");
-      }
+      safeSetText("metricTotal", 0);
 
       return;
     }
 
+    // ================================
+    // MAP DATA SAFELY
+    // ================================
     dashboardData = snap.docs.map(d => ({
       id: d.id,
       ...d.data()
@@ -4910,26 +4929,25 @@ async function loadDashboardData() {
 
     console.log("✅ DASHBOARD DATA LOADED:", dashboardData);
 
-    if (metricEl) {
-      metricEl.innerText = dashboardData.length;
-    } else {
-      console.error("❌ CRITICAL: metricTotal element missing in HTML");
-
-      // fallback UI (no crash)
-      BrickNotify.error("Dashboard UI element missing (metricTotal)");
-    }
+    // ================================
+    // UPDATE UI SAFELY
+    // ================================
+    safeSetText("metricTotal", dashboardData.length);
 
     updateDashboardUI(dashboardData);
 
   } catch (err) {
-    console.error("❌ DASHBOARD ERROR:", err);
+    console.error("❌ DASHBOARD ERROR (FULL):", err);
+
+    console.error("📌 MESSAGE:", err?.message);
+    console.error("📌 CODE:", err?.code);
+    console.error("📌 STACK:", err?.stack);
 
     BrickNotify.error(
-      "Failed to load dashboard data: " + (err?.message || "Unknown error")
+      "Dashboard failed: " + (err?.message || "Unknown error")
     );
   }
 }
-
 
 // =============================================
 // ===== REALTIME LISTENER (KEY FIX 🔥)
