@@ -2632,7 +2632,8 @@
 
       <input type="text" id="adTitle" required placeholder="Advert Title" />
       <input type="text" id="adDescription" required placeholder="Short description" />
-      <input type="file" id="adImage" accept="image/*" required />
+      <input type="file" id="adImage" accept="image/*" />
+
 
       <button type="submit" class="btn-submit">
         <span id="uploadText">Upload Advert</span>
@@ -3764,6 +3765,58 @@
           }
         }
       }
+      async function compressImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+      img.src = e.target.result;
+    };
+
+    img.onload = function () {
+      const canvas = document.createElement("canvas");
+
+      // MAX SIZE (Professional standard)
+      const MAX_WIDTH = 1280;
+      const MAX_HEIGHT = 1280;
+
+      let width = img.width;
+      let height = img.height;
+
+      // Resize proportionally
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Compress (0.7 = high quality + smaller size)
+      canvas.toBlob(
+        (blob) => {
+          resolve(blob);
+        },
+        "image/jpeg",
+        0.7
+      );
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
 
       async function loadRolesForSignup() {
         const roleSelect = document.getElementById("su_role");
@@ -4006,13 +4059,45 @@
         }
         enforceLogin();
       };
-      window.handleAdvertLike = async function () {
-        if (!window.currentAdvertItem) return;
+      window.handleAddAdvert = async function (e) {
+  e.preventDefault();
 
-        try {
-          await updateDoc(doc(db, "adverts", window.currentAdvertItem.id), {
-            likes: increment(1),
-          });
+  try {
+    const title = document.getElementById("adTitle").value;
+    const desc = document.getElementById("adDescription").value;
+    const file = document.getElementById("adImage").files[0];
+
+    if (!file) return alert("Select image");
+
+    // 🔥 COMPRESS IMAGE FIRST
+    const compressedImage = await compressImage(file);
+
+    // Upload to Firebase Storage
+    const storageRef = ref(storage, "adverts/" + Date.now() + ".jpg");
+
+    await uploadBytes(storageRef, compressedImage);
+
+    const url = await getDownloadURL(storageRef);
+
+    // Save to Firestore
+    await addDoc(collection(db, "adverts"), {
+      title,
+      description: desc,
+      imageUrl: url,
+      likes: 0,
+      views: 0,
+      shares: 0,
+      createdAt: serverTimestamp(),
+    });
+
+    alert("Advert uploaded successfully");
+
+  } catch (err) {
+    console.error(err);
+    alert("Upload failed");
+  }
+};
+    });
 
           BrickNotify.success("Liked!");
         } catch (err) {
