@@ -4846,34 +4846,85 @@
 // =============================================
 window.charts = window.charts || {};
 
-// =============================================
-// ===== DASHBOARD OPEN =====
-// =============================================
-window.showDashboard = async function () {
-  try {
-    const user = JSON.parse(sessionStorage.getItem("currentUser"));
+const charts = {};
 
-    if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
-      alert("Unauthorized access");
-      return;
-    }
+async function loadDashboardData() {
 
-    const modal = document.getElementById("dashboardModal");
+  const children = await getChildrenData(); // 🔥 BADILIKO KUBWA
 
-    if (!modal) {
-      console.error("❌ Dashboard modal not found!");
-      return;
-    }
+  const total = children.length;
 
-    modal.classList.remove("hidden");
+  const missing = children.filter(c =>
+    c.status === 'missing' &&
+    (!c.identifiers || c.identifiers.length < 3)
+  ).length;
 
-    await loadDashboardData();
+  const found = children.filter(c => c.status === 'found').length;
 
-  } catch (error) {
-    console.error("❌ Dashboard error:", error);
-  }
-};
+  const identified = children.filter(c =>
+    c.identifiers && c.identifiers.length >= 3
+  ).length;
 
+  const totalAge = children.reduce((sum, c) =>
+    sum + (parseInt(c.age) || 0), 0);
+
+  const avgAge = total > 0 ? (totalAge / total).toFixed(1) : 0;
+
+  let totalIdentifiers = 0;
+
+  const identifierDistribution = {
+    '0 Identifiers': 0,
+    '1 Identifier': 0,
+    '2 Identifiers': 0,
+    '3 Identifiers': 0
+  };
+
+  children.forEach(c => {
+    const count = c.identifiers ? c.identifiers.length : 0;
+    totalIdentifiers += count;
+
+    if (count === 0) identifierDistribution['0 Identifiers']++;
+    else if (count === 1) identifierDistribution['1 Identifier']++;
+    else if (count === 2) identifierDistribution['2 Identifiers']++;
+    else identifierDistribution['3 Identifiers']++;
+  });
+
+  document.getElementById('metricTotal').innerText = total;
+  document.getElementById('metricMissing').innerText = missing;
+  document.getElementById('metricFound').innerText = found + identified;
+  document.getElementById('metricAvgAge').innerText = avgAge;
+  document.getElementById('metricIdentifiers').innerText = totalIdentifiers;
+
+  /* ==== CHART DATA ==== */
+  const ageBins = { '0-5': 0, '6-10': 0, '11-15': 0, '16-20': 0, '21+': 0 };
+
+  children.forEach(c => {
+    const age = parseInt(c.age) || 0;
+    if (age <= 5) ageBins['0-5']++;
+    else if (age <= 10) ageBins['6-10']++;
+    else if (age <= 15) ageBins['11-15']++;
+    else if (age <= 20) ageBins['16-20']++;
+    else ageBins['21+']++;
+  });
+
+  const genderData = { 'Kiume': 0, 'Kike': 0 };
+  children.forEach(c => {
+    if (genderData[c.gender] !== undefined) genderData[c.gender]++;
+  });
+
+  const regionData = {};
+  children.forEach(c => {
+    const r = c.region || 'Unknown';
+    regionData[r] = (regionData[r] || 0) + 1;
+  });
+
+  Object.values(charts).forEach(chart => chart.destroy());
+
+  charts['ageChart'] = new Chart(document.getElementById('ageChart'), {
+    type: 'bar',
+    data: { labels: Object.keys(ageBins), datasets: [{ data: Object.values(ageBins) }] }
+  });
+}
 // =============================================
 // ===== DASHBOARD CLOSE =====
 // =============================================
