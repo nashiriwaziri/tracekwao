@@ -1,1844 +1,1071 @@
 <!DOCTYPE html>
-<html lang="sw">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Majadiliano - Together Safe Network</title>
-    <!-- Icons (FontAwesome) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Social Connect | Messaging Platform</title>
+  
+  <!-- Fonts & Icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- External Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Identity Services -->
-    <script src="https://accounts.google.com/gsi/client" async="" defer=""></script>
+  <style>
+    /* =========================================
+       GLOBAL STYLES & VARIABLES
+       ========================================= */
+    :root {
+      --primary-color: #0084ff; /* Messenger/FB Blue style */
+      --primary-hover: #0073e6;
+      --bg-body: #f0f2f5;
+      --bg-card: #ffffff;
+      --bg-sidebar: #ffffff;
+      --text-main: #050505;
+      --text-muted: #65676b;
+      --border-color: #ced0d4;
+      --incoming-bubble: #e4e6eb;
+      --outgoing-bubble: #0084ff;
+      --outgoing-text: #ffffff;
+      --success: #42b72a;
+      --warning: #f7b928;
+      --danger: #fa383e;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+      --radius: 12px;
+    }
 
-    <style>
-      :root {
-        --primary: #1877f2;
-        --bg: #f0f2f5;
-        --white: #ffffff;
-        --text: #050505;
-        --text-sec: #65676b;
-        --hover: #e4e6eb;
-        --border: #ced0d4;
-        --success: #42b72a;
-        --danger: #f02849;
-        --shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-        --header-h: 60px;
-        --admin-gold: #f1c40f;
-      }
+    * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
 
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #bcc0c4; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a0a4a8; }
 
-      body {
-        background-color: var(--bg);
-        color: var(--text);
-        padding-top: var(--header-h);
-        padding-bottom: 60px;
-        overflow-x: hidden;
-      }
+    /* =========================================
+       LAYOUT: SIDEBAR & MAIN
+       ========================================= */
+    .app-container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
 
-      /* --- UTILITIES --- */
-      .btn {
-        border: none;
-        outline: none;
-        cursor: pointer;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-weight: 600;
-        transition: 0.2s;
-        font-size: 14px;
-      }
-      .btn-primary {
-        background: var(--primary);
-        color: white;
-      }
-      .btn-primary:hover {
-        background: #166fe5;
-      }
-      .btn-ghost {
-        background: transparent;
-        color: var(--text-sec);
-      }
-      .btn-ghost:hover {
-        background: var(--hover);
-      }
-      .btn-sm {
-        padding: 4px 8px;
-        font-size: 12px;
-      }
-      .btn-danger {
-        background: var(--danger);
-        color: white;
-      }
-      .btn-danger:hover {
-        background: #d61e3a;
-      }
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 320px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
 
-      /* --- AUTH SCREEN --- */
-      #authScreen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100vh;
-        background: var(--bg);
-        z-index: 5000;
-        display: none; /* Toggled by JS */
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-      }
-      .auth-box {
-        background: white;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: var(--shadow);
-        width: 90%;
-        max-width: 400px;
-        text-align: center;
-      }
-      .auth-box input {
-        width: 100%;
-        padding: 12px;
-        margin: 10px 0;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-      }
-      .auth-toggle {
-        margin-top: 15px;
-        font-size: 13px;
-        color: var(--primary);
-        cursor: pointer;
-      }
+    .user-profile {
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
 
-      /* --- NAVBAR --- */
-      .navbar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: var(--header-h);
-        background: var(--white);
-        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0 20px;
-        z-index: 1000;
-      }
-      .logo {
-        font-size: 24px;
-        font-weight: bold;
-        color: var(--primary);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        cursor: pointer;
-      }
-      .nav-icons {
-        display: flex;
-        gap: 15px;
-        align-items: center;
-      }
-      .nav-icon {
-        width: 40px;
-        height: 40px;
-        background: var(--hover);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 18px;
-        cursor: pointer;
-        position: relative;
-      }
-      .badge {
-        position: absolute;
-        top: 0;
-        right: 0;
-        background: var(--danger);
-        color: white;
-        font-size: 10px;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #ddd;
+    }
 
-      /* --- LAYOUT GRID --- */
-      .container {
-        display: grid;
-        grid-template-columns: 1fr 2fr 1fr;
-        gap: 20px;
-        max-width: 1200px;
-        margin: 20px auto;
-        padding: 0 15px;
-      }
+    .user-info h3 { font-size: 16px; font-weight: 600; }
+    .user-info span { font-size: 13px; color: var(--text-muted); }
 
-      /* --- SIDEBARS --- */
-      .sidebar-left,
-      .sidebar-right {
-        height: calc(100vh - 80px);
-        position: sticky;
-        top: 80px;
-        overflow-y: auto;
-      }
-      .menu-item {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        padding: 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: 0.2s;
-        color: var(--text);
-        text-decoration: none;
-      }
-      .menu-item:hover {
-        background: var(--hover);
-      }
-      .menu-item i {
-        font-size: 20px;
-        color: var(--primary);
-        width: 30px;
-        text-align: center;
-      }
-      .menu-item.admin-item {
-        color: var(--admin-gold);
-        font-weight: bold;
-        display: none;
-      } /* Hidden by default */
-      .menu-item.admin-item i {
-        color: var(--admin-gold);
-      }
+    .nav-menu {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+    }
 
-      /* User List Item Styling */
-      .user-list-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 10px;
-        border-radius: 8px;
-        margin-bottom: 5px;
-      }
-      .user-list-item:hover {
-        background: var(--hover);
-      }
-      .user-actions button {
-        background: var(--bg);
-        border: none;
-        padding: 5px;
-        border-radius: 50%;
-        cursor: pointer;
-        margin-left: 3px;
-        color: var(--text-sec);
-        transition: 0.2s;
-      }
-      .user-actions button:hover {
-        background: #d0d2d6;
-        color: var(--primary);
-      }
-      .user-actions button.active {
-        color: var(--success);
-      }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.2s;
+      color: var(--text-main);
+      text-decoration: none;
+      font-weight: 500;
+      margin-bottom: 4px;
+      position: relative;
+    }
 
-      /* --- FEED (MAIN) --- */
-      .feed {
-        width: 100%;
-        max-width: 600px;
-        margin: 0 auto;
-      }
+    .nav-item:hover { background-color: #f2f2f2; }
+    .nav-item.active { background-color: #e7f3ff; color: var(--primary-color); }
+    .nav-item i { margin-right: 12px; font-size: 18px; width: 20px; text-align: center; }
+    
+    .badge {
+      background: var(--danger);
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: auto;
+      display: none; /* Hidden by default */
+    }
 
-      .create-post {
-        background: var(--white);
-        border-radius: 8px;
-        padding: 15px;
-        box-shadow: var(--shadow);
-        margin-bottom: 20px;
-      }
-      .cp-top {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 15px;
-      }
-      .avatar-placeholder {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: #ddd;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        color: #555;
-      }
-      .cp-input {
-        width: 100%;
-        background: var(--bg);
-        border-radius: 20px;
-        padding: 10px 15px;
-        border: none;
-        outline: none;
-        resize: none;
-        min-height: 40px;
-        display: block;
-      }
+    /* Main Content Area */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--bg-body);
+    }
 
-      .file-preview {
-        display: flex;
-        gap: 10px;
-        margin-top: 10px;
-        flex-wrap: wrap;
-      }
-      .preview-item {
-        position: relative;
-        width: 80px;
-        height: 80px;
-        border-radius: 8px;
-        overflow: hidden;
-        border: 1px solid #ddd;
-        background: #eee;
-      }
-      .preview-item img,
-      .preview-item video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      .preview-item audio {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        padding: 5px;
-      }
-      .remove-preview {
-        position: absolute;
-        top: 2px;
-        right: 2px;
-        background: rgba(0, 0, 0, 0.6);
-        color: white;
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        text-align: center;
-        line-height: 20px;
-        font-size: 12px;
-        cursor: pointer;
-        z-index: 10;
-      }
+    .top-bar {
+      height: 60px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      justify-content: space-between;
+    }
+    
+    .top-bar h2 { font-size: 20px; font-weight: 700; }
 
-      .cp-actions {
-        display: flex;
-        justify-content: space-between;
-        border-top: 1px solid var(--hover);
-        padding-top: 10px;
-        margin-top: 10px;
-      }
-      .cp-btn {
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--text-sec);
-        font-weight: 600;
-        padding: 8px;
-        border-radius: 5px;
-      }
-      .cp-btn:hover {
-        background: var(--hover);
-      }
+    .content-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
 
-      /* Post Card */
-      .post {
-        background: var(--white);
-        border-radius: 8px;
-        box-shadow: var(--shadow);
-        margin-bottom: 20px;
-        animation: fadeIn 0.3s ease;
-      }
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
+    /* =========================================
+       COMPONENTS: CARDS & TABLES
+       ========================================= */
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
 
-      .post-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 15px;
-      }
-      .post-user {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .user-info h4 {
-        font-size: 15px;
-        margin-bottom: 2px;
-      }
-      .user-info span {
-        font-size: 12px;
-        color: var(--text-sec);
-      }
+    /* Inbox & Message Styles */
+    .inbox-msg-card, .sent-msg-card {
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+      background: white;
+      transition: transform 0.2s;
+    }
+    
+    .inbox-msg-card.unread { border-left: 4px solid var(--primary-color); }
+    .inbox-msg-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
-      .post-content {
-        padding: 0 15px 15px;
-        font-size: 15px;
-        white-space: pre-wrap;
-      }
+    .msg-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .msg-sender { font-weight: 700; color: var(--text-main); }
+    .msg-sender-email { font-weight: 400; color: var(--text-muted); font-size: 0.9em; margin-left: 5px; }
+    .msg-phone { font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
+    .msg-date { font-size: 0.8em; color: var(--text-muted); }
+    .msg-subject { font-weight: 600; color: var(--text-main); margin-bottom: 6px; font-size: 1.05em; }
+    .msg-body { color: #333; line-height: 1.5; white-space: pre-wrap; margin-bottom: 12px; }
 
-      .post-media {
-        width: 100%;
-        margin-top: 10px;
-        display: grid;
-        gap: 5px;
-      }
-      .post-media img,
-      .post-media video {
-        width: 100%;
-        max-height: 400px;
-        object-fit: cover;
-        border-radius: 8px;
-        display: block;
-      }
-      .post-media audio {
-        width: 100%;
-        margin-top: 5px;
-      }
-      .post-media .download-link {
-        background: #f0f2f5;
-        padding: 10px;
-        border-radius: 5px;
-        margin-top: 5px;
-        display: inline-block;
-        font-size: 14px;
-      }
+    /* Attachments Preview */
+    .attachment-preview {
+      margin-top: 10px;
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
 
-      /* Stats & Actions */
-      .post-stats {
-        padding: 10px 15px;
-        display: flex;
-        justify-content: space-between;
-        border-bottom: 1px solid var(--hover);
-        color: var(--text-sec);
-        font-size: 13px;
-      }
-      .post-actions {
-        display: flex;
-        padding: 5px;
-        border-bottom: 1px solid var(--hover);
-      }
-      .action-btn {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        padding: 10px;
-        border-radius: 5px;
-        cursor: pointer;
-        color: var(--text-sec);
-        transition: 0.2s;
-        font-weight: 600;
-        position: relative;
-      }
-      .action-btn:hover {
-        background: var(--hover);
-      }
+    /* Admin Reply Section */
+    .admin-reply-section {
+      background: #f0f2f5;
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    .reply-label { font-size: 0.8em; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+    .reply-text { color: var(--text-main); font-style: italic; }
+    .reply-date { font-size: 0.75em; color: var(--text-muted); text-align: right; margin-top: 4px; }
 
-      .reactions-bar {
-        position: absolute;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        background: white;
-        padding: 5px;
-        border-radius: 20px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        display: flex;
-        gap: 5px;
-        opacity: 0;
-        pointer-events: none;
-        transition: 0.2s;
-        margin-bottom: 8px;
-      }
-      .action-btn:hover .reactions-bar {
-        opacity: 1;
-        pointer-events: auto;
-        bottom: 110%;
-      }
-      .reaction-emoji {
-        font-size: 20px;
-        cursor: pointer;
-        transition: transform 0.2s;
-      }
-      .reaction-emoji:hover {
-        transform: scale(1.3);
-      }
+    /* Input Area */
+    .admin-reply-input-area { margin-top: 15px; display: flex; gap: 10px; flex-direction: column; }
+    .admin-reply-input-area textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+    }
+    
+    /* Action Buttons */
+    .btn {
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary { background: var(--primary-color); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #e4e6eb; color: var(--text-main); }
+    .btn-secondary:hover { background: #d8dadf; }
 
-      /* Comments */
-      .comments-section {
-        padding: 10px 15px;
-        background: var(--bg);
-        display: none;
-      }
-      .comments-section.open {
-        display: block;
-      }
-      .comment {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-      .comment-bubble {
-        background: var(--white);
-        padding: 8px 12px;
-        border-radius: 15px;
-        font-size: 13px;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-      }
-      .comment-input-area {
-        display: flex;
-        gap: 10px;
-        margin-top: 10px;
-      }
-      .comment-input-area input {
-        flex: 1;
-        padding: 8px 12px;
-        border-radius: 20px;
-        border: none;
-        outline: none;
-      }
+    /* Table Styles (Admin Identifiers) */
+    .custom-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95em;
+    }
+    .custom-table th { text-align: left; padding: 12px; background: #f7f7f7; color: var(--text-muted); font-weight: 600; border-bottom: 2px solid var(--border-color); }
+    .custom-table td { padding: 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+    .msg-action-btn {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: #f0f2f5;
+      cursor: pointer;
+      margin-right: 5px;
+      color: var(--text-muted);
+    }
+    .msg-action-btn.call:hover { background: #e0f2fe; color: var(--primary-color); }
+    .msg-action-btn.copy:hover { background: #dcfce7; color: var(--success); }
 
-      /* --- CHAT WINDOW (Inbox) --- */
-      #chatWindow {
-        position: fixed;
-        bottom: 0;
-        right: 20px;
-        width: 320px;
-        height: 450px;
-        background: white;
-        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
-        border-radius: 10px 10px 0 0;
-        display: none;
-        flex-direction: column;
-        z-index: 2000;
-      }
-      .cw-header {
-        background: var(--primary);
-        color: white;
-        padding: 10px 15px;
-        border-radius: 10px 10px 0 0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-      }
-      .cw-body {
-        flex: 1;
-        padding: 15px;
-        overflow-y: auto;
-        background: #e4e6eb;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-      .cw-msg {
-        padding: 8px 12px;
-        border-radius: 15px;
-        max-width: 80%;
-        font-size: 13px;
-        word-break: break-word;
-      }
-      .cw-msg.mine {
-        background: var(--primary);
-        color: white;
-        align-self: flex-end;
-        border-bottom-right-radius: 2px;
-      }
-      .cw-msg.theirs {
-        background: white;
-        align-self: flex-start;
-        border-bottom-left-radius: 2px;
-      }
-      .cw-footer {
-        padding: 10px;
-        border-top: 1px solid #ddd;
-        display: flex;
-        gap: 5px;
-        background: white;
-      }
+    /* Tabs */
+    .tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 20px; }
+    .msg-tab {
+      padding: 12px 24px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 3px solid transparent;
+    }
+    .msg-tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+    .msg-tab-panel { display: none; }
+    .msg-tab-panel.active { display: block; animation: fadeIn 0.3s; }
 
-      /* --- ADMIN CHAT CONTROL MODAL --- */
-      .modal-lg {
-        width: 90%;
-        max-width: 800px;
-        height: 80vh;
-        display: flex;
-        flex-direction: column;
-      }
-      .admin-layout {
-        display: flex;
-        height: 100%;
-        overflow: hidden;
-      }
-      .admin-sidebar {
-        width: 35%;
-        border-right: 1px solid #ddd;
-        overflow-y: auto;
-        background: #f9f9f9;
-      }
-      .admin-chat-view {
-        width: 65%;
-        display: flex;
-        flex-direction: column;
-        background: white;
-        position: relative;
-      }
-      .admin-chat-item {
-        padding: 15px;
-        border-bottom: 1px solid #eee;
-        cursor: pointer;
-        transition: 0.2s;
-      }
-      .admin-chat-item:hover {
-        background: #eee;
-      }
-      .admin-chat-item.active {
-        background: #e3f2fd;
-        border-left: 4px solid var(--primary);
-      }
-      .admin-msg-container {
-        flex: 1;
-        padding: 15px;
-        overflow-y: auto;
-        background: #e4e6eb;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .admin-controls {
-        padding: 10px;
-        border-top: 1px solid #ddd;
-        display: flex;
-        justify-content: flex-end;
-        background: white;
-      }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-      /* --- MODAL --- */
-      .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 3000;
-        display: none;
-        align-items: center;
-        justify-content: center;
-      }
-      .modal-overlay.active {
-        display: flex;
-      }
-      .modal-box {
-        background: white;
-        padding: 25px;
-        border-radius: 10px;
-        width: 90%;
-        max-width: 400px;
-        text-align: center;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-      }
-      .modal-box input {
-        width: 100%;
-        padding: 10px;
-        margin: 10px 0;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-      }
-      .modal-actions {
-        display: flex;
-        gap: 10px;
-        justify-content: center;
-        margin-top: 15px;
-      }
+    /* =========================================
+       MODALS
+       ========================================= */
+    .modal {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .modal.hidden { opacity: 0; pointer-events: none; }
+    .modal:not(.hidden) { opacity: 1; pointer-events: all; }
 
-      /* --- TOAST --- */
-      .toast {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #333;
-        color: white;
-        padding: 10px 20px;
-        border-radius: 5px;
-        opacity: 0;
-        transition: 0.3s;
-        pointer-events: none;
-        z-index: 4000;
-      }
-      .toast.show {
-        opacity: 1;
-      }
+    .modal-content {
+      background: white;
+      width: 100%;
+      max-width: 600px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+      max-height: 90vh;
+      overflow: hidden;
+      transform: scale(0.95);
+      transition: transform 0.3s;
+    }
+    .modal:not(.hidden) .modal-content { transform: scale(1); }
 
-      /* --- RESPONSIVE --- */
-      @media (max-width: 900px) {
-        .container {
-          grid-template-columns: 1fr 2fr;
-        }
-        .sidebar-right {
-          display: none;
-        }
-        .modal-lg {
-          width: 95%;
-          height: 90vh;
-        }
-        .admin-layout {
-          flex-direction: column;
-        }
-        .admin-sidebar {
-          width: 100%;
-          height: 40%;
-          border-right: none;
-          border-bottom: 1px solid #ddd;
-        }
-        .admin-chat-view {
-          width: 100%;
-          height: 60%;
-        }
-      }
-      @media (max-width: 700px) {
-        .container {
-          grid-template-columns: 1fr;
-          padding-bottom: 60px;
-        }
-        .sidebar-left {
-          display: none;
-        }
-        #chatWindow {
-          width: 100%;
-          height: 100vh;
-          right: 0;
-          bottom: 0;
-          border-radius: 0;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <!-- ===== RED BRICK NOTIFICATION CONTAINER ===== -->
-    <div class="brick-notify-container" id="brickNotifyContainer"></div>
+    .modal-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fcfcfc;
+    }
+    .modal-header h3 { font-size: 18px; }
+    .close-modal { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); }
 
-    <!-- AUTH SCREEN -->
-    <div id="authScreen" style="display: flex">
-      <div class="auth-box">
-        <h2 style="color: var(--primary); margin-bottom: 10px">Majadiliano</h2>
-        <h3 id="authTitle">Kuingia (Login)</h3>
-        <input type="text" id="authUser" placeholder="Jina la mtumiaji (Username)" />
-        <input type="password" id="authPass" placeholder="Neno la siri (Password)" />
-        <button class="btn btn-primary" style="width: 100%; margin-top: 10px" onclick="window.handleAuth()">
-          Endelea
-        </button>
-        <div class="auth-toggle" onclick="window.toggleAuthMode()">Huna akaunti? Jisajili Sasa</div>
-      </div>
-    </div>
+    .modal-body { padding: 24px; overflow-y: auto; }
 
-    <!-- MAIN APP -->
-    <div id="mainApp" style="display: none">
-      <!-- Navbar -->
-      <nav class="navbar">
-        <div class="logo" onclick="window.closeChat()">
-          <i class="fas fa-shield-alt"></i>
-          <span>Majadiliano</span>
-        </div>
-        <div class="nav-icons">
-          <div class="nav-icon"><i class="fas fa-bell"></i></div>
-          <div class="nav-icon" onclick="window.scrollToTop()"><i class="fas fa-home"></i></div>
-          <div class="avatar-placeholder" id="myAvatar">ME</div>
-        </div>
-      </nav>
+    /* Forms in Modals */
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em; }
+    .form-control {
+      width: 100%; padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px; font-size: 14px;
+    }
+    .file-input-wrapper {
+      border: 2px dashed var(--border-color);
+      padding: 20px;
+      text-align: center;
+      border-radius: 8px;
+      cursor: pointer;
+      position: relative;
+    }
+    .file-input-wrapper:hover { border-color: var(--primary-color); background: #f0f7ff; }
+    .file-input-wrapper input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+    .file-preview-img { max-height: 150px; display: none; margin: 10px auto; border-radius: 8px; }
 
-      <!-- Main Layout -->
-      <div class="container">
-        <!-- Sidebar Left -->
-        <aside class="sidebar-left">
-          <div class="menu-item">
-            <div class="avatar-placeholder" id="sidebarAvatar" style="width: 30px; height: 30px; font-size: 12px">
-              ME
-            </div>
-            <span id="sidebarUsername">Juma Mtu</span>
-          </div>
+    /* =========================================
+       TOAST NOTIFICATIONS (BrickNotify)
+       ========================================= */
+    #brick-notify-container {
+      position: fixed; top: 20px; right: 20px; z-index: 2000;
+    }
+    .brick-notify {
+      background: #333; color: white; padding: 12px 24px;
+      border-radius: 8px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: flex; align-items: center; gap: 10px;
+      animation: slideIn 0.3s forwards;
+    }
+    .brick-notify.success { background: var(--success); }
+    .brick-notify.error { background: var(--danger); }
+    .brick-notify.info { background: var(--primary-color); }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-          <!-- Admin Only Button -->
-          <div class="menu-item admin-item" id="adminPanelBtn" onclick="window.openAdminChatControl()">
-            <i class="fas fa-user-shield"></i>
-            <span>Dashboard ya Waziri (Admin)</span>
-          </div>
+    /* =========================================
+       LOGIN OVERLAY (For Demo Purposes)
+       ========================================= */
+    #loginOverlay {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: var(--bg-body); z-index: 5000;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .login-box {
+      background: white; padding: 30px; border-radius: 16px;
+      box-shadow: var(--shadow-md); text-align: center; width: 300px;
+    }
+    .login-btn { width: 100%; margin-top: 10px; justify-content: center; padding: 10px; }
 
-          <div class="menu-item" onclick="window.openManagement()">
-            <i class="fas fa-cogs"></i>
-            <span>Manage Account</span>
-          </div>
+    /* Responsive */
+    @media (max-width: 768px) {
+      .app-container { flex-direction: column; }
+      .sidebar { width: 100%; height: auto; flex-direction: row; border-right: none; border-bottom: 1px solid var(--border-color); }
+      .nav-menu { display: flex; overflow-x: auto; flex: 1; }
+      .nav-item span { display: none; }
+      .nav-item i { margin: 0; font-size: 24px; }
+      .user-profile { padding: 10px; border-bottom: none; border-right: 1px solid var(--border-color); }
+      .modal-content { width: 95%; height: 80vh; }
+    }
+  </style>
+</head>
+<body>
 
-          <!-- LINKS START HERE -->
-          <a href="kundi.html" class="menu-item">
-            <i class="fas fa-users"></i>
-            <span>Kundi</span>
-          </a>
+  <!-- Firebase SDKs (Modular) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, doc, updateDoc, query, where, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
 
-          <a href="rafiki.html" class="menu-item">
-            <i class="fas fa-user-friends"></i>
-            <span>Rafiki</span>
-          </a>
-          <!-- LINKS END HERE -->
+    // =====================================================
+    // CONFIGURATION (REPLACE WITH YOUR KEYS)
+    // =====================================================
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
 
-          <!-- Sign Out Button -->
-          <div class="menu-item" onclick="window.logout()" style="color: var(--danger)">
-            <i class="fas fa-sign-out-alt"></i>
-            <span>Ondoka (Sign Out)</span>
-          </div>
-        </aside>
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
 
-        <!-- Main Feed -->
-        <main class="feed">
-          <!-- Create Post -->
-          <div class="create-post">
-            <div class="cp-top">
-              <div class="avatar-placeholder" id="feedAvatar">ME</div>
-              <div class="cp-input-group">
-                <textarea id="content" class="cp-input" placeholder="Una nini akilini, Nashiri?"></textarea>
-              </div>
-            </div>
+    // Expose to window so inline HTML events work
+    window.db = db;
+    window.storage = storage;
+    window.serverTimestamp = serverTimestamp;
 
-            <!-- File Preview Area -->
-            <div id="filePreviewArea" class="file-preview"></div>
+    // =====================================================
+    // UTILITY: BrickNotify (No Alerts)
+    // =====================================================
+    const BrickNotify = {
+      show(message, type = 'info') {
+        const container = document.getElementById('brick-notify-container');
+        const toast = document.createElement('div');
+        toast.className = `brick-notify ${type}`;
+        let icon = type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle';
+        toast.innerHTML = `<i class="fas ${icon}"></i> <span>${message}</span>`;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.animation = 'slideIn 0.3s reverse forwards';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      },
+      success: (msg) => BrickNotify.show(msg, 'success'),
+      error: (msg) => BrickNotify.show(msg, 'error'),
+      info: (msg) => BrickNotify.show(msg, 'info')
+    };
+    window.BrickNotify = BrickNotify;
 
-            <div class="cp-actions">
-              <div style="display: flex; gap: 5px">
-                <label class="cp-btn" style="color: #45bd62">
-                  <i class="fas fa-images"></i>
-                  Picha/Video
-                  <input
-                    type="file"
-                    id="fileInput"
-                    multiple=""
-                    accept="image/*,video/*"
-                    style="display: none"
-                    onchange="window.handleFileSelect(event)"
-                  />
-                </label>
-                <!-- Audio Upload Button -->
-                <label class="cp-btn" style="color: #e07a5f">
-                  <i class="fas fa-microphone"></i>
-                  Sauti/Audio
-                  <input
-                    type="file"
-                    id="audioInput"
-                    accept="audio/*"
-                    style="display: none"
-                    onchange="window.handleFileSelect(event)"
-                  />
-                </label>
-              </div>
-              <button class="btn btn-primary" onclick="window.addPost()">Tuma Posti</button>
-            </div>
-          </div>
-
-          <!-- Posts Container -->
-          <div id="postsContainer"></div>
-
-          <!-- Footer Link -->
-          <div
-            class="footer-nav"
-            style="text-align: center; padding: 20px; color: var(--text-sec); font-size: 14px; margin-top: 30px"
-          >
-            &lt;&lt; ©
-            <a href="Index.html" style="color: var(--primary); text-decoration: none; font-weight: bold">
-              Back to Home Page
-            </a>
-            &gt;&gt;
-          </div>
-        </main>
-
-        <!-- Sidebar Right (Users List) -->
-        <aside class="sidebar-right">
-          <div
-            style="
-              padding: 10px;
-              font-weight: bold;
-              color: var(--text-sec);
-              border-bottom: 1px solid #ddd;
-              display: flex;
-              justify-content: space-between;
-            "
-          >
-            <span>Watumiaji (Walio Karibu)</span>
-            <span id="userCount">0</span>
-          </div>
-          <div id="usersListContainer">
-            <!-- Users generated by JS -->
-          </div>
-        </aside>
-      </div>
-
-      <!-- Chat Window (Inbox) -->
-      <div id="chatWindow">
-        <div class="cw-header" onclick="window.closeChat()">
-          <span id="chatTitle">Inbox</span>
-          <i class="fas fa-times"></i>
-        </div>
-        <div class="cw-body" id="chatBody">
-          <!-- Messages go here -->
-          <div style="text-align: center; color: #888; margin-top: 50px">Chagua mtumiaji kuandika ujumbe.</div>
-        </div>
-        <div class="cw-footer">
-          <input
-            type="text"
-            id="chatInput"
-            placeholder="Andika ujumbe... (Private)"
-            style="flex: 1; border: none; outline: none; padding: 5px"
-          />
-          <button class="btn btn-ghost" onclick="window.sendMessage()">
-            <i class="fas fa-paper-plane" style="color: var(--primary)"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modals -->
-
-    <!-- Admin Delete Modal -->
-    <div class="modal-overlay" id="passwordModal">
-      <div class="modal-box">
-        <h3>Admin Check</h3>
-        <p style="font-size: 13px; color: #666; margin-bottom: 10px">Weka Neno la siri la WAZIRI2015</p>
-        <input type="password" id="adminPassInput" placeholder="Neno la siri..." />
-        <div class="modal-actions">
-          <button class="btn btn-ghost" onclick="window.closeModal('passwordModal')">Cancel</button>
-          <button class="btn btn-primary" onclick="window.confirmDelete()">Delete</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Account Management Modal -->
-    <div class="modal-overlay" id="manageModal">
-      <div class="modal-box">
-        <h3>Manage Account</h3>
-        <p id="manageUserDisplay" style="font-weight: bold; margin: 10px 0"></p>
-        <div style="text-align: left; background: #f9f9f9; padding: 10px; border-radius: 5px; margin-bottom: 15px">
-          <div style="margin-bottom: 10px">
-            <i class="fas fa-trash"></i>
-            Futa posti zangu zote
-          </div>
-          <button class="btn btn-sm" style="background: var(--danger); color: white" onclick="window.deleteMyPosts()">
-            Futa Posti Zangu
-          </button>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" onclick="window.closeModal('manageModal')">Funga</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ADMIN CHAT CONTROL MODAL -->
-    <div class="modal-overlay" id="adminChatModal">
-      <div class="modal-box modal-lg">
-        <h3
-          style="
-            padding: 15px;
-            border-bottom: 1px solid #ddd;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          "
-        >
-          <span>
-            <i class="fas fa-user-secret"></i>
-            Admin Chat Control
-          </span>
-          <button class="btn btn-sm btn-ghost" onclick="window.closeModal('adminChatModal')">
-            <i class="fas fa-times"></i>
-          </button>
-        </h3>
-        <div class="admin-layout">
-          <!-- List of active chats -->
-          <div class="admin-sidebar" id="adminChatList">
-            <!-- Populated by JS -->
-          </div>
-          <!-- Chat View -->
-          <div class="admin-chat-view">
-            <div
-              style="padding: 10px; background: white; font-weight: bold; border-bottom: 1px solid #eee"
-              id="adminChatHeader"
-            >
-              Chagua mazungumzo kutoka kushoto
-            </div>
-            <div class="admin-msg-container" id="adminChatBody">
-              <!-- Messages -->
-            </div>
-            <!-- Control Button -->
-            <div class="admin-controls" id="adminControlBtnContainer" style="display: none">
-              <button class="btn btn-danger" onclick="window.clearSelectedChat()">
-                <i class="fas fa-trash"></i>
-                Futa Mazungumzo (Clear Chat)
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Toast -->
-    <div class="toast" id="toast">Ujumbe hapa</div>
-
-    <!-- MAIN JAVASCRIPT LOGIC (UPDATED FOR FIREBASE) -->
-    <script type="module">
-      // =====================
-      // IMPORT FIREBASE SDKs
-      // =====================
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-      import {
-        getAuth,
-        onAuthStateChanged,
-        signOut,
-        signInWithEmailAndPassword,
-        createUserWithEmailAndPassword,
-        GoogleAuthProvider,
-        signInWithCredential,
-        updateProfile
-      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-      import {
-        getFirestore,
-        collection,
-        addDoc,
-        getDocs,
-        getDoc,
-        updateDoc,
-        deleteDoc,
-        doc,
-        query,
-        where,
-        orderBy
-      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-      // =====================
-      // FIREBASE CONFIG
-      // =====================
-      const firebaseConfig = {
-        apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-        authDomain: "ncrs-aeb43.firebaseapp.com",
-        projectId: "ncrs-aeb43",
-        storageBucket: "ncrs-aeb43.firebasestorage.app",
-        messagingSenderId: "786434442929",
-        appId: "1:786434442929:web:7c91cb67f71a23904b4490",
-        measurementId: "G-1GLSLPKQK5",
-      };
-
-      const app = initializeApp(firebaseConfig);
-      const db = getFirestore(app);
-      const auth = getAuth(app);
-
-      // =====================
-      // GLOBAL STATE
-      // =====================
-      let currentUser = null; // Merged Auth User + Firestore Data
-      let selectedFiles = [];
-      let chatPartnerId = null;
-      let postToDeleteId = null;
-      let isSigningUp = false;
-      let currentAdminPairId = null;
-      let postsCache = [];
-      let usersCache = [];
-
-      // =====================
-      // DATA HELPERS (Replaces LocalStorage)
-      // =====================
-
-      // --- USERS ---
-      async function fetchUsers() {
-        const q = query(collection(db, "users"));
-        const snapshot = await getDocs(q);
-        usersCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        return usersCache;
-      }
-
-      async function getUserByName(name) {
-        const q = query(collection(db, "users"), where("name", "==", name));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-            return { id: snap.docs[0].id, ...snap.docs[0].data() };
-        }
+    // =====================================================
+    // HELPER: IMAGE UPLOAD
+    // =====================================================
+    window.uploadImageToStorage = async function(file) {
+      if (!file) return null;
+      try {
+        const fileName = `${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, `chat_attachments/${fileName}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        return downloadURL;
+      } catch (error) {
+        console.error("Upload Error:", error);
+        BrickNotify.error("Image upload failed.");
         return null;
       }
-
-      async function createUser(userData) {
-        userData.following = [];
-        userData.friends = [];
-        const docRef = await addDoc(collection(db, "users"), userData);
-        return { id: docRef.id, ...userData };
-      }
-
-      // --- POSTS ---
-      async function fetchPosts() {
-        const q = query(collection(db, "posts"), orderBy("date", "desc"));
-        const snapshot = await getDocs(q);
-        postsCache = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        return postsCache;
-      }
-
-      async function createPost(postData) {
-          await addDoc(collection(db, "posts"), postData);
-      }
-
-      async function deletePostById(id) {
-          await deleteDoc(doc(db, "posts", id));
-      }
-
-      // --- MESSAGES ---
-      async function fetchMessages() {
-          // Fetch all messages (demo scale) to avoid complex indexes
-          const q = query(collection(db, "messages"), orderBy("time", "asc"));
-          const snapshot = await getDocs(q);
-          return snapshot.docs.map(d => d.data());
-      }
-
-      async function createMessage(msgData) {
-          await addDoc(collection(db, "messages"), msgData);
-      }
-
-      // =====================
-      // SESSION LOGIC
-      // =====================
-      function saveSession(user) {
-          localStorage.setItem("majadiliano_session_uid", user.id);
-          currentUser = user;
-      }
-
-      async function loadSession() {
-          const uid = localStorage.getItem("majadiliano_session_uid");
-          if (uid) {
-              const docRef = doc(db, "users", uid);
-              const snap = await getDoc(docRef);
-              if (snap.exists()) {
-                  currentUser = { id: uid, ...snap.data() };
-              }
-          }
-      }
-
-      // =====================
-      // INITIALIZATION
-      // =====================
-      async function initApp() {
-          await loadSession();
-          if (currentUser) {
-              showMainApp();
-          } else {
-              document.getElementById('authScreen').style.display = 'flex';
-              document.getElementById('mainApp').style.display = 'none';
-          }
-      }
-
-      window.toggleAuthMode = function() {
-          isSigningUp = !isSigningUp;
-          document.getElementById('authTitle').innerText = isSigningUp ? "Jisajili (Sign Up)" : "Kuingia (Login)";
-          document.querySelector('.auth-toggle').innerText = isSigningUp ? "Tayari una akaunti? Ingia" : "Huna akaunti? Jisajili Sasa";
-      };
-
-      window.handleAuth = async function() {
-          const nameInput = document.getElementById('authUser').value.trim();
-          const passInput = document.getElementById('authPass').value.trim();
-
-          if(!nameInput || !passInput) { showToast("Weka jina na neno la siri"); return; }
-
-          if (isSigningUp) {
-              const existing = await getUserByName(nameInput);
-              if(existing) {
-                  showToast("Jina limechukuliwa tayari!");
-                  return;
-              }
-              const newUser = {
-                  name: nameInput,
-                  password: passInput, // In prod, hash this!
-                  avatar: nameInput.substring(0,2).toUpperCase(),
-                  createdAt: Date.now()
-              };
-              const createdUser = await createUser(newUser);
-              loginUser(createdUser);
-          } else {
-              const user = await getUserByName(nameInput);
-              if(user && user.password === passInput) {
-                  loginUser(user);
-              } else {
-                  showToast("Jina au neno la siri si sahihi.");
-              }
-          }
-      };
-
-      function loginUser(user) {
-          saveSession(user);
-          document.getElementById('authScreen').style.display = 'none';
-          showMainApp();
-      }
-
-      window.logout = async function() {
-          await signOut(auth);
-          localStorage.removeItem("majadiliano_session_uid");
-          currentUser = null;
-          location.reload();
-      };
-
-      async function showMainApp() {
-          document.getElementById('mainApp').style.display = 'block';
-          document.getElementById('sidebarUsername').innerText = currentUser.name;
-          document.getElementById('feedAvatar').innerText = currentUser.avatar;
-          document.getElementById('sidebarAvatar').innerText = currentUser.avatar;
-          document.getElementById('myAvatar').innerText = currentUser.avatar;
-
-          // Check Super Admin Credentials (One Administrator Rule)
-          // Note: Enforce that ONLY Nashiri Waziri gets the Admin Dashboard button
-          if (currentUser.name === "Nashiri Waziri") {
-              document.getElementById('adminPanelBtn').style.display = 'flex';
-              // Ensure user has admin role in DB if they are Nashiri Waziri, just in case they signed up as regular user but should be admin.
-              if (currentUser.role !== 'Administrator') {
-                  await updateDoc(doc(db, "users", currentUser.id), { role: "Administrator" });
-                  currentUser.role = "Administrator'; // Update local state immediately
-              }
-          } else if (currentUser.role === 'Administrator') {
-              document.getElementById('adminPanelBtn').style.display = 'flex';
-          } else {
-              document.getElementById('adminPanelBtn').style.display = 'none';
-          }
-
-          await loadPosts();
-          renderUserList();
-      }
-
-      // =====================
-      // UI RENDERING
-      // =====================
-      async function renderUserList() {
-          const users = await fetchUsers();
-          const container = document.getElementById('usersListContainer');
-          container.innerHTML = "";
-          document.getElementById('userCount').innerText = users.length;
-
-          users.forEach(u => {
-              if(u.id === currentUser.id) return;
-
-              const isFollowing = currentUser.following.includes(u.id);
-              const isFriend = currentUser.friends.includes(u.id);
-              const hasRequested = u.requests.includes(currentUser.id);
-
-              let actionBtn = "";
-              if(isFriend) {
-                  actionBtn = `<button class="active" title="Rafiki"><i class="fas fa-user-check"></i></button>`;
-              } else if (hasRequested) {
-                  actionBtn = `<button title="Imetumwa"><i class="fas fa-clock"></i></button>`;
-              } else {
-                  // Admin Logic: Only Admin can "Add" or effectively manage all users.
-                  // We expose a function to add users for the Admin if they use the console or a specific tool.
-                  // Standard users can follow/friend others.
-                  actionBtn = `<button onclick="window.sendFriendRequest('${u.id}')" title="Add Friend"><i class="fas fa-user-plus"></i></button>`;
-              }
-
-              const html = `
-              <div class="user-list-item">
-                  <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="window.openChatWith('${u.id}')">
-                      <div class="avatar-placeholder" style="width:30px; height:30px; font-size:10px;">${u.avatar}</div>
-                      <div>
-                          <div style="font-size:14px; font-weight:600;">${u.name}</div>
-                          <div style="font-size:11px; color:#666;">Mutaboa wa karibu</div>
-                      </div>
-                  </div>
-                  <div class="user-actions">
-                      <button class="${isFollowing ? 'active' : ''}" onclick="window.toggleFollow('${u.id}')" title="Follow">
-                          <i class="fas ${isFollowing ? 'fa-user-minus' : 'fa-user-plus'}"></i>
-                      </button>
-                      ${actionBtn}
-                      <button onclick="window.openChatWith('${u.id}')" title="Message"><i class="fas fa-comment-dots"></i></button>
-                  </div>
-              </div>
-              `;
-              container.innerHTML += html;
-          });
-      }
-
-      // Social Actions (Update then Reload)
-      window.toggleFollow = async function(targetId) {
-          const q = query(collection(db, "users"), where("name", "==", currentUser.name)); // Find self by name to get ref
-          const snap = await getDocs(q);
-          if(!snap.empty) {
-              const myRef = snap.docs[0].ref;
-              let myData = snap.docs[0].data();
-              let following = myData.following || [];
-
-              if(following.includes(targetId)) {
-                  following = following.filter(id => id !== targetId);
-                  showToast("Umefuta ufuatilio.");
-              } else {
-                  following.push(targetId);
-                  showToast("Unamfuata sasa hivi.");
-              }
-
-              await updateDoc(myRef, { following: following });
-              // Refresh local state
-              currentUser.following = following;
-              renderUserList();
-          }
-      };
-
-      window.sendFriendRequest = async function(targetId) {
-          const q = query(collection(db, "users"), where("name", "==", currentUser.name));
-          const snap = await getDocs(q);
-          if(!snap.empty) {
-              const targetRef = doc(db, "users", targetId);
-              const targetSnap = await getDoc(targetRef);
-              if(targetSnap.exists()) {
-                  let requests = targetSnap.data().requests || [];
-                  if(!requests.includes(currentUser.id)) {
-                      requests.push(currentUser.id);
-                      await updateDoc(targetRef, { requests: requests });
-                      showToast("Ombi la urafiki limetumwa.");
-                      renderUserList();
-                  }
-              }
-          }
-      };
-
-      // =====================
-      // MESSAGING (INBOX)
-      // =====================
-      window.openChatWith = async function(userId) {
-          chatPartnerId = userId;
-          // Find partner in cache (avoid extra read)
-          const partner = usersCache.find(u => u.id === userId);
-          document.getElementById('chatTitle').innerText = `Chat na ${partner ? partner.name : 'User'}`;
-          document.getElementById('chatWindow').style.display = 'flex';
-          renderChat();
-      };
-
-      window.closeChat = function() {
-          document.getElementById('chatWindow').style.display = 'none';
-          chatPartnerId = null;
-      };
-
-      window.sendMessage = async function() {
-          const input = document.getElementById('chatInput');
-          const text = input.value.trim();
-          if(!text || !chatPartnerId) return;
-
-          await createMessage({
-              from: currentUser.id,
-              to: chatPartnerId,
-              text: text,
-              time: new Date().toLocaleString()
-          });
-
-          input.value = "";
-          renderChat();
-      };
-
-      async function renderChat() {
-          const container = document.getElementById('chatBody');
-          container.innerHTML = "";
-
-          const allMsgs = await fetchMessages();
-          const chatHistory = allMsgs.filter(m =>
-              (m.from === currentUser.id && m.to === chatPartnerId) ||
-              (m.from === chatPartnerId && m.to === currentUser.id)
-          );
-
-          if(chatHistory.length === 0) {
-              container.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px;">Hakuna ujumbe bado. Anza mazungumzo!</div>`;
-              return;
-          }
-
-          chatHistory.forEach(msg => {
-              const isMine = msg.from === currentUser.id;
-              container.innerHTML += `
-                  <div class="cw-msg ${isMine ? 'mine' : 'theirs'}">
-                      ${msg.text}
-                  </div>
-              `;
-          });
-          container.scrollTop = container.scrollHeight;
-      }
-
-      // =====================
-      // POSTS SYSTEM
-      // =====================
-      window.handleFileSelect = function(event) {
-          const allFiles = [];
-          const fileInput = document.getElementById("fileInput");
-          const audioInput = document.getElementById("audioInput");
-
-          if (fileInput.files.length > 0) Array.from(fileInput.files).forEach(f => allFiles.push(f));
-          if (audioInput.files.length > 0) Array.from(audioInput.files).forEach(f => allFiles.push(f));
-
-          selectedFiles = allFiles;
-
-          const previewArea = document.getElementById("filePreviewArea");
-          previewArea.innerHTML = "";
-
-          allFiles.forEach((file, index) => {
-              const reader = new FileReader();
-              reader.onload = function(e) {
-                  const div = document.createElement("div");
-                  div.className = "preview-item";
-                  let mediaHtml = "";
-                  if(file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
-                  else if(file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
-                  else if(file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
-                  else mediaHtml = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:10px;text-align:center;">FILE</div>`;
-
-                  div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${index})">&times;</div>`;
-                  previewArea.appendChild(div);
-              };
-              reader.readAsDataURL(file);
-          });
-      };
-
-      window.removeFile = function(index) {
-          selectedFiles.splice(index, 1);
-          // Clear inputs to ensure change event fires if we re-add same file
-          document.getElementById("fileInput").value = "";
-          document.getElementById("audioInput").value = "";
-
-          // Re-render based on current array logic would be complex with separate inputs,
-          // so we simply clear visual here
-          // and rely on `selectedFiles` array being correct on submit.
-          // To fix the visual sync properly:
-          const previewArea = document.getElementById("filePreviewArea");
-          previewArea.innerHTML = "";
-          selectedFiles.forEach((file, idx) => {
-              const reader = new FileReader();
-              reader.onload = function(e) {
-                   const div = document.createElement("div");
-                  div.className = "preview-item";
-                  let mediaHtml = "";
-                  if(file.type.startsWith("image/")) mediaHtml = `<img src="${e.target.result}">`;
-                  else if(file.type.startsWith("video")) mediaHtml = `<video src="${e.target.result}"></video>`;
-                  else if(file.type.startsWith("audio")) mediaHtml = `<audio controls src="${e.target.result}"></audio>`;
-
-                  div.innerHTML = `${mediaHtml}<div class="remove-preview" onclick="window.removeFile(${idx})">&times;</div>`;
-                  previewArea.appendChild(div);
-              }
-              reader.readAsDataURL(file);
-          });
-      };
-
-      window.addPost = async function() {
-          let content = document.getElementById("content").value;
-          if(content == "" && selectedFiles.length == 0){ showToast("Andika kitu au weka picha!"); return; }
-
-          let filePromises = selectedFiles.map(file => {
-              return new Promise((resolve) => {
-                  let reader = new FileReader();
-                  reader.onload = (e) => resolve({ name: file.name, type: file.type, data: e.target.result });
-                  reader.readAsDataURL(file);
-              });
-          });
-
-          try {
-              const filesData = await Promise.all(filePromises);
-
-              const newPost = {
-                  id: Date.now(),
-                  authorId: currentUser.id,
-                  authorName: currentUser.name,
-                  authorAvatar: currentUser.avatar,
-                  content: content,
-                  files: filesData,
-                  date: new Date().toLocaleString(),
-                  reactions: { like: 0, love: 0, laugh: 0, angry: 0, sad: 0 },
-                  comments: []
-              };
-
-              await createPost(newPost);
-
-              document.getElementById("content").value = "";
-              document.getElementById("fileInput").value = "";
-              document.getElementById("audioInput").value = "";
-              document.getElementById("filePreviewArea").innerHTML = "";
-              selectedFiles = [];
-
-              await loadPosts();
-              showToast("Post Imechapishwa!");
-          } catch (e) {
-              console.error(e);
-              showToast("Error adding post: " + e.message);
-          }
-      };
-
-
-      async function loadPosts() {
-          let container = document.getElementById("postsContainer");
-          container.innerHTML = "";
-
-          const posts = await fetchPosts();
-          postsCache = posts;
-
-          posts.forEach(p => {
-              let mediaHTML = "";
-              p.files.forEach(f => {
-                  if(f.type.startsWith("image")) mediaHTML += `<img src="${f.data}">`;
-                  else if(f.type.startsWith("video")) mediaHTML += `<video controls src="${f.data}"></video>`;
-                  else if(f.type.startsWith("audio")) mediaHTML += `<div style="background:#f0f2f5; padding:10px; border-radius:8px; margin-top:5px;"><audio controls src="${f.data}" style="width:100%;"></audio></div>`;
-                  else mediaHTML += `<a href="${f.data}" download="${f.name}" class="download-link">📄 Download ${f.name}</a>`;
-              });
-
-              let commentsHtml = "";
-              if(p.comments) {
-                  p.comments.forEach(c => {
-                      commentsHtml += `
-                          <div class="comment">
-                              <div class="avatar-placeholder" style="width:32px; height:32px; font-size:10px;">${c.user.substring(0,2).toUpperCase()}</div>
-                              <div class="comment-bubble"><b>${c.user}</b> ${c.text}</div>
-                          </div>`;
-                  });
-              }
-
-              const totalReactions = Object.values(p.reactions).reduce((a, b) => a + b, 0);
-              const isMyPost = p.authorId === currentUser.id;
-
-              const html = `
-              <article class="post">
-                  <div class="post-header">
-                      <div class="post-user">
-                          <div class="avatar-placeholder">${p.authorAvatar}</div>
-                          <div class="user-info">
-                              <h4>${p.authorName}</h4>
-                              <span>${p.date}</span>
-                          </div>
-                      </div>
-                      ${isMyPost ? `
-                      <div class="btn-ghost" onclick="window.initiateDelete('${p.id}')" style="font-size:12px; color:var(--danger);">
-                          <i class="fas fa-trash"></i>
-                      </div>` : ''}
-                  </div>
-
-                  <div class="post-content">
-                      <p>${p.content}</p>
-                      <div class="post-media">${mediaHTML}</div>
-                  </div>
-
-                  <div class="post-stats">
-                      <span>${totalReactions > 0 ? '<i class="fas fa-thumbs-up" style="color:var(--primary)"></i> ' + totalReactions : ''}</span>
-                      <span>${p.comments ? p.comments.length : 0} maoni</span>
-                  </div>
-
-                  <div class="post-actions">
-                      <div class="action-btn" onmouseleave="window.hideReactions('${p.id}')">
-                          <div class="reactions-bar" id="react-bar-${p.id}">
-                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'like')">👍</span>
-                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'love')">❤️</span>
-                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'laugh')">😂</span>
-                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'angry')">😡</span>
-                              <span class="reaction-emoji" onclick="window.addReaction('${p.id}', 'sad')">😢</span>
-                          </div>
-                          <i class="far fa-thumbs-up"></i> Penda
-                      </div>
-                      <div class="action-btn" onclick="window.toggleComments('${p.id}')">
-                          <i class="far fa-comment-alt"></i> Maoni
-                      </div>
-                      <div class="action-btn" onclick="window.sharePost('${p.id}')">
-                          <i class="fas fa-share"></i> Shiriki
-                      </div>
-                  </div>
-
-                  <div class="comments-section" id="comments-${p.id}">
-                      <div id="comments-list-${p.id}">${commentsHtml}</div>
-                      <div class="comment-input-area">
-                          <div class="avatar-placeholder" style="width:32px; height:32px; font-size:10px;">ME</div>
-                          <input type="text" placeholder="Andika maoni..." onkeypress="window.handleComment(event, '${p.id}')">
-                      </div>
-                  </div>
-              </article>
-              `;
-              container.innerHTML += html;
-          });
-      }
-
-      // Post Actions
-      window.addReaction = async function(postId, type) {
-          const postRef = doc(db, "posts", postId);
-          const snap = await getDoc(postRef);
-          if(snap.exists()){
-              const data = snap.data();
-              const reactions = data.reactions || {};
-              reactions[type] = (reactions[type] || 0) + 1;
-              await updateDoc(postRef, { reactions: reactions });
-              await loadPosts();
-          }
-      };
-
-      window.toggleComments = function(id) {
-          document.getElementById(`comments-${id}`).classList.toggle('open');
-      };
-
-      window.hideReactions = function(id) {
-          // Optional: hide bar logic
-      };
-
-      window.handleComment = async function(e, id) {
-          if(e.key === 'Enter') {
-              const text = e.target.value;
-              if(text) {
-                  const postRef = doc(db, "posts", id);
-                  const snap = await getDoc(postRef);
-                  if(snap.exists()) {
-                      const comments = snap.data().comments || [];
-                      comments.push({ user: currentUser.name, text: text });
-                      await updateDoc(postRef, { comments });
-                      await loadPosts();
-                      setTimeout(() => document.getElementById(`comments-${id}`).classList.add('open'), 50);
-                  }
-              }
-          }
-      };
-
-      window.sharePost = async function(id) {
-          const post = postsCache.find(p => p.id === id);
-          navigator.clipboard.writeText(`${post.content} - Kuangalia zaidi tembelea Majadiliano Network.`).then(() => {
-              showToast("Imenakiliwa!");
-          });
-      };
-
-      window.initiateDelete = function(id) {
-          const post = postsCache.find(p => p.id === id);
-
-          // Super Admin Check: Only Nashiri Waziri can delete ANY post.
-          // Standard Admins can only delete their OWN posts (enforced "role of adding user" interpretation: Admins can add users, so they have control).
-          if (currentUser.name !== "Nashiri Waziri") {
-              if (currentUser.role === "Administrator") {
-                  // Standard Admins: Can only delete their own posts
-                  if (post.authorId !== currentUser.id) {
-                      showToast("You can only delete your own posts.");
-                      return;
-                  }
-              } else {
-                  if(confirm("Unafuta posti yako?")) {
-                      deletePostById(id);
-                      await loadPosts();
-                      showToast("Post imefutwa.");
-                  }
-              }
-          } else {
-              // Super Admin Logic
-              // Can delete ANY post, but must verify password if it belongs to someone else?
-              // For simplicity in this refactor: We allow Super Admins to delete anything immediately.
-              if(confirm("Hakikisha: Unafuta posti hii?")) {
-                  deletePostById(id);
-                  loadPosts();
-                  showToast("Post imefutwa (Admin).");
-              }
-          }
-      };
-
-      window.confirmDelete = async function() {
-          const pass = document.getElementById('adminPassInput').value;
-          // Super Admin Check
-          if (pass === "WAZIRI2015") {
-              // Delete post regardless of ownership
-              deletePostById(postToDeleteId);
-              loadPosts();
-              showToast("Post imefutwa (Admin).");
-              closeModal('passwordModal');
-          } else {
-              showToast("Neno la siri la Admin si sahihi!");
-          }
-      };
-
-      // =====================
-      // MANAGEMENT & ADMIN
-      // =====================
-      window.openManagement = function() {
-          document.getElementById('manageUserDisplay').innerText = `Logged in as: ${currentUser.name}`;
-          document.getElementById('manageModal').classList.add('active');
-      };
-      window.closeModal = function(id) {
-          document.getElementById(id).classList.remove('active');
-      };
-
-      window.deleteMyPosts = async function() {
-          if(confirm("HAHATARI: Unafuta posti ZAKO ZOTE?")) {
-              const posts = await fetchPosts();
-              const myPosts = posts.filter(p => p.authorId === currentUser.id);
-
-              const promises = myPosts.map(p => deleteDoc(doc(db, "posts", p.id));
-              await Promise.all(promises);
-
-              loadPosts();
-              showToast("Posti zako zote zimefutwa.");
-              closeModal('manageModal');
-          }
-      };
-
-      // =====================
-      // ADMIN CHAT CONTROL SYSTEM
-      // =====================
-      window.openAdminChatControl = async function() {
-          // Only Administrators can access this.
-          if (!currentUser || currentUser.role !== "Administrator" && currentUser.name !== "Nashiri Waziri") {
-              showToast("Haki zako hazitoshi.");
-              return;
-          }
-          document.getElementById('adminChatModal').classList.add('active');
-          loadAdminChatList();
-      };
-
-      async function loadAdminChatList() {
-          const listContainer = document.getElementById('adminChatList');
-          listContainer.innerHTML = "";
-
-          // Identify unique conversation pairs
-          // We create a unique key for each pair: "id1-id2" (sorted)
-          const pairs = new Set();
-          const messages = await fetchMessages(); // Cache messages first
-
-          messages.forEach(m => {
-              const pairKey = [m.from, m.to].sort((a,b) => a - b).join('-');
-              pairs.add(pairKey);
-          });
-
-          if(pairs.size === 0) {
-              listContainer.innerHTML = "<div style='padding:10px; color:#777;'>Hakuna mazungumzo yaliyorekodiwa.</div>";
-              return;
-          }
-
-          pairs.forEach(pair => {
-              const [id1, id2] = pair.split('-'); // Strings
-              const user1 = usersCache.find(u => u.id == id1);
-              const user2 = usersCache.find(u => u.id == id2);
-
-              if(user1 && user2) {
-                  const div = document.createElement('div');
-                  div.className = 'admin-chat-item';
-                  div.innerHTML = `
-                      <div style="font-weight:bold; font-size:14px;">${user1.name} <i class="fas fa-exchange-alt" style="font-size:10px; color:#888;"></i> ${user2.name}</div>
-                      <div style="font-size:11px; color:#666;">ID: ${pair}</div>
-                  `;
-                  div.onclick = () => loadAdminChatView(pair, `${user1.name} & ${user2.name}`);
-                  listContainer.appendChild(div);
-              } else {
-                  // Fallback in case users haven't loaded yet
-                  const div = document.createElement('div');
-                  div.className = 'admin-chat-item';
-                  div.innerHTML = `
-                      <div style="font-weight:bold; font-size:14px;">Unknown User</div>
-                      <div style="font-size:11px; color:#666;">ID: ${pair}</div>
-                  `;
-                  listContainer.appendChild(div);
-              }
-          });
-      }
-
-      function loadAdminChatView(pairKey, title) {
-          currentAdminPairId = pairKey;
-          document.getElementById('adminChatHeader').innerText = `Mazungumzo: ${title}`;
-          document.getElementById('adminControlBtnContainer').style.display = 'block';
-
-          const body = document.getElementById('adminChatBody');
-          body.innerHTML = "";
-
-          const [id1, id2] = pairKey.split('-'); // Strings from Set
-
-          // Filter messages
-          const chatHistory = messages.filter(m =>
-              (m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1)
-          );
-
-          if(chatHistory.length === 0) {
-              body.innerHTML = "<div style='text-align:center; padding:20px; color:#888;'>Hakuna ujumbe.</div>";
-              return;
-          }
-
-          chatHistory.forEach(msg => {
-              const sender = usersCache.find(u => u.id == msg.from) || currentUser;
-              const isLeft = msg.from == id1; // Just to alternate visuals loosely
-
-              body.innerHTML += `
-                  <div style="display:flex; flex-direction:column; align-items: ${isLeft ? 'flex-start' : 'flex-end'}; margin-bottom:5px;">
-                      <div style="font-size:0.75rem; color:#666; margin:0 0 5px;">${sender ? sender.name : 'Unknown'}</div>
-                      <div class="cw-msg ${isLeft ? 'theirs' : 'mine'}" style="position:relative;">
-                          ${msg.text}
-                      </div>
-                  </div>
-              `;
-          });
-          body.scrollTop = body.scrollHeight;
-      }
-
-      window.clearSelectedChat = async function() {
-          if(!currentAdminPairId) return;
-          if(!confirm("UNAFUTA MAZUNGUMZO HAYA KAMILI? HAIWEZI RUDISHWA.") return;
-
-          const [id1, id2] = currentAdminPairId.split('-');
-
-          // Remove messages where (from==id1 AND to==id2) OR (from==id2 AND to==id1)
-          // In a production app, use a deleteBatch or Cloud Function.
-          // For this refactor, we fetch all, filter, and delete individually.
-          const allMsgs = await fetchMessages(); // Helper re-used
-          const toDelete = allMsgs.filter(m =>
-              ((m.from == id1 && m.to == id2) || (m.from == id2 && m.to == id1))
-          );
-
-          const batch = toDelete.map(m => deleteDoc(doc(db, "messages", m.id));
-          await Promise.all(batch);
-
-          document.getElementById('adminChatBody').innerHTML = "";
-          document.getElementById('adminControlBtnContainer').style.display = 'none';
-          document.getElementById('adminChatHeader').innerText = "Mazungumzo yamefutwa.";
-          loadAdminChatList(); // Refresh list
-          showToast("Mazungumzo yametolewa.");
-      }
-
-      // =====================
-      // UTILITIES
-      // =====================
-      function showToast(message) {
-          const toast = document.getElementById("toast");
-          toast.innerText = message;
-          toast.classList.add("show");
-          setTimeout(() => toast.classList.remove("show"), 3000);
-      }
-
-      window.scrollToTop = function() { window.scrollTo({ top: 0, behavior: 'smooth' }); };
-
-      // Close menu on outside click
-      document.addEventListener('click', (e) => {
-          const menu = document.getElementById('contextMenu');
-          const menuBtn = document.querySelector('.chat-header .fa-ellipsis-v');
-          if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
-              menu.style.display = 'none';
-          }
+    };
+
+    // Handle Image Preview on Select
+    window.handleImageSelect = function(inputId, previewId) {
+      const input = document.getElementById(inputId);
+      const preview = document.getElementById(previewId);
+      input.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        }
       });
+    };
 
-      // Initialize App
-      document.addEventListener("DOMContentLoaded", initApp);
-    </script>
-  </body>
+    // =====================================================
+    // PROVIDED LOGIC (INTEGRATED & ENHANCED)
+    // =====================================================
+
+    // =============================================
+    // ===== MESSAGES BOX LOGIC (ADMIN) =====
+    // =============================================
+    window.openMessagesBox = async function () {
+      const user = JSON.parse(sessionStorage.getItem("currentUser"));
+      if (!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) {
+        BrickNotify.error("Access Denied.");
+        return;
+      }
+
+      document.getElementById("messagesModal").classList.remove("hidden");
+      // Default to identifiers tab
+      switchMsgTab("identifiers");
+
+      const tbody = document.getElementById("messagesTableBody");
+      tbody.innerHTML = "<tr><td colspan='6' style='text-align:center;'>Loading messages...</td></tr>";
+
+      try {
+        const snap = await getDocs(collection(db, "child"));
+        const children = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        tbody.innerHTML = "";
+        let messageCount = 0;
+
+        for (const child of children) {
+          if (child.identifiers && Array.isArray(child.identifiers)) {
+            child.identifiers.forEach((identifier) => {
+              messageCount++;
+              let dateStr = "";
+              if (identifier.timestamp) {
+                const ts = identifier.timestamp.seconds ? identifier.timestamp.seconds * 1000 : identifier.timestamp;
+                dateStr = new Date(ts).toLocaleString();
+              }
+              const replyStatus = identifier.adminReply
+                ? `<span style="color:green; font-size:0.8em;"><i class="fas fa-check"></i> Replied</span>`
+                : `<span style="color:orange; font-size:0.8em;">Pending</span>`;
+              tbody.innerHTML += `<tr><td><strong>${child.name}</strong></td><td>${identifier.name || ""}</td><td>${identifier.contact || ""}</td><td>${identifier.message || ""}</td><td>${dateStr}</td><td><button class="msg-action-btn call" onclick="window.location.href='tel:${identifier.contact}'"><i class="fas fa-phone"></i></button><button class="msg-action-btn copy" onclick="navigator.clipboard.writeText('${identifier.contact}');BrickNotify.success('Copied')"><i class="fas fa-copy"></i></button>${replyStatus}</td></tr>`;
+            });
+          }
+        }
+        if (messageCount === 0)
+          tbody.innerHTML = `<tr><td colspan="6" style='text-align:center;'>No messages found.</td></tr>`;
+      } catch (error) {
+        console.error("Error:", error);
+        tbody.innerHTML = `<tr><td colspan="6" style='text-align:center; color:red;'>Error loading.</td></tr>`;
+      }
+    };
+
+    window.closeMessagesBox = function () {
+      document.getElementById("messagesModal").classList.add("hidden");
+    };
+
+    // Tab Switching for Admin Messages Modal
+    window.switchMsgTab = function (tabName) {
+      document.querySelectorAll(".msg-tab").forEach((t) => t.classList.remove("active"));
+      document.querySelectorAll(".msg-tab-panel").forEach((p) => p.classList.remove("active"));
+      if (tabName === "identifiers") {
+        document.querySelector(".msg-tab:nth-child(1)").classList.add("active");
+        document.getElementById("tabIdentifiers").classList.add("active");
+      } else {
+        document.querySelector(".msg-tab:nth-child(2)").classList.add("active");
+        document.getElementById("tabInbox").classList.add("active");
+        loadAdminInbox();
+      }
+    };
+
+    // Load Inbox for Admin
+    window.loadAdminInbox = async function () {
+      const listDiv = document.getElementById("adminInboxList");
+      listDiv.innerHTML = "<p style='text-align:center;'>Loading inbox...</p>";
+
+      try {
+        const q = query(collection(db, "inbox"), orderBy("createdAt", "desc"));
+        const snap = await getDocs(q);
+        listDiv.innerHTML = "";
+
+        if (snap.empty) {
+          listDiv.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>Inbox is empty.</p>";
+          return;
+        }
+
+        snap.forEach((d) => {
+          const msg = d.data();
+          const dateStr = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : "";
+          const isReplied = !!msg.adminReply;
+          const unreadClass = !isReplied ? "unread" : "";
+
+          // Attachment HTML
+          let attachmentHtml = '';
+          if(msg.attachmentUrl) {
+            attachmentHtml = `<div class="attachment-preview"><img src="${msg.attachmentUrl}" style="max-width:100%; max-height:200px; border-radius:8px; display:block; margin-top:5px;"></div>`;
+          }
+
+          listDiv.innerHTML += `
+            <div class="inbox-msg-card ${unreadClass}">
+              <div class="msg-header">
+                <div>
+                  <div class="msg-sender">${msg.senderName} <span class="msg-sender-email">(${msg.senderEmail})</span></div>
+                  ${msg.senderPhone ? `<div class="msg-phone"><i class="fas fa-phone"></i> ${msg.senderPhone}</div>` : ""}
+                </div>
+                <div class="msg-date">${dateStr}</div>
+              </div>
+              <div class="msg-subject">${msg.subject || "No Subject"}</div>
+              <div class="msg-body">${msg.message}</div>
+              ${attachmentHtml}
+              ${
+                isReplied
+                  ? `
+                  <div class="admin-reply-section">
+                    <div class="reply-label">Your Reply:</div>
+                    <div class="reply-text">${msg.adminReply}</div>
+                    ${msg.adminReplyAttachment ? `<img src="${msg.adminReplyAttachment}" style="max-width:100%; border-radius:4px; margin-top:4px;">` : ''}
+                    <div class="reply-date">${msg.replyTimestamp ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}</div>
+                  </div>
+                  `
+                  : `
+                  <div class="admin-reply-input-area">
+                    <textarea id="inbox-reply-${d.id}" placeholder="Type your reply..."></textarea>
+                    <div style="margin-top:5px;">
+                        <input type="file" id="reply-file-${d.id}" style="font-size:12px; margin-bottom:5px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="sendAdminInboxReply('${d.id}')">Reply</button>
+                  </div>
+                  `
+              }
+            </div>`;
+        });
+      } catch (err) {
+        console.error(err);
+        listDiv.innerHTML = "<p style='color:red; text-align:center;'>Error loading inbox.</p>";
+      }
+    };
+
+    // Admin Replies to Inbox Message
+    window.sendAdminInboxReply = async function (msgId) {
+      const textarea = document.getElementById(`inbox-reply-${msgId}`);
+      const fileInput = document.getElementById(`reply-file-${msgId}`);
+      const replyText = textarea ? textarea.value.trim() : "";
+      
+      if (!replyText && !fileInput.files[0]) {
+        BrickNotify.error("Please type a reply or attach an image.");
+        return;
+      }
+
+      const btn = document.activeElement;
+      btn.innerText = "Sending...";
+      btn.disabled = true;
+
+      try {
+        let attachmentUrl = null;
+        if (fileInput.files[0]) {
+          attachmentUrl = await window.uploadImageToStorage(fileInput.files[0]);
+        }
+
+        const updateData = {
+          adminReply: replyText,
+          replyTimestamp: serverTimestamp(),
+          status: "replied",
+        };
+        if (attachmentUrl) {
+          updateData.adminReplyAttachment = attachmentUrl;
+        }
+
+        await updateDoc(doc(db, "inbox", msgId), updateData);
+        BrickNotify.success("Reply sent successfully.");
+        loadAdminInbox();
+      } catch (err) {
+        console.error(err);
+        BrickNotify.error("Failed to send reply.");
+        btn.innerText = "Reply";
+        btn.disabled = false;
+      }
+    };
+
+    // Real-time listener for Admin Inbox Unread Count
+    window.listenForInboxUnread = function () {
+      const q = query(collection(db, "inbox"), where("status", "==", "unread"));
+      onSnapshot(q, (snap) => {
+        const count = snap.size;
+        const badge = document.getElementById("inboxUnreadBadge");
+        if (count > 0) {
+          if (badge) {
+            badge.innerText = count;
+            badge.style.display = "inline-flex";
+          }
+        } else {
+          if (badge) badge.style.display = "none";
+        }
+      });
+    };
+
+    // =============================================
+    // ===== USER MESSAGING LOGIC =====
+    // =============================================
+
+    // 1. OPEN / CLOSE SEND MESSAGE MODAL
+    window.openSendMessageModal = function () {
+      const user = JSON.parse(sessionStorage.getItem("currentUser"));
+      if (!user) {
+        BrickNotify.error("Please login first.");
+        return;
+      }
+
+      document.getElementById("inboxSubject").value = "";
+      document.getElementById("inboxPhone").value = user.phone || "";
+      document.getElementById("inboxMessage").value = "";
+      document.getElementById("msgPreview").style.display = "none";
+      document.getElementById("msgFileInput").value = ""; 
+
+      document.getElementById("sendMessageModal").classList.remove("hidden");
+    };
+
+    window.closeSendMessageModal = function () {
+      document.getElementById("sendMessageModal").classList.add("hidden");
+    };
+
+    // 2. SEND MESSAGE TO ADMIN (WITH IMAGE)
+    window.handleSendAdminMessage = async function (e) {
+      e.preventDefault();
+
+      const user = JSON.parse(sessionStorage.getItem("currentUser"));
+      if (!user) {
+        BrickNotify.error("Please login first.");
+        return;
+      }
+
+      const submitBtn = document.getElementById("sendMsgBtn");
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+
+      const fileInput = document.getElementById("msgFileInput");
+      let attachmentUrl = null;
+
+      try {
+        // Handle Image Upload first if exists
+        if (fileInput.files[0]) {
+          attachmentUrl = await window.uploadImageToStorage(fileInput.files[0]);
+        }
+
+        const msgData = {
+          senderId: user.id || user.email,
+          senderName: `${user.fname || ""} ${user.lname || ""}`.trim(),
+          senderEmail: user.email,
+          senderPhone: document.getElementById("inboxPhone").value.trim(),
+          subject: document.getElementById("inboxSubject").value.trim(),
+          message: document.getElementById("inboxMessage").value.trim(),
+          attachmentUrl: attachmentUrl,
+          adminReply: null,
+          adminReplyAttachment: null,
+          replyTimestamp: null,
+          status: "unread",
+          createdAt: serverTimestamp(),
+        };
+
+        if (!msgData.subject || !msgData.message) {
+          BrickNotify.error("Please fill in subject and message.");
+          submitBtn.disabled = false;
+          submitBtn.innerText = "Send Message";
+          return;
+        }
+
+        await addDoc(collection(db, "inbox"), msgData);
+
+        BrickNotify.success("Message sent to Administrator.");
+        closeSendMessageModal();
+      } catch (err) {
+        console.error("SEND ERROR:", err);
+        BrickNotify.error("Message could not be sent.");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Send Message";
+      }
+    };
+
+    // 3. LOAD USER MESSAGES (MY MESSAGES)
+    window.openMyMessages = async function () {
+      const user = JSON.parse(sessionStorage.getItem("currentUser"));
+      if (!user) return;
+
+      document.getElementById("myMessagesModal").classList.remove("hidden");
+
+      const listDiv = document.getElementById("myMessagesList");
+      listDiv.innerHTML = "<p style='text-align:center;'>Loading...</p>";
+
+      try {
+        const q = query(collection(db, "inbox"), where("senderEmail", "==", user.email), orderBy("createdAt", "desc"));
+        const snap = await getDocs(q);
+
+        listDiv.innerHTML = "";
+
+        if (snap.empty) {
+          listDiv.innerHTML = "<p style='text-align:center; color:var(--text-muted);'>No messages found.</p>";
+          return;
+        }
+
+        snap.forEach((d) => {
+          const msg = d.data();
+          const dateStr = msg.createdAt?.seconds
+            ? new Date(msg.createdAt.seconds * 1000).toLocaleString()
+            : "No date";
+
+          const isReplied = !!msg.adminReply;
+
+          // Attachment
+          let attachmentHtml = '';
+          if(msg.attachmentUrl) {
+            attachmentHtml = `<div style="margin:5px 0;"><img src="${msg.attachmentUrl}" style="max-width:100%; border-radius:8px; border:1px solid #ddd;"></div>`;
+          }
+
+          listDiv.innerHTML += `
+            <div class="sent-msg-card">
+              <div class="sent-header" style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <div class="sent-subject" style="font-weight:700;">${msg.subject || "No Subject"}</div>
+                <div class="sent-date" style="font-size:0.8em; color:var(--text-muted);">${dateStr}</div>
+              </div>
+              <div class="sent-body">${msg.message || ""}</div>
+              ${attachmentHtml}
+              <div style="margin-top:10px;">
+                <span class="sent-status ${isReplied ? "replied" : "pending"}" style="font-size:0.85em; padding:4px 8px; border-radius:4px; background:${isReplied ? '#e6fffa' : '#fffaf0'}; color:${isReplied ? 'var(--success)' : 'var(--warning)'}; display:inline-flex; align-items:center; gap:5px;">
+                  ${isReplied ? '<i class="fas fa-check-double"></i> Replied' : '<i class="fas fa-clock"></i> Pending'}
+                </span>
+              </div>
+              ${
+                isReplied
+                  ? `
+                  <div class="admin-reply-section">
+                    <div class="reply-label">Admin Reply:</div>
+                    <div class="reply-text">${msg.adminReply || ""}</div>
+                    ${msg.adminReplyAttachment ? `<img src="${msg.adminReplyAttachment}" style="max-width:100%; border-radius:4px; margin-top:4px;">` : ''}
+                    <div class="reply-date">
+                      ${msg.replyTimestamp?.seconds ? new Date(msg.replyTimestamp.seconds * 1000).toLocaleString() : ""}
+                    </div>
+                  </div>
+                  `
+                  : `<div style="color:gray; margin-top:5px; font-size:0.9em;">Waiting for admin reply...</div>`
+              }
+            </div>`;
+        });
+      } catch (err) {
+        console.error("LOAD ERROR:", err);
+        listDiv.innerHTML = `<p style='color:red; text-align:center;'>Error loading messages.</p>`;
+      }
+    };
+
+    window.closeMyMessages = function () {
+      document.getElementById("myMessagesModal").classList.add("hidden");
+    };
+
+    // 4. REAL-TIME REPLY BADGE
+    window.listenForMyMessageReplies = function (user) {
+      if (!user || !user.email) return;
+      const q = query(
+        collection(db, "inbox"),
+        where("senderEmail", "==", user.email),
+        where("status", "==", "replied"),
+      );
+      onSnapshot(q, (snap) => {
+        const count = snap.size;
+        const badge = document.getElementById("myMsgBadge");
+        const dropdownBadge = document.getElementById("myMsgDropdownBadge");
+        if (count > 0) {
+          if (badge) {
+            badge.innerText = count;
+            badge.style.display = "inline-block";
+          }
+          if (dropdownBadge) {
+            dropdownBadge.innerText = count;
+            dropdownBadge.style.display = "inline-flex";
+          }
+        } else {
+          if (badge) badge.style.display = "none";
+          if (dropdownBadge) dropdownBadge.style.display = "none";
+        }
+      });
+    };
+    
+    // Initialize Image Preview Listener
+    handleImageSelect('msgFileInput', 'msgPreview');
+
+  </script>
+
+  <!-- =========================================
+       HTML UI STRUCTURE
+       ========================================= -->
+  
+  <!-- Toast Container -->
+  <div id="brick-notify-container"></div>
+
+  <!-- Login Overlay (Demo) -->
+  <div id="loginOverlay">
+    <div class="login-box">
+      <h2 style="margin-bottom:20px;">Social Connect</h2>
+      <p style="margin-bottom:20px; color:var(--text-muted);">Select a role to simulate:</p>
+      <button class="btn btn-primary login-btn" onclick="loginAs('Admin')">Login as Administrator</button>
+      <button class="btn btn-secondary login-btn" onclick="loginAs('User')">Login as Identifier (User)</button>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="user-profile">
+        <img src="https://picsum.photos/seed/admin/40/40" alt="User" class="avatar" id="navAvatar">
+        <div class="user-info">
+          <h3 id="navUserName">Guest</h3>
+          <span id="navUserRole">Not Logged In</span>
+        </div>
+      </div>
+      
+      <nav class="nav-menu">
+        <!-- Admin Links -->
+        <a href="#" class="nav-item admin-only" style="display:none;" onclick="openMessagesBox()">
+          <i class="fas fa-envelope"></i>
+          <span>Messages Box</span>
+          <span class="badge" id="inboxUnreadBadge">0</span>
+        </a>
+        
+        <!-- User Links -->
+        <a href="#" class="nav-item user-only" style="display:none;" onclick="openMyMessages()">
+          <i class="fas fa-inbox"></i>
+          <span>My Messages</span>
+          <span class="badge" id="myMsgBadge">0</span>
+        </a>
+        <a href="#" class="nav-item user-only" style="display:none;" onclick="openSendMessageModal()">
+          <i class="fas fa-paper-plane"></i>
+          <span>Compose New</span>
+        </a>
+
+        <!-- Common -->
+        <a href="#" class="nav-item" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i>
+          <span>Logout</span>
+        </a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="top-bar">
+        <h2 id="pageTitle">Dashboard</h2>
+        <div id="topBarActions"></div>
+      </header>
+      
+      <div class="content-scroll" id="mainView">
+        <div class="card">
+          <h3 style="margin-bottom:10px;">Welcome to Social Connect</h3>
+          <p style="color:var(--text-muted); line-height:1.6;">
+            This is a professional messaging interface. Please log in to access your messages.
+          </p>
+          <ul style="margin-top:20px; margin-left:20px; color:var(--text-muted);">
+            <li>Administrators can view identifiers and manage the inbox.</li>
+            <li>Users (Identifiers) can compose new messages and view history.</li>
+            <li>Image attachments are supported for all sizes.</li>
+          </ul>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- =========================================
+       MODALS
+       ========================================= -->
+
+  <!-- Admin Messages Modal -->
+  <div id="messagesModal" class="modal hidden">
+    <div class="modal-content" style="max-width:900px;">
+      <div class="modal-header">
+        <h3>Admin Message Center</h3>
+        <button class="close-modal" onclick="closeMessagesBox()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="tabs">
+          <div class="msg-tab active" onclick="switchMsgTab('identifiers')">Identifiers</div>
+          <div class="msg-tab" onclick="switchMsgTab('inbox')">Inbox</div>
+        </div>
+        
+        <div id="tabIdentifiers" class="msg-tab-panel active">
+          <table class="custom-table">
+            <thead>
+              <tr>
+                <th>Child Name</th>
+                <th>Identifier</th>
+                <th>Contact</th>
+                <th>Message</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="messagesTableBody"></tbody>
+          </table>
+        </div>
+        
+        <div id="tabInbox" class="msg-tab-panel">
+          <div id="adminInboxList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send Message Modal (User) -->
+  <div id="sendMessageModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>New Message</h3>
+        <button class="close-modal" onclick="closeSendMessageModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="sendMsgForm" onsubmit="window.handleSendAdminMessage(event)">
+          <div class="form-group">
+            <label class="form-label">Subject</label>
+            <input type="text" id="inboxSubject" class="form-control" placeholder="Enter subject" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone (Optional)</label>
+            <input type="tel" id="inboxPhone" class="form-control" placeholder="+123 456 789">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Message</label>
+            <textarea id="inboxMessage" class="form-control" rows="5" placeholder="Type your message here..." required></textarea>
+          </div>
+          
+          <!-- Image Upload -->
+          <div class="form-group">
+            <label class="form-label">Attachment (Image)</label>
+            <div class="file-input-wrapper">
+              <i class="fas fa-cloud-upload-alt fa-2x" style="color:var(--text-muted); margin-bottom:10px;"></i>
+              <p style="font-size:0.9em; color:var(--text-muted);">Click to upload an image</p>
+              <input type="file" id="msgFileInput" accept="image/*">
+            </div>
+            <img id="msgPreview" class="file-preview-img" alt="Preview">
+          </div>
+
+          <button type="submit" id="sendMsgBtn" class="btn btn-primary" style="width:100%;">Send Message</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- My Messages Modal (User) -->
+  <div id="myMessagesModal" class="modal hidden">
+    <div class="modal-content" style="height: 80vh;">
+      <div class="modal-header">
+        <h3>My Messages</h3>
+        <button class="close-modal" onclick="closeMyMessages()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body" id="myMessagesList">
+        <!-- Content loaded via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Script: Login/Logout Simulation -->
+  <script>
+    function loginAs(role) {
+      let user;
+      if (role === 'Admin') {
+        user = {
+          id: 'admin123',
+          fname: 'Super',
+          lname: 'Admin',
+          email: 'admin@social.com',
+          role: 'Super Administrator',
+          phone: '+255700000000'
+        };
+        document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
+        document.querySelectorAll('.user-only').forEach(el => el.style.display = 'none');
+        document.getElementById('pageTitle').innerText = "Admin Dashboard";
+      } else {
+        user = {
+          id: 'user123',
+          fname: 'John',
+          lname: 'Doe',
+          email: 'john.doe@example.com',
+          role: 'Identifier',
+          phone: '+255712345678'
+        };
+        document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.user-only').forEach(el => el.style.display = 'flex');
+        document.getElementById('pageTitle').innerText = "My Dashboard";
+        
+        // Start listening for user replies
+        if(window.listenForMyMessageReplies) window.listenForMyMessageReplies(user);
+      }
+
+      sessionStorage.setItem("currentUser", JSON.stringify(user));
+      
+      // Update UI
+      document.getElementById('navUserName').innerText = `${user.fname} ${user.lname}`;
+      document.getElementById('navUserRole').innerText = user.role;
+      document.getElementById('navAvatar').src = `https://picsum.photos/seed/${user.email}/40/40`;
+      document.getElementById('loginOverlay').style.display = 'none';
+
+      if(role === 'Admin' && window.listenForInboxUnread) {
+        window.listenForInboxUnread();
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem("currentUser");
+      location.reload();
+    }
+  </script>
+</body>
 </html>
