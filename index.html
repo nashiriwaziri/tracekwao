@@ -3705,66 +3705,41 @@
         }
       }
 
-      // =============================================
-// ===== ENSURE NEWS DATA =====
-// =============================================
-async function ensureNewsData() {
-  try {
-    const snap = await getDocs(query(collection(db, "news")));
+      async function ensureNewsData() {
+        const snap = await getDocs(query(collection(db, "news")));
+        if (snap.empty) {
+          const dummyNews = [
+            {
+              title: "NCRS Kuzindua Mfumo wa Simu (CP New App )",
+              descr:
+                "Tunafurahi kutangaza kuwa hivi karibuni tutakamilisha programu mpya ya simu ili kusaidia katika utafutaji wa watoto waliopotea.",
+              image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/furahakatikafamilia.jpg",
+              createdAt: serverTimestamp(),
+              likes: 12,
+            },
+            {
+              title: "Tangazo la Mfumo kwa Wananchi wote",
+              descr:
+                "Ewe Mwananchi, Kaa tayari, Muda wowote Tutakualika kwenye hafla ya kuhamasisha jamii kuhusu ulinzi wa mtoto.",
+              image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/bangoncrs.jpg",
+              createdAt: serverTimestamp(),
+              likes: 6590,
+            },
+            {
+              title: "Success Story: Mtoto Juma Aunganishwa Katika Familia yake ",
+              desc:
+                "Juma (miaka 5) aliyekuwa amepotea kwa mwezi mmoja amepatikana sasa kutokana na mfumo wetu wa NCRS.",
+              image: "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/imageadvert2.jpg",
+              createdAt: serverTimestamp(),
+              likes: 7543,
+            },
+          ];
 
-    if (snap.empty) {
-      const dummyNews = [
-        {
-          title: "NCRS Kuzindua Mfumo wa Simu (CP New App)",
-          description:
-            "Tunafurahi kutangaza kuwa hivi karibuni tutakamilisha programu mpya ya simu ili kusaidia katika utafutaji wa watoto waliopotea.",
-          image:
-            "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/furahakatikafamilia.jpg",
-          createdAt: serverTimestamp(),
-          likes: 12,
-        },
-        {
-          title: "Tangazo la Mfumo kwa Wananchi wote",
-          description:
-            "Ewe Mwananchi, kaa tayari. Muda wowote tutakualika kwenye hafla ya kuhamasisha jamii kuhusu ulinzi wa mtoto.",
-          image:
-            "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/bangoncrs.jpg",
-          createdAt: serverTimestamp(),
-          likes: 6590,
-        },
-        {
-          title: "Success Story: Mtoto Juma Aunganishwa Katika Familia yake",
-          description:
-            "Juma (miaka 5) aliyekuwa amepotea kwa mwezi mmoja amepatikana sasa kutokana na mfumo wetu wa NCRS.",
-          image:
-            "https://raw.githubusercontent.com/nashiriwaziri/tracekwao/main/imageadvert2.jpg",
-          createdAt: serverTimestamp(),
-          likes: 7543,
-        },
-      ];
-
-      // 🔥 add data safely
-      for (const news of dummyNews) {
-        await addDoc(collection(db, "news"), {
-          title: news.title || "No Title",
-          description: news.description || "No description",
-          image:
-            news.image && news.image.trim() !== ""
-              ? news.image
-              : "https://via.placeholder.com/300x200?text=No+Image",
-          createdAt: news.createdAt || serverTimestamp(),
-          likes: news.likes || 0,
-        });
+          for (const news of dummyNews) {
+            await addDoc(collection(db, "news"), news);
+          }
+        }
       }
-
-      console.log("✅ Dummy news inserted successfully");
-    } else {
-      console.log("ℹ️ News already exists, skipping dummy insert");
-    }
-  } catch (error) {
-    console.error("❌ Error ensuring news data:", error);
-  }
-}
 
       async function loadRolesForSignup() {
         const roleSelect = document.getElementById("su_role");
@@ -4238,229 +4213,86 @@ async function ensureNewsData() {
         closeContactSupport();
       };
 
-    // =============================================
-// =============================================
-// ===== GLOBAL =====
-// =============================================
-let currentNewsItem = null;
-let unsubscribeNews = null;
+      // =============================================
+      // ===== NEWS SYSTEM LOGIC =====
+      // =============================================
+      function initNewsSystem() {
+        const q = query(collection(db, "news"), orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+          const grid = document.getElementById("newsGrid");
+          grid.innerHTML = "";
+          const newsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
 
+          if (newsList.length === 0) {
+            grid.innerHTML = "<p style='text-align:center; color:#888;'>No news updates yet.</p>";
+            return;
+          }
 
-// =============================================
-// ===== NEWS SYSTEM LOGIC =====
-// =============================================
-function initNewsSystem() {
-  const q = query(collection(db, "news"), orderBy("createdAt", "desc"));
+          newsList.forEach((news) => {
+            const date = news.createdAt ? new Date(news.createdAt.seconds * 1000).toLocaleDateString() : "";
+            const card = document.createElement("div");
+            card.className = "news-card";
+            card.innerHTML = `
+              <img src="${news.image}" class="news-img" alt="News Image">
+              <div class="news-body">
+                <div class="news-meta"><span><i class="far fa-calendar-alt"></i> ${date}</span></div>
+                <div class="news-title" onclick="window.openNewsModal('${news.id}')">${news.title}</div>
+                <div class="news-desc-preview">${news.desc}</div>
+                <div class="news-actions">
+                  <button class="like-btn" onclick="event.stopPropagation(); window.likeNews('${news.id}')">
+                    <i class="fas fa-thumbs-up"></i> <span class="like-count">${news.likes || 0}</span>
+                  </button>
+                  <div class="share-buttons">
+                     <button class="share-btn wa" onclick="event.stopPropagation(); window.shareCardToWA('${encodeURIComponent(news.title)}', '${encodeURIComponent(window.location.href)}')"><i class="fab fa-whatsapp"></i></button>
+                     <button class="share-btn fb" onclick="event.stopPropagation(); window.shareCardToFB('${encodeURIComponent(window.location.href)}')"><i class="fab fa-facebook-f"></i></button>
+                  </div>
+                </div>
+              </div>`;
+            grid.appendChild(card);
+          });
+        });
+      }
 
-  // 🔥 cleanup previous listener
-  if (unsubscribeNews) unsubscribeNews();
-
-  unsubscribeNews = onSnapshot(q, (snapshot) => {
-    const grid = document.getElementById("newsGrid");
-    if (!grid) return;
-
-    grid.innerHTML = "";
-
-    const newsList = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-
-    if (newsList.length === 0) {
-      grid.innerHTML =
-        "<p style='text-align:center; color:#888;'>No news updates yet.</p>";
-      return;
-    }
-
-    newsList.forEach((news) => {
-      // ✅ SAFE VALUES
-      const image =
-        news.image && news.image.trim() !== ""
-          ? news.image
-          : "https://via.placeholder.com/300x200?text=No+Image";
-
-      const title = news.title || "No Title";
-      const desc =
-        news.description || news.desc || "No description available";
-      const likes = news.likes || 0;
-
-      // ✅ SAFE DATE
-      let date = "";
-      if (news.createdAt) {
-        try {
-          date =
-            news.createdAt.seconds
-              ? new Date(news.createdAt.seconds * 1000)
-              : new Date(news.createdAt)
-          ).toLocaleDateString();
-        } catch {
-          date = "";
+      window.openNewsModal = async function (newsId) {
+        const docRef = doc(db, "news", newsId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const news = docSnap.data();
+          currentNewsItem = { id: newsId, ...news };
+          document.getElementById("modalNewsImg").src = news.image;
+          document.getElementById("modalNewsTitle").innerText = news.title;
+          document.getElementById("modalNewsDesc").innerText = news.desc;
+          document.getElementById("modalNewsDate").innerText = news.createdAt
+            ? new Date(news.createdAt.seconds * 1000).toLocaleString()
+            : "";
+          document.getElementById("modalLikeCount").innerText = (news.likes || 0) + " Likes";
+          document.getElementById("newsModal").classList.remove("hidden");
         }
-      }
-
-      const card = document.createElement("div");
-      card.className = "news-card";
-
-      // 🔥 safer event (no inline JS injection)
-      card.innerHTML = `
-        <img src="${image}" class="news-img" alt="News Image">
-        <div class="news-body">
-          <div class="news-meta">
-            <span><i class="far fa-calendar-alt"></i> ${date}</span>
-          </div>
-
-          <div class="news-title">${title}</div>
-
-          <div class="news-desc-preview">${desc}</div>
-
-          <div class="news-actions">
-            <button class="like-btn">
-              <i class="fas fa-thumbs-up"></i>
-              <span class="like-count">${likes}</span>
-            </button>
-
-            <div class="share-buttons">
-              <button class="share-btn wa">
-                <i class="fab fa-whatsapp"></i>
-              </button>
-
-              <button class="share-btn fb">
-                <i class="fab fa-facebook-f"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-
-      // ✅ EVENTS (SAFE)
-      card.querySelector(".news-title").onclick = () =>
-        window.openNewsModal(news.id);
-
-      card.querySelector(".like-btn").onclick = (e) => {
-        e.stopPropagation();
-        window.likeNews(news.id);
       };
-
-      card.querySelector(".wa").onclick = (e) => {
-        e.stopPropagation();
-        window.shareCardToWA(title, window.location.href);
+      window.closeNewsModal = function () {
+        document.getElementById("newsModal").classList.add("hidden");
       };
-
-      card.querySelector(".fb").onclick = (e) => {
-        e.stopPropagation();
-        window.shareCardToFB(window.location.href);
+      window.likeNews = async function (newsId) {
+        await updateDoc(doc(db, "news", newsId), { likes: increment(1) });
+        BrickNotify.success("Thanks for liking!");
       };
-
-      grid.appendChild(card);
-    });
-  });
-}
-
-
-// =============================================
-// ===== MODAL =====
-// =============================================
-window.openNewsModal = async function (newsId) {
-  try {
-    const docRef = doc(db, "news", newsId);
-    const docSnap = await getDoc(docRef);
-
-    if (!docSnap.exists()) return;
-
-    const news = docSnap.data();
-    currentNewsItem = { id: newsId, ...news };
-
-    const image =
-      news.image && news.image.trim() !== ""
-        ? news.image
-        : "https://via.placeholder.com/300x200?text=No+Image";
-
-    const title = news.title || "No Title";
-    const desc =
-      news.description || news.desc || "No description available";
-
-    document.getElementById("modalNewsImg").src = image;
-    document.getElementById("modalNewsTitle").innerText = title;
-    document.getElementById("modalNewsDesc").innerText = desc;
-
-    // ✅ SAFE DATE
-    let date = "";
-    if (news.createdAt) {
-      try {
-        date =
-          news.createdAt.seconds
-            ? new Date(news.createdAt.seconds * 1000)
-            : new Date(news.createdAt)
-        ).toLocaleString();
-      } catch {
-        date = "";
-      }
-    }
-
-    document.getElementById("modalNewsDate").innerText = date;
-
-    document.getElementById("modalLikeCount").innerText =
-      (news.likes || 0) + " Likes";
-
-    document.getElementById("newsModal").classList.remove("hidden");
-  } catch (err) {
-    console.error("Modal error:", err);
-  }
-};
-
-
-// =============================================
-// ===== ACTIONS =====
-// =============================================
-window.closeNewsModal = function () {
-  document.getElementById("newsModal").classList.add("hidden");
-};
-
-window.likeNews = async function (newsId) {
-  try {
-    await updateDoc(doc(db, "news", newsId), {
-      likes: increment(1),
-    });
-
-    if (window.BrickNotify) {
-      BrickNotify.success("Thanks for liking!");
-    }
-  } catch (err) {
-    console.error("Like error:", err);
-  }
-};
-
-window.handleLikeFromModal = function () {
-  if (currentNewsItem) window.likeNews(currentNewsItem.id);
-};
-
-window.shareCardToWA = function (title, url) {
-  window.open(
-    `https://wa.me/?text=${encodeURIComponent(title)} ${encodeURIComponent(url)}`,
-    "_blank"
-  );
-};
-
-window.shareCardToFB = function (url) {
-  window.open(
-    `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
-    "_blank"
-  );
-};
-
-window.shareToWA = function () {
-  if (currentNewsItem)
-    window.shareCardToWA(currentNewsItem.title || "News", window.location.href);
-};
-
-window.shareToFB = function () {
-  if (currentNewsItem)
-    window.shareCardToFB(window.location.href);
-};
-
-// =============================================
-// =============================================
-
+      window.handleLikeFromModal = function () {
+        if (currentNewsItem) window.likeNews(currentNewsItem.id);
+      };
+      window.shareCardToWA = function (title, url) {
+        window.open(`https://wa.me/?text=${title} ${url}`, "_blank");
+      };
+      window.shareCardToFB = function (url) {
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, "_blank");
+      };
+      window.shareToWA = function () {
+        if (currentNewsItem)
+          window.shareCardToWA(encodeURIComponent(currentNewsItem.title), encodeURIComponent(window.location.href));
+      };
+      window.shareToFB = function () {
+        if (currentNewsItem) window.shareCardToFB(encodeURIComponent(window.location.href));
+      };
+      // =============================================
       // ===== CHILD CRUD (FIRESTORE) =====
       // =============================================
       window.renderChildTable = async function (queryStr = "") {
