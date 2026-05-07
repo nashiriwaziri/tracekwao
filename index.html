@@ -3993,102 +3993,285 @@
                 roleSelect.appendChild(opt);
               }
             }
+// =============================================
+// ===== SUPER ADMIN MANAGE FUNCTIONS =====
+// =============================================
 
-            // =============================================
-            // ===== SUPER ADMIN MANAGE FUNCTIONS =====
-            // =============================================
-            window.toggleManagePanel = function(type) {
-              const panel = document.getElementById(`${type}ManagePanel`);
-              panel.classList.toggle('active');
-            };
+// Make sure these Sets exist
+const selectedNewsIds = new Set();
+const selectedChildIds = new Set();
 
-            // News Management Functions
-            window.toggleNewsSelection = function(newsId) {
-              if (selectedNewsIds.has(newsId)) {
-                selectedNewsIds.delete(newsId);
-              } else {
-                selectedNewsIds.add(newsId);
-              }
-            };
+// =============================================
+// ===== TOGGLE MANAGE PANEL =====
+// =============================================
+window.toggleManagePanel = function(type) {
+  try {
+    const panel = document.getElementById(`${type}ManagePanel`);
 
-            window.deleteSelectedNews = async function() {
-              if (selectedNewsIds.size === 0) {
-                BrickNotify.warning("Please select news items to delete");
-                return;
-              }
+    if (!panel) {
+      console.error(`Panel not found: ${type}ManagePanel`);
+      return;
+    }
 
-              if (confirm(`Are you sure you want to delete ${selectedNewsIds.size} news item(s)?`)) {
-                for (const newsId of selectedNewsIds) {
-                  await deleteDoc(doc(db, "news", newsId));
-                }
-                selectedNewsIds.clear();
-                BrickNotify.success("Selected news deleted successfully");
-              }
-            };
+    panel.classList.toggle("active");
 
-            window.deleteAllNews = async function() {
-              if (confirm("Are you sure you want to delete ALL news? This action cannot be undone!")) {
-                const snap = await getDocs(collection(db, "news"));
-                const batch = snap.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(batch);
-                BrickNotify.success("All news deleted successfully");
-              }
-            };
+  } catch (error) {
+    console.error("Error toggling panel:", error);
+    BrickNotify.error("Failed to open panel");
+  }
+};
 
-            window.hideSelectedNews = async function() {
-              if (selectedNewsIds.size === 0) {
-                BrickNotify.warning("Please select news items to hide");
-                return;
-              }
+// =============================================
+// ===== NEWS MANAGEMENT FUNCTIONS =====
+// =============================================
 
-              for (const newsId of selectedNewsIds) {
-                await updateDoc(doc(db, "news", newsId), { isHidden: true });
-              }
-              selectedNewsIds.clear();
-              BrickNotify.success("Selected news hidden successfully");
-            };
+// Toggle single news selection
+window.toggleNewsSelection = function(newsId) {
+  if (selectedNewsIds.has(newsId)) {
+    selectedNewsIds.delete(newsId);
+  } else {
+    selectedNewsIds.add(newsId);
+  }
+};
 
-            window.enableAllNews = async function() {
-              const snap = await getDocs(query(collection(db, "news"), where("isHidden", "==", true)));
-              if (snap.empty) {
-                BrickNotify.info("No hidden news found");
-                return;
-              }
+// Delete selected news
+window.deleteSelectedNews = async function() {
+  try {
+    if (selectedNewsIds.size === 0) {
+      BrickNotify.warning("Please select news items to delete");
+      return;
+    }
 
-              const batch = snap.docs.map(doc => updateDoc(doc.ref, { isHidden: false }));
-              await Promise.all(batch);
-              BrickNotify.success("All hidden news enabled successfully");
-            };
+    const confirmed = confirm(
+      `Are you sure you want to delete ${selectedNewsIds.size} news item(s)?`
+    );
 
-            // Child Records Management Functions
-            window.toggleChildSelection = function(childId) {
-              if (selectedChildIds.has(childId)) {
-                selectedChildIds.delete(childId);
-              } else {
-                selectedChildIds.add(childId);
-              }
-            };
+    if (!confirmed) return;
 
-            window.toggleSelectAllChildren = function() {
-              const selectAll = document.getElementById("selectAllChildren");
-              const checkboxes = document.querySelectorAll('.child-checkbox');
+    await Promise.all(
+      [...selectedNewsIds].map(newsId =>
+        deleteDoc(doc(db, "news", newsId))
+      )
+    );
 
-              if (selectAll.checked) {
-                checkboxes.forEach(cb => {
-                  cb.checked = true;
-                  selectedChildIds.add(cb.value);
-                });
-              } else {
-                checkboxes.forEach(cb => {
-                  cb.checked = false;
-                });
-                selectedChildIds.clear();
-              }
-            };
+    selectedNewsIds.clear();
 
-            window.deleteSelectedChildren = async function() {
-              if (selectedChildIds.size === 0) {
-                BrickNotify.warning("Please select child records to delete");
+    BrickNotify.success("Selected news deleted successfully");
+
+  } catch (error) {
+    console.error("Delete selected news error:", error);
+    BrickNotify.error("Failed to delete selected news");
+  }
+};
+
+// Delete all news
+window.deleteAllNews = async function() {
+  try {
+    const confirmed = confirm(
+      "Are you sure you want to delete ALL news? This action cannot be undone!"
+    );
+
+    if (!confirmed) return;
+
+    const snap = await getDocs(collection(db, "news"));
+
+    if (snap.empty) {
+      BrickNotify.info("No news found");
+      return;
+    }
+
+    await Promise.all(
+      snap.docs.map(d => deleteDoc(d.ref))
+    );
+
+    selectedNewsIds.clear();
+
+    BrickNotify.success("All news deleted successfully");
+
+  } catch (error) {
+    console.error("Delete all news error:", error);
+    BrickNotify.error("Failed to delete all news");
+  }
+};
+
+// Hide selected news
+window.hideSelectedNews = async function() {
+  try {
+    if (selectedNewsIds.size === 0) {
+      BrickNotify.warning("Please select news items to hide");
+      return;
+    }
+
+    await Promise.all(
+      [...selectedNewsIds].map(newsId =>
+        updateDoc(doc(db, "news", newsId), {
+          isHidden: true
+        })
+      )
+    );
+
+    selectedNewsIds.clear();
+
+    BrickNotify.success("Selected news hidden successfully");
+
+  } catch (error) {
+    console.error("Hide selected news error:", error);
+    BrickNotify.error("Failed to hide selected news");
+  }
+};
+
+// Enable all hidden news
+window.enableAllNews = async function() {
+  try {
+    const q = query(
+      collection(db, "news"),
+      where("isHidden", "==", true)
+    );
+
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      BrickNotify.info("No hidden news found");
+      return;
+    }
+
+    await Promise.all(
+      snap.docs.map(d =>
+        updateDoc(d.ref, {
+          isHidden: false
+        })
+      )
+    );
+
+    BrickNotify.success("All hidden news enabled successfully");
+
+  } catch (error) {
+    console.error("Enable all news error:", error);
+    BrickNotify.error("Failed to enable hidden news");
+  }
+};
+
+// =============================================
+// ===== CHILD RECORD MANAGEMENT =====
+// =============================================
+
+// Toggle child selection
+window.toggleChildSelection = function(childId) {
+  if (selectedChildIds.has(childId)) {
+    selectedChildIds.delete(childId);
+  } else {
+    selectedChildIds.add(childId);
+  }
+};
+
+// Select all children
+window.toggleSelectAllChildren = function() {
+  try {
+    const selectAll = document.getElementById("selectAllChildren");
+    const checkboxes = document.querySelectorAll(".child-checkbox");
+
+    if (!selectAll) {
+      console.error("Select all checkbox not found");
+      return;
+    }
+
+    if (selectAll.checked) {
+
+      checkboxes.forEach(cb => {
+        cb.checked = true;
+        selectedChildIds.add(cb.value);
+      });
+
+    } else {
+
+      checkboxes.forEach(cb => {
+        cb.checked = false;
+      });
+
+      selectedChildIds.clear();
+    }
+
+  } catch (error) {
+    console.error("Toggle select all children error:", error);
+    BrickNotify.error("Failed to select children");
+  }
+};
+
+// Delete selected child records
+window.deleteSelectedChildren = async function() {
+  try {
+    if (selectedChildIds.size === 0) {
+      BrickNotify.warning("Please select child records to delete");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Are you sure you want to delete ${selectedChildIds.size} child record(s)?`
+    );
+
+    if (!confirmed) return;
+
+    await Promise.all(
+      [...selectedChildIds].map(childId =>
+        deleteDoc(doc(db, "children", childId))
+      )
+    );
+
+    selectedChildIds.clear();
+
+    // Uncheck all checkboxes after delete
+    document.querySelectorAll(".child-checkbox").forEach(cb => {
+      cb.checked = false;
+    });
+
+    const selectAll = document.getElementById("selectAllChildren");
+
+    if (selectAll) {
+      selectAll.checked = false;
+    }
+
+    BrickNotify.success("Selected child records deleted successfully");
+
+  } catch (error) {
+    console.error("Delete selected children error:", error);
+    BrickNotify.error("Failed to delete child records");
+  }
+};
+
+// =============================================
+// ===== OPTIONAL: SELECT ALL NEWS =====
+// =============================================
+window.toggleSelectAllNews = function() {
+  try {
+    const selectAll = document.getElementById("selectAllNews");
+    const checkboxes = document.querySelectorAll(".news-checkbox");
+
+    if (!selectAll) {
+      console.error("Select all news checkbox not found");
+      return;
+    }
+
+    if (selectAll.checked) {
+
+      checkboxes.forEach(cb => {
+        cb.checked = true;
+        selectedNewsIds.add(cb.value);
+      });
+
+    } else {
+
+      checkboxes.forEach(cb => {
+        cb.checked = false;
+      });
+
+      selectedNewsIds.clear();
+    }
+
+  } catch (error) {
+    console.error("Toggle select all news error:", error);
+    BrickNotify.error("Failed to select news");
+  }
+};
                 // =============================================
       // ===== UI LOGIC =====
       // =============================================
