@@ -3813,7 +3813,229 @@
           roleSelect.appendChild(opt);
         }
       }
+// =============================================
+// ===== CHILD CRUD (FIRESTORE) =====
+// =============================================
 
+// ===============================
+// 🚀 OFFLINE REPORTING QUEUE
+// ===============================
+function saveOfflineChild(data) {
+  let queue = JSON.parse(localStorage.getItem("offline_children") || "[]");
+  queue.push(data);
+  localStorage.setItem("offline_children", JSON.stringify(queue));
+}
+
+async function syncOfflineChildren() {
+  let queue = JSON.parse(localStorage.getItem("offline_children") || "[]");
+  if (queue.length === 0) return;
+
+  for (let child of queue) {
+    await addDoc(collection(db, "child"), child);
+  }
+
+  localStorage.removeItem("offline_children");
+}
+
+// Auto sync when online
+window.addEventListener("online", syncOfflineChildren);
+
+
+// ===============================
+// 🤖 FACE RECOGNITION AI (HOOK)
+// ===============================
+async function detectFace(imageBase64) {
+  // Placeholder for AI API (Azure Face / AWS Rekognition / Tensorflow backend)
+  try {
+    const res = await fetch("https://your-ai-face-api.com/detect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: imageBase64 }),
+    });
+
+    return await res.json(); // expected: { faceId, confidence }
+  } catch (err) {
+    console.warn("Face AI offline mode:", err);
+    return null;
+  }
+}
+
+
+// ===============================
+// 📲 SMS ALERT SYSTEM (HOOK)
+// ===============================
+async function sendSMSAlert(phone, message) {
+  try {
+    await fetch("https://your-sms-gateway.com/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: phone,
+        message: message,
+      }),
+    });
+  } catch (err) {
+    console.warn("SMS failed:", err);
+  }
+}
+
+
+// =============================================
+// ===== CHILD CRUD (FIRESTORE) =====
+// =============================================
+window.renderChildTable = async function (queryStr = "") {
+  const tbody = document.getElementById("childTableBody");
+  const snap = await getDocs(collection(db, "child"));
+
+  let child = snap.docs.map((doc) => ({ docId: doc.id, ...doc.data() }));
+
+  const user = JSON.parse(sessionStorage.getItem("currentUser"));
+  const isAdmin = user && (user.role === "Administrator" || user.role === "Super Administrator");
+
+  tbody.innerHTML = "";
+
+  let filteredChild = queryStr
+    ? child.filter((c) => c.name.toLowerCase().includes(queryStr.toLowerCase()))
+    : child;
+
+  if (filteredChild.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;">No data found.</td></tr>`;
+    return;
+  }
+
+  filteredChild.forEach((c) => {
+
+    // ==========================
+    // 🟢 QR CODE GENERATION
+    // ==========================
+    const qrData = `${c.name}-${c.policeRb}-${c.id || c.docId}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(qrData)}`;
+
+    let statusText = translations[currentLang].status_missing;
+    let statusClass = "missing";
+
+    if (c.status === "found") {
+      statusText = translations[currentLang].status_found;
+      statusClass = "found";
+    } else if (c.identifiers && c.identifiers.length >= 3) {
+      statusText = translations[currentLang].status_identified;
+      statusClass = "identified";
+    }
+
+    const statusHtml = `<span class="status-badge ${statusClass}">${statusText}</span>`;
+    const imgSrc = c.img || "https://via.placeholder.com/60";
+
+    let adminActions = "";
+
+    if (isAdmin) {
+      adminActions = `
+        <button class="btn-xs btn-delete" onclick="deleteChild('${c.docId}')">Delete</button>
+        <button class="btn-xs" onclick="hideChild('${c.docId}')">Hide</button>
+        <button class="btn-xs btn-view" onclick="restoreChild('${c.docId}')">Restore</button>
+      `;
+    }
+
+    tbody.innerHTML += `<tr>
+      <td>${c.policeRb || "-"}</td>
+
+      <td><img src="${imgSrc}" class="table-img" onclick="openViewChildModal('${c.docId}')"></td>
+
+      <td><strong>${c.name}</strong></td>
+
+      <td>${c.age}</td>
+      <td>${c.gender}</td>
+      <td>${c.region || "-"}</td>
+      <td>${c.district || "-"}</td>
+      <td>${c.ward || "-"}</td>
+      <td>${c.location || "-"}</td>
+
+      <td>${statusHtml}</td>
+
+      <td>
+        <img src="${qrUrl}" width="50" />
+      </td>
+
+      <td>
+        <button class="btn-xs" onclick="generateFaceID('${c.docId}', '${imgSrc}')">
+          Face ID
+        </button>
+      </td>
+
+      <td>${adminActions}</td>
+
+    </tr>`;
+  });
+};
+
+
+// =============================================
+// 🤖 FACE RECOGNITION TRIGGER
+// =============================================
+window.generateFaceID = async function (id, image) {
+  const result = await detectFace(image);
+
+  if (result) {
+    alert("Face detected ID: " + result.faceId);
+  } else {
+    alert("Face AI not available");
+  }
+};
+
+
+// =============================================
+// 👁 ADMIN HIDE / RESTORE CONTROL
+// =============================================
+window.hideChild = async function (id) {
+  await updateDoc(doc(db, "child", id), { hidden: true });
+  renderChildTable();
+};
+
+window.restoreChild = async function (id) {
+  await updateDoc(doc(db, "child", id), { hidden: false });
+  renderChildTable();
+};
+
+
+// =============================================
+// 📲 AUTO SMS ALERT ON CHILD ADD
+// =============================================
+async function saveChildData(imgData) {
+
+  const newChild = {
+    id: Date.now(),
+    policeRb: document.getElementById("child_police_rb").value,
+    name: document.getElementById("child_name").value,
+    age: parseInt(document.getElementById("child_age").value) || 0,
+    gender: document.getElementById("child_gender").value,
+    region: document.getElementById("child_region").value,
+    district: document.getElementById("child_district").value,
+    ward: document.getElementById("child_ward").value,
+    location: document.getElementById("child_location").value,
+    status: document.getElementById("child_status").value,
+    remarks: document.getElementById("child_remarks").value,
+    img: imgData,
+    createdAt: serverTimestamp(),
+    identifiers: [],
+    hidden: false
+  };
+
+  try {
+
+    // ONLINE SAVE
+    await addDoc(collection(db, "child"), newChild);
+
+    // SMS ALERT (example number placeholder)
+    await sendSMSAlert("+255000000000", `New child reported: ${newChild.name}`);
+
+  } catch (err) {
+
+    // OFFLINE SAVE
+    saveOfflineChild(newChild);
+  }
+
+  closeAddChildModal();
+  renderChildTable();
+};
       // =============================================
       // ===== UI LOGIC =====
       // =============================================
