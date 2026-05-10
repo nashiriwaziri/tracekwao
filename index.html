@@ -4640,39 +4640,138 @@
         BrickNotify.success("SMS Alert imetumwa kwa wazazi.");
       };
 
-      // NEW: Face Recognition (Simulation)
-      window.openFaceScanModal = function() {
-        document.getElementById("faceScanModal").classList.remove("hidden");
-        document.getElementById("scanResult").style.display = "none";
-        document.getElementById("scanOverlay").style.display = "none";
-        document.getElementById("scanPreviewImg").style.display = "none";
-        document.getElementById("scanPlaceholder").style.display = "block";
-        document.getElementById("faceInput").value = "";
-        document.getElementById("btnStartScan").disabled = true;
-      };
+      // =============================================
+// ===== CHILD CRUD (FIRESTORE) =====
+// =============================================
 
-      window.closeFaceScanModal = function () {
-  document.getElementById("faceScanModal").classList.add("hidden");
+// ===============================
+// 🚀 OFFLINE REPORTING QUEUE
+// ===============================
+function saveOfflineChild(data) {
+  let queue = JSON.parse(localStorage.getItem("offline_children") || "[]");
+  queue.push(data);
+  localStorage.setItem("offline_children", JSON.stringify(queue));
+}
+
+async function syncOfflineChildren() {
+  let queue = JSON.parse(localStorage.getItem("offline_children") || "[]");
+  if (queue.length === 0) return;
+
+  for (let child of queue) {
+    await addDoc(collection(db, "child"), child);
+  }
+
+  localStorage.removeItem("offline_children");
+}
+
+// Auto sync when online
+window.addEventListener("online", syncOfflineChildren);
+
+
+// ===============================
+// 🤖 FACE RECOGNITION AI (HOOK)
+// ===============================
+async function detectFace(imageBase64) {
+  // Placeholder for AI API (Azure Face / AWS Rekognition / Tensorflow backend)
+  try {
+    const res = await fetch("https://your-ai-face-api.com/detect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: imageBase64 }),
+    });
+
+    return await res.json(); // expected: { faceId, confidence }
+  } catch (err) {
+    console.warn("Face AI offline mode:", err);
+    return null;
+  }
+}
+
+
+// ===============================
+// 📲 SMS ALERT SYSTEM (HOOK)
+// ===============================
+async function sendSMSAlert(phone, message) {
+  try {
+    await fetch("https://your-sms-gateway.com/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: phone,
+        message: message,
+      }),
+    });
+  } catch (err) {
+    console.warn("SMS failed:", err);
+  }
+}
+
+
+// =============================================
+// 🤖 FACE RECOGNITION TRIGGER
+// =============================================
+window.generateFaceID = async function (id, image) {
+  const result = await detectFace(image);
+
+  if (result) {
+    alert("Face detected ID: " + result.faceId);
+  } else {
+    alert("Face AI not available");
+  }
 };
 
-window.previewFace = function (event) {
-  const file = event.target.files[0];
 
-  if (!file) return;
+// =============================================
+// 👁 ADMIN HIDE / RESTORE CONTROL
+// =============================================
+window.hideChild = async function (id) {
+  await updateDoc(doc(db, "child", id), { hidden: true });
+  renderChildTable();
+};
 
-  const reader = new FileReader();
+window.restoreChild = async function (id) {
+  await updateDoc(doc(db, "child", id), { hidden: false });
+  renderChildTable();
+};
 
-  reader.onload = function (e) {
-    const preview = document.getElementById("facePreview");
 
-    if (preview) {
-      preview.src = e.target.result;
-      preview.classList.remove("hidden");
-    }
+// =============================================
+// 📲 AUTO SMS ALERT ON CHILD ADD
+// =============================================
+async function saveChildData(imgData) {
+
+  const newChild = {
+    id: Date.now(),
+    policeRb: document.getElementById("child_police_rb").value,
+    name: document.getElementById("child_name").value,
+    age: parseInt(document.getElementById("child_age").value) || 0,
+    gender: document.getElementById("child_gender").value,
+    region: document.getElementById("child_region").value,
+    district: document.getElementById("child_district").value,
+    ward: document.getElementById("child_ward").value,
+    location: document.getElementById("child_location").value,
+    status: document.getElementById("child_status").value,
+    remarks: document.getElementById("child_remarks").value,
+    img: imgData,
+    createdAt: serverTimestamp(),
+    identifiers: [],
+    hidden: false
   };
 
-  reader.readAsDataURL(file);
+  try {
+
+    // ONLINE SAVE
+    await addDoc(collection(db, "child"), newChild);
+
+    // SMS ALERT (example number placeholder)
+    await sendSMSAlert("+255000000000", `New child reported: ${newChild.name}`);
+
+  } catch (err) {
+
+    // OFFLINE SAVE
+    saveOfflineChild(newChild);
+  }
+
+  closeAddChildModal();
+  renderChildTable();
 };
-    </script>
-  </body>
-</html>
