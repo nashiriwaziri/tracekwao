@@ -3472,7 +3472,396 @@
 
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
+     
+// =============================================
+// ===== ACTIVATE CHILD SEARCH =====
+// =============================================
 
+window.activateChildSearch = async function (childId) {
+
+  try {
+
+    // GET CHILD DATA
+
+    const childRef =
+      doc(db, "children", childId);
+
+    const childSnap =
+      await getDoc(childRef);
+
+    if (!childSnap.exists()) {
+
+      alert("Child not found");
+
+      return;
+
+    }
+
+    const childData =
+      childSnap.data();
+
+    // SAVE TO MISSING CHILDREN
+
+    await addDoc(
+      collection(db, "missingChildren"),
+      {
+
+        childId: childId,
+
+        childName: childData.fullName,
+
+        age: childData.age || "",
+
+        gender: childData.gender || "",
+
+        location: childData.location || "",
+
+        faceImage: childData.faceImage || "",
+
+        status: "missing",
+
+        activeSearch: true,
+
+        createdAt: serverTimestamp()
+
+      }
+    );
+
+    alert("Tafuta Mtoto activated");
+
+  }
+  catch (error) {
+
+    console.log(error);
+
+    alert("Error activating search");
+
+  }
+
+};
+
+
+
+// =============================================
+// ===== SAVE FACE DATA WITH CHILD =====
+// =============================================
+
+window.saveChildFace = async function (childId) {
+
+  try {
+
+    const faceImage =
+      document.getElementById("facePreview").src;
+
+    if (!faceImage) {
+
+      alert("No face image");
+
+      return;
+
+    }
+
+    // UPDATE CHILD
+
+    await updateDoc(
+      doc(db, "children", childId),
+      {
+
+        faceImage: faceImage,
+
+        faceRegistered: true,
+
+        updatedAt: serverTimestamp()
+
+      }
+    );
+
+    // SAVE FACE DATABASE
+
+    await addDoc(
+      collection(db, "faceRecognition"),
+      {
+
+        childId: childId,
+
+        faceImage: faceImage,
+
+        status: "active",
+
+        createdAt: serverTimestamp()
+
+      }
+    );
+
+    alert("Face registered successfully");
+
+  }
+  catch (error) {
+
+    console.log(error);
+
+  }
+
+};
+
+
+
+// =============================================
+// ===== START FACE SEARCH =====
+// =============================================
+
+window.startFaceSearch = async function () {
+
+  try {
+
+    // CURRENT SCANNED IMAGE
+
+    const scannedImage =
+      document.getElementById("facePreview").src;
+
+    if (!scannedImage) {
+
+      alert("Upload image first");
+
+      return;
+
+    }
+
+    // LOADING
+
+    document.getElementById("scanOverlay")
+      .style.display = "flex";
+
+    // GET ACTIVE SEARCHES
+
+    const q = query(
+      collection(db, "missingChildren"),
+      where("activeSearch", "==", true)
+    );
+
+    const querySnapshot =
+      await getDocs(q);
+
+    let found = false;
+
+    querySnapshot.forEach((docSnap) => {
+
+      const data = docSnap.data();
+
+      // =====================================
+      // SIMPLE FACE MATCH SIMULATION
+      // =====================================
+
+      // REAL AI:
+      // Use face-api.js
+      // TensorFlow
+      // AWS Rekognition
+      // Azure Face API
+
+      if (data.faceImage) {
+
+        found = true;
+
+        // SHOW RESULT
+
+        document.getElementById("scanResult")
+          .style.display = "block";
+
+        document.getElementById("scanResult")
+          .innerHTML = `
+
+        <div class="face-match-card">
+
+          <img
+            src="${data.faceImage}"
+            style="
+              width:120px;
+              height:120px;
+              border-radius:12px;
+              object-fit:cover;
+              margin-bottom:15px;
+            "
+          >
+
+          <h2>
+            MATCH FOUND
+          </h2>
+
+          <p>
+            <strong>Name:</strong>
+            ${data.childName}
+          </p>
+
+          <p>
+            <strong>Location:</strong>
+            ${data.location}
+          </p>
+
+          <p>
+            <strong>Status:</strong>
+            ${data.status}
+          </p>
+
+          <button
+            onclick="markChildFound('${docSnap.id}')"
+            class="btn-found"
+          >
+            Mark as Found
+          </button>
+
+        </div>
+
+        `;
+
+      }
+
+    });
+
+    // NO MATCH
+
+    if (!found) {
+
+      document.getElementById("scanResult")
+        .style.display = "block";
+
+      document.getElementById("scanResult")
+        .innerHTML = `
+
+      <div class="no-match">
+
+        <h2>
+          No Match Found
+        </h2>
+
+      </div>
+
+      `;
+
+    }
+
+    // HIDE LOADING
+
+    document.getElementById("scanOverlay")
+      .style.display = "none";
+
+  }
+  catch (error) {
+
+    console.log(error);
+
+    alert("Error searching face");
+
+  }
+
+};
+
+
+
+// =============================================
+// ===== MARK CHILD AS FOUND =====
+// =============================================
+
+window.markChildFound = async function (docId) {
+
+  try {
+
+    await updateDoc(
+      doc(db, "missingChildren", docId),
+      {
+
+        status: "found",
+
+        activeSearch: false,
+
+        foundAt: serverTimestamp()
+
+      }
+    );
+
+    alert("Child marked as found");
+
+  }
+  catch (error) {
+
+    console.log(error);
+
+  }
+
+};
+
+
+
+// =============================================
+// ===== LOAD ACTIVE SEARCHES =====
+// =============================================
+
+window.loadActiveSearches = async function () {
+
+  const container =
+    document.getElementById("activeSearches");
+
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  try {
+
+    const q = query(
+      collection(db, "missingChildren"),
+      where("activeSearch", "==", true)
+    );
+
+    const querySnapshot =
+      await getDocs(q);
+
+    querySnapshot.forEach((docSnap) => {
+
+      const data = docSnap.data();
+
+      container.innerHTML += `
+
+      <div class="search-card">
+
+        <img
+          src="${data.faceImage}"
+          style="
+            width:80px;
+            height:80px;
+            border-radius:10px;
+            object-fit:cover;
+          "
+        >
+
+        <h3>${data.childName}</h3>
+
+        <p>${data.location}</p>
+
+        <span class="status-active">
+          SEARCH ACTIVE
+        </span>
+
+      </div>
+
+      `;
+
+    });
+
+  }
+  catch (error) {
+
+    console.log(error);
+
+  }
+
+};
+
+
+
+// =============================================
+// ===== AUTO LOAD SEARCHES =====
+// =============================================
+
+loadActiveSearches();
       // =============================================
       // ===== GLOBAL UTILITIES =====
       // =============================================
@@ -4340,6 +4729,8 @@
       window.shareToFB = function () {
         if (currentNewsItem) window.shareCardToFB(encodeURIComponent(window.location.href));
       };
+
+      
       // =============================================
       // ===== CHILD CRUD (FIRESTORE) =====
       // =============================================
