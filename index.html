@@ -5419,23 +5419,33 @@ function updateDashboardUI(data) {
     if (!Array.isArray(data)) data = [];
 
     // =====================================
-    // CLEAN & NORMALIZE DATA (IMPORTANT FIX)
+    // CLEAN + NORMALIZE DATA (CRITICAL FIX)
     // =====================================
-    const cleanData = data.map(d => ({
-      ...d,
-      status: (d.status || "").toString().trim().toLowerCase(),
-      activeSearch: d.activeSearch === true || d.activeSearch === "true",
-      age: Number(d.age) || 0,
-      gender: d.gender || "Unknown",
-      region: d.region || "Unknown",
-      identifier: d.identifier || "Unknown"
-    }));
+    const cleanData = data.map(d => {
+      const status = (d?.status ?? "")
+        .toString()
+        .trim()
+        .toLowerCase();
+
+      return {
+        ...d,
+        status,
+        activeSearch: d?.activeSearch === true || d?.activeSearch === "true",
+        age: Number(d?.age) || 0,
+        gender: d?.gender || "Unknown",
+        region: d?.region || "Unknown",
+        identifier: d?.identifier ?? null
+      };
+    });
 
     // =====================================
-    // METRICS
+    // TOTAL
     // =====================================
     const total = cleanData.length;
 
+    // =====================================
+    // FIXED COUNTERS (STRICT CHECKING)
+    // =====================================
     const missing = cleanData.filter(d =>
       d.status === "missing"
     ).length;
@@ -5449,7 +5459,17 @@ function updateDashboardUI(data) {
     ).length;
 
     // =====================================
-    // AVG AGE (FIXED)
+    // IDENTIFIER COUNT (FIXED)
+    // (counts ONLY valid identifiers)
+    // =====================================
+    const identifierCount = cleanData.filter(d =>
+      d.identifier !== null &&
+      d.identifier !== undefined &&
+      d.identifier !== ""
+    ).length;
+
+    // =====================================
+    // AVG AGE (UNCHANGED BUT SAFE)
     // =====================================
     const ageList = cleanData
       .map(d => d.age)
@@ -5461,7 +5481,7 @@ function updateDashboardUI(data) {
         : 0;
 
     // =====================================
-    // SAFE SET TEXT
+    // UI UPDATE SAFE FUNCTION
     // =====================================
     const setText = (id, value) => {
       const el = document.getElementById(id);
@@ -5473,19 +5493,20 @@ function updateDashboardUI(data) {
     setText("metricFound", found);
     setText("metricActive", active);
     setText("metricAvgAge", avgAge);
+    setText("metricIdentifier", identifierCount);
 
     // =====================================
-    // UPDATE CHARTS
+    // UPDATE CHARTS WITH CLEAN DATA
     // =====================================
     updateCharts(cleanData);
 
-    console.log("✅ Dashboard updated successfully");
+    console.log("✅ Dashboard fully updated");
 
   } catch (error) {
     console.error("❌ UI error:", error);
   }
 }
-// =============================================
+      // =============================================
 // ===== GLOBAL CHART HOLDER SAFE INIT =====
 // =============================================
 window.charts = window.charts || {};
