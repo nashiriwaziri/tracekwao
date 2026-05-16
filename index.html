@@ -5400,28 +5400,69 @@ async function loadDashboardData() {
 }
 
 // =============================================
-// ===== UPDATE DASHBOARD UI =====
+// ===== UPDATE DASHBOARD UI (SAFE + FULL)
 // =============================================
 function updateDashboardUI(data) {
   try {
     console.log("📊 Updating UI...");
 
-    const totalEl = document.getElementById("metricTotal");
-
-    if (!totalEl) {
-      console.error("❌ metricTotal not found");
-      return;
+    // ===============================
+    // VALIDATE DATA
+    // ===============================
+    if (!Array.isArray(data)) {
+      console.warn("⚠️ Data is not array, fixing...");
+      data = [];
     }
 
-    totalEl.innerText = data.length || 0;
+    // ===============================
+    // CALCULATE METRICS
+    // ===============================
+    const total = data.length;
 
-    updateCharts(data);
+    const missing = data.filter(d => d.status === "missing").length;
+
+    const found = data.filter(d => d.status === "found").length;
+
+    const active = data.filter(d => d.activeSearch === true).length;
+
+    // ===============================
+    // UPDATE ELEMENTS SAFELY
+    // ===============================
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerText = value;
+      } else {
+        console.warn(`⚠️ ${id} not found`);
+      }
+    };
+
+    setText("metricTotal", total);
+    setText("metricMissing", missing);
+    setText("metricFound", found);
+    setText("metricActive", active);
+
+    // ===============================
+    // UPDATE CHARTS SAFELY
+    // ===============================
+    if (typeof updateCharts === "function") {
+      updateCharts({
+        total,
+        missing,
+        found,
+        active,
+        raw: data
+      });
+    } else {
+      console.warn("⚠️ updateCharts() not defined");
+    }
+
+    console.log("✅ UI Updated Successfully");
 
   } catch (error) {
     console.error("❌ UI update error:", error);
   }
 }
-
 // =============================================
 // ===== UPDATE CHARTS =====
 // =============================================
