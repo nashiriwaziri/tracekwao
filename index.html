@@ -5581,7 +5581,136 @@ function updateCharts(data) {
     console.error("❌ Chart error:", error);
   }
 }
+// =============================================
+// ===== GLOBAL CHART STORAGE =====
+// =============================================
+window.charts = window.charts || {};
 
+
+// =============================================
+// ===== UPDATE ALL DASHBOARD CHARTS =====
+// =============================================
+function updateCharts(data) {
+  try {
+
+    console.log("📊 Updating ALL charts...");
+
+    if (!Array.isArray(data)) data = [];
+
+    // =====================================
+    // ===== GENDER DISTRIBUTION =====
+    // =====================================
+    const genderCounts = { male: 0, female: 0, unknown: 0 };
+
+    data.forEach(d => {
+      const g = (d.gender || "").toLowerCase();
+
+      if (g === "male") genderCounts.male++;
+      else if (g === "female") genderCounts.female++;
+      else genderCounts.unknown++;
+    });
+
+    // =====================================
+    // ===== REGION DISTRIBUTION =====
+    // =====================================
+    const regionCounts = {};
+
+    data.forEach(d => {
+      const r = d.region || "Unknown";
+      regionCounts[r] = (regionCounts[r] || 0) + 1;
+    });
+
+    // =====================================
+    // ===== IDENTIFIER DISTRIBUTION =====
+    // =====================================
+    const identifierCounts = {
+      NIDA: 0,
+      BirthCert: 0,
+      PoliceRB: 0,
+      None: 0
+    };
+
+    data.forEach(d => {
+      if (d.nida) identifierCounts.NIDA++;
+      if (d.birthCert) identifierCounts.BirthCert++;
+      if (d.policeRb) identifierCounts.PoliceRB++;
+      if (!d.nida && !d.birthCert && !d.policeRb) identifierCounts.None++;
+    });
+
+    // =====================================
+    // ===== CREATE CHART HELPER =====
+    // =====================================
+    function renderChart(id, type, labels, values, color) {
+
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+
+      const ctx = canvas.getContext("2d");
+
+      if (window.charts[id]) {
+        window.charts[id].destroy();
+      }
+
+      window.charts[id] = new Chart(ctx, {
+        type: type,
+        data: {
+          labels: labels,
+          datasets: [{
+            label: id,
+            data: values,
+            backgroundColor: color
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0 }
+            }
+          }
+        }
+      });
+    }
+
+    // =====================================
+    // ===== RENDER ALL CHARTS =====
+    // =====================================
+
+    // GENDER
+    renderChart(
+      "genderChart",
+      "pie",
+      Object.keys(genderCounts),
+      Object.values(genderCounts),
+      ["#4e73df", "#e74a3b", "#f6c23e"]
+    );
+
+    // REGION
+    renderChart(
+      "regionChart",
+      "bar",
+      Object.keys(regionCounts),
+      Object.values(regionCounts),
+      "#36b9cc"
+    );
+
+    // IDENTIFIERS
+    renderChart(
+      "identifierChart",
+      "bar",
+      Object.keys(identifierCounts),
+      Object.values(identifierCounts),
+      "#1cc88a"
+    );
+
+    console.log("✅ All charts updated");
+
+  } catch (error) {
+    console.error("❌ Chart error:", error);
+  }
+}
 // =============================================
 // ===== DOWNLOAD CHART =====
 // =============================================
