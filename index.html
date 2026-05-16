@@ -5398,43 +5398,29 @@ async function loadDashboardData() {
     console.error("❌ Failed to load dashboard data:", error);
   }
 }
+// =============================================
+// ===== GLOBAL CHART STORAGE =====
+// =============================================
+window.charts = window.charts || {};
+
 
 // =============================================
-// ===== UPDATE DASHBOARD UI (SAFE + FULL)
+// ===== UPDATE DASHBOARD UI =====
 // =============================================
 function updateDashboardUI(data) {
   try {
     console.log("📊 Updating UI...");
 
-    // ===============================
-    // VALIDATE DATA
-    // ===============================
-    if (!Array.isArray(data)) {
-      console.warn("⚠️ Data is not array, fixing...");
-      data = [];
-    }
+    if (!Array.isArray(data)) data = [];
 
-    // ===============================
-    // CALCULATE METRICS
-    // ===============================
     const total = data.length;
-
     const missing = data.filter(d => d.status === "missing").length;
-
     const found = data.filter(d => d.status === "found").length;
-
     const active = data.filter(d => d.activeSearch === true).length;
 
-    // ===============================
-    // UPDATE ELEMENTS SAFELY
-    // ===============================
     const setText = (id, value) => {
       const el = document.getElementById(id);
-      if (el) {
-        el.innerText = value;
-      } else {
-        console.warn(`⚠️ ${id} not found`);
-      }
+      if (el) el.innerText = value;
     };
 
     setText("metricTotal", total);
@@ -5442,32 +5428,22 @@ function updateDashboardUI(data) {
     setText("metricFound", found);
     setText("metricActive", active);
 
-    // ===============================
-    // UPDATE CHARTS SAFELY
-    // ===============================
-    if (typeof updateCharts === "function") {
-      updateCharts({
-        total,
-        missing,
-        found,
-        active,
-        raw: data
-      });
-    } else {
-      console.warn("⚠️ updateCharts() not defined");
-    }
-
-    console.log("✅ UI Updated Successfully");
+    updateCharts(data);
 
   } catch (error) {
-    console.error("❌ UI update error:", error);
+    console.error("❌ UI error:", error);
   }
 }
+
+
 // =============================================
 // ===== UPDATE CHARTS =====
 // =============================================
 function updateCharts(data) {
   try {
+
+    if (!Array.isArray(data)) return;
+
     const statusCounts = {};
 
     data.forEach((c) => {
@@ -5476,15 +5452,11 @@ function updateCharts(data) {
     });
 
     const canvas = document.getElementById("statusChart");
-
-    if (!canvas) {
-      console.warn("⚠️ statusChart canvas not found");
-      return;
-    }
+    if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
 
-    // destroy old chart safely
+    // destroy old chart
     if (window.charts.statusChart) {
       window.charts.statusChart.destroy();
     }
@@ -5493,17 +5465,15 @@ function updateCharts(data) {
       type: "bar",
       data: {
         labels: Object.keys(statusCounts),
-        datasets: [
-          {
-            label: "Cases by Status",
-            data: Object.values(statusCounts),
-          },
-        ],
+        datasets: [{
+          label: "Cases by Status",
+          data: Object.values(statusCounts)
+        }]
       },
       options: {
         responsive: true,
-        maintainAspectRatio: false,
-      },
+        maintainAspectRatio: false
+      }
     });
 
   } catch (error) {
@@ -5511,38 +5481,61 @@ function updateCharts(data) {
   }
 }
 
+
 // =============================================
 // ===== DOWNLOAD CHART =====
 // =============================================
 window.downloadChart = function (chartId) {
   try {
-    const chartInstance = window.charts[chartId];
 
-    if (!chartInstance) {
-      console.warn("⚠️ Chart not found:", chartId);
+    if (!window.charts[chartId]) {
+      console.warn("Chart not found");
       return;
     }
 
     const link = document.createElement("a");
     link.download = chartId + ".png";
-    link.href = chartInstance.toBase64Image();
+    link.href = window.charts[chartId].toBase64Image();
     link.click();
 
   } catch (error) {
-    console.error("❌ Download error:", error);
+    console.error("Download error:", error);
   }
 };
+
+
+// =============================================
+// ===== LOAD DATA FROM FIRESTORE =====
+// =============================================
+window.loadDashboardData = async function () {
+  try {
+
+    const snap = await getDocs(collection(db, "children"));
+
+    const data = snap.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    updateDashboardUI(data);
+
+  } catch (error) {
+    console.error("❌ Load data error:", error);
+  }
+};
+
 
 // =============================================
 // ===== TABLE DATA =====
 // =============================================
 window.getTableData = async function () {
   try {
-    const snap = await getDocs(collection(db, "child"));
 
-    const children = snap.docs.map((doc) => ({
+    const snap = await getDocs(collection(db, "children"));
+
+    const children = snap.docs.map(doc => ({
       id: doc.id,
-      ...doc.data(),
+      ...doc.data()
     }));
 
     const headers = [[
@@ -5551,9 +5544,9 @@ window.getTableData = async function () {
       "Location", "Status", "Remarks"
     ]];
 
-    const data = children.map((c) => [
+    const data = children.map(c => [
       c.policeRb || "",
-      c.name || "",
+      c.fullName || "",
       c.age || "",
       c.gender || "",
       c.region || "",
@@ -5561,43 +5554,58 @@ window.getTableData = async function () {
       c.ward || "",
       c.location || "",
       c.status || "",
-      c.remarks || "",
+      c.remarks || ""
     ]);
 
     return { headers, data };
 
   } catch (error) {
-    console.error("❌ Table data error:", error);
+    console.error("❌ Table error:", error);
     return { headers: [], data: [] };
   }
 };
+
 
 // =============================================
 // ===== EXPORT PDF =====
 // =============================================
 window.exportPDF = async function () {
   try {
-    const { jsPDF } = window.jspdf;
 
+    if (!window.jspdf) {
+      alert("jsPDF not loaded");
+      return;
+    }
+
+    const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
     const { headers, data } = await getTableData();
 
     doc.text("NCRS REPORT", 14, 15);
 
-    doc.autoTable({
-      head: headers,
-      body: data,
-      startY: 20,
-    });
+    if (doc.autoTable) {
+      doc.autoTable({
+        head: headers,
+        body: data,
+        startY: 20
+      });
+    }
 
     doc.save("NCRS_Report.pdf");
 
   } catch (error) {
-    console.error("❌ PDF export error:", error);
-    alert("Failed to export PDF");
+    console.error("❌ PDF error:", error);
   }
 };
+
+
+// =============================================
+// ===== AUTO LOAD DASHBOARD =====
+// =============================================
+window.addEventListener("DOMContentLoaded", () => {
+  loadDashboardData();
+});
       // =============================================
       // ===== MESSAGES BOX LOGIC (ADMIN) =====
       // =============================================
