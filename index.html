@@ -5329,7 +5329,6 @@ loadActiveSearches();
         }
       };
 
-      
       // =============================================
 // ===== GLOBAL SAFE INIT =====
 // =============================================
@@ -5386,240 +5385,103 @@ async function loadDashboardData() {
 
     const snap = await getDocs(collection(db, "child"));
 
-    const child = snap.docs.map((doc) => ({
+    const children = snap.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
 
-    console.log("✅ Loaded:", child.length);
+    console.log("✅ Loaded:", children.length);
 
-    updateDashboardUI(child);
+    updateDashboardUI(children);
 
   } catch (error) {
     console.error("❌ Failed to load dashboard data:", error);
   }
 }
-// =============================================
-// ===== GLOBAL CHART STORAGE =====
-// =============================================
-window.charts = window.charts || {};
 
-
-// =============================================
-// ===== UPDATE DASHBOARD UI =====
-// =============================================
+// =====================================
+// ===== UPDATE DASHBOARD UI (FULL)
+// =====================================
 function updateDashboardUI(data) {
   try {
     console.log("📊 Updating UI...");
 
     if (!Array.isArray(data)) data = [];
 
-    // =====================================
-    // CLEAN + NORMALIZE DATA (CRITICAL FIX)
-    // =====================================
-    const cleanData = data.map(d => {
-      const status = (d?.status ?? "")
-        .toString()
-        .trim()
-        .toLowerCase();
-
-      return {
-        ...d,
-        status,
-        activeSearch: d?.activeSearch === true || d?.activeSearch === "true",
-        age: Number(d?.age) || 0,
-        gender: d?.gender || "Unknown",
-        region: d?.region || "Unknown",
-        identifier: d?.identifier ?? null
-      };
-    });
-
-    // =====================================
+    // =========================
     // TOTAL
-    // =====================================
-    const total = cleanData.length;
+    // =========================
+    const totalEl = document.getElementById("metricTotal");
+    if (totalEl) {
+      totalEl.innerText = data.length;
+    }
 
-    // =====================================
-    // FIXED COUNTERS (STRICT CHECKING)
-    // =====================================
-    const missing = cleanData.filter(d =>
-      d.status === "missing"
-    ).length;
+    // =========================
+    // MISSING
+    // =========================
+    const missingEl = document.getElementById("metric_missing");
+    if (missingEl) {
+      const missing = data.filter(d => d && d.status === "missing").length;
+      missingEl.innerText = missing;
+    }
 
-    const found = cleanData.filter(d =>
-      d.status === "found"
-    ).length;
+    // =========================
+    // FOUND
+    // =========================
+    const foundEl = document.getElementById("metric_found");
+    if (foundEl) {
+      const found = data.filter(d => d && d.status === "found").length;
+      foundEl.innerText = found;
+    }
 
-    const active = cleanData.filter(d =>
-      d.activeSearch === true
-    ).length;
+    // =========================
+    // AVG AGE
+    // =========================
+    const avgAgeEl = document.getElementById("metric_avg_age");
+    if (avgAgeEl) {
 
-    // =====================================
-    // IDENTIFIER COUNT (FIXED)
-    // (counts ONLY valid identifiers)
-    // =====================================
-    const identifierCount = cleanData.filter(d =>
-      d.identifier !== null &&
-      d.identifier !== undefined &&
-      d.identifier !== ""
-    ).length;
+      const ages = data
+        .map(d => parseFloat(d.age))
+        .filter(a => !isNaN(a));
 
-    // =====================================
-    // AVG AGE (UNCHANGED BUT SAFE)
-    // =====================================
-    const ageList = cleanData
-      .map(d => d.age)
-      .filter(age => age > 0);
-
-    const avgAge =
-      ageList.length > 0
-        ? (ageList.reduce((a, b) => a + b, 0) / ageList.length).toFixed(1)
+      const avg = ages.length
+        ? (ages.reduce((a, b) => a + b, 0) / ages.length).toFixed(1)
         : 0;
 
-    // =====================================
-    // UI UPDATE SAFE FUNCTION
-    // =====================================
-    const setText = (id, value) => {
-      const el = document.getElementById(id);
-      if (el) el.innerText = value;
-    };
+      avgAgeEl.innerText = avg;
+    }
 
-    setText("metricTotal", total);
-    setText("metricMissing", missing);
-    setText("metricFound", found);
-    setText("metricActive", active);
-    setText("metricAvgAge", avgAge);
-    setText("metricIdentifier", identifierCount);
-
-    // =====================================
-    // UPDATE CHARTS WITH CLEAN DATA
-    // =====================================
-    updateCharts(cleanData);
-
-    console.log("✅ Dashboard fully updated");
+    // =========================
+    // UPDATE CHARTS
+    // =========================
+    updateCharts(data);
 
   } catch (error) {
-    console.error("❌ UI error:", error);
+    console.error("❌ UI update error:", error);
   }
 }
-      // =============================================
-// ===== GLOBAL CHART HOLDER SAFE INIT =====
-// =============================================
-window.charts = window.charts || {};
 
 
-// =============================================
-// ===== UPDATE CHARTS (STATUS + AGE FIXED) =====
-// =============================================
+// =====================================
+// ===== UPDATE CHARTS (STABLE)
+// =====================================
 function updateCharts(data) {
   try {
 
-    console.log("📊 Updating charts...");
-
     if (!Array.isArray(data)) data = [];
 
-    // =====================================
-    // ===== STATUS COUNT =====
-    // =====================================
-    const statusCounts = {};
-
-    data.forEach(c => {
-      const status = (c.status || "Unknown").toLowerCase();
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
-
-    // =====================================
-    // ===== AGE GROUPING (HISTOGRAM FIX) =====
-    // =====================================
-    const ageGroups = {
-      "0-5": 0,
-      "6-10": 0,
-      "11-15": 0,
-      "16+": 0,
-      "Unknown": 0
-    };
-
-    data.forEach(c => {
-      const age = Number(c.age);
-
-      if (isNaN(age)) {
-        ageGroups["Unknown"]++;
-      } else if (age <= 5) {
-        ageGroups["0-5"]++;
-      } else if (age <= 10) {
-        ageGroups["6-10"]++;
-      } else if (age <= 15) {
-        ageGroups["11-15"]++;
-      } else {
-        ageGroups["16+"]++;
-      }
-    });
-
-    // =====================================
-    // ===== STATUS CHART =====
-    // =====================================
-    const statusCanvas = document.getElementById("statusChart");
-    if (statusCanvas) {
-
-      const ctx = statusCanvas.getContext("2d");
-
-      if (window.charts.statusChart) {
-        window.charts.statusChart.destroy();
-      }
-
-      window.charts.statusChart = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels: Object.keys(statusCounts),
-          datasets: [{
-            label: "Cases by Status",
-            data: Object.values(statusCounts),
-            backgroundColor: "#4e73df"
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                precision: 0
-              }
-            }
-          }
-        }
-      });
-
-    } else {
-      console.warn("⚠️ statusChart canvas missing");
-    }
-    function updateCharts(data) {
-  try {
-
-    // =====================================
-    // SAFETY: ensure data exists
-    // =====================================
-    if (!Array.isArray(data)) {
-      console.warn("⚠️ Data sio array, natumia empty array");
-      data = [];
-    }
-
-    // ensure charts storage
     window.charts = window.charts || {};
 
-    // helper: safe destroy
     function destroyChart(name) {
       if (window.charts[name]) {
         window.charts[name].destroy();
       }
     }
 
-    // helper: group data safely
     function safeGroup(arr, field) {
       const obj = {};
       arr.forEach(item => {
-        const key = (item && item[field]) ? item[field] : "Unknown";
+        const key = item && item[field] ? item[field] : "Unknown";
         obj[key] = (obj[key] || 0) + 1;
       });
       return obj;
