@@ -709,6 +709,74 @@
         font-weight: bold;
       }
 
+      /* ========================================= */
+      /* === NEW RBAC PRIVACY STYLES === */
+      /* ========================================= */
+      .rbac-control-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px;
+        background: #f0f4ff;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border: 1px solid #d0d9f0;
+      }
+      .rbac-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .access-granted-badge {
+        background: #d3f9d8;
+        color: #2b8a3e;
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 5px;
+      }
+      .btn-grant-access {
+        background: var(--accent);
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        cursor: pointer;
+        margin-top: 2px;
+      }
+      .btn-grant-access:hover {
+        background: #e76f51;
+      }
+      .btn-revoke-access {
+        background: var(--secondary);
+        color: white;
+      }
+      .privacy-lock-placeholder {
+        width: 100px;
+        height: 100px;
+        background: #e9ecef;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+        font-size: 0.8rem;
+        text-align: center;
+      }
+      .privacy-lock-placeholder i {
+        font-size: 1.5rem;
+        margin-bottom: 5px;
+      }
+      /* ========================================= */
+
       .hero {
         background:
           linear-gradient(rgba(0, 51, 102, 0.85), rgba(0, 51, 102, 0.9)),
@@ -2324,6 +2392,13 @@
               <i class="fas fa-ad"></i>
               Manage Adverts
             </a>
+            
+            <!-- NEW: Super Admin Global Image Visibility Toggle -->
+            <a href="#" id="superAdminGlobalImgToggle" onclick="toggleGlobalImageVisibilityUI()" style="display: none; color: var(--accent);">
+              <i class="fas fa-eye-slash"></i>
+              <span id="globalImgToggleText">Hide All Images</span>
+            </a>
+
             <!-- NEW: Identifier "My Messages" link in user dropdown -->
             <a href="#" id="myMessagesDropdownLink" onclick="openMyMessages()" style="display: none">
               <i class="fas fa-envelope-open-text"></i>
@@ -2854,6 +2929,7 @@
                     <label data-translate="label_role">Role</label>
                     <select id="su_role">
                       <option value="User">Standard User</option>
+                      <option value="Identifier">Identifier</option>
                     </select>
                   </div>
                   <div class="form-group">
@@ -3289,6 +3365,7 @@
                 <th>Email</th>
                 <th>Role</th>
                 <th>Assigned Task</th>
+                <th>Image Access</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -3322,6 +3399,7 @@
               <label>Role</label>
               <select id="editRole">
                 <option value="User">Standard User</option>
+                <option value="Identifier">Identifier</option>
                 <option value="Administrator">Administrator</option>
                 <option value="Super Administrator">Super Administrator</option>
               </select>
@@ -4141,6 +4219,98 @@ loadActiveSearches();
       let currentNewsItem = null;
 
       // =============================================
+      // ===== RBAC HELPER FUNCTIONS =====
+      // =============================================
+      
+      // 1. Super Admin: Toggle Global Visibility
+      window.toggleGlobalImageVisibilityUI = async function() {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if(!user || user.role !== "Super Administrator") return;
+
+        const settingsRef = doc(db, "appData", "settings");
+        const snap = await getDoc(settingsRef);
+        let currentStatus = true; // Default ON
+
+        if(snap.exists() && typeof snap.data().globalImageVisibility !== "undefined") {
+          currentStatus = snap.data().globalImageVisibility;
+        }
+
+        const newStatus = !currentStatus;
+
+        await updateDoc(settingsRef, {
+          globalImageVisibility: newStatus
+        }, { merge: true });
+
+        // Update UI text and icon
+        const link = document.getElementById("superAdminGlobalImgToggle");
+        const txt = document.getElementById("globalImgToggleText");
+        
+        if(newStatus) {
+          txt.innerText = "Hide All Images";
+          link.querySelector("i").className = "fas fa-eye-slash";
+          BrickNotify.success("Global Images: VISIBLE");
+        } else {
+          txt.innerText = "Show All Images";
+          link.querySelector("i").className = "fas fa-eye";
+          BrickNotify.warning("Global Images: HIDDEN");
+        }
+
+        // Refresh table to apply changes
+        renderChildTable();
+      };
+
+      // 2. Admin: Grant Identifier Access
+      window.grantImageAccess = async function(targetUserId, currentAccess) {
+        const user = JSON.parse(sessionStorage.getItem("currentUser"));
+        if(!user || (user.role !== "Administrator" && user.role !== "Super Administrator")) return;
+
+        try {
+          await updateDoc(doc(db, "users", targetUserId), {
+            canViewImages: !currentAccess
+          });
+          BrickNotify.success(!currentAccess ? "Image Access Granted" : "Image Access Revoked");
+          openUserManagement(); // Refresh list
+        } catch(e) {
+          console.error(e);
+          BrickNotify.error("Failed to update access");
+        }
+      };
+
+      // 3. Logic: Check Permissions
+      async function checkImagePermissions(currentUser) {
+        // A. If Admin/Super -> Always True
+        if (currentUser.role === "Administrator" || currentUser.role === "Super Administrator") {
+          return true;
+        }
+
+        // B. Fetch Global Setting
+        const settingsRef = doc(db, "appData", "settings");
+        const settingsSnap = await getDoc(settingsRef);
+        const globalVisible = settingsSnap.exists() && settingsSnap.data().globalImageVisibility !== undefined 
+          ? settingsSnap.data().globalImageVisibility 
+          : true; // Default true
+
+        // C. If Global Visible -> True
+        if (globalVisible) {
+          return true;
+        }
+
+        // D. If Identifier -> Check specific permission
+        if (currentUser.role === "Identifier") {
+          // Fetch fresh user data to get canViewImages
+          const userSnap = await getDoc(doc(db, "users", currentUser.id));
+          const userData = userSnap.data();
+          if(userData && userData.canViewImages) {
+            return true;
+          }
+        }
+
+        // E. Default (User) -> False
+        return false;
+      }
+
+
+      // =============================================
       // ===== FIREBASE HELPERS =====
       // =============================================
       async function ensureSuperAdmin() {
@@ -4209,7 +4379,7 @@ loadActiveSearches();
 
       async function loadRolesForSignup() {
         const roleSelect = document.getElementById("su_role");
-        roleSelect.innerHTML = '<option value="User">Standard User</option>';
+        roleSelect.innerHTML = '<option value="User">Standard User</option><option value="Identifier">Identifier</option>';
 
         const snap = await getDocs(collection(db, "users"));
         const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -4261,6 +4431,16 @@ loadActiveSearches();
         const snap = await getDoc(doc(db, "appData", "settings"));
         if (snap.exists()) {
           currentLang = snap.data().lang || "sw";
+          
+          // Set initial UI state for global toggle if Super Admin
+          if(snap.data().globalImageVisibility === false) {
+            const txt = document.getElementById("globalImgToggleText");
+            const icon = document.querySelector("#superAdminGlobalImgToggle i");
+            if(txt) txt.innerText = "Show All Images";
+            if(icon) {
+               icon.className = "fas fa-eye";
+            }
+          }
         }
         changeLanguage(currentLang);
 
@@ -4366,6 +4546,30 @@ loadActiveSearches();
         }
 
         profileWidget.style.display = "flex";
+
+        // Show Super Admin Global Toggle
+        const superToggle = document.getElementById("superAdminGlobalImgToggle");
+        if(user.role === "Super Administrator") {
+          superToggle.style.display = "flex";
+          
+          // Check current state to set icon
+          const settingsSnap = await getDoc(doc(db, "appData", "settings"));
+          const isGlobalVisible = settingsSnap.exists() && settingsSnap.data().globalImageVisibility !== undefined 
+             ? settingsSnap.data().globalImageVisibility : true;
+          
+          const txt = document.getElementById("globalImgToggleText");
+          const icon = superToggle.querySelector("i");
+          
+          if(isGlobalVisible) {
+            txt.innerText = "Hide All Images";
+            icon.className = "fas fa-eye-slash";
+          } else {
+            txt.innerText = "Show All Images";
+            icon.className = "fas fa-eye";
+          }
+        } else {
+          superToggle.style.display = "none";
+        }
 
         if (user.role === "Administrator" || user.role === "Super Administrator") {
           // ADMIN VIEW
@@ -4538,6 +4742,7 @@ loadActiveSearches();
           password: document.getElementById("su_pass").value,
           photoUrl: null,
           createdAt: Date.now(),
+          canViewImages: false, // Default for Identifiers
         };
 
         const q = query(collection(db, "users"), where("email", "==", userData.email));
@@ -4678,7 +4883,6 @@ loadActiveSearches();
         BrickNotify.success("Ombi la msaada limetumwa.");
         closeContactSupport();
       };
-
       // =============================================
       // ===== NEWS SYSTEM LOGIC =====
       // =============================================
