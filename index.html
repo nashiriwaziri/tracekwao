@@ -5225,28 +5225,85 @@ window.drawChildPoster = function () {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const allowed = canViewChildImage(currentViewChild);
+  const user = getCurrentUser();
 
-  // 🔴 BLOCK MODE
-  if (!allowed) {
-    ctx.fillStyle = "#eeeeee";
-    ctx.fillRect(100, 240, canvasWidth - 200, canvasWidth - 200);
+  // =============================================
+  // 🔴 1. HIDE ALL MODE (STRICT)
+  // =============================================
+  if (systemSettings.globalVisibility === false) {
+    // Only Super Admin can see
+    if (user?.role !== "Super Administrator") {
+      ctx.fillStyle = "#eeeeee";
+      ctx.fillRect(100, 240, canvasWidth - 200, canvasWidth - 200);
 
-    ctx.fillStyle = "red";
-    ctx.font = "bold 35px Arial";
-    ctx.textAlign = "center";
+      ctx.fillStyle = "red";
+      ctx.font = "bold 35px Arial";
+      ctx.textAlign = "center";
 
-    ctx.fillText(
-      "🔒 Image Hidden – Ask Administrator",
-      canvas.width / 2,
-      500
-    );
+      ctx.fillText(
+        "🔒 Image Hidden – Ask Administrator",
+        canvas.width / 2,
+        500
+      );
 
-    drawPosterText(ctx, canvas, 800);
-    return;
+      drawPosterText(ctx, canvas, 800);
+      return;
+    }
   }
 
-  // 🟢 LOAD IMAGE
+  // =============================================
+  // 🟢 2. SHOW MODE (CONTROLLED ACCESS)
+  // =============================================
+  if (systemSettings.globalVisibility === true) {
+    // Admin → allowed
+    if (user?.role === "Administrator" || user?.role === "Super Administrator") {
+      // continue (allowed)
+    }
+
+    // Identifier → MUST search first
+    else if (user?.role === "Identifier") {
+      if (!hasSearched) {
+        ctx.fillStyle = "#eeeeee";
+        ctx.fillRect(100, 240, canvasWidth - 200, canvasWidth - 200);
+
+        ctx.fillStyle = "orange";
+        ctx.font = "bold 35px Arial";
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+          "🔍 Search child name to view image",
+          canvas.width / 2,
+          500
+        );
+
+        drawPosterText(ctx, canvas, 800);
+        return;
+      }
+    }
+
+    // Normal users → blocked
+    else {
+      ctx.fillStyle = "#eeeeee";
+      ctx.fillRect(100, 240, canvasWidth - 200, canvasWidth - 200);
+
+      ctx.fillStyle = "red";
+      ctx.font = "bold 35px Arial";
+      ctx.textAlign = "center";
+
+      ctx.fillText(
+        "🔒 Image Hidden – Ask Administrator",
+        canvas.width / 2,
+        500
+      );
+
+      drawPosterText(ctx, canvas, 800);
+      return;
+    }
+  }
+
+  // =============================================
+  // 🟢 LOAD IMAGE (AUTHORIZED USERS ONLY)
+  // =============================================
   const img = new Image();
   img.crossOrigin = "Anonymous";
   img.src = currentViewChild.img || "https://via.placeholder.com/150";
@@ -5267,7 +5324,6 @@ window.drawChildPoster = function () {
 
     drawPosterText(ctx, canvas, 800);
   };
-};
 
 // =============================================
 // ===== DOWNLOAD (SECURED) =====
