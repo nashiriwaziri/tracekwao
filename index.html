@@ -5080,12 +5080,15 @@ loadActiveSearches();
           renderChildTable();
         }
       };
-      // =============================================
+    // =============================================
 // ===== RBAC SETTINGS (GLOBAL CONTROL) =====
 // =============================================
 let systemSettings = {
-  globalVisibility: false // controlled by Super Admin
+  globalVisibility: false // false = HIDE ALL, true = SHOW MODE
 };
+
+// Track if search was performed
+let hasSearched = false;
 
 // =============================================
 // ===== CURRENT USER =====
@@ -5095,24 +5098,39 @@ function getCurrentUser() {
 }
 
 // =============================================
-// ===== PERMISSION CHECK =====
+// ===== SEARCH FUNCTION (IMPORTANT) =====
+// =============================================
+window.searchChildByName = function (name) {
+  hasSearched = true;
+  // 👉 your existing search logic continues here
+};
+
+// =============================================
+// ===== PERMISSION CHECK (STRICT CONTROL) =====
 // =============================================
 function canViewChildImage(child) {
   const user = getCurrentUser();
-
   if (!user) return false;
 
-  // Super Admin → full access
+  // SUPER ADMIN → ALWAYS
   if (user.role === "Super Administrator") return true;
 
-  // Global visibility ON → everyone sees
-  if (systemSettings.globalVisibility) return true;
+  // 🔴 HIDE ALL MODE → BLOCK EVERYONE
+  if (systemSettings.globalVisibility === false) {
+    return false;
+  }
 
-  // Admin → allowed (can supervise)
-  if (user.role === "Administrator") return true;
+  // 🟢 SHOW MODE
+  if (systemSettings.globalVisibility === true) {
+    // Admin → allowed
+    if (user.role === "Administrator") return true;
 
-  // Identifier → must be granted
-  if (user.role === "Identifier" && user.canViewChildImages === true) return true;
+    // Identifier → ONLY AFTER SEARCH
+    if (user.role === "Identifier" && hasSearched === true) return true;
+
+    // Normal users → still blocked
+    return false;
+  }
 
   return false;
 }
@@ -5191,46 +5209,7 @@ window.closeViewChildModal = function () {
 };
 
 // =============================================
-// ===== ADMIN REPLY =====
-// =============================================
-window.saveAdminReply = async function (childId, identifierIndex) {
-  const input = document.getElementById(`reply-${identifierIndex}`);
-  const message = input.value;
-
-  if (!message) return;
-
-  const childRef = doc(db, "child", childId);
-  const childSnap = await getDoc(childRef);
-
-  if (childSnap.exists()) {
-    const data = childSnap.data();
-    const identifiers = data.identifiers || [];
-
-    if (identifiers[identifierIndex]) {
-      identifiers[identifierIndex].adminReply = message;
-
-      await updateDoc(childRef, { identifiers });
-
-      BrickNotify.success("Jibu limehifadhiwa.");
-      openViewChildModal(childId);
-    }
-  }
-};
-
-// =============================================
-// ===== POSTER RATIO =====
-// =============================================
-window.setPosterRatio = function (r, event) {
-  currentPosterRatio = r;
-
-  document.querySelectorAll(".ratio-btn").forEach((b) => b.classList.remove("active"));
-  if (event?.target) event.target.classList.add("active");
-
-  drawChildPoster();
-};
-
-// =============================================
-// ===== DRAW POSTER WITH SECURITY =====
+// ===== DRAW POSTER WITH STRICT SECURITY =====
 // =============================================
 window.drawChildPoster = function () {
   if (!currentViewChild) return;
@@ -5246,48 +5225,28 @@ window.drawChildPoster = function () {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // ===== STATUS =====
-  let statusColor = "#e63946";
-  let statusText = "Mtoto Amepotea";
-  let subText = "Missing Child";
-
-  if (currentViewChild.status === "found") {
-    statusColor = "#2b8a3e";
-    statusText = "Mtoto Amepatikana";
-    subText = "Found Child";
-  } else if (currentViewChild.identifiers?.length >= 3) {
-    statusColor = "#f4a261";
-    statusText = "Ametambuliwa";
-    subText = "Identified";
-  }
-
-  ctx.fillStyle = statusColor;
-  ctx.fillRect(0, 0, canvas.width, 220);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 80px Montserrat";
-  ctx.textAlign = "center";
-  ctx.fillText(statusText, canvas.width / 2, 130);
-
-  ctx.font = "bold 35px Roboto";
-  ctx.fillText(subText, canvas.width / 2, 180);
-
-  // ===== SECURITY CHECK =====
   const allowed = canViewChildImage(currentViewChild);
 
+  // 🔴 BLOCK MODE
   if (!allowed) {
     ctx.fillStyle = "#eeeeee";
     ctx.fillRect(100, 240, canvasWidth - 200, canvasWidth - 200);
 
     ctx.fillStyle = "red";
-    ctx.font = "bold 40px Arial";
-    ctx.fillText("🔒 IMAGE HIDDEN", canvas.width / 2, 500);
+    ctx.font = "bold 35px Arial";
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+      "🔒 Image Hidden – Ask Administrator",
+      canvas.width / 2,
+      500
+    );
 
     drawPosterText(ctx, canvas, 800);
     return;
   }
 
-  // ===== LOAD IMAGE =====
+  // 🟢 LOAD IMAGE
   const img = new Image();
   img.crossOrigin = "Anonymous";
   img.src = currentViewChild.img || "https://via.placeholder.com/150";
@@ -5311,59 +5270,11 @@ window.drawChildPoster = function () {
 };
 
 // =============================================
-// ===== POSTER TEXT =====
-// =============================================
-window.drawPosterText = function (ctx, canvas, startY) {
-  const c = currentViewChild;
-
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#333";
-  ctx.font = "bold 60px Montserrat";
-  ctx.fillText(c.name, canvas.width / 2, startY);
-
-  ctx.font = "35px Roboto";
-  ctx.fillStyle = "#555";
-
-  let y = startY + 60;
-  const lineHeight = 50;
-
-  ctx.fillText(`Age: ${c.age} | Gender: ${c.gender}`, canvas.width / 2, y);
-  y += lineHeight;
-
-  if (c.location) {
-    ctx.fillText(`Last Seen: ${c.location}`, canvas.width / 2, y);
-    y += lineHeight;
-  }
-
-  if (c.region) {
-    ctx.fillText(`Region: ${c.region}, ${c.district || ""}`, canvas.width / 2, y);
-    y += lineHeight;
-  }
-
-  if (c.policeRb) {
-    ctx.fillStyle = "#003366";
-    ctx.fillText(`RB: ${c.policeRb}`, canvas.width / 2, y);
-    y += lineHeight;
-  }
-
-  ctx.fillStyle = "#003366";
-  ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 25px Roboto";
-  ctx.fillText(
-    "From: NATIONAL CHILD REUNIFICATION SYSTEM",
-    canvas.width / 2,
-    canvas.height - 40
-  );
-};
-
-// =============================================
 // ===== DOWNLOAD (SECURED) =====
 // =============================================
 window.downloadPoster = function (format) {
   if (!canViewChildImage(currentViewChild)) {
-    alert("You are not allowed to download this image.");
+    alert("Image Hidden – ask Administrator");
     return;
   }
 
