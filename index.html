@@ -2334,16 +2334,19 @@
       </div>
       <a href="#search" class="nav-link-btn" data-translate="nav_search">Find Child</a>
       <div class="nav-dropdown">
-      <a href="#education" class="nav-link-btn" onclick="navigateTo('education'); return false;">Education</a>
-        <button class="dropbtn" data-translate="nav_edu">Education<i class="fa fa-caret-down"></i>
+        <button class="dropbtn" data-translate="nav_edu">
+          Education
+          <i class="fa fa-caret-down"></i>
         </button>
         <div class="dropdown-content">
           <a href="education.html">
             <i class="fas fa-school"></i>
             Community Education
           </a>
-            
-          <a href="safety-tips.html"><i class="fas fa-shield-alt"></i>Child Safety Tips </a>
+          <a href="safety-tips.html">
+            <i class="fas fa-shield-alt"></i>
+            Child Safety Tips
+          </a>
           <a href="laws.html">
             <i class="fas fa-balance-scale"></i>
             Laws &amp; Rights
@@ -4934,7 +4937,7 @@ loadActiveSearches();
       // =============================================
       // ===== CHILD CRUD (FIRESTORE) =====
       // =============================================
-            window.renderChildTable = async function (queryStr = "") {
+      window.renderChildTable = async function (queryStr = "") {
         const tbody = document.getElementById("childTableBody");
         const snap = await getDocs(collection(db, "child"));
         let child = snap.docs.map((doc) => ({ docId: doc.id, ...doc.data() }));
@@ -4985,49 +4988,17 @@ loadActiveSearches();
             }
           }
 
-          // IMAGE HIDDEN STATE LOGIC
-          const imgHidden = c.imgHidden === true;
-          let imgCellHtml = "";
-          
-          if (imgHidden && !isAdmin) {
-            imgCellHtml = `<div class="privacy-lock-placeholder" style="width:100px; height:100px; margin:auto;"><i class="fas fa-lock"></i>Hidden</div>`;
-          } else {
-            imgCellHtml = `<img src="${imgSrc}" class="table-img" style="${imgHidden && isAdmin ? 'filter: blur(3px);' : ''}" onclick="openViewChildModal('${c.docId}')">`;
-          }
-
-          // ADMIN ACTIONS (HIDE/SHOW + DELETE)
-          let adminActions = "";
-          if (isAdmin) {
-            adminActions = `<td style="text-align:center; white-space: nowrap;">
-              <button class="btn-hide" style="margin-bottom:5px;" onclick="toggleImageVisibility('${c.docId}', ${!imgHidden})" title="${imgHidden ? 'Show Image' : 'Hide Image'}">
-                <i class="fas ${imgHidden ? 'fa-eye' : 'fa-eye-slash'}"></i>
-              </button>
-              <button class="btn-delete" onclick="deleteChild('${c.docId}')"><i class="fas fa-trash"></i></button>
-            </td>`;
-          }
-
+          const imgCellHtml = `<img src="${imgSrc}" class="table-img" onclick="openViewChildModal('${c.docId}')">`;
           tbody.innerHTML += `<tr>
                     <td>${c.policeRb || "-"}</td><td>${imgCellHtml}</td><td><strong>${c.name}</strong> ${newBadge}</td>
                     <td>${c.age}</td><td>${c.gender}</td><td>${c.region || "-"}</td><td>${c.district || "-"}</td>
                     <td>${c.ward || "-"}</td><td>${c.location || "-"}</td><td>${statusHtml}</td>
                     <td style="font-size:0.85rem">${c.remarks || "-"}</td><td>${identifyBtnHtml}</td>
-                    ${adminActions}
+                 ${isAdmin ? `<td style="text-align:center;"><button class="btn-delete" onclick="deleteChild('${c.docId}')"><i class="fas fa-trash"></i></button></td>` : ""}
                 </tr>`;
         });
       };
-             // NEW: Toggle Image Visibility One by One
-      window.toggleImageVisibility = async function (childId, hide) {
-        try {
-          await updateDoc(doc(db, "child", childId), {
-            imgHidden: hide
-          });
-          BrickNotify.success(hide ? "Picha imefichwa kwa watumiaji wengine." : "Picha sasa inaonekana.");
-          renderChildTable(document.getElementById("myInput").value); // Refresh table
-        } catch (error) {
-          console.error("Error updating image visibility:", error);
-          BrickNotify.error("Imeshindikana kubadilisha hali ya picha.");
-        }
-      };
+
       window.searchTable = function () {
         renderChildTable(document.getElementById("myInput").value);
       };
@@ -5093,46 +5064,44 @@ function getCurrentUser() {
   return JSON.parse(sessionStorage.getItem("currentUser"));
 }
 
-      // =============================================
-      // ===== PERMISSION CHECK (UPDATED) =====
-      // =============================================
-      function canViewChildImage(child) {
-        const user = getCurrentUser();
-        if (!user) return false;
+// =============================================
+// ===== PERMISSION CHECK (UPDATED) =====
+// =============================================
+function canViewChildImage(child) {
+  const user = getCurrentUser();
+  if (!user) return false;
 
-        // 1. SUPER ADMIN & ADMIN → FULL CONTROL
-        if (user.role === "Super Administrator") return true;
-        if (user.role === "Administrator") return true;
+  // 1. SUPER ADMIN → FULL CONTROL
+  if (user.role === "Super Administrator") return true;
 
-        // 2. SPECIFIC IMAGE HIDDEN BY ADMIN
-        if (child.imgHidden === true) {
-          return false;
-        }
+  // 2. GLOBAL VISIBILITY (SUPER ADMIN SWITCH)
+  if (systemSettings.globalVisibility === true) {
+    // 🔥 KEY CHANGE:
+    // Allow Identifiers ALSO when global is ON
+    if (
+      user.role === "Identifier" ||
+      user.role === "Administrator" ||
+      user.role === "User"
+    ) {
+      return true;
+    }
+  }
 
-        // 3. GLOBAL VISIBILITY (SUPER ADMIN SWITCH)
-        if (systemSettings.globalVisibility === true) {
-          // 🔥 KEY CHANGE:
-          // Allow Identifiers ALSO when global is ON
-          if (
-            user.role === "Identifier" ||
-            user.role === "Administrator" ||
-            user.role === "User"
-          ) {
-            return true;
-          }
-        }
+  // 3. ADMIN → ALWAYS ALLOWED
+  if (user.role === "Administrator") return true;
 
-        // 4. IDENTIFIER → ONLY IF GRANTED (WHEN GLOBAL OFF)
-        if (
-          user.role === "Identifier" &&
-          user.canViewChildImages === true
-        ) {
-          return true;
-        }
+  // 4. IDENTIFIER → ONLY IF GRANTED (WHEN GLOBAL OFF)
+  if (
+    user.role === "Identifier" &&
+    user.canViewChildImages === true
+  ) {
+    return true;
+  }
 
-        // 5. NORMAL USER → BLOCKED (WHEN GLOBAL OFF)
-        return false;
-      }
+  // 5. NORMAL USER → BLOCKED (WHEN GLOBAL OFF)
+  return false;
+}
+
 // =============================================
 // ===== VIEW CHILD & POSTER =====
 // =============================================
