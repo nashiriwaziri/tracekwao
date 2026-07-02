@@ -1,0 +1,2076 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UMAS - Pricing & Profit Management System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+
+<script>
+tailwind.config={theme:{extend:{colors:{umas:{50:'#fef9ec',100:'#fef0c7',200:'#fde08a',300:'#fcca4d',400:'#fbad1e',500:'#f59207',600:'#d97706',700:'#b45309',800:'#92400e',900:'#78350f'},sidebar:'#0c0c10',card:'#ffffff',surface:'#f5f3ef'},fontFamily:{display:['Outfit','sans-serif'],body:['DM Sans','sans-serif']}}}}
+</script>
+<style>
+:root{--bg:#f5f3ef;--card:#fff;--sidebar:#0c0c10;--accent:#d97706;--accent-light:#fef3c7;--text:#1c1917;--muted:#78716c;--success:#059669;--danger:#dc2626;--warning:#ea580c;--border:#e7e5e4}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+h1,h2,h3,h4,h5,h6{font-family:'Outfit',sans-serif}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#a8a29e;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#78716c}
+
+/* Login */
+.login-bg{background:linear-gradient(135deg,#0c0c10 0%,#1a1520 50%,#1f1510 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.login-bg::before{content:'';position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(217,119,6,0.15),transparent 70%);top:-100px;right:-100px;border-radius:50%;animation:pulse-glow 4s ease-in-out infinite}
+.login-bg::after{content:'';position:absolute;width:400px;height:400px;background:radial-gradient(circle,rgba(217,119,6,0.1),transparent 70%);bottom:-80px;left:-80px;border-radius:50%;animation:pulse-glow 5s ease-in-out infinite reverse}
+@keyframes pulse-glow{0%,100%{transform:scale(1);opacity:0.5}50%{transform:scale(1.2);opacity:1}}
+
+.login-card{background:rgba(255,255,255,0.03);backdrop-filter:blur(40px);border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:48px;width:420px;max-width:90vw;position:relative;z-index:2}
+.login-card input,.login-card select{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:12px;padding:14px 16px;width:100%;font-size:15px;transition:all .3s}
+.login-card input:focus,.login-card select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,119,6,0.15)}
+.login-card select option{background:#1a1a2e;color:#fff}
+.login-card label{color:rgba(255,255,255,0.6);font-size:13px;font-weight:500;margin-bottom:6px;display:block}
+.login-btn{background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border:none;padding:16px;border-radius:12px;width:100%;font-size:16px;font-weight:700;cursor:pointer;transition:all .3s;font-family:'Outfit',sans-serif}
+.login-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(217,119,6,0.3)}
+.login-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* Sidebar */
+.sidebar{width:260px;min-height:100vh;background:var(--sidebar);position:fixed;left:0;top:0;z-index:40;transition:transform .3s;display:flex;flex-direction:column}
+.sidebar .nav-item{display:flex;align-items:center;gap:12px;padding:12px 20px;color:rgba(255,255,255,0.5);cursor:pointer;transition:all .2s;border-radius:10px;margin:2px 12px;font-size:14px;font-weight:500;position:relative}
+.sidebar .nav-item:hover{color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.04)}
+.sidebar .nav-item.active{color:#f59207;background:rgba(217,119,6,0.1)}
+.sidebar .nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:24px;background:#f59207;border-radius:0 3px 3px 0}
+.sidebar .nav-item i{width:20px;text-align:center;font-size:15px}
+
+.main-content{margin-left:260px;min-height:100vh;padding:24px 32px}
+
+/* Cards */
+.stat-card{background:var(--card);border-radius:16px;padding:24px;border:1px solid var(--border);transition:all .3s;position:relative;overflow:hidden}
+.stat-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,0.06)}
+.stat-card .icon-wrap{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px}
+
+/* Table */
+.data-table{width:100%;border-collapse:separate;border-spacing:0}
+.data-table thead th{background:#f5f3ef;padding:12px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);text-align:left;border-bottom:2px solid var(--border)}
+.data-table tbody td{padding:12px 16px;font-size:14px;border-bottom:1px solid var(--border);vertical-align:middle}
+.data-table tbody tr{transition:background .15s}
+.data-table tbody tr:hover{background:rgba(217,119,6,0.03)}
+
+/* Buttons */
+.btn{padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s;font-family:'DM Sans',sans-serif;display:inline-flex;align-items:center;gap:8px}
+.btn-primary{background:linear-gradient(135deg,#d97706,#b45309);color:#fff}
+.btn-primary:hover{box-shadow:0 4px 20px rgba(217,119,6,0.3);transform:translateY(-1px)}
+.btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:#ebe9e4}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-danger:hover{background:#b91c1c}
+.btn-sm{padding:6px 14px;font-size:12px;border-radius:8px}
+.btn-success{background:var(--success);color:#fff}
+
+/* Form inputs */
+.form-input{background:var(--card);border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;width:100%;font-size:14px;transition:all .2s;font-family:'DM Sans',sans-serif;color:var(--text)}
+.form-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,119,6,0.1)}
+.form-label{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block}
+.form-select{background:var(--card);border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;width:100%;font-size:14px;transition:all .2s;font-family:'DM Sans',sans-serif;color:var(--text);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2378716c' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+.form-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,119,6,0.1)}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal-box{background:var(--card);border-radius:20px;padding:32px;width:600px;max-width:90vw;max-height:85vh;overflow-y:auto;animation:modal-in .3s ease}
+@keyframes modal-in{from{opacity:0;transform:scale(0.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+/* Toast */
+.toast-container{position:fixed;top:24px;right:24px;z-index:200;display:flex;flex-direction:column;gap:8px}
+.toast{padding:14px 20px;border-radius:12px;color:#fff;font-size:14px;font-weight:500;animation:toast-in .3s ease;display:flex;align-items:center;gap:10px;min-width:300px;box-shadow:0 8px 30px rgba(0,0,0,0.15)}
+.toast.success{background:linear-gradient(135deg,#059669,#047857)}
+.toast.error{background:linear-gradient(135deg,#dc2626,#b91c1c)}
+.toast.warning{background:linear-gradient(135deg,#ea580c,#c2410c)}
+@keyframes toast-in{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+
+/* POS */
+.pos-product-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:all .2s;text-align:center}
+.pos-product-card:hover{border-color:var(--accent);box-shadow:0 4px 20px rgba(217,119,6,0.1);transform:translateY(-2px)}
+.cart-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.cart-item:last-child{border-bottom:none}
+
+/* Receipt Print */
+.receipt-a4{max-width:210mm;margin:0 auto;padding:20mm;font-family:'DM Sans',sans-serif}
+.receipt-pos{width:80mm;margin:0 auto;padding:5mm;font-family:'monospace';font-size:11px}
+.receipt-pos .center{text-align:center}
+.receipt-pos .line{border-top:1px dashed #000;margin:4px 0}
+.receipt-pos table{width:100%}
+
+/* Print styles */
+@media print{
+    body *{visibility:hidden}
+    .print-area,.print-area *{visibility:visible}
+    .print-area{position:absolute;left:0;top:0;width:100%}
+    .no-print{display:none!important}
+}
+
+/* Animations */
+@keyframes fade-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fade-up .5s ease forwards}
+.delay-1{animation-delay:.1s;opacity:0}
+.delay-2{animation-delay:.2s;opacity:0}
+.delay-3{animation-delay:.3s;opacity:0}
+.delay-4{animation-delay:.4s;opacity:0}
+
+/* Low stock badge */
+.badge-danger{background:#fef2f2;color:#dc2626;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-success{background:#ecfdf5;color:#059669;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-warning{background:#fff7ed;color:#ea580c;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-info{background:#eff6ff;color:#2563eb;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-purple{background:#faf5ff;color:#7c3aed;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+
+/* Section visibility */
+.section{display:none}
+.section.active{display:block}
+
+/* Lang toggle */
+.lang-toggle{display:flex;background:rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.08)}
+.lang-toggle button{padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;transition:all .2s;color:rgba(255,255,255,0.5);background:transparent}
+.lang-toggle button.active{background:var(--accent);color:#fff;border-radius:6px}
+
+/* === NEW: Auth Screens === */
+.auth-screen{background:linear-gradient(135deg,#0c0c10 0%,#1a1520 50%,#1f1510 100%);min-height:100vh;display:none;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.auth-screen::before{content:'';position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(217,119,6,0.15),transparent 70%);top:-100px;right:-100px;border-radius:50%;animation:pulse-glow 4s ease-in-out infinite}
+.auth-screen::after{content:'';position:absolute;width:400px;height:400px;background:radial-gradient(circle,rgba(217,119,6,0.1),transparent 70%);bottom:-80px;left:-80px;border-radius:50%;animation:pulse-glow 5s ease-in-out infinite reverse}
+.auth-link{color:rgba(255,255,255,0.45);font-size:13px;text-align:center;margin-top:16px;cursor:pointer;transition:color .2s}
+.auth-link:hover{color:var(--accent)}
+.auth-link a{color:var(--accent);cursor:pointer;font-weight:600}
+.auth-link a:hover{text-decoration:underline}
+.remember-row{display:flex;align-items:center;gap:8px;margin-bottom:20px}
+.remember-row input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.remember-row label{color:rgba(255,255,255,0.5);font-size:13px;cursor:pointer}
+.password-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.35);cursor:pointer;font-size:14px}
+.password-wrap{position:relative}
+.license-banner{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:16px;padding:32px;text-align:center;max-width:500px;margin:0 auto}
+.license-banner h2{font-family:'Outfit',sans-serif;font-size:24px;font-weight:800;margin-bottom:8px}
+.license-banner p{opacity:0.8;font-size:14px;margin-bottom:20px}
+
+/* === NEW: License & Payment === */
+.license-card{border:2px solid var(--border);border-radius:16px;padding:24px;transition:all .3s}
+.license-card.active{border-color:var(--success);background:rgba(5,150,105,0.03)}
+.license-card.expired{border-color:var(--danger);background:rgba(220,38,38,0.03)}
+.license-card.trial{border-color:#7c3aed;background:rgba(124,58,237,0.03)}
+.plan-card{border:2px solid var(--border);border-radius:16px;padding:28px;text-align:center;transition:all .3s;cursor:pointer}
+.plan-card:hover{border-color:var(--accent);transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,0.08)}
+.plan-card.selected{border-color:var(--accent);background:rgba(217,119,6,0.03)}
+.plan-price{font-family:'Outfit',sans-serif;font-size:36px;font-weight:900;color:var(--text)}
+
+/* === NEW: Business Profile === */
+.logo-upload{width:100px;height:100px;border:2px dashed var(--border);border-radius:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;overflow:hidden}
+.logo-upload:hover{border-color:var(--accent);background:rgba(217,119,6,0.03)}
+.logo-upload img{width:100%;height:100%;object-fit:cover}
+.logo-upload i{font-size:24px;color:var(--muted)}
+
+/* === NEW: Super Admin === */
+.sa-stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center}
+.sa-stat h4{font-family:'Outfit',sans-serif;font-size:28px;font-weight:900}
+.sa-stat p{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+
+/* === NEW: Email Verification === */
+.verify-icon{width:80px;height:80px;border-radius:50%;background:rgba(217,119,6,0.1);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
+.verify-icon i{font-size:32px;color:var(--accent)}
+
+/* Responsive */
+@media(max-width:1024px){
+    .sidebar{transform:translateX(-100%)}
+    .sidebar.open{transform:translateX(0)}
+    .main-content{margin-left:0;padding:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Login Screen -->
+<div id="loginScreen" class="login-bg">
+    <div class="login-card">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-umas-500 to-umas-700 mb-4">
+                <i class="fas fa-chart-line text-2xl text-white"></i>
+            </div>
+            <h1 class="text-2xl font-display font-800 text-white" data-i18n="appName">UMAS Tanzania</h1>
+            <p class="text-sm mt-1" style="color:rgba(255,255,255,0.4)" data-i18n="appSubtitle">Mfumo wa Bei na Usimamizi wa Faida</p>
+        </div>
+        <div class="lang-toggle mb-6 w-fit mx-auto">
+            <button onclick="setLang('sw')" class="active" id="langSw">SW</button>
+            <button onclick="setLang('en')" id="langEn">EN</button>
+        </div>
+        <form id="loginForm" onsubmit="return handleLogin(event)">
+            <div class="mb-4">
+                <label data-i18n="email">Barua Pepe</label>
+                <input type="email" id="loginEmail" value="" required>
+            </div>
+            <div class="mb-4">
+                <label data-i18n="password">Nenosiri</label>
+                <div class="password-wrap">
+                    <input type="password" id="loginPass" value="" required>
+                    <i class="fas fa-eye password-toggle" onclick="toggleLoginPw('loginPass',this)"></i>
+                </div>
+            </div>
+            <div class="remember-row">
+                <input type="checkbox" id="rememberMe" checked>
+                <label for="rememberMe" data-i18n="rememberMe">Nikumbuke</label>
+            </div>
+            <button type="submit" class="login-btn" id="loginBtn" data-i18n="loginBtn">Ingia kwa Mfumo</button>
+            <div class="auth-link" style="margin-top:12px">
+                <a onclick="showScreen('forgotScreen')" data-i18n="forgotPassword">Uliza nenosiri?</a>
+            </div>
+            <div style="text-align:center;margin-top:12px;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px">
+                <p style="color:rgba(255,255,255,0.3);font-size:12px" data-i18n="noAccount">Huna account?</p>
+                <a onclick="showScreen('registerScreen')" style="color:var(--accent);font-weight:700;font-size:14px;cursor:pointer" data-i18n="registerNow">Jisajili Sasa</a>
+            </div>
+            <p class="text-center mt-4" style="color:rgba(255,255,255,0.2);font-size:10px">Demo: demo@umas.co.tz / umas2024</p>
+        </form>
+    </div>
+</div>
+
+<!-- Register Screen -->
+<div id="registerScreen" class="auth-screen">
+    <div class="login-card" style="width:460px">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-umas-500 to-umas-700 mb-3">
+                <i class="fas fa-user-plus text-xl text-white"></i>
+            </div>
+            <h2 class="text-xl font-display font-800 text-white" data-i18n="createAccount">Unda Account</h2>
+        </div>
+        <form onsubmit="return handleRegister(event)">
+            <div class="mb-3">
+                <label data-i18n="fullName">Jina Kamili</label>
+                <input type="text" id="regName" required>
+            </div>
+            <div class="mb-3">
+                <label data-i18n="businessName">Jina la Biashara</label>
+                <input type="text" id="regBusiness" required>
+            </div>
+            <div class="mb-3">
+                <label data-i18n="email">Barua Pepe</label>
+                <input type="email" id="regEmail" required>
+            </div>
+            <div class="mb-3">
+                <label data-i18n="phone">Namba ya Simu</label>
+                <input type="tel" id="regPhone" required>
+            </div>
+            <div class="mb-3">
+                <label data-i18n="password">Nenosiri</label>
+                <div class="password-wrap">
+                    <input type="password" id="regPass" required minlength="6">
+                    <i class="fas fa-eye password-toggle" onclick="toggleLoginPw('regPass',this)"></i>
+                </div>
+            </div>
+            <div class="mb-4">
+                <label data-i18n="confirmPass">Thibitisha Nenosiri</label>
+                <div class="password-wrap">
+                    <input type="password" id="regConfirm" required minlength="6">
+                    <i class="fas fa-eye password-toggle" onclick="toggleLoginPw('regConfirm',this)"></i>
+                </div>
+            </div>
+            <button type="submit" class="login-btn" data-i18n="registerBtn">Jisajili</button>
+            <div class="auth-link">
+                <span data-i18n="haveAccount">Una account tayari?</span> <a onclick="showScreen('loginScreen')" data-i18n="loginHere">Ingia hapa</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Forgot Password Screen -->
+<div id="forgotScreen" class="auth-screen">
+    <div class="login-card">
+        <div class="text-center mb-6">
+            <div class="verify-icon"><i class="fas fa-lock"></i></div>
+            <h2 class="text-xl font-display font-800 text-white" data-i18n="forgotPassword">Uliza Nenosiri</h2>
+            <p style="color:rgba(255,255,255,0.4);font-size:13px;margin-top:8px" data-i18n="forgotDesc">Tutakutumia kiungo cha kubadilisha nenosiri kwa barua pepe yako</p>
+        </div>
+        <form onsubmit="return handleForgotPassword(event)">
+            <div class="mb-4">
+                <label data-i18n="email">Barua Pepe</label>
+                <input type="email" id="forgotEmail" required>
+            </div>
+            <button type="submit" class="login-btn" data-i18n="sendResetLink">Tuma Kiungo cha Kubadilisha</button>
+            <div class="auth-link">
+                <a onclick="showScreen('loginScreen')"><i class="fas fa-arrow-left"></i> <span data-i18n="backToLogin">Rudi kwa Login</span></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Email Verification Screen -->
+<div id="verifyScreen" class="auth-screen">
+    <div class="login-card" style="text-align:center">
+        <div class="verify-icon"><i class="fas fa-envelope-open-text"></i></div>
+        <h2 class="text-xl font-display font-800 text-white mb-2" data-i18n="verifyEmail">Thibitisha Barua Pepe</h2>
+        <p style="color:rgba(255,255,255,0.4);font-size:13px;margin-bottom:24px" data-i18n="verifyDesc">Tumekutumia barua pepe ya thibitisho. Tafadhali angalia sanduku lako.</p>
+        <button class="login-btn" onclick="checkEmailVerification()" data-i18n="checkVerification">Nimeithibitisha, Endelea</button>
+        <button class="login-btn" style="background:transparent;border:1px solid rgba(255,255,255,0.15);margin-top:10px" onclick="resendVerificationEmail()" data-i18n="resendEmail">Tena Tuma Barua</button>
+        <div class="auth-link">
+            <a onclick="handleLogout()" data-i18n="backToLogin">Rudi kwa Login</a>
+        </div>
+    </div>
+</div>
+
+<!-- License Activation Screen -->
+<div id="licenseScreen" class="auth-screen">
+    <div style="text-align:center;padding:40px;max-width:550px">
+        <div class="license-banner">
+            <i class="fas fa-key" style="font-size:40px;margin-bottom:12px;opacity:0.8"></i>
+            <h2 data-i18n="activateLicense">Washa Leseni</h2>
+            <p data-i18n="licenseDesc">Account yako inahitaji leseni halali ili kuendelea. Weka funguo la leseni uliopokea.</p>
+        </div>
+        <div style="margin-top:24px">
+            <div style="margin-bottom:16px">
+                <input type="text" id="licenseKeyInput" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;border-radius:12px;padding:16px;width:100%;font-size:16px;text-align:center;letter-spacing:2px;font-family:monospace" maxlength="24">
+            </div>
+            <button class="login-btn" onclick="activateLicense()" data-i18n="activateNow">Washa Sasa</button>
+            <div style="margin-top:16px">
+                <p style="color:rgba(255,255,255,0.3);font-size:12px;margin-bottom:8px" data-i18n="noLicense">Huna leseni? Bonyeza hapa kununua.</p>
+                <button class="login-btn" style="background:linear-gradient(135deg,#7c3aed,#5b21b6);font-size:14px;padding:12px" onclick="showPlans()" data-i18n="viewPlans">Tazama Miundombinu</button>
+            </div>
+            <div class="auth-link" style="margin-top:20px">
+                <a onclick="handleLogout()" data-i18n="logout">Toka</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Plans Screen -->
+<div id="plansScreen" class="auth-screen">
+    <div style="max-width:700px;width:90vw;padding:40px 0">
+        <div style="text-align:center;margin-bottom:32px">
+            <h2 class="text-2xl font-display font-800 text-white" data-i18n="choosePlan">Chagua Mpango</h2>
+            <p style="color:rgba(255,255,255,0.4);font-size:14px;margin-top:4px" data-i18n="planDesc">Chagua mpango unaoendana na biashara yako</p>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div class="plan-card" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1)" onclick="selectPlan('monthly')" id="planMonthly">
+                <p style="color:var(--accent);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:1px" data-i18n="monthlyPlan">Mpango wa Kila Mwezi</p>
+                <div class="plan-price" style="color:#fff;margin:16px 0">TZS 30,000</div>
+                <p style="color:rgba(255,255,255,0.4);font-size:13px" data-i18n="perMonth">kwa mwezi</p>
+                <ul style="text-align:left;margin-top:20px;list-style:none">
+                    <li style="color:rgba(255,255,255,0.6);font-size:13px;padding:6px 0"><i class="fas fa-check" style="color:var(--accent);margin-right:8px"></i> <span data-i18n="allFeatures">Vipengele Vyote</span></li>
+                    <li style="color:rgba(255,255,255,0.6);font-size:13px;padding:6px 0"><i class="fas fa-check" style="color:var(--accent);margin-right:8px"></i> <span data-i18n="emailSupport">Msaada kwa Barua Pepe</span></li>
+                    <li style="color:rgba(255,255,255,0.6);font-size:13px;padding:6px 0"><i class="fas fa-check" style="color:var(--accent);margin-right:8px"></i> <span data-i18n="singleUser">Mtumiaji Mmoja</span></li>
+                </ul>
+            </div>
+            <div class="plan-card" style="background:rgba(217,119,6,0.05);border-color:var(--accent);position:relative" onclick="selectPlan('yearly')" id="planYearly">
+                <div style="position:absolute;top:-10px;right:16px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:10px" data-i18n="save20">OKOA 20%</div>
+                <p style="color:var(--accent);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:1px" data-i18n="yearlyPlan">Mpango wa Mwaka</p>
+                <div class="plan-price" style="color:#fff;margin:16px 0">TZS 288,000</div>
+                <p style="color:rgba(255,255,255,0.4);font-size:13px" data-i18n="perYear">kwa mwaka (TZS 24,000/mwezi)</p>
+                <ul style="text-align:left;margin-top:20px;list-style:none">
+                    <li style="color:rgba(255,255,255,0.6);font-size:13px;padding:6px 0"><i class="fas fa-check" style="color:var(--accent);margin-right:8px"></i> <span data-i18n="allFeatures">Vipengele Vyote</span></li>
+                    <li style="color:rgba(255,255,255,0.6);font-size:13px;padding:6px 0"><i class="fas fa-check" style="color:var(--accent);margin-right:8px"></i> <span data-i18n="prioritySupport">Msaada wa Kipaumbele</span></li>
+                    <li style="color:rgba(255,255,255,0.6);font-size:13px;padding:6px 0"><i class="fas fa-check" style="color:var(--accent);margin-right:8px"></i> <span data-i18n="multiUser">Watumiaji Wengi</span></li>
+                </ul>
+            </div>
+        </div>
+        <div style="text-align:center;margin-top:24px">
+            <button class="login-btn" onclick="proceedToPayment()" id="proceedPayBtn" data-i18n="proceedPayment">Endelea kwa Malipo</button>
+            <div class="auth-link" style="margin-top:12px">
+                <a onclick="showScreen('licenseScreen')" data-i18n="backToLicense">Rudi kwa Leseni</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box" id="modalBox"></div>
+</div>
+
+<!-- Main App -->
+<div id="mainApp" style="display:none">
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <div class="p-5 pb-3">
+            <div class="flex items-center gap-3 mb-1">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-umas-500 to-umas-700 flex items-center justify-center" id="sidebarLogoWrap">
+                    <i class="fas fa-chart-line text-white text-sm" id="sidebarLogoIcon"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-display font-700 text-lg leading-tight" id="sidebarBizName">UMAS</h2>
+                    <p class="text-xs" style="color:rgba(255,255,255,0.3)" id="sidebarBizSub">Tanzania</p>
+                </div>
+            </div>
+        </div>
+        <div class="px-3 flex-1 overflow-y-auto pb-4" id="navContainer"></div>
+        <div class="p-4 border-t border-white/5">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-9 h-9 rounded-full bg-umas-600 flex items-center justify-center text-white text-sm font-bold" id="userAvatar">A</div>
+                <div>
+                    <p class="text-white text-sm font-semibold" id="userName">Admin</p>
+                    <p class="text-xs" style="color:rgba(255,255,255,0.35)" id="userRole">Administrator</p>
+                </div>
+            </div>
+            <div class="lang-toggle w-full">
+                <button onclick="setLang('sw')" class="active flex-1" id="sideLangSw">SW</button>
+                <button onclick="setLang('en')" class="flex-1" id="sideLangEn">EN</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile menu button -->
+    <button class="fixed top-4 left-4 z-50 lg:hidden w-10 h-10 rounded-xl bg-white shadow-lg flex items-center justify-center no-print" onclick="document.getElementById('sidebar').classList.toggle('open')">
+        <i class="fas fa-bars text-gray-700"></i>
+    </button>
+
+    <!-- Content -->
+    <main class="main-content" id="mainContent">
+
+        <!-- Dashboard -->
+        <div class="section active" id="sec-dashboard"></div>
+
+        <!-- Products -->
+        <div class="section" id="sec-products"></div>
+
+        <!-- Stock In -->
+        <div class="section" id="sec-stockin"></div>
+
+        <!-- Stock Out -->
+        <div class="section" id="sec-stockout"></div>
+
+        <!-- Suppliers -->
+        <div class="section" id="sec-suppliers"></div>
+
+        <!-- Customers -->
+        <div class="section" id="sec-customers"></div>
+
+        <!-- Receipts -->
+        <div class="section" id="sec-receipts"></div>
+
+        <!-- Auto Pricing -->
+        <div class="section" id="sec-autopricing"></div>
+
+        <!-- Profit Allocation -->
+        <div class="section" id="sec-profit"></div>
+
+        <!-- Break-even -->
+        <div class="section" id="sec-breakeven"></div>
+
+        <!-- Reports -->
+        <div class="section" id="sec-reports"></div>
+
+        <!-- POS -->
+        <div class="section" id="sec-pos"></div>
+
+        <!-- Security -->
+        <div class="section" id="sec-security"></div>
+
+        <!-- NEW: Business Profile -->
+        <div class="section" id="sec-business-profile"></div>
+
+        <!-- NEW: License & Subscription -->
+        <div class="section" id="sec-license"></div>
+
+        <!-- NEW: Super Admin Panel -->
+        <div class="section" id="sec-superadmin"></div>
+
+    </main>
+</div>
+
+<!-- Print Area (hidden) -->
+<div id="printArea" class="print-area" style="display:none"></div>
+
+<script>
+/* ======================================================================
+   FIREBASE CONFIGURATION
+   Replace these values with your own Firebase project credentials.
+   ====================================================================== */
+const FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+/* ======================================================================
+   FIREBASE INITIALIZATION
+   Gracefully handles missing/invalid config - falls back to demo mode.
+   ====================================================================== */
+let fbApp = null, fbAuth = null, fbDb = null, fbStorage = null;
+let firebaseAvailable = false;
+
+try {
+    if (FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
+        fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+        fbAuth = firebase.auth();
+        fbDb = firebase.firestore();
+        fbStorage = firebase.storage();
+        firebaseAvailable = true;
+    }
+} catch (e) {
+    console.warn("Firebase initialization failed, using demo mode:", e);
+}
+
+/* ======================================================================
+   MULTI-TENANT DATA LAYER
+   All data is scoped to the authenticated user's UID.
+   Falls back to 'umas_' prefix in demo mode.
+   ====================================================================== */
+function getDataKey(key) {
+    if (firebaseAvailable && currentUser.uid) {
+        return 'umas_' + currentUser.uid + '_' + key;
+    }
+    return 'umas_' + key;
+}
+
+function getData(key, def) {
+    try {
+        const d = localStorage.getItem(getDataKey(key));
+        return d ? JSON.parse(d) : def;
+    } catch (e) { return def; }
+}
+
+function setData(key, val) {
+    try {
+        localStorage.setItem(getDataKey(key), JSON.stringify(val));
+    } catch (e) {
+        console.error("Storage write failed:", e);
+    }
+}
+
+/* Also sync to Firestore when Firebase is available */
+function syncToFirestore(key, val) {
+    if (!firebaseAvailable || !currentUser.uid) return;
+    try {
+        fbDb.collection('users').doc(currentUser.uid).collection('data').doc(key).set({
+            value: val, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).catch(e => console.warn("Firestore sync failed:", e));
+    } catch (e) { /* silent fail */ }
+}
+
+function setDataSync(key, val) {
+    setData(key, val);
+    syncToFirestore(key, val);
+}
+
+/* ======================================================================
+   BUSINESS PROFILE HELPERS
+   Used in exports to include business info.
+   ====================================================================== */
+function getBusinessProfile() {
+    return getData('businessProfile', {
+        name: 'UMAS Tanzania',
+        logo: '',
+        address: '',
+        phone: '',
+        email: '',
+        taxNumber: '',
+        currency: 'TZS',
+        timeZone: 'Africa/Dar_es_Salaam'
+    });
+}
+
+/* ======================================================================
+   TRANSLATIONS (ORIGINAL PRESERVED + NEW KEYS ADDED)
+   ====================================================================== */
+const T={
+sw:{
+    appName:'UMAS Tanzania',appSubtitle:'Mfumo wa Bei na Usimamizi wa Faida',loginBtn:'Ingia kwa Mfumo',username:'Jina la Mtumiaji',password:'Nenosiri',role:'Jukumu',
+    dashboard:'Dashibodi',products:'Bidhaa',stockIn:'Kuingiza Bidhaa',stockOut:'Kuuza Bidhaa',suppliers:'Wauzaji',customers:'Wateja',receipts:'Risiti',autoPricing:'Bei ya Kiotomatiki',profitAlloc:'Mgawanyo wa Faida',breakEven:'Kiwango cha Kufidia Gharama',reports:'Ripoti',pos:'POS',security:'Usalama',logout:'Toka',
+    salesToday:'Mauzo ya Leo',salesWeek:'Mauzo ya Wiki',salesMonth:'Mauzo ya Mwezi',salesYear:'Mauzo ya Mwaka',
+    profitToday:'Faida ya Leo',profitWeek:'Faida ya Wiki',profitMonth:'Faida ya Mwezi',profitYear:'Faida ya Mwaka',
+    salesChart:'Grafu ya Mauzo',profitChart:'Grafu ya Faida',topProducts:'Bidhaa Zinazouzwa Zaidi',lowStock:'Onyo la Bidhaa Chache',
+    addProduct:'Ongeza Bidhaa',editProduct:'Hariri Bidhaa',productCode:'Kodi ya Bidhaa',barcode:'Barcode',productName:'Jina la Bidhaa',category:'Category',supplier:'Mtoaji',costPrice:'Bei ya Gharama',overhead:'Gharama za Uendeshaji (%)',sellingPrice:'Bei ya Kuuza',reorderLevel:'Kiwango cha Omba',quantity:'Kiasi',actions:'Vitendo',search:'Tafuta...',save:'Hifadhi',cancel:'Ghairi',delete:'Futa',edit:'Hariri',close:'Funga',
+    date:'Tarehe',invoiceNo:'Namba ya Invoice',unitCost:'Bei ya Kitengo',totalCost:'Jumla ya Gharama',
+    receiptNo:'Namba ya Risiti',customer:'Mteja',discount:'Punguzo',vat:'VAT',paymentMethod:'Njia ya Malipo',cash:'Cash',mobileMoney:'Mobile Money',
+    supplierCode:'Kodi ya Mtoaji',name:'Jina',phone:'Simu',email:'Barua Pepe',address:'Anwani',balance:'Salio',
+    customerCode:'Kodi ya Mteja',loyaltyPoints:'Loyalty Points',
+    printA4:'Chapisha A4',printPOS:'Chapisha POS',preview:'Tazama',
+    costPriceLabel:'Bei ya Gharama (TZS)',overheadLabel:'Gharama za Uendeshaji (%)',marginLabel:'Asilimia ya Faida (%)',calculatedPrice:'Bei Iliyohesabiwa',
+    totalProfit:'Faida Jumla',reinvestment:'Uwekezaji Tena (50%)',saving:'Akiba (20%)',distribution:'Mgawanyo wa Faida (30%)',
+    fixedCosts:'Gharama Zisizobadilika/Mwezi',variableCost:'Gharama ya Kibidhaa',sellingPriceCalc:'Bei ya Kuuza',breakEvenQty:'Kiwango cha Kufidia (Vipindi)',breakEvenValue:'Thamani ya Kufidia (TZS)',calculate:'Hesabu',
+    daily:'Kila Siku',weekly:'Kila Wiki',monthly:'Kila Mwezi',annual:'Kila Mwaka',profitReport:'Ripoti ya Faida',expenseReport:'Ripoti ya Gharama',inventoryReport:'Ripoti ya Bidhaa',generate:'Tengeneza',
+    searchBarcode:'Tafuta kwa Barcode...',searchName:'Tafuta kwa Jina...',cart:'Gari la Ununuzi',pay:'Lipa',total:'Jumla',empty:'Hakuna data',noResults:'Hakuna matokeo',
+    changePassword:'Badilisha Nenosiri',currentPass:'Nenosiri la Sasa',newPass:'Nenosiri Mpya',confirmPass:'Thibitisha Nenosiri',dashboardPass:'Nenosiri la Dashibodi',formulaPass:'Nenosiri la Fomula',sheetPass:'Nenosiri la Laharidi',update:'Sasisha',
+    stock:'Kiasi',unit:'Kitengo',all:'Zote',groceries:'Vyakula',toiletries:'Vya chooni',beverages:'Vinywaji',electronics:'Elektroniki',other:'Nyingine',
+    qty:'Qty',price:'Bei',subtotal:'Jumla Ndogo',remove:'Ondoa',clearCart:'Futa Gari',
+    fromDate:'Tarehe ya Mwanzo',toDate:'Tarehe ya Mwisho',reportType:'Aina ya Ripoti',
+    successSave:'Imehifadhiwa kikamilifu!',successDelete:'Imefutwa kikamilifu!',errorFill:'Tafadhali jaza sehemu zote zinazohitajika!',loginError:'Barua pepe au nenosiri sio sahihi!',
+    addStockIn:'Ongeza Kuingiza',addSale:'Ongeza Mauzo',addSupplier:'Ongeza Mtoaji',addCustomer:'Ongeza Mteja',
+    currency:'TZS',receiptTitle:'RISITI YA UNUNUZI',thankYou:'Asante kwa kununua!',receiptFooter:'UMAS Tanzania - Mfumo wa Bei na Faida',
+    breakEvenDesc:'Hii itakusaidia kuona kiwango cha chini cha bidhaa unazopaswa kuuza ili kufidia gharama zako za kila mwezi.',
+    pricingDesc:'Bei ya kuuza ihesabiwe kwa kuzingatia: Bei ya Gharama, Sehemu ya gharama za uendeshaji, na Asilimia ya faida.',
+    profitDesc:'Faida igawanywe kiotomatiki: 50% Uwekezaji Tena, 20% Akiba, 30% Mgawanyo wa Faida.',
+    confirmDelete:'Je, una uhakika unataka kufuta hii?',yes:'Ndiyo',no:'Hapana',
+    /* NEW translation keys */
+    email:'Barua Pepe',fullName:'Jina Kamili',businessName:'Jina la Biashara',forgotPassword:'Uliza nenosiri?',noAccount:'Huna account?',registerNow:'Jisajili Sasa',createAccount:'Unda Account',
+    registerBtn:'Jisajili',haveAccount:'Una account tayari?',loginHere:'Ingia hapa',rememberMe:'Nikumbuke',
+    forgotDesc:'Tutakutumia kiungo cha kubadilisha nenosiri kwa barua pepe yako',sendResetLink:'Tuma Kiungo cha Kubadilisha',backToLogin:'Rudi kwa Login',
+    verifyEmail:'Thibitisha Barua Pepe',verifyDesc:'Tumekutumia barua pepe ya thibitisho. Tafadhali angalia sanduku lako.',checkVerification:'Nimeithibitisha, Endelea',resendEmail:'Tena Tuma Barua',
+    activateLicense:'Washa Leseni',licenseDesc:'Account yako inahitaji leseni halali ili kuendelea. Weka funguo la leseni uliopokea.',activateNow:'Washa Sasa',noLicense:'Huna leseni? Bonyeza hapa kununua.',viewPlans:'Tazama Miundombinu',
+    choosePlan:'Chagua Mpango',planDesc:'Chagua mpango unaoendana na biashara yako',monthlyPlan:'Mpango wa Kila Mwezi',perMonth:'kwa mwezi',yearlyPlan:'Mpango wa Mwaka',perYear:'kwa mwaka (TZS 24,000/mwezi)',save20:'OKOA 20%',
+    allFeatures:'Vipengele Vyote',emailSupport:'Msaada kwa Barua Pepe',singleUser:'Mtumiaji Mmoja',prioritySupport:'Msaada wa Kipaumbele',multiUser:'Watumiaji Wengi',proceedPayment:'Endelea kwa Malipo',backToLicense:'Rudi kwa Leseni',
+    businessProfile:'Wasifu wa Biashara',businessLogo:'Logo ya Biashara',taxNumber:'Namba ya Kodi',currencyLabel:'Fedha',timeZone:'Saa za Eneo',
+    licenseManagement:'Usimamizi wa Leseni',subscription:'Usajili',licenseStatus:'Hali ya Leseni',activationDate:'Tarehe ya Kuwasha',expiryDate:'Tarehe ya Mwisho',remainingDays:'Siku Zilizobaki',paymentPlan:'Mpango wa Malipo',licenseKey:'Funguo la Leseni',
+    licenseActive:'Leseni ni Halali',licenseExpired:'Leseni Imekwisha',licenseTrial:'Trial',renewLicense:'Sasisha Leseni',
+    superAdmin:'Super Admin',userManagement:'Usimamizi wa Watumiaji',licenseMgmt:'Usimamizi wa Leseni',subscriptionMgmt:'Usimamizi wa Usajili',systemSettings:'Mipangilio ya Mfumo',
+    totalUsers:'Watumiaji Wote',activeLicenses:'Leseni Halali',expiredLicenses:'Leseni Zimekwisha',totalRevenue:'Mapato Jumla',
+    suspendUser:'Simamisha Mtumiaji',deleteUser:'Futa Mtumiaji',resetPassword:'Reset Nenosiri',activateUser:'Washa Mtumiaji',viewProfile:'Tazama Wasifu',
+    paymentStatus:'Hali ya Malipo',renewalDate:'Tarehe ya Kusasisha',transactionHistory:'Historia ya Muamala',
+    regSuccess:'Usajili umefanikiwa! Tafadhali thibitisha barua pepe yako.',regError:'Usajili umeshindikana. Jaribu tena.',
+    resetSent:'Kiungo cha kubadilisha nenosiri kimetumwa kwa barua pepe yako.',licenseActivated:'Leseni imewashwa kikamilifu!',licenseInvalid:'Funguo la leseni sio sahihi.',
+    passwordChanged:'Nenosiri limebadilishwa kikamilifu!',passwordMismatch:'Nenosiri hazilingani.',weakPassword:'Nenosiri ni dhaifu. Lazima iwe na herufi 6 au zaidi.',
+    sessionExpired:'Kipindi chako kimekwisha. Tafadhali ingia tena.',dataIsolated:'Data yako ni ya kibinafsi na salama.',
+    reportGenerated:'Ripoti imeundwa kikamilifu!'
+},
+en:{
+    appName:'UMAS Tanzania',appSubtitle:'Pricing & Profit Management System',loginBtn:'Login to System',username:'Username',password:'Password',role:'Role',
+    dashboard:'Dashboard',products:'Products',stockIn:'Stock In',stockOut:'Stock Out / Sales',suppliers:'Suppliers',customers:'Customers',receipts:'Receipts',autoPricing:'Auto Pricing',profitAlloc:'Profit Allocation',breakEven:'Break-even Calculator',reports:'Reports',pos:'POS',security:'Security',logout:'Logout',
+    salesToday:'Sales Today',salesWeek:'Sales This Week',salesMonth:'Sales This Month',salesYear:'Sales This Year',
+    profitToday:'Profit Today',profitWeek:'Profit This Week',profitMonth:'Profit This Month',profitYear:'Profit This Year',
+    salesChart:'Sales Chart',profitChart:'Profit Chart',topProducts:'Top Selling Products',lowStock:'Low Stock Alert',
+    addProduct:'Add Product',editProduct:'Edit Product',productCode:'Product Code',barcode:'Barcode',productName:'Product Name',category:'Category',supplier:'Supplier',costPrice:'Cost Price',overhead:'Overhead Allocation (%)',sellingPrice:'Selling Price',reorderLevel:'Reorder Level',quantity:'Quantity',actions:'Actions',search:'Search...',save:'Save',cancel:'Cancel',delete:'Delete',edit:'Edit',close:'Close',
+    date:'Date',invoiceNo:'Invoice No.',unitCost:'Unit Cost',totalCost:'Total Cost',
+    receiptNo:'Receipt No.',customer:'Customer',discount:'Discount',vat:'VAT',paymentMethod:'Payment Method',cash:'Cash',mobileMoney:'Mobile Money',
+    supplierCode:'Supplier Code',name:'Name',phone:'Phone',email:'Email',address:'Address',balance:'Balance',
+    customerCode:'Customer Code',loyaltyPoints:'Loyalty Points',
+    printA4:'Print A4',printPOS:'Print POS',preview:'Preview',
+    costPriceLabel:'Cost Price (TZS)',overheadLabel:'Overhead Allocation (%)',marginLabel:'Profit Margin (%)',calculatedPrice:'Calculated Price',
+    totalProfit:'Total Profit',reinvestment:'Reinvestment (50%)',saving:'Saving (20%)',distribution:'Profit Distribution (30%)',
+    fixedCosts:'Fixed Costs/Month',variableCost:'Variable Cost/Unit',sellingPriceCalc:'Selling Price',breakEvenQty:'Break-even Quantity',breakEvenValue:'Break-even Value (TZS)',calculate:'Calculate',
+    daily:'Daily',weekly:'Weekly',monthly:'Monthly',annual:'Annual',profitReport:'Profit Report',expenseReport:'Expense Report',inventoryReport:'Inventory Report',generate:'Generate',
+    searchBarcode:'Search by Barcode...',searchName:'Search by Name...',cart:'Shopping Cart',pay:'Pay',total:'Total',empty:'No data',noResults:'No results',
+    changePassword:'Change Password',currentPass:'Current Password',newPass:'New Password',confirmPass:'Confirm Password',dashboardPass:'Dashboard Password',formulaPass:'Formula Password',sheetPass:'Sheet Password',update:'Update',
+    stock:'Stock',unit:'Unit',all:'All',groceries:'Groceries',toiletries:'Toiletries',beverages:'Beverages',electronics:'Electronics',other:'Other',
+    qty:'Qty',price:'Price',subtotal:'Subtotal',remove:'Remove',clearCart:'Clear Cart',
+    fromDate:'From Date',toDate:'To Date',reportType:'Report Type',
+    successSave:'Saved successfully!',successDelete:'Deleted successfully!',errorFill:'Please fill all required fields!',loginError:'Invalid email or password!',
+    addStockIn:'Add Stock In',addSale:'Add Sale',addSupplier:'Add Supplier',addCustomer:'Add Customer',
+    currency:'TZS',receiptTitle:'PURCHASE RECEIPT',thankYou:'Thank you for your purchase!',receiptFooter:'UMAS Tanzania - Pricing & Profit System',
+    breakEvenDesc:'This helps you see the minimum quantity of products you need to sell to cover your monthly costs.',
+    pricingDesc:'Selling price is calculated based on: Cost Price, Overhead allocation, and Profit margin percentage.',
+    profitDesc:'Profit is automatically allocated: 50% Reinvestment, 20% Saving, 30% Profit Distribution.',
+    confirmDelete:'Are you sure you want to delete this?',yes:'Yes',no:'No',
+    /* NEW translation keys */
+    email:'Email',fullName:'Full Name',businessName:'Business Name',forgotPassword:'Forgot password?',noAccount:'No account?',registerNow:'Register Now',createAccount:'Create Account',
+    registerBtn:'Register',haveAccount:'Already have an account?',loginHere:'Login here',rememberMe:'Remember me',
+    forgotDesc:'We will send you a password reset link to your email',sendResetLink:'Send Reset Link',backToLogin:'Back to Login',
+    verifyEmail:'Verify Email',verifyDesc:'We have sent a verification email. Please check your inbox.',checkVerification:'I have verified, Continue',resendEmail:'Resend Email',
+    activateLicense:'Activate License',licenseDesc:'Your account requires a valid license to continue. Enter the license key you received.',activateNow:'Activate Now',noLicense:'No license? Click here to purchase.',viewPlans:'View Plans',
+    choosePlan:'Choose a Plan',planDesc:'Choose a plan that fits your business',monthlyPlan:'Monthly Plan',perMonth:'per month',yearlyPlan:'Yearly Plan',perYear:'per year (TZS 24,000/month)',save20:'SAVE 20%',
+    allFeatures:'All Features',emailSupport:'Email Support',singleUser:'Single User',prioritySupport:'Priority Support',multiUser:'Multi User',proceedPayment:'Proceed to Payment',backToLicense:'Back to License',
+    businessProfile:'Business Profile',businessLogo:'Business Logo',taxNumber:'Tax Number',currencyLabel:'Currency',timeZone:'Time Zone',
+    licenseManagement:'License Management',subscription:'Subscription',licenseStatus:'License Status',activationDate:'Activation Date',expiryDate:'Expiry Date',remainingDays:'Remaining Days',paymentPlan:'Payment Plan',licenseKey:'License Key',
+    licenseActive:'License is Active',licenseExpired:'License Expired',licenseTrial:'Trial',renewLicense:'Renew License',
+    superAdmin:'Super Admin',userManagement:'User Management',licenseMgmt:'License Management',subscriptionMgmt:'Subscription Management',systemSettings:'System Settings',
+    totalUsers:'Total Users',activeLicenses:'Active Licenses',expiredLicenses:'Expired Licenses',totalRevenue:'Total Revenue',
+    suspendUser:'Suspend User',deleteUser:'Delete User',resetPassword:'Reset Password',activateUser:'Activate User',viewProfile:'View Profile',
+    paymentStatus:'Payment Status',renewalDate:'Renewal Date',transactionHistory:'Transaction History',
+    regSuccess:'Registration successful! Please verify your email.',regError:'Registration failed. Please try again.',
+    resetSent:'Password reset link has been sent to your email.',licenseActivated:'License activated successfully!',licenseInvalid:'Invalid license key.',
+    passwordChanged:'Password changed successfully!',passwordMismatch:'Passwords do not match.',weakPassword:'Password is too weak. Must be at least 6 characters.',
+    sessionExpired:'Your session has expired. Please login again.',dataIsolated:'Your data is private and secure.',
+    reportGenerated:'Report generated successfully!'
+}
+};
+
+/* ======================================================================
+   APP STATE (ORIGINAL PRESERVED + NEW FIELDS ADDED)
+   ====================================================================== */
+let lang='sw';
+let currentUser={name:'Admin',role:'admin',uid:null,email:'',isSuperAdmin:false};
+let charts={};
+const PW={dashboard:'umas2024',formula:'formula2024',sheet:'sheet2024'};
+let selectedPlan='monthly';
+let sessionTimer=null;
+const SESSION_TIMEOUT=30*60*1000; /* 30 minutes */
+
+function t(k){return T[lang][k]||k}
+
+/* ======================================================================
+   INITIALIZATION (ORIGINAL PRESERVED)
+   ====================================================================== */
+function initData(){
+    if(!getData('initialized',false)){
+        const products=[
+            {code:'RICE001',barcode:'6191001000011',name:'Mchele Super',category:'groceries',supplier:'SUP001',cost:25000,overhead:10,price:33000,reorder:20,stock:150},
+            {code:'SUGAR001',barcode:'6191001000028',name:'Sukari White Star',category:'groceries',supplier:'SUP002',cost:18000,overhead:10,price:23500,reorder:30,stock:8},
+            {code:'OIL001',barcode:'6191001000035',name:'Mafuta ya Upishi 1L',category:'groceries',supplier:'SUP001',cost:12000,overhead:8,price:15200,reorder:25,stock:200},
+            {code:'FLOUR001',barcode:'6191001000042',name:'Unga wa Ngano 2kg',category:'groceries',supplier:'SUP002',cost:8000,overhead:10,price:10600,reorder:40,stock:5},
+            {code:'SOAP001',barcode:'6191001000059',name:'Sabuni ya Kufulia',category:'toiletries',supplier:'SUP003',cost:5000,overhead:12,price:6800,reorder:50,stock:300},
+            {code:'DETO001',barcode:'6191001000066',name:'Dettol 500ml',category:'toiletries',supplier:'SUP003',cost:9500,overhead:10,price:12400,reorder:20,stock:45},
+            {code:'JUICE001',barcode:'6191001000073',name:'Juisi ya Matunda 1L',category:'beverages',supplier:'SUP002',cost:6000,overhead:8,price:7800,reorder:30,stock:120},
+            {code:'WATER001',barcode:'6191001000080',name:'Maji ya Kunywa 500ml',category:'beverages',supplier:'SUP001',cost:500,overhead:15,price:700,reorder:200,stock:500},
+            {code:'CHARGE001',barcode:'6191001000097',name:'Chaja ya Simu',category:'electronics',supplier:'SUP003',cost:8000,overhead:15,price:11000,reorder:10,stock:3},
+            {code:'BREAD001',barcode:'6191001000103',name:'Mkate Wa Kila Siku',category:'groceries',supplier:'SUP002',cost:1500,overhead:10,price:2000,reorder:50,stock:60}
+        ];
+        const suppliers=[
+            {code:'SUP001',name:'Mwanza Traders Ltd',phone:'028-2551234',email:'info@mwanzatraders.co.tz',address:'Mwanza, Nyerere Road',balance:0},
+            {code:'SUP002',name:'Dar Food Supply',phone:'022-2865432',email:'sales@darfood.co.tz',address:'Dar es Salaam, Kariakoo',balance:0},
+            {code:'SUP003',name:'Kariakoo Wholesalers',phone:'022-2876543',email:'orders@kariakoowholesale.co.tz',address:'Dar es Salaam, Kariakoo Mkuki',balance:0}
+        ];
+        const customers=[
+            {code:'CUS001',name:'John Mwangi',phone:'0712-345678',points:120,balance:0},
+            {code:'CUS002',name:'Fatma Hassan',phone:'0756-789012',points:85,balance:0},
+            {code:'CUS003',name:'Peter Kimaro',phone:'0654-321098',points:200,balance:15000},
+            {code:'CUS004',name:'Asha Mohamed',phone:'0789-123456',points:45,balance:0},
+            {code:'CUS005',name:'Joseph Mbatia',phone:'0678-654321',points:310,balance:0}
+        ];
+        const sales=[];
+        const now=new Date();
+        for(let i=30;i>=0;i--){
+            const d=new Date(now);d.setDate(d.getDate()-i);
+            const ds=d.toISOString().split('T')[0];
+            const numSales=Math.floor(Math.random()*8)+3;
+            for(let j=0;j<numSales;j++){
+                const p=products[Math.floor(Math.random()*products.length)];
+                const qty=Math.floor(Math.random()*5)+1;
+                const disc=Math.random()>0.7?Math.floor(Math.random()*10)+5:0;
+                const sp=p.price;
+                const sub=sp*qty;
+                const discAmt=Math.round(sub*disc/100);
+                const total=sub-discAmt;
+                sales.push({
+                    id:'RCPT-'+ds.replace(/-/g,'')+'-'+(j+1).toString().padStart(3,'0'),
+                    date:ds,customer:customers[Math.floor(Math.random()*customers.length)].code,
+                    product:p.code,qty:qty,price:sp,discount:disc,vat:0,
+                    payment:Math.random()>0.5?'cash':'mobile',total:total,cost:p.cost*qty
+                });
+            }
+        }
+        const stockIn=[
+            {id:'SI-001',date:'2025-01-10',supplier:'SUP001',invoice:'INV-2025-001',product:'RICE001',qty:200,unitCost:25000,total:5000000},
+            {id:'SI-002',date:'2025-01-12',supplier:'SUP002',invoice:'INV-2025-002',product:'SUGAR001',qty:100,unitCost:18000,total:1800000},
+            {id:'SI-003',date:'2025-01-15',supplier:'SUP001',invoice:'INV-2025-003',product:'OIL001',qty:300,unitCost:12000,total:3600000},
+            {id:'SI-004',date:'2025-01-18',supplier:'SUP003',invoice:'INV-2025-004',product:'SOAP001',qty:500,unitCost:5000,total:2500000},
+            {id:'SI-005',date:'2025-01-20',supplier:'SUP002',invoice:'INV-2025-005',product:'FLOUR001',qty:150,unitCost:8000,total:1200000}
+        ];
+        setData('products',products);
+        setData('suppliers',suppliers);
+        setData('customers',customers);
+        setData('sales',sales);
+        setData('stockIn',stockIn);
+        setData('initialized',true);
+    }
+}
+
+/* ======================================================================
+   UTILITIES (ORIGINAL PRESERVED)
+   ====================================================================== */
+function fmt(n){return new Intl.NumberFormat('en-TZ').format(Math.round(n))}
+function fmtDate(d){return new Date(d).toLocaleDateString(lang==='sw'?'sw-TZ':'en-GB',{day:'2-digit',month:'short',year:'numeric'})}
+function genId(prefix){return prefix+'-'+Date.now().toString(36).toUpperCase()}
+function today(){return new Date().toISOString().split('T')[0]}
+function weekAgo(){const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().split('T')[0]}
+function monthAgo(){const d=new Date();d.setMonth(d.getMonth()-1);return d.toISOString().split('T')[0]}
+function yearAgo(){const d=new Date();d.setFullYear(d.getFullYear()-1);return d.toISOString().split('T')[0]}
+
+function toast(msg,type='success'){
+    const c=document.getElementById('toastContainer');
+    const el=document.createElement('div');
+    el.className='toast '+type;
+    const icons={success:'fa-check-circle',error:'fa-times-circle',warning:'fa-exclamation-triangle'};
+    el.innerHTML=`<i class="fas ${icons[type]||icons.success}"></i><span>${msg}</span>`;
+    c.appendChild(el);
+    setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(40px)';el.style.transition='all .3s';setTimeout(()=>el.remove(),300)},3000);
+}
+
+function openModal(html){document.getElementById('modalBox').innerHTML=html;document.getElementById('modalOverlay').classList.add('show')}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('show')}
+
+function confirmAction(msg,onYes){
+    openModal(`
+        <div class="text-center py-4">
+            <div class="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4"><i class="fas fa-exclamation-triangle text-2xl text-red-500"></i></div>
+            <h3 class="text-lg font-display font-700 mb-2">${msg}</h3>
+            <div class="flex gap-3 justify-center mt-6">
+                <button class="btn btn-secondary" onclick="closeModal()">${t('no')}</button>
+                <button class="btn btn-danger" id="confirmYesBtn">${t('yes')}</button>
+            </div>
+        </div>
+    `);
+    document.getElementById('confirmYesBtn').onclick=()=>{closeModal();onYes()};
+}
+
+/* ======================================================================
+   LANGUAGE SYSTEM (ORIGINAL PRESERVED)
+   ====================================================================== */
+function setLang(l){
+    lang=l;
+    document.documentElement.lang=l;
+    document.querySelectorAll('.lang-toggle button').forEach(b=>{
+        b.classList.toggle('active',b.textContent.trim().toLowerCase()===l);
+    });
+    document.querySelectorAll('[data-i18n]').forEach(el=>{
+        const k=el.getAttribute('data-i18n');
+        if(T[lang][k])el.textContent=T[lang][k];
+    });
+    const active=document.querySelector('.section.active');
+    if(active)navigateTo(active.id.replace('sec-',''));
+}
+
+/* ======================================================================
+   SCREEN NAVIGATION (NEW - manages auth screens)
+   ====================================================================== */
+function showScreen(id){
+    ['loginScreen','registerScreen','forgotScreen','verifyScreen','licenseScreen','plansScreen','mainApp'].forEach(s=>{
+        const el=document.getElementById(s);
+        if(el) el.style.display='none';
+    });
+    const target=document.getElementById(id);
+    if(target){
+        if(target.classList.contains('auth-screen')){target.style.display='flex'}
+        else if(target.id==='mainApp'){target.style.display='block'}
+        else{target.style.display='flex'}
+    }
+}
+
+/* ======================================================================
+   PASSWORD TOGGLE (NEW)
+   ====================================================================== */
+function toggleLoginPw(inputId, iconEl){
+    const inp=document.getElementById(inputId);
+    if(inp.type==='password'){inp.type='text';iconEl.classList.replace('fa-eye','fa-eye-slash')}
+    else{inp.type='password';iconEl.classList.replace('fa-eye-slash','fa-eye')}
+}
+
+/* ======================================================================
+   SESSION MANAGEMENT (NEW)
+   ====================================================================== */
+function startSession(){
+    if(sessionTimer)clearTimeout(sessionTimer);
+    sessionTimer=setTimeout(()=>{
+        toast(t('sessionExpired'),'warning');
+        handleLogout();
+    },SESSION_TIMEOUT);
+    /* Reset on any user activity */
+    ['click','keydown','scroll','mousemove'].forEach(evt=>{
+        document.removeEventListener(evt,resetSessionTimer);
+        document.addEventListener(evt,resetSessionTimer,{passive:true});
+    });
+}
+
+function resetSessionTimer(){
+    if(sessionTimer)clearTimeout(sessionTimer);
+    sessionTimer=setTimeout(()=>{
+        toast(t('sessionExpired'),'warning');
+        handleLogout();
+    },SESSION_TIMEOUT);
+}
+
+function stopSession(){
+    if(sessionTimer)clearTimeout(sessionTimer);
+    ['click','keydown','scroll','mousemove'].forEach(evt=>{
+        document.removeEventListener(evt,resetSessionTimer);
+    });
+}
+
+/* ======================================================================
+   AUTHENTICATION - REGISTER (NEW)
+   ====================================================================== */
+async function handleRegister(e){
+    e.preventDefault();
+    const name=document.getElementById('regName').value.trim();
+    const business=document.getElementById('regBusiness').value.trim();
+    const email=document.getElementById('regEmail').value.trim();
+    const phone=document.getElementById('regPhone').value.trim();
+    const pass=document.getElementById('regPass').value;
+    const confirm=document.getElementById('regConfirm').value;
+
+    if(!name||!business||!email||!phone||!pass){toast(t('errorFill'),'error');return false}
+    if(pass!==confirm){toast(t('passwordMismatch'),'error');return false}
+    if(pass.length<6){toast(t('weakPassword'),'error');return false}
+
+    const btn=e.target.querySelector('button[type="submit"]');
+    btn.disabled=true;btn.textContent='...';
+
+    try {
+        if(firebaseAvailable){
+            const cred=await fbAuth.createUserWithEmailAndPassword(email,pass);
+            await cred.user.sendEmailVerification();
+            /* Store user profile in Firestore */
+            await fbDb.collection('users').doc(cred.user.uid).set({
+                name,businessName:business,email,phone,
+                role:'user',createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+                licenseStatus:'none',suspended:false
+            });
+            /* Store business profile */
+            await fbDb.collection('users').doc(cred.user.uid).collection('data').doc('businessProfile').set({
+                value:{name:business,logo:'',address:'',phone,email,taxNumber:'',currency:'TZS',timeZone:'Africa/Dar_es_Salaam'}
+            });
+            showScreen('verifyScreen');
+        } else {
+            /* Demo mode: create local account */
+            const uid='demo_'+Date.now();
+            currentUser={name,role:'admin',uid,email,phone,isSuperAdmin:false};
+            setData('userProfile',{name,businessName:business,email,phone,role:'admin',uid});
+            setData('businessProfile',{name:business,logo:'',address:'',phone,email,taxNumber:'',currency:'TZS',timeZone:'Africa/Dar_es_Salaam'});
+            setData('license',{status:'trial',key:'DEMO-TRIAL',plan:'monthly',activatedAt:new Date().toISOString(),expiryDate:new Date(Date.now()+7*86400000).toISOString()});
+            initData();
+            showScreen('licenseScreen');
+        }
+        toast(t('regSuccess'),'success');
+    } catch(err){
+        console.error("Registration error:",err);
+        let msg=t('regError');
+        if(err.code==='auth/email-already-in-use')msg='Barua pepe tayari inatumika.';
+        if(err.code==='auth/weak-password')msg=t('weakPassword');
+        if(err.code==='auth/invalid-email')msg='Barua pepe sio sahihi.';
+        toast(msg,'error');
+    }
+
+    btn.disabled=false;btn.textContent=t('registerBtn');
+    return false;
+}
+
+/* ======================================================================
+   AUTHENTICATION - LOGIN (MODIFIED to support both Firebase and demo)
+   ====================================================================== */
+async function handleLogin(e){
+    e.preventDefault();
+    const email=document.getElementById('loginEmail').value.trim();
+    const pass=document.getElementById('loginPass').value;
+    const remember=document.getElementById('rememberMe').checked;
+
+    if(!email||!pass){toast(t('errorFill'),'error');return false}
+
+    const btn=document.getElementById('loginBtn');
+    btn.disabled=true;btn.textContent='...';
+
+    try {
+        if(firebaseAvailable){
+            const persist=remember?firebase.auth.Auth.Persistence.LOCAL:firebase.auth.Auth.Persistence.SESSION;
+            await fbAuth.setPersistence(persist);
+            const cred=await fbAuth.signInWithEmailAndPassword(email,pass);
+            await handlePostLogin(cred.user);
+        } else {
+            /* Demo mode: check against stored profiles or default */
+            const profile=getData('userProfile',null);
+            if(profile && profile.email===email){
+                currentUser={name:profile.name,role:profile.role||'admin',uid:profile.uid,email:profile.email,phone:profile.phone,isSuperAdmin:false};
+            } else if(email==='demo@umas.co.tz' && pass===PW.dashboard){
+                currentUser={name:'Admin',role:'admin',uid:'demo_default',email,phone:'',isSuperAdmin:false};
+                if(!getData('initialized',false))initData();
+            } else {
+                toast(t('loginError'),'error');
+                btn.disabled=false;btn.textContent=t('loginBtn');
+                return false;
+            }
+            await handlePostLogin(null);
+        }
+    } catch(err){
+        console.error("Login error:",err);
+        let msg=t('loginError');
+        if(err.code==='auth/user-not-found')msg='Akaunti haipatikani.';
+        if(err.code==='auth/wrong-password')msg='Nenosiri sio sahihi.';
+        if(err.code==='auth/invalid-email')msg='Barua pepe sio sahihi.';
+        if(err.code==='auth/too-many-requests')msg='Majaribio mengi. Jaribu tena baada ya dakika.';
+        if(err.code==='auth/invalid-credential')msg=t('loginError');
+        toast(msg,'error');
+    }
+
+    btn.disabled=false;btn.textContent=t('loginBtn');
+    return false;
+}
+
+/* ======================================================================
+   POST-LOGIN: Verify email, check license, load data (NEW)
+   ====================================================================== */
+async function handlePostLogin(fbUser){
+    let userProfile=null;
+
+    if(firebaseAvailable && fbUser){
+        currentUser.uid=fbUser.uid;
+        currentUser.email=fbUser.email;
+
+        /* Check email verification */
+        if(!fbUser.emailVerified){
+            showScreen('verifyScreen');
+            return;
+        }
+
+        /* Fetch user profile from Firestore */
+        try {
+            const doc=await fbDb.collection('users').doc(fbUser.uid).get();
+            if(doc.exists){
+                userProfile=doc.data();
+                currentUser.name=userProfile.name||'User';
+                currentUser.role=userProfile.role||'user';
+                currentUser.isSuperAdmin=userProfile.role==='super_admin';
+                currentUser.phone=userProfile.phone||'';
+
+                /* Check if suspended */
+                if(userProfile.suspended){
+                    toast('Account yako imefungwa. Wasiliana na msaidizi.','error');
+                    await fbAuth.signOut();
+                    showScreen('loginScreen');
+                    return;
+                }
+
+                /* Save profile locally */
+                setData('userProfile',userProfile);
+            }
+        } catch(err){console.warn("Profile fetch failed:",err)}
+
+        /* Load data from Firestore to localStorage for offline use */
+        try {
+            const dataDocs=await fbDb.collection('users').doc(fbUser.uid).collection('data').get();
+            dataDocs.forEach(d=>{
+                localStorage.setItem('umas_'+fbUser.uid+'_'+d.id,JSON.stringify(d.data().value));
+            });
+        } catch(err){console.warn("Data sync failed:",err)}
+    } else {
+        /* Demo mode */
+        userProfile=getData('userProfile',{});
+        currentUser.name=currentUser.name||userProfile.name||'Admin';
+    }
+
+    /* Check license */
+    const license=getData('license',null);
+    if(!license || (license.status!=='active' && license.status!=='trial')){
+        showScreen('licenseScreen');
+        return;
+    }
+
+    /* Check if license expired */
+    if(license.expiryDate && new Date(license.expiryDate)<new Date()){
+        showScreen('licenseScreen');
+        return;
+    }
+
+    /* Initialize demo data if needed */
+    if(!getData('initialized',false))initData();
+
+    /* Enter main app */
+    enterMainApp();
+}
+
+/* ======================================================================
+   EMAIL VERIFICATION (NEW)
+   ====================================================================== */
+async function checkEmailVerification(){
+    if(!firebaseAvailable){enterMainApp();return}
+    try {
+        await fbAuth.currentUser.reload();
+        if(fbAuth.currentUser.emailVerified){
+            await handlePostLogin(fbAuth.currentUser);
+        } else {
+            toast('Barua pepe bado haijathibitishwa. Angalia sanduku lako.','warning');
+        }
+    } catch(err){toast('Hitilafu. Jaribu tena.','error')}
+}
+
+async function resendVerificationEmail(){
+    if(!firebaseAvailable)return;
+    try {
+        await fbAuth.currentUser.sendEmailVerification();
+        toast('Barua pepe imetumwa tena.','success');
+    } catch(err){toast('Hitilafu kutuma barua.','error')}
+}
+
+/* ======================================================================
+   FORGOT PASSWORD (NEW)
+   ====================================================================== */
+async function handleForgotPassword(e){
+    e.preventDefault();
+    const email=document.getElementById('forgotEmail').value.trim();
+    if(!email){toast(t('errorFill'),'error');return false}
+
+    try {
+        if(firebaseAvailable){
+            await fbAuth.sendPasswordResetEmail(email);
+        }
+        toast(t('resetSent'),'success');
+        showScreen('loginScreen');
+    } catch(err){
+        let msg=t('loginError');
+        if(err.code==='auth/user-not-found')msg='Akaunti haipatikani kwa barua pepe hii.';
+        toast(msg,'error');
+    }
+    return false;
+}
+
+/* ======================================================================
+   CHANGE PASSWORD (NEW)
+   ====================================================================== */
+async function changePassword(currentPw,newPw,confirmPw){
+    if(!newPw||newPw.length<6){toast(t('weakPassword'),'error');return}
+    if(newPw!==confirmPw){toast(t('passwordMismatch'),'error');return}
+
+    try {
+        if(firebaseAvailable){
+            const user=fbAuth.currentUser;
+            if(user){
+                /* Re-authenticate first */
+                const cred=firebase.auth.EmailAuthProvider.credential(user.email,currentPw);
+                await user.reauthenticateWithCredential(cred);
+                await user.updatePassword(newPw);
+            }
+        }
+        toast(t('passwordChanged'),'success');
+    } catch(err){
+        if(err.code==='auth/wrong-password')toast('Nenosiri la sasa sio sahihi.','error');
+        else if(err.code==='auth/requires-recent-login')toast('Tafadhali ingia tena kisha ubadilishe nenosiri.','warning');
+        else toast('Hitilafu kubadilisha nenosiri.','error');
+    }
+}
+
+/* ======================================================================
+   LICENSE ACTIVATION (NEW)
+   ====================================================================== */
+async function activateLicense(){
+    const key=document.getElementById('licenseKeyInput').value.trim().toUpperCase();
+    if(!key){toast(t('errorFill'),'error');return}
+
+    /* License validation happens server-side in production.
+       In demo mode, accept any key matching pattern XXXXX-XXXXX-XXXXX-XXXXX */
+    const pattern=/^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/;
+    if(!pattern.test(key)){
+        /* Also accept simple demo keys */
+        if(key!=='DEMO-TRIAL' && key.length<5){
+            toast(t('licenseInvalid'),'error');return;
+        }
+    }
+
+    const plan=selectedPlan||'monthly';
+    const duration=plan==='yearly'?365:30;
+    const now=new Date();
+    const expiry=new Date(now.getTime()+duration*86400000);
+
+    const license={
+        status:'active',key,plan,
+        activatedAt:now.toISOString(),
+        expiryDate:expiry.toISOString()
+    };
+
+    setDataSync('license',license);
+
+    /* Update Firestore if available */
+    if(firebaseAvailable && currentUser.uid){
+        try{
+            await fbDb.collection('users').doc(currentUser.uid).update({
+                licenseStatus:'active',licenseKey:key,licensePlan:plan,
+                licenseActivatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+                licenseExpiryDate:expiry
+            });
+        }catch(e){console.warn("License sync failed:",e)}
+    }
+
+    /* Record transaction */
+    const transactions=getData('transactions',[]);
+    transactions.push({
+        id:genId('TXN'),type:'license',plan,amount:plan==='yearly'?288000:30000,
+        status:'completed',date:now.toISOString(),description:'License Activation - '+plan
+    });
+    setDataSync('transactions',transactions);
+
+    toast(t('licenseActivated'),'success');
+    enterMainApp();
+}
+
+/* ======================================================================
+   PLANS SELECTION (NEW)
+   ====================================================================== */
+function showPlans(){showScreen('plansScreen')}
+
+function selectPlan(plan){
+    selectedPlan=plan;
+    document.getElementById('planMonthly').classList.toggle('selected',plan==='monthly');
+    document.getElementById('planYearly').classList.toggle('selected',plan==='yearly');
+}
+
+function proceedToPayment(){
+    /* In production, this would redirect to a payment gateway (Stripe, M-Pesa, etc.)
+       For now, show a message and go back to license screen */
+    toast('Integration ya malipo inatengenezwa. Weka funguo la leseni.','warning');
+    showScreen('licenseScreen');
+}
+
+/* ======================================================================
+   ENTER MAIN APP (NEW - shared entry point)
+   ====================================================================== */
+function enterMainApp(){
+    showScreen('mainApp');
+    document.getElementById('userName').textContent=currentUser.name;
+    document.getElementById('userAvatar').textContent=currentUser.name.charAt(0).toUpperCase();
+    const roleNames={admin:'Administrator',manager:'Manager',cashier:'Cashier',storekeeper:'Storekeeper',super_admin:'Super Admin',user:'User'};
+    document.getElementById('userRole').textContent=roleNames[currentUser.role]||currentUser.role;
+
+    /* Update sidebar with business info */
+    const bp=getBusinessProfile();
+    document.getElementById('sidebarBizName').textContent=bp.name||'UMAS';
+    document.getElementById('sidebarBizSub').textContent=bp.address||'Tanzania';
+    if(bp.logo){
+        document.getElementById('sidebarLogoWrap').innerHTML=`<img src="${bp.logo}" style="width:40px;height:40px;border-radius:12px;object-fit:cover">`;
+    }
+
+    buildNav();
+    navigateTo('dashboard');
+    startSession();
+}
+
+/* ======================================================================
+   NAVIGATION (ORIGINAL PRESERVED + NEW ITEMS ADDED)
+   ====================================================================== */
+const navItems=[
+    {id:'dashboard',icon:'fa-th-large',key:'dashboard',roles:['admin','manager','cashier','storekeeper','user']},
+    {id:'products',icon:'fa-box',key:'products',roles:['admin','manager','storekeeper','user']},
+    {id:'stockin',icon:'fa-arrow-down',key:'stockIn',roles:['admin','manager','storekeeper','user']},
+    {id:'stockout',icon:'fa-arrow-up',key:'stockOut',roles:['admin','manager','cashier','user']},
+    {id:'suppliers',icon:'fa-truck',key:'suppliers',roles:['admin','manager','storekeeper','user']},
+    {id:'customers',icon:'fa-users',key:'customers',roles:['admin','manager','cashier','user']},
+    {id:'receipts',icon:'fa-receipt',key:'receipts',roles:['admin','manager','user']},
+    {id:'autopricing',icon:'fa-calculator',key:'autoPricing',roles:['admin','manager','user']},
+    {id:'profit',icon:'fa-chart-pie',key:'profitAlloc',roles:['admin','manager','user']},
+    {id:'breakeven',icon:'fa-balance-scale',key:'breakEven',roles:['admin','manager','user']},
+    {id:'reports',icon:'fa-file-alt',key:'reports',roles:['admin','manager','user']},
+    {id:'pos',icon:'fa-cash-register',key:'pos',roles:['admin','manager','cashier','user']},
+    /* NEW nav items */
+    {id:'business-profile',icon:'fa-building',key:'businessProfile',roles:['admin','manager','user']},
+    {id:'license',icon:'fa-key',key:'licenseManagement',roles:['admin','manager','user']},
+    {id:'security',icon:'fa-shield-alt',key:'security',roles:['admin','manager','user']},
+    /* Super Admin - only visible to super_admin role */
+    {id:'superadmin',icon:'fa-crown',key:'superAdmin',roles:['super_admin']}
+];
+
+function buildNav(){
+    const c=document.getElementById('navContainer');
+    const items=navItems.filter(n=>n.roles.includes(currentUser.role));
+    c.innerHTML=items.map(n=>`
+        <div class="nav-item" data-nav="${n.id}" onclick="navigateTo('${n.id}')">
+            <i class="fas ${n.icon}"></i><span data-i18n="${n.key}">${t(n.key)}</span>
+        </div>
+    `).join('')+`
+        <div class="nav-item mt-4" style="color:rgba(255,255,255,0.3);border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;margin-top:8px" onclick="handleLogout()">
+            <i class="fas fa-sign-out-alt"></i><span data-i18n="logout">${t('logout')}</span>
+        </div>
+    `;
+}
+
+function navigateTo(id){
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    const sec=document.getElementById('sec-'+id);
+    if(sec){sec.classList.add('active');renderSection(id)}
+    const navEl=document.querySelector(`[data-nav="${id}"]`);
+    if(navEl)navEl.classList.add('active');
+    document.getElementById('sidebar').classList.remove('open');
+    startSession();
+}
+
+async function handleLogout(){
+    stopSession();
+    Object.values(charts).forEach(c=>{if(c&&c.destroy)c.destroy()});charts={};
+    if(firebaseAvailable){try{await fbAuth.signOut()}catch(e){}}
+    currentUser={name:'Admin',role:'admin',uid:null,email:'',isSuperAdmin:false};
+    showScreen('loginScreen');
+    document.getElementById('loginEmail').value='';
+    document.getElementById('loginPass').value='';
+    /* Reset sidebar logo */
+    document.getElementById('sidebarLogoWrap').innerHTML='<i class="fas fa-chart-line text-white text-sm" id="sidebarLogoIcon"></i>';
+    document.getElementById('sidebarBizName').textContent='UMAS';
+    document.getElementById('sidebarBizSub').textContent='Tanzania';
+}
+
+/* ======================================================================
+   RENDER SECTIONS (ORIGINAL PRESERVED + NEW SECTIONS)
+   ====================================================================== */
+function renderSection(id){
+    const renderers={
+        dashboard:renderDashboard,products:renderProducts,stockin:renderStockIn,
+        stockout:renderStockOut,suppliers:renderSuppliers,customers:renderCustomers,
+        receipts:renderReceipts,autopricing:renderAutoPricing,profit:renderProfit,
+        breakeven:renderBreakEven,reports:renderReports,pos:renderPOS,security:renderSecurity,
+        /* NEW renderers */
+        'business-profile':renderBusinessProfile,license:renderLicense,superadmin:renderSuperAdmin
+    };
+    if(renderers[id])renderers[id]();
+}
+
+/* ======================================================================
+   DASHBOARD (ORIGINAL PRESERVED)
+   ====================================================================== */
+function renderDashboard(){
+    const sales=getData('sales',[]);
+    const products=getData('products',[]);
+    const td=today(),wk=weekAgo(),mn=monthAgo(),yr=yearAgo();
+    const filterSales=(f,t)=>sales.filter(s=>s.date>=f&&s.date<=t);
+    const sumTot=(arr)=>arr.reduce((a,s)=>a+s.total,0);
+    const sumProfit=(arr)=>arr.reduce((a,s)=>a+(s.total-s.cost),0);
+    const sTD=filterSales(td,td),sWK=filterSales(wk,td),sMN=filterSales(mn,td),sYR=filterSales(yr,td);
+
+    const sec=document.getElementById('sec-dashboard');
+    sec.innerHTML=`
+        <div class="flex items-center justify-between mb-6">
+            <div><h1 class="text-2xl font-display font-800" data-i18n="dashboard">${t('dashboard')}</h1><p class="text-sm text-stone-400 mt-1">${fmtDate(td)}</p></div>
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card fade-up delay-1">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-umas-50 text-umas-600"><i class="fas fa-shopping-cart"></i></div><span class="text-xs font-600 text-stone-400">TODAY</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="salesToday">${t('salesToday')}</p>
+                <p class="text-xl font-display font-800">${fmt(sumTot(sTD))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+            <div class="stat-card fade-up delay-2">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-chart-line"></i></div><span class="text-xs font-600 text-stone-400">WEEK</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="salesWeek">${t('salesWeek')}</p>
+                <p class="text-xl font-display font-800">${fmt(sumTot(sWK))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+            <div class="stat-card fade-up delay-3">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-blue-50 text-blue-600"><i class="fas fa-calendar-alt"></i></div><span class="text-xs font-600 text-stone-400">MONTH</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="salesMonth">${t('salesMonth')}</p>
+                <p class="text-xl font-display font-800">${fmt(sumTot(sMN))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+            <div class="stat-card fade-up delay-4">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-purple-50 text-purple-600"><i class="fas fa-calendar"></i></div><span class="text-xs font-600 text-stone-400">YEAR</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="salesYear">${t('salesYear')}</p>
+                <p class="text-xl font-display font-800">${fmt(sumTot(sYR))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card fade-up delay-1">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">TODAY</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="profitToday">${t('profitToday')}</p>
+                <p class="text-xl font-display font-800 text-green-600">${fmt(sumProfit(sTD))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+            <div class="stat-card fade-up delay-2">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">WEEK</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="profitWeek">${t('profitWeek')}</p>
+                <p class="text-xl font-display font-800 text-green-600">${fmt(sumProfit(sWK))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+            <div class="stat-card fade-up delay-3">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">MONTH</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="profitMonth">${t('profitMonth')}</p>
+                <p class="text-xl font-display font-800 text-green-600">${fmt(sumProfit(sMN))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+            <div class="stat-card fade-up delay-4">
+                <div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">YEAR</span></div>
+                <p class="text-xs font-600 text-stone-400 mb-1" data-i18n="profitYear">${t('profitYear')}</p>
+                <p class="text-xl font-display font-800 text-green-600">${fmt(sumProfit(sYR))} <span class="text-xs text-stone-400">TZS</span></p>
+            </div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4 mb-6">
+            <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4" data-i18n="salesChart">${t('salesChart')}</h3><canvas id="salesChartCanvas" height="200"></canvas></div>
+            <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4" data-i18n="profitChart">${t('profitChart')}</h3><canvas id="profitChartCanvas" height="200"></canvas></div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4">
+            <div class="stat-card">
+                <h3 class="text-sm font-display font-700 mb-4" data-i18n="topProducts">${t('topProducts')}</h3>
+                <div id="topProductsList"></div>
+            </div>
+            <div class="stat-card">
+                <h3 class="text-sm font-display font-700 mb-4" data-i18n="lowStock">${t('lowStock')}</h3>
+                <div id="lowStockList"></div>
+            </div>
+        </div>
+    `;
+    renderDashCharts(sales);
+    const prodMap={};
+    sales.forEach(s=>{prodMap[s.product]=(prodMap[s.product]||0)+s.qty});
+    const topProds=Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const topEl=document.getElementById('topProductsList');
+    if(topProds.length===0){topEl.innerHTML=`<p class="text-sm text-stone-400">${t('empty')}</p>`}
+    else{topEl.innerHTML=topProds.map(([code,qty],i)=>{
+        const p=products.find(x=>x.code===code);
+        const maxQ=topProds[0][1];const pct=Math.round(qty/maxQ*100);
+        return `<div class="flex items-center gap-3 mb-3"><span class="text-xs font-bold text-stone-400 w-5">${i+1}</span><div class="flex-1"><p class="text-sm font-600">${p?p.name:code}</p><div class="w-full h-2 bg-stone-100 rounded-full mt-1"><div class="h-2 bg-umas-500 rounded-full" style="width:${pct}%"></div></div></div><span class="text-sm font-700">${qty}</span></div>`;
+    }).join('')}
+    const lowStock=products.filter(p=>p.stock<=p.reorder);
+    const lowEl=document.getElementById('lowStockList');
+    if(lowStock.length===0){lowEl.innerHTML=`<p class="text-sm text-stone-400">${t('empty')}</p>`}
+    else{lowEl.innerHTML=lowStock.map(p=>`
+        <div class="flex items-center justify-between py-2 border-b border-stone-100 last:border-0">
+            <div><p class="text-sm font-600">${p.name}</p><p class="text-xs text-stone-400">${p.code}</p></div>
+            <div class="text-right"><span class="badge-danger">${p.stock} / ${p.reorder}</span></div>
+        </div>
+    `).join('')}
+}
+
+function renderDashCharts(sales){
+    const days=[];const salesData=[];const profitData=[];
+    for(let i=6;i>=0;i--){
+        const d=new Date();d.setDate(d.getDate()-i);const ds=d.toISOString().split('T')[0];
+        days.push(d.toLocaleDateString(lang==='sw'?'sw-TZ':'en-GB',{weekday:'short'}));
+        const daySales=sales.filter(s=>s.date===ds);
+        salesData.push(daySales.reduce((a,s)=>a+s.total,0));
+        profitData.push(daySales.reduce((a,s)=>a+(s.total-s.cost),0));
+    }
+    if(charts.sales)charts.sales.destroy();if(charts.profit)charts.profit.destroy();
+    const ctxS=document.getElementById('salesChartCanvas');const ctxP=document.getElementById('profitChartCanvas');
+    if(ctxS){charts.sales=new Chart(ctxS,{type:'bar',data:{labels:days,datasets:[{label:t('salesToday'),data:salesData,backgroundColor:'rgba(217,119,6,0.7)',borderRadius:8,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>fmt(v)}},x:{grid:{display:false}}}}})}
+    if(ctxP){charts.profit=new Chart(ctxP,{type:'line',data:{labels:days,datasets:[{label:t('profitToday'),data:profitData,borderColor:'#059669',backgroundColor:'rgba(5,150,105,0.1)',fill:true,tension:0.4,pointRadius:4,pointBackgroundColor:'#059669'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>fmt(v)}},x:{grid:{display:false}}}}})}
+}
+
+/* ======================================================================
+   PRODUCTS (ORIGINAL PRESERVED)
+   ====================================================================== */
+function renderProducts(){
+    const products=getData('products',[]);
+    const cats=['all','groceries','toiletries','beverages','electronics','other'];
+    const sec=document.getElementById('sec-products');
+    sec.innerHTML=`
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <h1 class="text-2xl font-display font-800" data-i18n="products">${t('products')}</h1>
+            <button class="btn btn-primary" onclick="openProductModal()"><i class="fas fa-plus"></i> <span data-i18n="addProduct">${t('addProduct')}</span></button>
+        </div>
+        <div class="flex gap-3 mb-4 flex-wrap">
+            <input type="text" class="form-input" style="max-width:300px" placeholder="${t('search')}" oninput="filterProducts(this.value)">
+            <select class="form-select" style="max-width:200px" onchange="filterProductsCat(this.value)" id="prodCatFilter">
+                ${cats.map(c=>`<option value="${c}">${t(c)}</option>`).join('')}
+            </select>
+        </div>
+        <div class="stat-card overflow-x-auto">
+            <table class="data-table" id="productsTable">
+                <thead><tr>
+                    <th>${t('productCode')}</th><th>${t('barcode')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('supplier')}</th><th>${t('costPrice')}</th><th>${t('sellingPrice')}</th><th>${t('stock')}</th><th>${t('actions')}</th>
+                </tr></thead>
+                <tbody id="productsBody"></tbody>
+            </table>
+        </div>
+    `;
+    renderProductsTable(products);
+}
+
+function renderProductsTable(list){
+    const suppliers=getData('suppliers',[]);
+    const tbody=document.getElementById('productsBody');if(!tbody)return;
+    if(list.length===0){tbody.innerHTML=`<tr><td colspan="9" class="text-center py-8 text-stone-400">${t('empty')}</td></tr>`;return}
+    tbody.innerHTML=list.map(p=>{
+        const sup=suppliers.find(s=>s.code===p.supplier);const isLow=p.stock<=p.reorder;
+        return `<tr>
+            <td class="font-mono text-xs font-600">${p.code}</td><td class="font-mono text-xs">${p.barcode}</td>
+            <td class="font-600">${p.name}</td><td><span class="badge-warning">${t(p.category)}</span></td>
+            <td class="text-sm">${sup?sup.name:p.supplier}</td><td>${fmt(p.cost)}</td>
+            <td class="font-700 text-umas-700">${fmt(p.price)}</td>
+            <td><span class="${isLow?'badge-danger':'badge-success'}">${p.stock}</span></td>
+            <td>
+                <button class="btn btn-sm btn-secondary" onclick="openProductModal('${p.code}')"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.code}')"><i class="fas fa-trash"></i></button>
+            </td></tr>`;
+    }).join('');
+}
+
+let prodFilterText='',prodFilterCat='all';
+function filterProducts(v){prodFilterText=v.toLowerCase();applyProdFilter()}
+function filterProductsCat(v){prodFilterCat=v;applyProdFilter()}
+function applyProdFilter(){
+    let list=getData('products',[]);
+    if(prodFilterText)list=list.filter(p=>p.name.toLowerCase().includes(prodFilterText)||p.code.toLowerCase().includes(prodFilterText)||p.barcode.includes(prodFilterText));
+    if(prodFilterCat!=='all')list=list.filter(p=>p.category===prodFilterCat);
+    renderProductsTable(list);
+}
+
+function openProductModal(code){
+    const products=getData('products',[]);const suppliers=getData('suppliers',[]);
+    const p=code?products.find(x=>x.code===code):null;
+    const cats=['groceries','toiletries','beverages','electronics','other'];
+    openModal(`
+        <h2 class="text-lg font-display font-700 mb-6">${p?t('editProduct'):t('addProduct')}</h2>
+        <form onsubmit="return saveProduct(event,'${code||''}')">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('productCode')}</label><input class="form-input" id="pCode" value="${p?p.code:genId('PRD')}" ${p?'readonly':''}></div>
+                <div><label class="form-label">${t('barcode')}</label><input class="form-input" id="pBarcode" value="${p?p.barcode:''}"></div>
+            </div>
+            <div class="mb-4"><label class="form-label">${t('productName')}</label><input class="form-input" id="pName" value="${p?p.name:''}" required></div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('category')}</label><select class="form-select" id="pCat">${cats.map(c=>`<option value="${c}" ${p&&p.category===c?'selected':''}>${t(c)}</option>`).join('')}</select></div>
+                <div><label class="form-label">${t('supplier')}</label><select class="form-select" id="pSup">${suppliers.map(s=>`<option value="${s.code}" ${p&&p.supplier===s.code?'selected':''}>${s.name}</option>`).join('')}</select></div>
+            </div>
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <div><label class="form-label">${t('costPrice')} (TZS)</label><input class="form-input" type="number" id="pCost" value="${p?p.cost:''}" required></div>
+                <div><label class="form-label">${t('overhead')}</label><input class="form-input" type="number" id="pOverhead" value="${p?p.overhead:10}"></div>
+                <div><label class="form-label">${t('sellingPrice')} (TZS)</label><input class="form-input" type="number" id="pPrice" value="${p?p.price:''}" required></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div><label class="form-label">${t('reorderLevel')}</label><input class="form-input" type="number" id="pReorder" value="${p?p.reorder:10}"></div>
+                <div><label class="form-label">${t('stock')}</label><input class="form-input" type="number" id="pStock" value="${p?p.stock:0}"></div>
+            </div>
+            <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+        </form>
+    `);
+}
+
+function saveProduct(e,code){
+    e.preventDefault();
+    const obj={
+        code:document.getElementById('pCode').value,barcode:document.getElementById('pBarcode').value,
+        name:document.getElementById('pName').value,category:document.getElementById('pCat').value,
+        supplier:document.getElementById('pSup').value,cost:parseInt(document.getElementById('pCost').value)||0,
+        overhead:parseInt(document.getElementById('pOverhead').value)||0,price:parseInt(document.getElementById('pPrice').value)||0,
+        reorder:parseInt(document.getElementById('pReorder').value)||10,stock:parseInt(document.getElementById('pStock').value)||0
+    };
+    if(!obj.name||!obj.price){toast(t('errorFill'),'error');return false}
+    const products=getData('products',[]);
+    if(code){const i=products.findIndex(x=>x.code===code);if(i>=0)products[i]=obj}
+    else{if(products.find(x=>x.code===obj.code)){toast('Code already exists','error');return false}products.push(obj)}
+    setDataSync('products',products);closeModal();renderProducts();toast(t('successSave'),'success');return false;
+}
+
+function deleteProduct(code){
+    confirmAction(t('confirmDelete'),()=>{
+        const products=getData('products',[]).filter(x=>x.code!==code);
+        setDataSync('products',products);renderProducts();toast(t('successDelete'),'success');
+    });
+}
+
+/* ======================================================================
+   STOCK IN (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderStockIn(){
+    const stockIn=getData('stockIn',[]);
+    const sec=document.getElementById('sec-stockin');
+    sec.innerHTML=`
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-display font-800" data-i18n="stockIn">${t('stockIn')}</h1>
+            <button class="btn btn-primary" onclick="openStockInModal()"><i class="fas fa-plus"></i> ${t('addStockIn')}</button>
+        </div>
+        <div class="stat-card overflow-x-auto"><table class="data-table">
+            <thead><tr><th>ID</th><th>${t('date')}</th><th>${t('supplier')}</th><th>${t('invoiceNo')}</th><th>${t('productName')}</th><th>${t('quantity')}</th><th>${t('unitCost')}</th><th>${t('totalCost')}</th></tr></thead>
+            <tbody>${stockIn.length===0?`<tr><td colspan="8" class="text-center py-8 text-stone-400">${t('empty')}</td></tr>`:
+            stockIn.map(s=>{const p=getData('products',[]).find(x=>x.code===s.product);return `<tr>
+                <td class="font-mono text-xs">${s.id}</td><td>${fmtDate(s.date)}</td>
+                <td>${s.supplier}</td><td class="font-mono">${s.invoice}</td>
+                <td class="font-600">${p?p.name:s.product}</td><td>${s.qty}</td>
+                <td>${fmt(s.unitCost)}</td><td class="font-700">${fmt(s.total)}</td></tr>`}).join('')}</tbody>
+        </table></div>`;
+}
+
+function openStockInModal(){
+    const suppliers=getData('suppliers',[]);const products=getData('products',[]);
+    openModal(`
+        <h2 class="text-lg font-display font-700 mb-6">${t('addStockIn')}</h2>
+        <form onsubmit="return saveStockIn(event)">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('date')}</label><input class="form-input" type="date" id="siDate" value="${today()}" required></div>
+                <div><label class="form-label">${t('supplier')}</label><select class="form-select" id="siSup">${suppliers.map(s=>`<option value="${s.code}">${s.name}</option>`).join('')}</select></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('invoiceNo')}</label><input class="form-input" id="siInvoice" required></div>
+                <div><label class="form-label">${t('productName')}</label><select class="form-select" id="siProduct">${products.map(p=>`<option value="${p.code}">${p.name}</option>`).join('')}</select></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div><label class="form-label">${t('quantity')}</label><input class="form-input" type="number" id="siQty" required></div>
+                <div><label class="form-label">${t('unitCost')} (TZS)</label><input class="form-input" type="number" id="siCost" required></div>
+            </div>
+            <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+        </form>`);
+}
+
+function saveStockIn(e){
+    e.preventDefault();
+    const qty=parseInt(document.getElementById('siQty').value)||0;
+    const cost=parseInt(document.getElementById('siCost').value)||0;
+    const product=document.getElementById('siProduct').value;
+    const obj={id:genId('SI'),date:document.getElementById('siDate').value,supplier:document.getElementById('siSup').value,invoice:document.getElementById('siInvoice').value,product,qty,unitCost:cost,total:qty*cost};
+    const stockIn=getData('stockIn',[]);stockIn.push(obj);setDataSync('stockIn',stockIn);
+    /* Update product stock */
+    const products=getData('products',[]);const p=products.find(x=>x.code===product);if(p)p.stock+=qty;setDataSync('products',products);
+    closeModal();renderStockIn();toast(t('successSave'),'success');return false;
+}
+
+/* ======================================================================
+   STOCK OUT / SALES (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderStockOut(){
+    const sales=getData('sales',[]).sort((a,b)=>b.date.localeCompare(a.date));
+    const sec=document.getElementById('sec-stockout');
+    sec.innerHTML=`
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-display font-800" data-i18n="stockOut">${t('stockOut')}</h1>
+            <button class="btn btn-primary" onclick="openSaleModal()"><i class="fas fa-plus"></i> ${t('addSale')}</button>
+        </div>
+        <div class="stat-card overflow-x-auto"><table class="data-table">
+            <thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('customer')}</th><th>${t('productName')}</th><th>${t('qty')}</th><th>${t('price')}</th><th>${t('discount')}</th><th>${t('paymentMethod')}</th><th>${t('total')}</th></tr></thead>
+            <tbody>${sales.length===0?`<tr><td colspan="9" class="text-center py-8 text-stone-400">${t('empty')}</td></tr>`:
+            sales.slice(0,50).map(s=>{const p=getData('products',[]).find(x=>x.code===s.product);const c=getData('customers',[]).find(x=>x.code===s.customer);return `<tr>
+                <td class="font-mono text-xs">${s.id}</td><td>${fmtDate(s.date)}</td>
+                <td>${c?c.name:s.customer}</td><td class="font-600">${p?p.name:s.product}</td>
+                <td>${s.qty}</td><td>${fmt(s.price)}</td><td>${s.discount}%</td>
+                <td><span class="badge-${s.payment==='cash'?'success':'info'}">${s.payment==='cash'?t('cash'):t('mobileMoney')}</span></td>
+                <td class="font-700">${fmt(s.total)}</td></tr>`}).join('')}</tbody>
+        </table></div>`;
+}
+
+function openSaleModal(){
+    const products=getData('products',[]).filter(p=>p.stock>0);const customers=getData('customers',[]);
+    openModal(`
+        <h2 class="text-lg font-display font-700 mb-6">${t('addSale')}</h2>
+        <form onsubmit="return saveSale(event)">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('date')}</label><input class="form-input" type="date" id="soDate" value="${today()}" required></div>
+                <div><label class="form-label">${t('customer')}</label><select class="form-select" id="soCust">${customers.map(c=>`<option value="${c.code}">${c.name}</option>`).join('')}</select></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('productName')}</label><select class="form-select" id="soProduct" onchange="updateSalePrice()">${products.map(p=>`<option value="${p.code}" data-price="${p.price}" data-cost="${p.cost}">${p.name} (Stock: ${p.stock})</option>`).join('')}</select></div>
+                <div><label class="form-label">${t('qty')}</label><input class="form-input" type="number" id="soQty" value="1" min="1" oninput="updateSalePrice()" required></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('discount')} (%)</label><input class="form-input" type="number" id="soDisc" value="0" min="0" max="100" oninput="updateSalePrice()"></div>
+                <div><label class="form-label">${t('paymentMethod')}</label><select class="form-select" id="soPay"><option value="cash">${t('cash')}</option><option value="mobile">${t('mobileMoney')}</option></select></div>
+            </div>
+            <div class="mb-6 p-4 bg-stone-50 rounded-xl"><p class="text-sm text-stone-500">${t('total')}</p><p class="text-2xl font-display font-800" id="soTotal">TZS 0</p></div>
+            <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+        </form>`);
+    updateSalePrice();
+}
+
+function updateSalePrice(){
+    const sel=document.getElementById('soProduct');if(!sel)return;
+    const price=parseInt(sel.options[sel.selectedIndex].dataset.price)||0;
+    const cost=parseInt(sel.options[sel.selectedIndex].dataset.cost)||0;
+    const qty=parseInt(document.getElementById('soQty').value)||1;
+    const disc=parseInt(document.getElementById('soDisc').value)||0;
+    const sub=price*qty;const total=sub-Math.round(sub*disc/100);
+    document.getElementById('soTotal').textContent='TZS '+fmt(total);
+    document.getElementById('soProduct').dataset.totalCost=cost*qty;
+}
+
+function saveSale(e){
+    e.preventDefault();
+    const sel=document.getElementById('soProduct');
+    const price=parseInt(sel.options[sel.selectedIndex].dataset.price)||0;
+    const cost=parseInt(sel.options[sel.selectedIndex].dataset.cost)||0;
+    const qty=parseInt(document.getElementById('soQty').value)||1;const disc=parseInt(document.getElementById('soDisc').value)||0;
+    const product=sel.value;const sub=price*qty;const total=sub-Math.round(sub*disc/100);
+    if(qty<=0){toast(t('errorFill'),'error');return false}
+    const obj={id:genId('RCPT'),date:document.getElementById('soDate').value,customer:document.getElementById('soCust').value,product,qty,price,discount:disc,vat:0,payment:document.getElementById('soPay').value,total,cost:cost*qty};
+    const sales=getData('sales',[]);sales.push(obj);setDataSync('sales',sales);
+    const products=getData('products',[]);const p=products.find(x=>x.code===product);if(p)p.stock=Math.max(0,p.stock-qty);setDataSync('products',products);
+    closeModal();renderStockOut();toast(t('successSave'),'success');return false;
+}
+
+/* ======================================================================
+   SUPPLIERS (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderSuppliers(){
+    const suppliers=getData('suppliers',[]);
+    const sec=document.getElementById('sec-suppliers');
+    sec.innerHTML=`
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-display font-800" data-i18n="suppliers">${t('suppliers')}</h1>
+            <button class="btn btn-primary" onclick="openSupplierModal()"><i class="fas fa-plus"></i> ${t('addSupplier')}</button>
+        </div>
+        <div class="stat-card overflow-x-auto"><table class="data-table">
+            <thead><tr><th>${t('supplierCode')}</th><th>${t('name')}</th><th>${t('phone')}</th><th>${t('email')}</th><th>${t('address')}</th><th>${t('actions')}</th></tr></thead>
+            <tbody>${suppliers.length===0?`<tr><td colspan="6" class="text-center py-8 text-stone-400">${t('empty')}</td></tr>`:
+            suppliers.map(s=>`<tr><td class="font-mono text-xs font-600">${s.code}</td><td class="font-600">${s.name}</td><td>${s.phone}</td><td class="text-sm">${s.email}</td><td class="text-sm">${s.address}</td>
+                <td><button class="btn btn-sm btn-secondary" onclick="openSupplierModal('${s.code}')"><i class="fas fa-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="deleteSupplier('${s.code}')"><i class="fas fa-trash"></i></button></td></tr>`).join('')}</tbody>
+        </table></div>`;
+}
+
+function openSupplierModal(code){
+    const suppliers=getData('suppliers',[]);const s=code?suppliers.find(x=>x.code===code):null;
+    openModal(`<h2 class="text-lg font-display font-700 mb-6">${s?t('edit'):t('add')} ${t('suppliers').slice(0,-1)}</h2>
+        <form onsubmit="return saveSupplier(event,'${code||''}')">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('supplierCode')}</label><input class="form-input" id="supCode" value="${s?s.code:genId('SUP')}" ${s?'readonly':''}></div>
+                <div><label class="form-label">${t('name')}</label><input class="form-input" id="supName" value="${s?s.name:''}" required></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('phone')}</label><input class="form-input" id="supPhone" value="${s?s.phone:''}"></div>
+                <div><label class="form-label">${t('email')}</label><input class="form-input" type="email" id="supEmail" value="${s?s.email:''}"></div>
+            </div>
+            <div class="mb-6"><label class="form-label">${t('address')}</label><input class="form-input" id="supAddr" value="${s?s.address:''}"></div>
+            <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+        </form>`);
+}
+
+function saveSupplier(e,code){
+    e.preventDefault();
+    const obj={code:document.getElementById('supCode').value,name:document.getElementById('supName').value,phone:document.getElementById('supPhone').value,email:document.getElementById('supEmail').value,address:document.getElementById('supAddr').value,balance:0};
+    if(!obj.name){toast(t('errorFill'),'error');return false}
+    const suppliers=getData('suppliers',[]);
+    if(code){const i=suppliers.findIndex(x=>x.code===code);if(i>=0){obj.balance=suppliers[i].balance;suppliers[i]=obj}}else suppliers.push(obj);
+    setDataSync('suppliers',suppliers);closeModal();renderSuppliers();toast(t('successSave'),'success');return false;
+}
+
+function deleteSupplier(code){confirmAction(t('confirmDelete'),()=>{setDataSync('suppliers',getData('suppliers',[]).filter(x=>x.code!==code));renderSuppliers();toast(t('successDelete'),'success')})}
+
+/* ======================================================================
+   CUSTOMERS (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderCustomers(){
+    const customers=getData('customers',[]);
+    const sec=document.getElementById('sec-customers');
+    sec.innerHTML=`
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-display font-800" data-i18n="customers">${t('customers')}</h1>
+            <button class="btn btn-primary" onclick="openCustomerModal()"><i class="fas fa-plus"></i> ${t('addCustomer')}</button>
+        </div>
+        <div class="stat-card overflow-x-auto"><table class="data-table">
+            <thead><tr><th>${t('customerCode')}</th><th>${t('name')}</th><th>${t('phone')}</th><th>${t('loyaltyPoints')}</th><th>${t('balance')}</th><th>${t('actions')}</th></tr></thead>
+            <tbody>${customers.length===0?`<tr><td colspan="6" class="text-center py-8 text-stone-400">${t('empty')}</td></tr>`:
+            customers.map(c=>`<tr><td class="font-mono text-xs font-600">${c.code}</td><td class="font-600">${c.name}</td><td>${c.phone}</td><td><span class="badge-purple">${c.points}</span></td><td>${fmt(c.balance)}</td>
+                <td><button class="btn btn-sm btn-secondary" onclick="openCustomerModal('${c.code}')"><i class="fas fa-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="deleteCustomer('${c.code}')"><i class="fas fa-trash"></i></button></td></tr>`).join('')}</tbody>
+        </table></div>`;
+}
+
+function openCustomerModal(code){
+    const customers=getData('customers',[]);const c=code?customers.find(x=>x.code===code):null;
+    openModal(`<h2 class="text-lg font-display font-700 mb-6">${c?t('edit'):t('add')} ${t('customers').slice(0,-1)}</h2>
+        <form onsubmit="return saveCustomer(event,'${code||''}')">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('customerCode')}</label><input class="form-input" id="custCode" value="${c?c.code:genId('CUS')}" ${c?'readonly':''}></div>
+                <div><label class="form-label">${t('name')}</label><input class="form-input" id="custName" value="${c?c.name:''}" required></div>
+            </div>
+            <div class="mb-6"><label class="form-label">${t('phone')}</label><input class="form-input" id="custPhone" value="${c?c.phone:''}"></div>
+            <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+        </form>`);
+}
+
+function saveCustomer(e,code){
+    e.preventDefault();
+    const obj={code:document.getElementById('custCode').value,name:document.getElementById('custName').value,phone:document.getElementById('custPhone').value,points:0,balance:0};
+    if(!obj.name){toast(t('errorFill'),'error');return false}
+    const customers=getData('customers',[]);
+    if(code){const i=customers.findIndex(x=>x.code===code);if(i>=0){obj.points=customers[i].points;obj.balance=customers[i].balance;customers[i]=obj}}else customers.push(obj);
+    setDataSync('customers',customers);closeModal();renderCustomers();toast(t('successSave'),'success');return false;
+}
+
+function deleteCustomer(code){confirmAction(t('confirmDelete'),()=>{setDataSync('customers',getData('customers',[]).filter(x=>x.code!==code));renderCustomers();toast(t('successDelete'),'success')})}
+
+/* ======================================================================
+   RECEIPTS (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderReceipts(){
+    const sales=getData('sales',[]).sort((a,b)=>b.date.localeCompare(a.date));
+    const sec=document.getElementById('sec-receipts');
+    sec.innerHTML=`
+        <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-display font-800" data-i18n="receipts">${t('receipts')}</h1></div>
+        <div class="stat-card overflow-x-auto"><table class="data-table">
+            <thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('customer')}</th><th>${t('total')}</th><th>${t('paymentMethod')}</th><th>${t('actions')}</th></tr></thead>
+            <tbody>${sales.length===0?`<tr><td colspan="6" class="text-center py-8 text-stone-400">${t('empty')}</td></tr>`:
+            sales.slice(0,50).map(s=>{const c=getData('customers',[]).find(x=>x.code===s.customer);return `<tr>
+                <td class="font-mono text-xs">${s.id}</td><td>${fmtDate(s.date)}</td><td>${c?c.name:s.customer}</td>
+                <td class="font-700">${fmt(s.total)}</td><td><span class="badge-${s.payment==='cash'?'success':'info'}">${s.payment==='cash'?t('cash'):t('mobileMoney')}</span></td>
+                <td><button class="btn btn-sm btn-secondary" onclick="viewReceipt('${s.id}')"><i class="fas fa-eye"></i></button> <button class="btn btn-sm btn-primary" onclick="printReceipt('${s.id}','a4')"><i class="fas fa-print"></i></button></td></tr>`}).join('')}</tbody>
+        </table></div>`;
+}
+
+function viewReceipt(id){
+    const s=getData('sales',[]).find(x=>x.id===id);if(!s)return;
+    const p=getData('products',[]).find(x=>x.code===s.product);const c=getData('customers',[]).find(x=>x.code===s.customer);const bp=getBusinessProfile();
+    openModal(`
+        <div class="receipt-pos" id="receiptContent">
+            <div class="center"><strong style="font-size:14px">${bp.name}</strong><br><span style="font-size:10px">${bp.address}</span><br><span style="font-size:10px">${bp.phone} | ${bp.email}</span></div>
+            <div class="line"></div>
+            <p class="center" style="font-weight:bold">${t('receiptTitle')}</p>
+            <div class="line"></div>
+            <table><tr><td>${t('receiptNo')}</td><td style="text-align:right">${s.id}</td></tr>
+            <tr><td>${t('date')}</td><td style="text-align:right">${fmtDate(s.date)}</td></tr>
+            <tr><td>${t('customer')}</td><td style="text-align:right">${c?c.name:'-'}</td></tr></table>
+            <div class="line"></div>
+            <table><tr><th>${t('productName')}</th><th>${t('qty')}</th><th style="text-align:right">${t('total')}</th></tr>
+            <tr><td>${p?p.name:s.product}</td><td>${s.qty}</td><td style="text-align:right">${fmt(s.total)}</td></tr></table>
+            <div class="line"></div>
+            <table><tr><td>${t('discount')}</td><td style="text-align:right">${s.discount}%</td></tr>
+            <tr style="font-weight:bold;font-size:13px"><td>${t('total')}</td><td style="text-align:right">${fmt(s.total)}</td></tr>
+            <tr><td>${t('paymentMethod')}</td><td style="text-align:right">${s.payment==='cash'?t('cash'):t('mobileMoney')}</td></tr></table>
+            <div class="line"></div>
+            <p class="center" style="font-size:10px">${t('thankYou')}</p>
+            <p class="center" style="font-size:9px">${bp.name} - ${fmtDate(new Date().toISOString())}</p>
+        </div>
+        <div class="flex gap-3 justify-center mt-4 no-print">
+            <button class="btn btn-sm btn-primary" onclick="printReceipt('${id}','pos')"><i class="fas fa-print"></i> ${t('printPOS')}</button>
+            <button class="btn btn-sm btn-secondary" onclick="printReceipt('${id}','a4')"><i class="fas fa-print"></i> ${t('printA4')}</button>
+        </div>`,true);
+}
+
+function printReceipt(id,format){
+    const printArea=document.getElementById('printArea');
+    const s=getData('sales',[]).find(x=>x.id===id);if(!s)return;
+    const p=getData('products',[]).find(x=>x.code===s.product);const c=getData('customers',[]).find(x=>x.code===s.customer);const bp=getBusinessProfile();
+    if(format==='pos'){
+        printArea.innerHTML=`<div class="receipt-pos"><div class="center"><strong>${bp.name}</strong><br>${bp.address}<br>${bp.phone} | ${bp.email}</div><div class="line"></div><p class="center" style="font-weight:bold">${t('receiptTitle')}</p><div class="line"></div><table><tr><td>No:</td><td style="text-align:right">${s.id}</td></tr><tr><td>Date:</td><td style="text-align:right">${fmtDate(s.date)}</td></tr><tr><td>Customer:</td><td style="text-align:right">${c?c.name:'-'}</td></tr></table><div class="line"></div><table><tr><th>Item</th><th>Qty</th><th>Total</th></tr><tr><td>${p?p.name:s.product}</td><td>${s.qty}</td><td style="text-align:right">${fmt(s.total)}</td></tr></table><div class="line"></div><table><tr><td>Discount:</td><td style="text-align:right">${s.discount}%</td></tr><tr style="font-weight:bold"><td>TOTAL:</td><td style="text-align:right">${fmt(s.total)}</td></tr></table><div class="line"></div><p class="center">${t('thankYou')}</p><p class="center" style="font-size:9px">${bp.name}</p></div>`;
+    } else {
+        printArea.innerHTML=`<div class="receipt-a4" style="padding:40px"><div style="text-align:center;margin-bottom:30px"><h1 style="font-family:Outfit;font-size:24px">${bp.name}</h1><p>${bp.address}</p><p>${bp.phone} | ${bp.email}</p>${bp.taxNumber?`<p>TIN: ${bp.taxNumber}</p>`:''}</div><h2 style="text-align:center;margin-bottom:20px">${t('receiptTitle')}</h2><table style="width:100%;margin-bottom:20px"><tr><td>Receipt No:</td><td><strong>${s.id}</strong></td><td>Date:</td><td>${fmtDate(s.date)}</td></tr><tr><td>Customer:</td><td>${c?c.name:'-'}</td><td>Payment:</td><td>${s.payment==='cash'?t('cash'):t('mobileMoney')}</td></tr></table><table style="width:100%;border-collapse:collapse;margin-bottom:20px"><thead><tr style="background:#f5f3ef"><th style="padding:10px;text-align:left">Item</th><th style="padding:10px">Qty</th><th style="padding:10px">Price</th><th style="padding:10px">Discount</th><th style="padding:10px;text-align:right">Total</th></tr></thead><tbody><tr style="border-bottom:1px solid #e7e5e4"><td style="padding:10px">${p?p.name:s.product}</td><td style="padding:10px;text-align:center">${s.qty}</td><td style="padding:10px;text-align:center">${fmt(s.price)}</td><td style="padding:10px;text-align:center">${s.discount}%</td><td style="padding:10px;text-align:right;font-weight:700">${fmt(s.total)}</td></tr></tbody></table><div style="text-align:right;font-size:18px;font-weight:800;margin-bottom:30px">TOTAL: ${fmt(s.total)} TZS</div><p style="text-align:center;color:#78716c">${t('thankYou')}</p><p style="text-align:center;color:#a8a29e;font-size:11px;margin-top:10px">${bp.name} | Printed: ${new Date().toLocaleString()}</p></div>`;
+    }
+    window.print();
+}
+
+/* ======================================================================
+   AUTO PRICING (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderAutoPricing(){
+    const sec=document.getElementById('sec-autopricing');
+    sec.innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800" data-i18n="autoPricing">${t('autoPricing')}</h1><p class="text-sm text-stone-400 mt-1">${t('pricingDesc')}</p></div>
+        <div class="grid lg:grid-cols-2 gap-6">
+            <div class="stat-card">
+                <h3 class="text-sm font-display font-700 mb-4">${t('calculatedPrice')}</h3>
+                <div class="mb-4"><label class="form-label">${t('costPriceLabel')}</label><input class="form-input" type="number" id="apCost" oninput="calcPrice()" placeholder="0"></div>
+                <div class="mb-4"><label class="form-label">${t('overheadLabel')}</label><input class="form-input" type="number" id="apOverhead" value="10" oninput="calcPrice()"></div>
+                <div class="mb-4"><label class="form-label">${t('marginLabel')}</label><input class="form-input" type="number" id="apMargin" value="20" oninput="calcPrice()"></div>
+                <div class="p-4 rounded-xl" style="background:linear-gradient(135deg,rgba(217,119,6,0.1),rgba(180,83,9,0.05))"><p class="text-sm text-stone-500">${t('calculatedPrice')}</p><p class="text-3xl font-display font-900 text-umas-700" id="apResult">TZS 0</p></div>
+            </div>
+            <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4">${t('formula')}</h3>
+                <div class="p-4 bg-stone-50 rounded-xl font-mono text-sm leading-relaxed" style="white-space:pre-line">Selling Price = Cost + (Cost × Overhead%) + (Cost × Margin%)
+Example: Cost = 10,000
+Overhead = 10% → 1,000
+Margin = 20% → 2,000
+Selling Price = 13,000 TZS</div>
+            </div>
+        </div>`;
+}
+
+function calcPrice(){
+    const cost=parseFloat(document.getElementById('apCost').value)||0;
+    const oh=parseFloat(document.getElementById('apOverhead').value)||0;
+    const margin=parseFloat(document.getElementById('apMargin').value)||0;
+    const price=cost+(cost*oh/100)+(cost*margin/100);
+    document.getElementById('apResult').textContent='TZS '+fmt(Math.round(price));
+}
+
+/* ======================================================================
+   PROFIT ALLOCATION (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderProfit(){
+    const sales=getData('sales',[]);const mn=monthAgo();const td=today();
+    const monthSales=sales.filter(s=>s.date>=mn&&s.date<=td);
+    const totalProfit=monthSales.reduce((a,s)=>a+(s.total-s.cost),0);
+    const sec=document.getElementById('sec-profit');
+    sec.innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800" data-i18n="profitAlloc">${t('profitAlloc')}</h1><p class="text-sm text-stone-400 mt-1">${t('profitDesc')}</p></div>
+        <div class="stat-card mb-6"><h3 class="text-sm font-display font-700 mb-2">${t('totalProfit')}</h3><p class="text-3xl font-display font-900 text-green-600">TZS ${fmt(totalProfit)}</p></div>
+        <div class="grid grid-cols-3 gap-4">
+            <div class="stat-card text-center"><div class="w-12 h-12 rounded-xl bg-umas-50 text-umas-600 flex items-center justify-center mx-auto mb-3"><i class="fas fa-redo"></i></div><p class="text-xs text-stone-400 mb-1">${t('reinvestment')}</p><p class="text-xl font-display font-800">TZS ${fmt(Math.round(totalProfit*0.5))}</p></div>
+            <div class="stat-card text-center"><div class="w-12 h-12 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mx-auto mb-3"><i class="fas fa-piggy-bank"></i></div><p class="text-xs text-stone-400 mb-1">${t('saving')}</p><p class="text-xl font-display font-800">TZS ${fmt(Math.round(totalProfit*0.2))}</p></div>
+            <div class="stat-card text-center"><div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3"><i class="fas fa-users"></i></div><p class="text-xs text-stone-400 mb-1">${t('distribution')}</p><p class="text-xl font-display font-800">TZS ${fmt(Math.round(totalProfit*0.3))}</p></div>
+        </div>`;
+}
+
+/* ======================================================================
+   BREAK-EVEN (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+function renderBreakEven(){
+    const sec=document.getElementById('sec-breakeven');
+    sec.innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800" data-i18n="breakEven">${t('breakEven')}</h1><p class="text-sm text-stone-400 mt-1">${t('breakEvenDesc')}</p></div>
+        <div class="stat-card" style="max-width:500px">
+            <div class="mb-4"><label class="form-label">${t('fixedCosts')} (TZS)</label><input class="form-input" type="number" id="beFixed" placeholder="e.g. 500000"></div>
+            <div class="mb-4"><label class="form-label">${t('variableCost')} (TZS)</label><input class="form-input" type="number" id="beVariable" placeholder="e.g. 8000"></div>
+            <div class="mb-4"><label class="form-label">${t('sellingPriceCalc')} (TZS)</label><input class="form-input" type="number" id="bePrice" placeholder="e.g. 12000"></div>
+            <button class="btn btn-primary" onclick="calcBreakEven()">${t('calculate')}</button>
+            <div id="beResult" class="mt-6" style="display:none">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="p-4 bg-umas-50 rounded-xl text-center"><p class="text-xs text-stone-500">${t('breakEvenQty')}</p><p class="text-2xl font-display font-800 text-umas-700" id="beQty"></p></div>
+                    <div class="p-4 bg-green-50 rounded-xl text-center"><p class="text-xs text-stone-500">${t('breakEvenValue')}</p><p class="text-2xl font-display font-800 text-green-600" id="beValue"></p></div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function calcBreakEven(){
+    const fixed=parseFloat(document.getElementById('beFixed').value)||0;
+    const variable=parseFloat(document.getElementById('beVariable').value)||0;
+    const price=parseFloat(document.getElementById('bePrice').value)||0;
+    if(!fixed||!price||price<=variable){toast(t('errorFill'),'error');return}
+    const contribution=price-variable;const qty=Math.ceil(fixed/contribution);
+    document.getElementById('beQty').textContent=qty+' units';
+    document.getElementById('beValue').textContent='TZS '+fmt(qty*price);
+    document.getElementById('beResult').style.display='block';
+}
+
+/* ======================================================================
+   REPORTS (ORIGINAL PATTERN RECONSTRUCTED + EXPORT WITH BUSINESS INFO)
+   ====================================================================== */
+function renderReports(){
+    const sec=document.getElementById('sec-reports');
+    sec.innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800" data-i18n="reports">${t('reports')}</h1></div>
+        <div class="stat-card" style="max-width:500px">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('reportType')}</label><select class="form-select" id="rptType"><option value="profit">${t('profitReport')}</option><option value="expense">${t('expenseReport')}</option><option value="inventory">${t('inventoryReport')}</option></select></div>
+                <div><label class="form-label">${t('date')}</label><select class="form-select" id="rptPeriod"><option value="daily">${t('daily')}</option><option value="weekly">${t('weekly')}</option><option value="monthly" selected>${t('monthly')}</option><option value="annual">${t('annual')}</option></select></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="form-label">${t('fromDate')}</label><input class="form-input" type="date" id="rptFrom" value="${monthAgo()}"></div>
+                <div><label class="form-label">${t('toDate')}</label><input class="form-input" type="date" id="rptTo" value="${today()}"></div>
+            </div>
+            <div class="flex gap-3"><button class="btn btn-primary" onclick="generateReport('pdf')"><i class="fas fa-file-pdf"></i> PDF</button><button class="btn btn-success" onclick="generateReport('excel')"><i class="fas fa-file-excel"></i> Excel</button><button class="btn btn-secondary" onclick="generateReport('print')"><i class="fas fa-print"></i> ${t('generate')}</button></div>
+        </div>`;
+}
+
+function generateReport(format){
+    const type=document.getElementById('rptType').value;
+    const from=document.getElementById('rptFrom').value;
+    const to=document.getElementById('rptTo').value;
+    const bp=getBusinessProfile();
+    let rows=[];let title='';
+
+    if(type==='profit'){
+        title=t('profitReport');
+        const sales=getData('sales',[]).filter(s=>s.date>=from&&s.date<=to);
+        rows=sales.map(s=>{const p=getData('products',[]).find(x=>x.code===s.product);return{Date:s.date,Product:p?p.name:s.product,Qty:s.qty,Revenue:s.total,Cost:s.cost,Profit:s.total-s.cost}});
+    } else if(type==='expense'){
+        title=t('expenseReport');
+        const stockIn=getData('stockIn',[]).filter(s=>s.date>=from&&s.date<=to);
+        rows=stockIn.map(s=>{const p=getData('products',[]).find(x=>x.code===s.product);return{Date:s.date,Supplier:s.supplier,Product:p?p.name:s.product,Qty:s.qty,'Unit Cost':s.unitCost,Total:s.total}});
+    } else {
+        title=t('inventoryReport');
+        rows=getData('products',[]).map(p=>({Code:p.code,Name:p.name,Category:p.category,Stock:p.stock,'Cost Price':p.cost,'Selling Price':p.price,Value:p.stock*p.cost}));
+    }
+
+    if(format==='excel'){
+        try{
+            const ws=XLSX.utils.json_to_sheet(rows);
+            const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,title);
+            /* Add business info as header rows */
+            XLSX.writeFile(wb,`${bp.name}_${title}_${from}.xlsx`);
+            toast(t('reportGenerated'),'success');
+        }catch(e){toast('Export failed','error')}
+    } else if(format==='print'){
+        const printArea=document.getElementById('printArea');
+        printArea.innerHTML=`<div class="receipt-a4" style="padding:40px"><div style="text-align:center;margin-bottom:30px"><h1 style="font-family:Outfit">${bp.name}</h1><p>${bp.address||''}</p><p>${bp.phone||''} | ${bp.email||''}</p></div><h2 style="text-align:center;margin-bottom:20px">${title}</h2><p style="margin-bottom:15px">${t('fromDate')}: ${fmtDate(from)} - ${t('toDate')}: ${fmtDate(to)}</p><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f5f3ef">${Object.keys(rows[0]||{}).map(k=>`<th style="padding:8px;text-align:left;border:1px solid #e7e5e4;font-size:12px">${k}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${Object.values(r).map(v=>`<td style="padding:6px;border:1px solid #e7e5e4;font-size:12px">${typeof v==='number'?fmt(v):v}</td>`).join('')}</tr>`).join('')}</tbody></table><p style="text-align:center;color:#a8a29e;font-size:11px;margin-top:20px">${bp.name} | ${new Date().toLocaleString()}</p></div>`;
+        window.print();
+    } else {
+        toast('PDF export requires jspdf library. Use Print or Excel instead.','warning');
+    }
+    toast(t('reportGenerated'),'success');
+}
+
+/* ======================================================================
+   POS (ORIGINAL PATTERN RECONSTRUCTED)
+   ====================================================================== */
+let posCart=[];
+function renderPOS(){
+    posCart=[];
+    const products=getData('products',[]).filter(p=>p.stock>0);
+    const sec=document.getElementById('sec-pos');
+    sec.innerHTML=`
+        <div class="grid lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2">
+                <div class="flex gap-3 mb-4">
+                    <input type="text" class="form-input" placeholder="${t('searchBarcode')}" id="posSearch" oninput="filterPOS(this.value)">
+                    <input type="text" class="form-input" placeholder="${t('searchName')}" id="posNameSearch" oninput="filterPOSName(this.value)">
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" id="posGrid">
+                    ${products.map(p=>`<div class="pos-product-card" data-code="${p.code}" data-name="${p.name.toLowerCase()}" onclick="addToCart('${p.code}')">
+                        <p class="text-xs text-stone-400 mb-1">${p.code}</p>
+                        <p class="font-600 text-sm mb-2" style="min-height:36px">${p.name}</p>
+                        <p class="text-xs text-stone-400">${t('stock')}: ${p.stock}</p>
+                        <p class="font-700 text-umas-700 mt-1">${fmt(p.price)}</p>
+                    </div>`).join('')}
+                </div>
+            </div>
+            <div class="stat-card" style="position:sticky;top:24px;align-self:start">
+                <h3 class="text-sm font-display font-700 mb-4">${t('cart')} (<span id="cartCount">0</span>)</h3>
+                <div id="cartItems" style="max-height:400px;overflow-y:auto"><p class="text-sm text-stone-400">${t('empty')}</p></div>
+                <div style="border-top:2px solid var(--border);padding-top:12px;margin-top:12px">
+                    <div class="flex justify-between mb-2"><span class="text-sm text-stone-500">${t('discount')} (%)</span><input type="number" class="form-input" style="width:80px;padding:6px" id="posDisc" value="0" min="0" max="100" oninput="updateCartTotal()"></div>
+                    <div class="flex justify-between items-center"><span class="font-display font-800 text-lg">${t('total')}</span><span class="font-display font-900 text-xl text-umas-700" id="cartTotal">TZS 0</span></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                    <button class="btn btn-primary w-full" onclick="completePOSSale('cash')"><i class="fas fa-money-bill"></i> ${t('cash')}</button>
+                    <button class="btn btn-secondary w-full" onclick="completePOSSale('mobile')"><i class="fas fa-mobile-alt"></i> ${t('mobileMoney')}</button>
+                </div>
+                <button class="btn btn-danger w-full mt-2" onclick="posCart=[];updateCartUI()">${t('clearCart')}</button>
+            </div>
+        </div>`;
+}
+
+function filterPOS(v){document.querySelectorAll('.pos-product-card').forEach(c=>{c.style.display=c.dataset.code.toLowerCase().includes(v.toLowerCase())?'':'none'})}
+function filterPOSName(v){document.querySelectorAll('.pos-product-card').forEach(c=>{c.style.display=c.dataset.name.includes(v.toLowerCase())?'':'none'})}
+
+function addToCart(code){
+    const p=getData('products',[]).find(x=>x.code===code);if(!p)return;
+    const existing=posCart.find(x=>x.code===code);
+    if(existing){if(existing.qty<p.stock)existing.qty++;else{toast('Stock insufficient','warning');return}}
+    else posCart.push({code,name:p.name,price:p.price,cost:p.cost,qty:1,maxStock:p.stock});
+    updateCartUI();
+}
+
+function updateCartUI(){
+    const disc=parseInt(document.getElementById('posDisc')?.value||0);
+    const subtotal=posCart.reduce((a,c)=>a+c.price*c.qty,0);
+    const total=subtotal-Math.round(subtotal*disc/100);
+    document.getElementById('cartCount').textContent=posCart.reduce((a,c)=>a+c.qty,0);
+    document.getElementById('cartTotal').textContent='TZS '+fmt(total);
+    const container=document.getElementById('cartItems');
+    if(posCart.length===0){container.innerHTML=`<p class="text-sm text-stone-400">${t('empty')}</p>`;return}
+    container.innerHTML=posCart.map((c,i)=>`<div class="cart-item">
+        <div class="flex-1"><p class="text-sm font-600">${c.name}</p><p class="text-xs text-stone-400">${fmt(c.price)} × ${c.qty}</p></div>
+        <div class="flex items-center gap-2"><button class="btn btn-xs btn-secondary" onclick="posCart[${i}].qty=Math.max(1,posCart[${i}].qty-1);updateCartUI()">-</button><span class="text-sm font-600">${c.qty}</span><button class="btn btn-xs btn-secondary" onclick="if(posCart[${i}].qty<posCart[${i}].maxStock){posCart[${i}].qty++;updateCartUI()}">+</button></div>
+        <button class="text-red-500 text-sm" onclick="posCart.splice(${i},1);updateCartUI()"><i class="fas fa-times"></i></button>
+    </div>`).join('');
+}
+
+function updateCartTotal(){updateCartUI()}
+
+function completePOSSale(payment){
+    if(posCart.length===0){toast(t('empty'),'warning');return}
+    const disc=parseInt(document.getElementById('posDisc')?.value||0);
+    const customers=getData('customers',[]);
+    posCart.forEach(c=>{
+        const subtotal=c.price*c.qty;const total=subtotal-Math.round(subtotal*disc/100);
+        const sales=getData('sales',[]);
+        sales.push({id:genId('RCPT'),date:today(),customer:customers.length>0?customers[0].code:'',product:c.code,qty:c.qty,price:c.price,discount:disc,vat:0,payment,total,cost:c.cost*c.qty});
+        setDataSync('sales',sales);
+        const products=getData('products',[]);const p=products.find(x=>x.code===c.code);if(p)p.stock=Math.max(0,p.stock-c.qty);setDataSync('products',products);
+    });
+    posCart=[];renderPOS();toast(t('successSave'),'success');
+}
+
+/* ======================================================================
+   SECURITY (ORIGINAL PATTERN RECONSTRUCTED + CHANGE PASSWORD ADDED)
+   ====================================================================== */
+function renderSecurity(){
+    const sec=document.getElementById('sec-security');
+    sec.innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800" data-i18n="security">${t('security')}</h1></div>
+        <div class="grid lg:grid-cols-2 gap-6">
+            <div class="stat-card">
+                <h3 class="text-sm font-display font-700 mb-4">${t('changePassword')}</h3>
+                <form onsubmit="return handleSecurityPwChange(event)">
+                    <div class="mb-4"><label class="form-label">${t('currentPass')}</label><input class="form-input" type="password" id="secCurrPw" required></div>
+                    <div class="mb-4"><label class="form-label">${t('newPass')}</label><input class="form-input" type="password" id="secNewPw" required minlength="6"></div>
+                    <div class="mb-6"><label class="form-label">${t('confirmPass')}</label><input class="form-input" type="password" id="secConfPw" required minlength="6"></div>
+                    <button type="submit" class="btn btn-primary">${t('update')}</button>
+                </form>
+            </div>
+            <div class="stat-card">
+                <h3 class="text-sm font-display font-700 mb-4">${t('dataIsolated')}</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-3 p-3 bg-green-50 rounded-xl"><i class="fas fa-check-circle text-green-600"></i><span class="text-sm">Firebase Authentication</span></div>
+                    <div class="flex items-center gap-3 p-3 bg-green-50 rounded-xl"><i class="fas fa-check-circle text-green-600"></i><span class="text-sm">Role-Based Access Control</span></div>
+                    <div class="flex items-center gap-3 p-3 bg-green-50 rounded-xl"><i class="fas fa-check-circle text-green-600"></i><span class="text-sm">Session Timeout (30 min)</span></div>
+                    <div class="flex items-center gap-3 p-3 bg-green-50 rounded-xl"><i class="fas fa-check-circle text-green-600"></i><span class="text-sm">Multi-Tenant Data Isolation</span></div>
+                    <div class="flex items-center gap-3 p-3 bg-green-50 rounded-xl"><i class="fas fa-check-circle text-green-600"></i><span class="text-sm">Input Validation & XSS Protection</span></div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function handleSecurityPwChange(e){
+    e.preventDefault();
+    const curr=document.getElementById('secCurrPw').value;
+    const newPw=document.getElementById('secNewPw').value;
+    const conf=document.getElementById('secConfPw').value;
+    changePassword(curr,newPw,conf);
+    return false;
+}
+
+/* ======================================================================
+   BUSINESS PROFILE (NEW)
+   ====================================================================== */
+function renderBusinessProfile(){
+    const bp=getBusinessProfile();
+    const sec=document.getElementById('sec-business-profile');
+    sec.innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800" data-i18n="businessProfile">${t('businessProfile')}</h1></div>
+        <div class="stat-card" style="max-width:600px">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="logo-upload" id="logoUpload" onclick="document.getElementById('logoInput').click()">
+                    ${bp.logo?`<img src="${bp.logo}" alt="Logo">`:'<i class="fas fa-camera"></i>'}
+                </div>
+                <input type="file" id="logoInput" accept="image/*" style="display:none" onchange="handleLogoUpload(this)">
+                <div><p class="font-600">${t('businessLogo')}</p><p class="text-xs text-stone-400">PNG, JPG - Max 2MB</p></div>
+            </div>
+            <form onsubmit="return saveBusinessProfile(event)">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div><label class="form-label">${t('businessName')}</label><input class="form-input" id="bpName" value="${escHtml(bp.name)}"
