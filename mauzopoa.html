@@ -2074,3 +2074,202 @@ function renderBusinessProfile(){
             <form onsubmit="return saveBusinessProfile(event)">
                 <div class="grid grid-cols-2 gap-4 mb-4">
                     <div><label class="form-label">${t('businessName')}</label><input class="form-input" id="bpName" value="${escHtml(bp.name)}"
+/* ===== PROFIT ALLOCATION ===== */
+function renderProfit(){
+    const sales=getData('sales',[]);const mn=monthAgo();const td=today();
+    const mSales=sales.filter(s=>s.date>=mn&&s.date<=td);
+    const totalProfit=mSales.reduce((a,s)=>a+(s.total-s.cost),0);
+    const reinvest=Math.round(totalProfit*0.5);const saving=Math.round(totalProfit*0.2);const distrib=Math.round(totalProfit*0.3);
+    const sec=document.getElementById('sec-profit');
+    sec.innerHTML=`<div class="flex items-center justify-between mb-6 flex-wrap gap-3"><h1 class="text-2xl font-display font-800">${t('profitAlloc')}</h1>${exportButtonsHTML()}</div>
+    <div class="stat-card mb-6"><p class="text-sm text-stone-500 mb-6">${t('profitDesc')}</p><div class="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl text-center mb-6"><p class="text-sm text-stone-500 mb-2">${t('totalProfit')} (${fmtDate(mn)} - ${fmtDate(td)})</p><p class="text-4xl font-display font-900 text-green-700">${fmt(totalProfit)}</p><p class="text-sm text-stone-400 mt-1">TZS</p></div>
+    <div class="grid md:grid-cols-3 gap-4"><div class="p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 text-center"><div class="w-12 h-12 rounded-xl bg-blue-500 text-white flex items-center justify-center mx-auto mb-3"><i class="fas fa-redo"></i></div><p class="text-xs text-stone-500 mb-1">${t('reinvestment')}</p><p class="text-2xl font-display font-800 text-blue-700">${fmt(reinvest)}</p><p class="text-xs text-stone-400">TZS</p></div><div class="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100 text-center"><div class="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center mx-auto mb-3"><i class="fas fa-piggy-bank"></i></div><p class="text-xs text-stone-500 mb-1">${t('saving')}</p><p class="text-2xl font-display font-800 text-amber-700">${fmt(saving)}</p><p class="text-xs text-stone-400">TZS</p></div><div class="p-5 rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 text-center"><div class="w-12 h-12 rounded-xl bg-purple-500 text-white flex items-center justify-center mx-auto mb-3"><i class="fas fa-hand-holding-usd"></i></div><p class="text-xs text-stone-500 mb-1">${t('distribution')}</p><p class="text-2xl font-display font-800 text-purple-700">${fmt(distrib)}</p><p class="text-xs text-stone-400">TZS</p></div></div></div>`;
+    lastReportData={title:'UMAS - '+t('profitAlloc')+' - '+fmtDate(today()),rows:[{label:t('reinvestment'),amount:reinvest,pct:'50%'},{label:t('saving'),amount:saving,pct:'20%'},{label:t('distribution'),amount:distrib,pct:'30%'}],columns:[{key:'label',header:'Category',width:30},{key:'amount',header:'Amount (TZS)',width:20,value:r=>fmt(r.amount)},{key:'pct',header:'Percentage',width:14}],summaryRows:[{label:t('totalProfit'),value:fmt(totalProfit)+' TZS'},{label:'Kipindi',value:fmtDate(mn)+' - '+fmtDate(td)},{label:t('itemsSold'),value:mSales.reduce((a,s)=>a+s.qty,0)}]};
+}
+
+/* ===== BREAK-EVEN ===== */
+function renderBreakEven(){
+    const sec=document.getElementById('sec-breakeven');
+    sec.innerHTML=`<div class="flex items-center justify-between mb-6 flex-wrap gap-3"><h1 class="text-2xl font-display font-800">${t('breakEven')}</h1>${exportButtonsHTML()}</div>
+    <div class="stat-card mb-6"><p class="text-sm text-stone-500 mb-6">${t('breakEvenDesc')}</p><div class="grid md:grid-cols-3 gap-4 mb-6"><div><label class="form-label">${t('fixedCosts')} (TZS)</label><input class="form-input" type="number" id="beFixed" value="2000000"></div><div><label class="form-label">${t('variableCost')} (TZS)</label><input class="form-input" type="number" id="beVariable" value="15000"></div><div><label class="form-label">${t('sellingPriceCalc')} (TZS)</label><input class="form-input" type="number" id="beSelling" value="25000"></div></div><button class="btn btn-primary w-full" onclick="calcBreakEven()"><i class="fas fa-calculator"></i> ${t('calculate')}</button></div>
+    <div class="grid md:grid-cols-2 gap-4" id="beResults" style="display:none"><div class="stat-card text-center p-8"><p class="text-sm text-stone-500 mb-2">${t('breakEvenQty')}</p><p class="text-4xl font-display font-900 text-umas-700" id="beQtyResult">0</p><p class="text-sm text-stone-400">Units</p></div><div class="stat-card text-center p-8"><p class="text-sm text-stone-500 mb-2">${t('breakEvenValue')}</p><p class="text-4xl font-display font-900 text-green-700" id="beValResult">0</p><p class="text-sm text-stone-400">TZS</p></div></div>`;
+    lastReportData={title:'UMAS - '+t('breakEven')+' - '+fmtDate(today()),rows:[],columns:[],summaryRows:[]};
+}
+function calcBreakEven(){const f=parseFloat(document.getElementById('beFixed').value)||0;const v=parseFloat(document.getElementById('beVariable').value)||0;const s=parseFloat(document.getElementById('beSelling').value)||0;if(s<=v){toast('Bei ya kuuza lazima iwe kubwa kuliko gharama ya kibidhaa!','error');return}const qty=Math.ceil(f/(s-v));const val=qty*s;document.getElementById('beResults').style.display='grid';document.getElementById('beQtyResult').textContent=fmt(qty);document.getElementById('beValResult').textContent=fmt(val);lastReportData={title:'UMAS - '+t('breakEven')+' - '+fmtDate(today()),rows:[{label:'Gharama Zisizobadilika',value:f},{label:'Gharama ya Kibidhaa',value:v},{label:'Bei ya Kuuza',value:s},{label:'Faida ya Kibidhaa',value:s-v}],columns:[{key:'label',header:'Description',width:30},{key:'value',header:'Amount (TZS)',width:20,value:r=>fmt(r.value)}],summaryRows:[{label:t('breakEvenQty'),value:fmt(qty)+' Units'},{label:t('breakEvenValue'),value:fmt(val)+' TZS'}]};toast(t('reportGenerated'),'success')}
+
+/* ===== REPORTS (KWA UHELPU WA EXCEL NA PDF) ===== */
+function renderReports(){
+    const sec=document.getElementById('sec-reports');
+    sec.innerHTML=`
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h1 class="text-2xl font-display font-800" data-i18n="reports">${t('reports')}</h1>
+    </div>
+    <div class="stat-card mb-6">
+        <h3 class="text-sm font-display font-700 mb-4">${t('generate')} ${t('reports')}</h3>
+        <div class="grid md:grid-cols-3 gap-4 mb-4">
+            <div><label class="form-label">${t('reportType')}</label>
+                <select class="form-select" id="rptType">
+                    <option value="profit">${t('profitReport')}</option>
+                    <option value="expense">${t('expenseReport')}</option>
+                    <option value="inventory">${t('inventoryReport')}</option>
+                    <option value="daily">${t('daily')}</option>
+                    <option value="weekly">${t('weekly')}</option>
+                    <option value="monthly">${t('monthly')}</option>
+                    <option value="annual">${t('annual')}</option>
+                </select>
+            </div>
+            <div><label class="form-label">${t('fromDate')}</label><input class="form-input" type="date" id="rptFrom" value="${monthAgo()}"></div>
+            <div><label class="form-label">${t('toDate')}</label><input class="form-input" type="date" id="rptTo" value="${today()}"></div>
+        </div>
+        <button class="btn btn-primary" onclick="generateReport()"><i class="fas fa-chart-bar"></i> ${t('generate')}</button>
+    </div>
+    <div id="reportResultArea"></div>`;
+    lastReportData={title:'UMAS - '+t('reports'),rows:[],columns:[],summaryRows:[]};
+}
+
+function generateReport(){
+    const type=document.getElementById('rptType').value;
+    const from=document.getElementById('rptFrom').value;
+    const to=document.getElementById('rptTo').value;
+    const sales=getData('sales',[]).filter(s=>s.date>=from&&s.date<=to);
+    const products=getData('products',[]);
+    const stockIn=getData('stockIn',[]).filter(s=>s.date>=from&&s.date<=to);
+    const area=document.getElementById('reportResultArea');
+    let title='',rows=[],columns=[],summaryRows=[];
+
+    if(type==='profit'||type==='daily'||type==='weekly'||type==='monthly'||type==='annual'){
+        /* Ripoti ya Faida */
+        const periodLabels={daily:'Daily',weekly:'Weekly',monthly:'Monthly',annual:'Annual'};
+        title='UMAS - '+t('profitReport')+(type!=='profit'?' ('+periodLabels[type]+')':'')+' '+fmtDate(from)+' - '+fmtDate(to);
+        /* Panga mauzo kulingana na aina */
+        let grouped={};
+        if(type==='daily'){
+            sales.forEach(s=>{if(!grouped[s.date])grouped[s.date]={date:s.date,sales:0,cost:0,profit:0,items:0};grouped[s.date].sales+=s.total;grouped[s.date].cost+=s.cost;grouped[s.date].profit+=(s.total-s.cost);grouped[s.date].items+=s.qty});
+        }else if(type==='weekly'){
+            sales.forEach(s=>{const d=new Date(s.date);const wk=Math.floor((d.getDate()-1)/7)+1;const key=s.date.substring(0,7)+'-W'+wk;if(!grouped[key])grouped[key]={date:key,sales:0,cost:0,profit:0,items:0};grouped[key].sales+=s.total;grouped[key].cost+=s.cost;grouped[key].profit+=(s.total-s.cost);grouped[key].items+=s.qty});
+        }else if(type==='monthly'){
+            sales.forEach(s=>{const key=s.date.substring(0,7);if(!grouped[key])grouped[key]={date:key,sales:0,cost:0,profit:0,items:0};grouped[key].sales+=s.total;grouped[key].cost+=s.cost;grouped[key].profit+=(s.total-s.cost);grouped[key].items+=s.qty});
+        }else if(type==='annual'){
+            sales.forEach(s=>{const key=s.date.substring(0,4);if(!grouped[key])grouped[key]={date:key,sales:0,cost:0,profit:0,items:0};grouped[key].sales+=s.total;grouped[key].cost+=s.cost;grouped[key].profit+=(s.total-s.cost);grouped[key].items+=s.qty});
+        }else{
+            /* profit - per product */
+            sales.forEach(s=>{if(!grouped[s.product])grouped[s.product]={date:s.product,sales:0,cost:0,profit:0,items:0};grouped[s.product].sales+=s.total;grouped[s.product].cost+=s.cost;grouped[s.product].profit+=(s.total-s.cost);grouped[s.product].items+=s.qty});
+        }
+        rows=Object.values(grouped);
+        const isProduct=type==='profit';
+        columns=[
+            {key:'date',header:isProduct?t('productNameCol'):t('date'),width:20},
+            {key:'items',header:t('itemsSold'),width:14},
+            {key:'sales',header:t('totalSales')+' (TZS)',width:20,value:r=>fmt(r.sales)},
+            {key:'cost',header:t('totalCosts')+' (TZS)',width:20,value:r=>fmt(r.cost)},
+            {key:'profit',header:t('netProfit')+' (TZS)',width:20,value:r=>fmt(r.profit)},
+            {key:'margin',header:t('marginCol')+'%',width:12,value:r=>r.sales>0?Math.round(r.profit/r.sales*100):0}
+        ];
+        const totS=rows.reduce((a,r)=>a+r.sales,0);
+        const totC=rows.reduce((a,r)=>a+r.cost,0);
+        const totP=rows.reduce((a,r)=>a+r.profit,0);
+        const totI=rows.reduce((a,r)=>a+r.items,0);
+        summaryRows=[
+            {label:t('totalSales'),value:fmt(totS)+' TZS'},
+            {label:t('totalCosts'),value:fmt(totC)+' TZS'},
+            {label:t('netProfit'),value:fmt(totP)+' TZS'},
+            {label:'Margin %',value:totS>0?Math.round(totP/totS*100)+'%':'0%'},
+            {label:t('itemsSold'),value:totI},
+            {label:'Kipindi',value:fmtDate(from)+' - '+fmtDate(to)}
+        ];
+        /* Onyesha meza */
+        area.innerHTML=`<div class="stat-card"><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><h3 class="text-sm font-display font-700">${title}</h3>${exportButtonsHTML()}</div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <div class="p-4 bg-umas-50 rounded-xl"><p class="text-xs text-stone-400">${t('totalSales')}</p><p class="text-lg font-display font-800 text-umas-700">${fmt(totS)}</p></div>
+            <div class="p-4 bg-red-50 rounded-xl"><p class="text-xs text-stone-400">${t('totalCosts')}</p><p class="text-lg font-display font-800 text-red-600">${fmt(totC)}</p></div>
+            <div class="p-4 bg-green-50 rounded-xl"><p class="text-xs text-stone-400">${t('netProfit')}</p><p class="text-lg font-display font-800 text-green-600">${fmt(totP)}</p></div>
+            <div class="p-4 bg-blue-50 rounded-xl"><p class="text-xs text-stone-400">${t('marginCol')}</p><p class="text-lg font-display font-800 text-blue-600">${totS>0?Math.round(totP/totS*100):0}%</p></div>
+        </div>
+        <div class="overflow-x-auto"><table class="data-table"><thead><tr>${columns.map(c=>`<th>${c.header}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${columns.map(c=>`<td>${c.value?c.value(r):(r[c.key]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+    }else if(type==='expense'){
+        /* Ripoti ya Gharama */
+        title='UMAS - '+t('expenseReport')+' '+fmtDate(from)+' - '+fmtDate(to);
+        rows=stockIn.map(s=>{const p=products.find(x=>x.code===s.product);return{...s,productName:p?p.name:s.product}});
+        columns=[
+            {key:'id',header:'ID',width:14},{key:'date',header:t('date'),width:14},{key:'invoice',header:t('invoiceNo'),width:18},
+            {key:'productName',header:t('productNameCol'),width:22},{key:'qty',header:t('qty'),width:10},
+            {key:'unitCost',header:t('unitCost')+' (TZS)',width:16,value:r=>fmt(r.unitCost)},{key:'total',header:t('totalCost')+' (TZS)',width:18,value:r=>fmt(r.total)}
+        ];
+        const totExp=rows.reduce((a,r)=>a+r.total,0);
+        summaryRows=[{label:t('totalCosts'),value:fmt(totExp)+' TZS'},{label:'Vipindi vya Kuingiza',value:rows.length},{label:'Kipindi',value:fmtDate(from)+' - '+fmtDate(to)}];
+        area.innerHTML=`<div class="stat-card"><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><h3 class="text-sm font-display font-700">${title}</h3>${exportButtonsHTML()}</div>
+        <div class="p-4 bg-red-50 rounded-xl mb-6 inline-block"><p class="text-xs text-stone-400">${t('totalCosts')}</p><p class="text-2xl font-display font-800 text-red-600">${fmt(totExp)} TZS</p></div>
+        <div class="overflow-x-auto"><table class="data-table"><thead><tr>${columns.map(c=>`<th>${c.header}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${columns.map(c=>`<td>${c.value?c.value(r):(r[c.key]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+    }else if(type==='inventory'){
+        /* Ripoti ya Bidhaa */
+        title='UMAS - '+t('inventoryReport')+' - '+fmtDate(today());
+        rows=products.map(p=>({code:p.code,name:p.name,category:t(p.category),cost:p.cost,price:p.price,stock:p.stock,reorder:p.reorder,value:p.stock*p.cost,status:p.stock<=p.reorder?'Low':'OK'}));
+        columns=[
+            {key:'code',header:t('productCode'),width:14},{key:'name',header:t('productNameCol'),width:24},{key:'category',header:t('category'),width:14},
+            {key:'cost',header:t('costPrice')+' (TZS)',width:16,value:r=>fmt(r.cost)},{key:'price',header:t('sellingPrice')+' (TZS)',width:16,value:r=>fmt(r.price)},
+            {key:'stock',header:t('currentStock'),width:12},{key:'value',header:t('stockValue')+' (TZS)',width:18,value:r=>fmt(r.value)},{key:'status',header:t('statusCol'),width:10}
+        ];
+        const totVal=rows.reduce((a,r)=>a+r.value,0);
+        const lowCount=rows.filter(r=>r.status==='Low').length;
+        summaryRows=[{label:'Jumla ya Bidhaa',value:rows.length},{label:t('stockValue'),value:fmt(totVal)+' TZS'},{label:'Bidhaa Chini (Low Stock)',value:lowCount}];
+        area.innerHTML=`<div class="stat-card"><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><h3 class="text-sm font-display font-700">${title}</h3>${exportButtonsHTML()}</div>
+        <div class="grid grid-cols-3 gap-3 mb-6"><div class="p-4 bg-umas-50 rounded-xl"><p class="text-xs text-stone-400">Bidhaa</p><p class="text-lg font-display font-800 text-umas-700">${rows.length}</p></div><div class="p-4 bg-green-50 rounded-xl"><p class="text-xs text-stone-400">${t('stockValue')}</p><p class="text-lg font-display font-800 text-green-600">${fmt(totVal)}</p></div><div class="p-4 bg-red-50 rounded-xl"><p class="text-xs text-stone-400">Low Stock</p><p class="text-lg font-display font-800 text-red-600">${lowCount}</p></div></div>
+        <div class="overflow-x-auto"><table class="data-table"><thead><tr>${columns.map(c=>`<th>${c.header}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${columns.map(c=>`<td>${c.value?c.value(r):(r[c.key]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+    }
+    /* Hifadhi data ya ripoti kwa ajili ya export */
+    lastReportData={title,rows,columns,summaryRows};
+    toast(t('reportGenerated'),'success');
+}
+
+/* ===== POS ===== */
+let posCart=[];
+function renderPOS(){
+    const products=getData('products',[]).filter(p=>p.stock>0);
+    const customers=getData('customers',[]);
+    const sec=document.getElementById('sec-pos');
+    sec.innerHTML=`<div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-display font-800">${t('pos')}</h1></div>
+    <div class="grid lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2">
+            <div class="flex gap-3 mb-4"><input type="text" class="form-input" placeholder="${t('searchBarcode')}" id="posSearch" oninput="filterPOS()"><input type="text" class="form-input" placeholder="${t('searchName')}" id="posNameSearch" oninput="filterPOS()"></div>
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3" id="posGrid">${products.map(p=>`<div class="pos-product-card" data-code="${p.code}" data-name="${p.name.toLowerCase()}" data-barcode="${p.barcode}" onclick="addToCart('${p.code}')"><p class="text-xs text-stone-400 mb-1">${p.code}</p><p class="font-600 text-sm mb-2" style="min-height:36px">${p.name}</p><p class="font-display font-800 text-umas-700">${fmt(p.price)}</p><p class="text-xs text-stone-400 mt-1">${t('stock')}: ${p.stock}</p></div>`).join('')}</div>
+        </div>
+        <div class="stat-card h-fit" style="position:sticky;top:24px">
+            <h3 class="text-sm font-display font-700 mb-3">${t('cart')}</h3>
+            <div class="mb-3"><select class="form-select" id="posCustomer">${customers.map(c=>`<option value="${c.code}">${c.name}</option>`).join('')}<option value="">Walk-in</option></select></div>
+            <div id="cartItems" style="max-height:300px;overflow-y:auto">${posCart.length===0?`<p class="text-sm text-stone-400 text-center py-6">${t('empty')}</p>`:posCart.map((item,i)=>`<div class="cart-item"><div class="flex-1"><p class="text-sm font-600">${item.name}</p><p class="text-xs text-stone-400">${fmt(item.price)} x ${item.qty}</p></div><div class="flex items-center gap-2"><button class="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-xs font-bold" onclick="changeCartQty(${i},-1)">-</button><span class="text-sm font-700 w-6 text-center">${item.qty}</span><button class="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-xs font-bold" onclick="changeCartQty(${i},1)">+</button></div><button class="text-red-400 hover:text-red-600 ml-2" onclick="removeFromCart(${i})"><i class="fas fa-times"></i></button></div>`).join('')}</div>
+            <div class="border-t border-stone-200 pt-3 mt-3 space-y-2">
+                <div class="flex justify-between text-sm"><span class="text-stone-400">${t('subtotal')}</span><span class="font-700">${fmt(posCart.reduce((a,i)=>a+i.price*i.qty,0))} TZS</span></div>
+                <div class="flex justify-between text-sm"><span class="text-stone-400">${t('discount')}%</span><input type="number" class="form-input" style="width:70px;padding:4px 8px;font-size:13px" id="posDisc" value="0" min="0" max="100" oninput="updatePOSTotal()"></div>
+                <div class="flex justify-between text-lg font-display font-800 pt-2 border-t border-stone-200"><span>${t('total')}</span><span class="text-umas-700" id="posTotalDisplay">${fmt(posCart.reduce((a,i)=>a+i.price*i.qty,0))} TZS</span></div>
+            </div>
+            <div class="flex gap-2 mt-4"><button class="btn btn-secondary flex-1" onclick="posCart=[];renderPOS()">${t('clearCart')}</button><button class="btn btn-primary flex-1" onclick="processPOSPay()"><i class="fas fa-cash-register"></i> ${t('pay')}</button></div>
+        </div>
+    </div>`;
+}
+function filterPOS(){const b=document.getElementById('posSearch').value.toLowerCase();const n=document.getElementById('posNameSearch').value.toLowerCase();document.querySelectorAll('.pos-product-card').forEach(c=>{const matchB=c.dataset.barcode.includes(b);const matchN=c.dataset.name.includes(n);c.style.display=(matchB&&matchN)?'':'none'})}
+function addToCart(code){const products=getData('products',[]);const p=products.find(x=>x.code===code);if(!p)return;const existing=posCart.findIndex(i=>i.code===code);if(existing>=0){posCart[existing].qty++}else{posCart.push({code:p.code,name:p.name,price:p.price,cost:p.cost,qty:1})}renderPOS()}
+function changeCartQty(idx,delta){posCart[idx].qty+=delta;if(posCart[idx].qty<=0)posCart.splice(idx,1);renderPOS()}
+function removeFromCart(idx){posCart.splice(idx,1);renderPOS()}
+function updatePOSTotal(){const sub=posCart.reduce((a,i)=>a+i.price*i.qty,0);const d=parseFloat(document.getElementById('posDisc').value)||0;document.getElementById('posTotalDisplay').textContent=fmt(Math.round(sub*(1-d/100)))+' TZS'}
+function processPOSPay(){if(posCart.length===0){toast(t('empty'),'warning');return}const sales=getData('sales',[]);const products=getData('products',[]);const cust=document.getElementById('posCustomer').value;const disc=parseFloat(document.getElementById('posDisc').value)||0;let totalAll=0;posCart.forEach(item=>{const sub=item.price*item.qty;const total=Math.round(sub*(1-disc/100));const cost=item.cost*item.qty;sales.push({id:genId('RCPT'),date:today(),customer:cust,product:item.code,qty:item.qty,price:item.price,discount:disc,vat:0,payment:'cash',total:total,cost:cost});totalAll+=total;const pi=products.findIndex(p=>p.code===item.code);if(pi>=0)products[pi].stock-=item.qty});setData('sales',sales);setData('products',products);posCart=[];toast(t('successSave')+' - '+fmt(totalAll)+' TZS');renderPOS()}
+
+/* ===== SECURITY ===== */
+function renderSecurity(){
+    const sec=document.getElementById('sec-security');
+    sec.innerHTML=`<div class="mb-6"><h1 class="text-2xl font-display font-800">${t('security')}</h1></div>
+    <div class="grid md:grid-cols-2 gap-4">
+        <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4">${t('changePassword')}</h3>
+            <div class="space-y-4"><div><label class="form-label">${t('currentPass')}</label><input class="form-input" type="password" id="secCurr"></div><div><label class="form-label">${t('newPass')}</label><input class="form-input" type="password" id="secNew"></div><div><label class="form-label">${t('confirmPass')}</label><input class="form-input" type="password" id="secConf"></div><button class="btn btn-primary w-full" onclick="changeMainPass()"><i class="fas fa-key"></i> ${t('update')}</button></div>
+        </div>
+        <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4">Nenosiri za Sehemu</h3>
+            <div class="space-y-4"><div><label class="form-label">${t('dashboardPass')}</label><div class="flex gap-2"><input class="form-input" value="${PW.dashboard}" readonly><span class="badge-success">Active</span></div></div><div><label class="form-label">${t('formulaPass')}</label><div class="flex gap-2"><input class="form-input" value="${PW.formula}" readonly><span class="badge-success">Active</span></div></div><div><label class="form-label">${t('sheetPass')}</label><div class="flex gap-2"><input class="form-input" value="${PW.sheet}" readonly><span class="badge-success">Active</span></div></div></div>
+        </div>
+    </div>`;
+}
+function changeMainPass(){const curr=document.getElementById('secCurr').value;const nw=document.getElementById('secNew').value;const conf=document.getElementById('secConf').value;if(curr!==PW.dashboard){toast(t('loginError'),'error');return}if(nw.length<4){toast('Nenosiri lazima liwe na herufi 4 au zaidi!','error');return}if(nw!==conf){toast('Nenosiri mpya hailingani!','error');return}PW.dashboard=nw;toast(t('successSave'))}
+
+/* ===== INIT ===== */
+initData();
+</script>
+</body>
+</html>
