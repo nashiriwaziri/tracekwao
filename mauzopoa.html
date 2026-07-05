@@ -93,6 +93,8 @@ tr:hover td{background:rgba(13,148,136,.03)}
 .fu{animation:fadeUp .5s ease both}
 .d1{animation-delay:.1s;opacity:0}.d2{animation-delay:.2s;opacity:0}.d3{animation-delay:.3s;opacity:0}.d4{animation-delay:.4s;opacity:0}
 .grid-bg{background-image:radial-gradient(circle,rgba(13,148,136,.04) 1px,transparent 1px);background-size:24px 24px}
+    <p class="text-center mt-4"
+style="color:rgba(255,255,255,.25);font-size:11px">
 </style>
 </head>
 <body class="grid-bg">
@@ -105,48 +107,6 @@ tr:hover td{background:rgba(13,148,136,.03)}
 <button class="mob-btn no-print" onclick="toggleSB()"><i class="fas fa-bars"></i></button>
 <div id="app"></div>
 <div id="print-zone" class="print-zone" style="display:none"></div>
-
-
-<!-- Toast Container -->
-<div class="toast-container" id="toastContainer"></div>
-
-<!-- Login Screen -->
-<div id="loginScreen" class="login-bg">
-    <div class="login-card">
-        <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-umas-500 to-umas-700 mb-4">
-                <i class="fas fa-chart-line text-2xl text-white"></i>
-            </div>
-            <h1 class="text-2xl font-display font-800 text-white" data-i18n="appName">UMAS Tanzania</h1>
-            <p class="text-sm mt-1" style="color:rgba(255,255,255,0.4)" data-i18n="appSubtitle">Mfumo wa Bei na Usimamizi wa Faida</p>
-        </div>
-        <div class="lang-toggle mb-6 w-fit mx-auto">
-            <button onclick="setLang('sw')" class="active" id="langSw">SW</button>
-            <button onclick="setLang('en')" id="langEn">EN</button>
-        </div>
-        <form id="loginForm" onsubmit="return handleLogin(event)">
-            <div class="mb-4">
-                <label data-i18n="username">Jina la Mtumiaji</label>
-                <input type="text" id="loginUser" value="admin" required>
-            </div>
-            <div class="mb-4">
-                <label data-i18n="password">Nenosiri</label>
-                <input type="password" id="loginPass" value="WAZIRI2015" required>
-            </div>
-            <div class="mb-6">
-                <label data-i18n="role">Jukumu</label>
-                <select id="loginRole">
-                    <option value="admin">super Administrator</option>
-                    <option value="admin">Administrator</option>
-                    <option value="manager">Manager</option>
-                    <option value="cashier">Cashier</option>
-                    <option value="storekeeper">Storekeeper</option>
-                </select>
-            </div>
-            <button type="submit" class="login-btn" data-i18n="loginBtn">Ingia kwa Mfumo</button>
-            <p class="text-center mt-4" style="color:rgba(255,255,255,0.25);font-size:11px">Default: admin / WAZIRI20215</p>
-        </form>
-    </div>
 </div>
 
 <script>
@@ -246,17 +206,123 @@ function destroyCharts(){try{Object.keys(charts).forEach(function(k){if(charts[k
 function logoSVG(){return'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" width="180" height="45"><defs><linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0d9488"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient></defs><rect x="2" y="3" width="44" height="44" rx="12" fill="url(#lg1)"/><text x="24" y="34" text-anchor="middle" fill="#fff" font-size="22" font-weight="900" font-family="Outfit,sans-serif">MP</text><text x="56" y="24" fill="#14b8a6" font-size="19" font-weight="900" font-family="Outfit,sans-serif">Mauzo</text><text x="56" y="44" fill="#22d3ee" font-size="19" font-weight="900" font-family="Outfit,sans-serif">Poa</text></svg>'}
 
 /* ── 13. AUTH (SINGLE) ── */
-function login(u,p,r){
-  var users=gd('users',[]);var found=users.find(function(x){return x.username===u&&x.password===p});
-  if(!found){toast(t('login_error'),'err');return false}
-  if(r&&found.role!==r){toast(t('login_error'),'err');return false}
-  USR=found;try{localStorage.setItem('mp_session',JSON.stringify(found))}catch(e){}
-  addAudit('login',found.username);return true;
-}
-function getSession(){if(USR)return USR;try{var s=localStorage.getItem('mp_session');if(s){USR=JSON.parse(s);return USR}}catch(e){}return null}
-function logout(){if(USR)addAudit('logout',USR.username);USR=null;try{localStorage.removeItem('mp_session')}catch(e){}flushCache();cart=[];nav('landing')}
-function addAudit(action,detail){try{var audits=gd('audit',[]);audits.unshift({id:genId('aud'),userId:USR?USR.id:'anon',userName:USR?USR.username:'anon',action:action,detail:detail,date:new Date().toISOString()});if(audits.length>500)audits=audits.slice(0,500);sd('audit',audits)}catch(e){}}
 
+function login(u, p, r) {
+
+    var users = gd('users', []);
+
+    var found = users.find(function(user) {
+
+        // Username na password
+        if (
+            user.username.trim().toLowerCase() !== u.trim().toLowerCase() ||
+            user.password !== p
+        ) {
+            return false;
+        }
+
+        // Role inayolingana
+        if (user.role === r) {
+            return true;
+        }
+
+        // Super Admin aruhusiwe pia kupitia Administrator (hiari)
+        if (user.role === "super_admin" && r === "admin") {
+            return true;
+        }
+
+        return false;
+
+    });
+
+    if (!found) {
+        toast("Username, Password au Role si sahihi.", "err");
+        return false;
+    }
+
+    USR = found;
+
+    try {
+        localStorage.setItem("mp_session", JSON.stringify(found));
+    } catch (e) {
+        console.error(e);
+    }
+
+    addAudit("login", found.username);
+
+    toast("Karibu " + found.username, "ok");
+
+    return true;
+}
+
+function getSession() {
+
+    if (USR) return USR;
+
+    try {
+
+        var s = localStorage.getItem("mp_session");
+
+        if (s) {
+            USR = JSON.parse(s);
+            return USR;
+        }
+
+    } catch (e) {
+        console.error(e);
+    }
+
+    return null;
+}
+
+function logout() {
+
+    if (USR) {
+        addAudit("logout", USR.username);
+    }
+
+    USR = null;
+
+    try {
+        localStorage.removeItem("mp_session");
+    } catch (e) {
+        console.error(e);
+    }
+
+    flushCache();
+
+    cart = [];
+
+    nav("landing");
+}
+
+function addAudit(action, detail) {
+
+    try {
+
+        var audits = gd("audit", []);
+
+        audits.unshift({
+
+            id: genId("aud"),
+            userId: USR ? USR.id : "anon",
+            userName: USR ? USR.username : "anon",
+            action: action,
+            detail: detail,
+            date: new Date().toISOString()
+
+        });
+
+        if (audits.length > 500) {
+            audits = audits.slice(0, 500);
+        }
+
+        sd("audit", audits);
+
+    } catch (e) {
+        console.error(e);
+    }
+}
 /* ── 14. SEED DATA (SINGLE) ── */
 function seedData(){
   if(gd('seeded',false))return;
@@ -284,20 +350,74 @@ function seedData(){
     {code:'CUS004',name:'Asha Mohamed',phone:'0789-123456',points:45,balance:0},
     {code:'CUS005',name:'Joseph Mbatia',phone:'0678-654321',points:310,balance:0}
   ];
-  var sales=[];var now=new Date();
-  for(var i=30;i>=0;i--){var d=new Date(now);d.setDate(d.getDate()-i);var ds=d.toISOString().split('T')[0];var numS=Math.floor(Math.random()*8)+3;
-    for(var j=0;j<numS;j++){var p=prods[Math.floor(Math.random()*prods.length)];var qty=Math.floor(Math.random()*5)+1;var disc=Math.random()>0.7?Math.floor(Math.random()*10)+5:0;var sub=p.price*qty;
-      sales.push({id:'RCPT-'+ds.replace(/-/g,'')+'-'+(j+1).toString().padStart(3,'0'),date:ds,customer:custs[Math.floor(Math.random()*custs.length)].code,product:p.code,qty:qty,price:p.price,discount:disc,vat:0,payment:Math.random()>0.5?'cash':'mobile',total:sub-Math.round(sub*disc/100),cost:p.cost*qty})}}
-  var stockIn=[{id:'SI-001',date:'2025-01-10',supplier:'SUP001',invoice:'INV-2025-001',product:'RICE001',qty:200,unitCost:25000,total:5000000},{id:'SI-002',date:'2025-01-12',supplier:'SUP002',invoice:'INV-2025-002',product:'SUGAR001',qty:100,unitCost:18000,total:1800000},{id:'SI-003',date:'2025-01-15',supplier:'SUP001',invoice:'INV-2025-003',product:'OIL001',qty:300,unitCost:12000,total:3600000},{id:'SI-004',date:'2025-01-18',supplier:'SUP003',invoice:'INV-2025-004',product:'SOAP001',qty:500,unitCost:5000,total:2500000},{id:'SI-005',date:'2025-01-20',supplier:'SUP002',invoice:'INV-2025-005',product:'FLOUR001',qty:150,unitCost:8000,total:1200000}];
-  var users=[{id:'sa1',username:'superadmin',password:'WAZIRI2015',email:'nashiriwaziri29@gmail.com',phone:'0714864117',role:'super_admin',status:'active',businessId:'system',businessName:'Mauzo Poa System',createdAt:'2025-01-01'},{id:'u1',username:'admin',password:'admin123',email:'admin@biz.co.tz',phone:'0712000001',role:'admin',status:'active',businessId:'biz1',businessName:'Demo Business',createdAt:'2025-01-05'},{id:'u2',username:'manager',password:'manager123',email:'manager@biz.co.tz',phone:'0712000002',role:'manager',status:'active',businessId:'biz1',businessName:'Demo Business',createdAt:'2025-01-06'},{id:'u3',username:'cashier',password:'cashier123',email:'cashier@biz.co.tz',phone:'0712000003',role:'cashier',status:'active',businessId:'biz1',businessName:'Demo Business',createdAt:'2025-01-07'},{id:'u4',username:'storekeeper',password:'store123',email:'store@biz.co.tz',phone:'0712000004',role:'storekeeper',status:'active',businessId:'biz1',businessName:'Demo Business',createdAt:'2025-01-08'}];
-  var cats=['groceries','toiletries','beverages','electronics','other'].map(function(c,i){return{id:'cat'+(i+1),name:c}});
-  var exps=[{id:'exp1',date:ago(5,'d'),type:'rent',category:'rent',amount:500000,description:'Kodi ya duka'},{id:'exp2',date:ago(3,'d'),type:'utilities',category:'utilities',amount:85000,description:'Umeme na maji'},{id:'exp3',date:ago(1,'d'),type:'transport',category:'transport',amount:35000,description:'Usafiri wa bidhaa'}];
-  var emps=[{id:'emp1',name:'Ali Juma',phone:'0713000001',position:'Cashier',salary:350000,hireDate:'2024-06-01'},{id:'emp2',name:'Maria Rehema',phone:'0713000002',position:'Storekeeper',salary:300000,hireDate:'2024-08-15'}];
-  var msgs=[{id:'msg1',from:'system',to:'all',subject:'Karibu kwenye Mauzo Poa',body:'Mfumo umekuwa tayari.',date:ago(0,'d'),read:false},{id:'msg2',from:'system',to:'all',subject:'Mafunzo ya Mfumo',body:'Tumia kituo cha AI kupata mapendekezo.',date:ago(1,'d'),read:true}];
-  var licenses=[{id:'lic1',code:'LIC-DEMO-2025',businessId:'biz1',businessName:'Demo Business',duration:'year_1',startDate:'2025-01-05',endDate:'2026-01-05',status:'valid'}];
-  var settings={currency:'TZS',taxRate:0,businessName:'Demo Business',phone:'0712000001',address:'Dar es Salaam, Tanzania'};
-  sd('products',prods);sd('suppliers',sups);sd('customers',custs);sd('sales',sales);sd('stockIn',stockIn);sd('users',users);sd('categories',cats);sd('expenses',exps);sd('employees',emps);sd('messages',msgs);sd('licenses',licenses);sd('audit',[{id:'aud0',userId:'sa1',userName:'superadmin',action:'system_init',detail:'System initialized',date:new Date().toISOString()}]);sd('settings',settings);sd('seeded',true);
+ var users = [
+
+{
+    id:'sa1',
+    username:'superadmin',
+    password:'WAZIRI2015',
+    email:'nashiriwaziri29@gmail.com',
+    phone:'0714864117',
+    role:'super_admin',
+    status:'active',
+    businessId:'system',
+    businessName:'UMAS Tanzania',
+    createdAt:'2025-01-01'
+},
+
+{
+    id:'u1',
+    username:'admin',
+    password:'WAZIRI2015',
+    email:'admin@umas.co.tz',
+    phone:'0712000001',
+    role:'admin',
+    status:'active',
+    businessId:'biz1',
+    businessName:'UMAS Tanzania',
+    createdAt:'2025-01-05'
+},
+
+{
+    id:'u2',
+    username:'manager',
+    password:'WAZIRI2015',
+    email:'manager@umas.co.tz',
+    phone:'0712000002',
+    role:'manager',
+    status:'active',
+    businessId:'biz1',
+    businessName:'UMAS Tanzania',
+    createdAt:'2025-01-06'
+},
+
+{
+    id:'u3',
+    username:'cashier',
+    password:'WAZIRI2015',
+    email:'cashier@umas.co.tz',
+    phone:'0712000003',
+    role:'cashier',
+    status:'active',
+    businessId:'biz1',
+    businessName:'UMAS Tanzania',
+    createdAt:'2025-01-07'
+},
+
+{
+    id:'u4',
+    username:'storekeeper',
+    password:'WAZIRI2015',
+    email:'storekeeper@umas.co.tz',
+    phone:'0712000004',
+    role:'storekeeper',
+    status:'active',
+    businessId:'biz1',
+    businessName:'UMAS Tanzania',
+    createdAt:'2025-01-08'
 }
+
+];
 
 /* ── 15. MAIN RENDER (SINGLE DISPATCHER) ── */
 function render(){
@@ -342,19 +462,99 @@ function vLanding(){
 
 /* ── 17. LOGIN ── */
 function vLogin(){
-  var roles=['admin','manager','cashier','storekeeper'];
-  return'<div class="landing flex items-center justify-center min-h-screen px-4"><div class="login-card">'
-    +'<div class="text-center mb-8"><div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style="background:linear-gradient(135deg,#0d9488,#06b6d4)"><i class="fas fa-chart-line text-xl text-white"></i></div>'
-    +'<h1 class="text-2xl font-display font-800 text-white">'+t('app_name')+'</h1>'
-    +'<p class="text-xs mt-1" style="color:var(--muted)">'+t('app_sub')+'</p></div>'
-    +'<form onsubmit="return doLogin(event)">'
-    +'<div class="mb-4"><label class="lbl" style="color:rgba(255,255,255,.5)">'+t('username')+'</label><input type="text" id="l-user" class="inp" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#fff" value="admin" required></div>'
-    +'<div class="mb-4"><label class="lbl" style="color:rgba(255,255,255,.5)">'+t('password')+'</label><input type="password" id="l-pass" class="inp" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#fff" value="admin123" required></div>'
-    +'<div class="mb-6"><label class="lbl" style="color:rgba(255,255,255,.5)">'+t('select_role')+'</label><select id="l-role" class="inp" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#fff">'
-    +roles.map(function(r){return'<option value="'+r+'">'+t(r)+'</option>'}).join('')+'</select></div>'
-    +'<button type="submit" class="btn-p" style="width:100%;justify-content:center;padding:14px;font-size:15px"><i class="fas fa-sign-in-alt"></i> '+t('login')+'</button>'
-    +'<p class="text-center mt-4 text-xs" style="color:rgba(255,255,255,.2)">admin/admin123 | manager/manager123 | cashier/cashier123 | superadmin/WAZIRI2015</p>'
-    +'</form></div></div>';
+
+    var roles = [
+        'super_admin',
+        'admin',
+        'manager',
+        'cashier',
+        'storekeeper'
+    ];
+
+    return ''
+
+    +'<div class="landing flex items-center justify-center min-h-screen px-4">'
+
+        +'<div class="login-card">'
+
+            +'<div class="text-center mb-8">'
+
+                +'<div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style="background:linear-gradient(135deg,#0d9488,#06b6d4)">'
+
+                    +'<i class="fas fa-chart-line text-xl text-white"></i>'
+
+                +'</div>'
+
+                +'<h1 class="text-2xl font-display font-800 text-white">UMAS Tanzania</h1>'
+
+                +'<p class="text-xs mt-1" style="color:var(--muted)">Mfumo wa Bei na Usimamizi wa Faida</p>'
+
+            +'</div>'
+
+            +'<form onsubmit="return doLogin(event)">'
+
+                +'<div class="mb-4">'
+
+                    +'<label class="lbl" style="color:rgba(255,255,255,.5)">Username</label>'
+
+                    +'<input type="text" id="l-user" class="inp" value="admin" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#fff" required>'
+
+                +'</div>'
+
+                +'<div class="mb-4">'
+
+                    +'<label class="lbl" style="color:rgba(255,255,255,.5)">Password</label>'
+
+                    +'<input type="password" id="l-pass" class="inp" value="WAZIRI2015" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#fff" required>'
+
+                +'</div>'
+
+                +'<div class="mb-6">'
+
+                    +'<label class="lbl" style="color:rgba(255,255,255,.5)">Role</label>'
+
+                    +'<select id="l-role" class="inp" style="background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1);color:#fff">'
+
+                        +'<option value="super_admin">Super Administrator</option>'
+
+                        +'<option value="admin">Administrator</option>'
+
+                        +'<option value="manager">Manager</option>'
+
+                        +'<option value="cashier">Cashier</option>'
+
+                        +'<option value="storekeeper">Storekeeper</option>'
+
+                    +'</select>'
+
+                +'</div>'
+
+                +'<button type="submit" class="btn-p" style="width:100%;justify-content:center;padding:14px;font-size:15px">'
+
+                    +'<i class="fas fa-sign-in-alt"></i> Ingia kwenye Mfumo'
+
+                +'</button>'
+
+                +'<div class="mt-4 text-center" style="font-size:11px;color:rgba(255,255,255,.35)">'
+
+                    +'Super Admin : <b>superadmin</b> / <b>WAZIRI2015</b><br>'
+
+                    +'Administrator : <b>admin</b> / <b>WAZIRI2015</b><br>'
+
+                    +'Manager : <b>manager</b> / <b>WAZIRI2015</b><br>'
+
+                    +'Cashier : <b>cashier</b> / <b>WAZIRI2015</b><br>'
+
+                    +'Storekeeper : <b>storekeeper</b> / <b>WAZIRI2015</b>'
+
+                +'</div>'
+
+            +'</form>'
+
+        +'</div>'
+
+    +'</div>';
+
 }
 function doLogin(e){e.preventDefault();var u=document.getElementById('l-user').value.trim();var p=document.getElementById('l-pass').value;var r=document.getElementById('l-role').value;if(!u||!p){toast(t('fill_required'),'err');return false}if(login(u,p,r)){nav(USR.role==='super_admin'?'sa_users':'dashboard')}return false}
 
