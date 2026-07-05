@@ -1472,3 +1472,117 @@ function bindEvents(){
     db.transactions.push({id:uid(),orgId,type:'expense',category:$('#emf_cat').value,amount:amt,date:$('#emf_date').value,description:$('#emf_desc').value.trim(),ref:'EXP-'+uid().slice(0,6).toUpperCase(),created:now()});
     Auth.logAction('ADD_EXPENSE','Expenses',`Expense of ${fmt(amt)}`);DB.save();closeModal();toast('Expense added','success');renderApp()};
   document.querySelectorAll('.del-expense-btn').forEach(btn=>{btn.onclick=()=>{const db=DB.get();db.transactions=db.transactions.filter(t=>t.id!==btn.dataset.id);DB.save();toast('Expense deleted','success');renderApp()}}
+
+
+
+function renderMSavings(c,v,m){const s=(v.savings||[]).filter(x=>x.memberId===m.id);c.innerHTML=`<div class="card"><div class="card-header"><h3>Akiba Yangu (${fmt(s.reduce((a,x)=>a+x.amount,0)})</h3></div><div class="card-body">${s.length===0?'<div class="empty-state"><i class="fas fa-piggy-bank"></i><h3>Hakuna akiba</h3></div>':`<div class="table-wrap"><table><thead><tr><th>Tarehe</th><th>Aina</th><th>Kiasi</th></tr></thead><tbody>${s.slice().reverse().map(x=>`<tr><td>${fmtD(x.date)}</td><td><span class="badge badge-green">${x.type}</span></td><td style="font-weight:700;color:var(--pri)">${fmt(x.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}
+function renderMLoans(c,v,m){const loans=(v.loans||[]).filter(l=>l.memberId===mid);c.innerHTML=`<div class="card"><div class="card-header"><h3>Mikopo Yangu (${loans.length})</h3><div style="margin-bottom:16px"><button class="btn btn-pri" onclick="showLoanReq()"><i class="fas fa-plus"></i> Omba Mkopo</button></div><div class="table-wrap"><table><thead><tr><th>Kiasi</th><th>Riba</th><th>Malipo</th><th>Baki</th><th>Hali</th></tr></thead><tbody>${loans.map(l=>{const b=l.amount+l.amount*l.interest/100-l.paid;return`<tr><td style="font-weight:700">${fmt(l.amount)}</td><td>${l.interest}%</td><td style="color:var(--pri)">${fmt(l.paid)}</td><td style="color:${b>0?'var(--danger)':'var(--pri)'}">${fmt(Math.max(0,b))}</td><td><span class="badge ${l.status==='active'?'badge-green':l.status==='pending'?'badge-gold':l.status==='paid'?'badge-blue':'badge-red'}>${l.status==='active'?'Hai':l.status==='pending'?'Inasubiri':l.status==='paid'?'Imelipwa':'Imekataliwa'}</span></td></tr>`}).join('')}</tbody></table></div></div>`}
+function showLoanReq(){openModal('Omba Mkopo',`<div class="form-group"><label>Kiasi cha Mkopo</label><input type="number" id="lqA" placeholder="0"></div><div class="form-group"><label>Sababu ya Mkopo</label><textarea id="lqR" rows="3" placeholder="Eleza sababu ya mkopo..."></textarea></div><button class="btn btn-pri w-full" onclick="submitLoan()"><i class="fas fa-paper-plane"></i> Tuma Ombi</button>`)}
+function submitLoan(){const a=parseInt(gv('lqA'));if(!a||a<=0)return toast('Ingiza kiasi sahihi','warning');const v=getV();(v.loans||[]).push({id:uid(),memberId:APP.user.id,amount:a,interest:10,penalty:5,status:'pending',applied:new Date().toISOString(),paid:0,guarantors:[]});S.set('vicobas',S.get('vicobas'));addLog('LOAN_REQ','Ombi: '+fmt(a)+' kwa '+v.groupName);toast('Ombi limetumwa kwa Admin!','success');closeModal();renderMember()}
+
+function renderMShares(c,v,m){const sh=(v.shares||[]).find(s=>s.memberId===m.id);c.innerHTML=`<div class="card"><div class="card-header"><h3>Hisa Zangu</h3></div><div class="card-body">${sh?`<div style="text-align:center;padding:30px"><div style="font-size:3rem;font-weight:900;color:var(--acc)">${sh.count}</div><div style="font-size:1rem;color:var(--muted)">Hisa Zangu</div><div style="margin-top:12px"><span class="badge badge-blue">${esc(sh.cert)}</span></div></div>`:'<div class="empty-state"><i class="fas fa-chart-pie"></i><h3>Huna hisa bado</h3></div>'}</div></div>`}
+
+function renderMFines(c,v,m){const f=(v.fines||[]).filter(x=>x.memberId===m.id);c.innerHTML=`<div class="card"><div class="card-header"><h3>Faini Zangu (${f.length})</h3></div><div class="card-body">${f.length===0?'<div class="empty-state"><i class="fas fa-check-circle" style="color:var(--success)"></i><h3>Hakuna faini</h3></div>':`<div class="table-wrap"><table><thead><tr><th>Aina</th><th>Kiasi</th><th>Sababu</th><th>Hali</th></tr></thead><tbody>${f.map(x=>`<tr><td><span class="badge badge-gold">${x.type}</span></td><td style="font-weight:700">${fmt(x.amount)}</td><td style="font-size:.85rem;color:var(--muted)">${esc(x.reason)}</td><td><span class="badge ${x.status==='paid'?'badge-green':'badge-red'}">${x.status==='paid'?'Imelipwa':'Haijalipwa'}</span></td></tr>`).join('')}</tbody></table></div></div>`}
+
+function renderMHeirs(c,v,m){
+    const wh=(v.heirs||[]).filter(h=>h.memberId===m.id);
+    const totalPct=wh.reduce((a,h)=>a+h.pct,0);
+    c.innerHTML=`<div class="card"><div class="card-header"><h3>Warithi Wangu (${wh.length})</h3></div><div class="card-body">
+    <div style="text-align:center;margin-bottom:16px;padding:16px;background:linear-gradient(135deg,rgba(142,68,173,.06),rgba(13,94,63,.05));border-radius:var(--radius)"><div style="font-size:2rem;font-weight:900;color:var(--purple)">${wh.length}</div><div style="font-size:.9rem;color:var(--muted)">Jumla Warithi (${totalPct}%)</div></div>
+    <button class="btn btn-pri w-full" onclick="showAddHeir()"><i class="fas fa-plus"></i> Ongeza Warithi</button>
+    ${wh.length===0?'<div class="empty-state"><i class="fas fa-heart" style="color:var(--purple);opacity:.5"></i><h3>Hakuna warithi</h3><p style="font-size:.88rem;color:var(--muted)">Ongeza warithi wako hapa ili kuwa wakati umefariki</p></div>':
+    wh.map(h=>`<div class="heir-card"><div style="display:flex;justify-content:space-between;align-items:center"><div><strong style="font-size:.95rem">${esc(h.name)}</strong><span class="badge badge-purple" style="margin-left:8px">${esc(h.relation)}</span></div><div style="font-weight:800;color:var(--acc);font-size:1.1rem">${h.pct}%</div></div><div style="font-size:.82rem;color:var(--muted);margin-top:4px"><i class="fas fa-phone" style="margin-right:4px"></i>${esc(h.phone)} | <i class="fas fa-id-card" style="margin:0 4px 0 8px"></i>${esc(h.idNum)}</div></div>`).join('')}
+    </div>`;
+}
+function showAddHeir(){openModal('Ongeza Warithi',`<div class="form-row"><div class="form-group"><label>Jina la Warithi</label><input id="hrName"></div><div class="form-group"><label>Uhusiano</label><select id="hrRel"><option value="Mume">Mume</option><option value="Mke">Mke</option><option value="Mtoto">Mtoto</option><option value="Baba">Baba</option><option value="Mama">Mama</option><option value="Kaka">Kaka</option><option value="Dada">Dada</option><option value="Rafiki">Rafiki</option><option value="Mwingine">Mwingine</option></select></div></div><div class="form-row"><div class="form-group"><label>Simu</label><input id="hrPhone" placeholder="07xxxxxxxx"></div><div class="form-group"><label>Namba ya Kitambulisho</label><input id="hrId" placeholder="ID-xxx"></div></div>
+    <div class="form-group"><label>Asilimia (%)</label><input type="number" id="hrPct" placeholder="50" min="1" max="100"></div>
+    <button class="btn btn-pri w-full" onclick="addHeir()"><i class="fas fa-plus"></i> Ongeza Warithi</button>`);
+}
+function addHeir(){const n=gv('hrName'),r=gv('hrRel'),p=gv('hrPhone'),idn=gv('hrId'),pct=parseInt(gv('hrPct'));const v=getV();if(!n||!r)return toast('Jaza jina na uhusiano','warning');const curPct=(v.heirs||[]).filter(h=>h.memberId===APP.user.mid).reduce((a,h)=>a+h.pct,0);if(curPct+pct>100)return toast('Asilimia zimezidi 100%','warning');
+    (v.heirs||[]).push({id:uid(),memberId:APP.user.id,name:n,relation:r,phone:p,idNum:idn,pct:pct,addedDate:new Date().toISOString().split('T')[0]});
+    S.set('vicobas',S.get('vicobas'));addLog('ADD_HEIR',n+' ('+r+')');toast('Warithi ameongezwa!','success');closeModal();renderMember()}
+
+function renderMExcuse(c,v,m){
+    const sc=(v.schedules||[]).filter(s=>s.status==='upcoming');
+    c.innerHTML=`<div class="card"><div class="card-header"><h3>Tuma Udhururu kwa Administrator</h3></div><div class="card-body">
+    <p style="font-size:.9rem;color:var(--muted);margin-bottom:14px">Tuma ujumbe wa udhururu ikiwa huwezi kuhudhuria kikao. Administrator atasoma na kujibu.</p>
+    <div class="form-group"><label>Chagua Kikao</label><select id="exSch">${sc.length===0?'<option value="">Hakuna kikao vijazo</option>':sc.map(s=>`<option value="${s.id}">${esc(s.title)} - ${fmtD(s.date)} ${s.time}</option>`).join('')}</select></div>
+    <div class="form-group"><label>Sababu ya Udhururu *</label><textarea id="exReason" rows="4" placeholder="Eleza sababu ya udhururu..."></textarea></div>
+    <button class="btn btn-gold w-full" onclick="sendExcuse()" ${sc.length===0?'disabled':''}><i class="fas fa-paper-plane"></i> Tuma Udhururu</button>
+    </div>
+    <h3 style="font-size:1rem;font-weight:800;margin:20px 0 12px">Historia ya Udhiruru Wangu</h3>
+    ${(v.excuses||[]).slice().reverse().map(e=>{const m=(v.members||[]).find(x=>x.id===e.memberId);const sc=(v.schedules||[]).find(s=>s.id===e.scheduleId);const sb=e.status==='approved'?'badge-green':'badge-red';return`<div class="excuse-card ${e.status}"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><div><strong>${m?esc(m.name):'-'}</div><span class="badge ${sb}">${e.status==='approved'?'Imekubaliwa':'Imekataliwa'}</span></div><p style="font-size:.85rem;color:var(--muted);margin-top:6px">"${esc(e.reason)}"</p><div style="font-size:.78rem;color:var(--muted)">Kwa: ${sc?esc(sc.title):'-'} | ${fmtDT(e.sentAt)}</div>${e.reply?`<div style="margin-top:8px;padding:8px;background:rgba(39,174,96,.05);border:1px solid rgba(39,174,96,.15);border-radius:8px;font-size:.85rem"><i class="fas fa-reply" style="color:var(--success);margin-right:6px"></i><b>Jibu:</b> ${esc(e.reply)}</div>`:''}</div></div>`).join('')}</div></div>`;
+}
+function sendExcuse(){const sid=gv('exSch'),r=gv('exReason');if(!sid||!r)return toast('Jaza sababu','warning');
+    const v=getV();(v.excuses||[]).push({id:uid(),memberId:APP.user.id,scheduleId:sid,reason:r,status:'pending',sentAt:new Date().toISOString(),reply:''});
+    S.set('vicobas',S.get('vicoba'));addLog('EXCUSE',r.substring(0,50));toast('Udhiruru umetumwa kwa Admin!','success');renderMember();
+}
+
+function renderMSchedule(c,v,m){
+    const sc=(v.schedules||[]);c.innerHTML=`<h3 style="font-size:1rem;font-weight:800;margin-bottom:16px">Vikao Vijazo</h3>
+    ${sc.length===0?'<div class="card"><div class="card-body"><div class="empty-state"><i class="fas fa-calendar-check"></i><h3>Hakuna vikao vijazo</h3></div></div>':
+    sc.map(s=>`<div class="meeting-card ${s.status==='upcoming'?'upcoming':''}"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><div><strong style="font-size:.95rem">${esc(s.title)}</strong><div style="font-size:.82rem;color:var(--muted);margin-top:4px"><i class="fas fa-calendar"></i> ${fmtD(s.date)} &bull; <i class="fas fa-clock"></i> ${s.time} &bull; <i class="fas fa-map-marker-alt"></i> ${esc(s.venue)}</div>${s.sentToAll?'<span class="badge badge-green"><i class="fas fa-bell" style="margin-right:4px"></i>Imetumwa</span>':''}</div></div></div></div>`).join('')}`;
+}
+
+function renderMStatement(c,v,m){
+    const sav=(v.savings||[]).filter(s=>s.memberId===m.id);
+    const loans=(v.loans||[]).filter(l=>l.memberId===m.id);
+    c.innerHTML=`<div class="card"><div class="card-header"><h3>Taarifa ya Akiba</h3></div><div class="card-body"><div class="table-wrap"><table><thead><tr><th>Tarehe</th><th>Aina</th><th>Kiasi</th></tr></thead><tbody>${sav.map(s=>`<tr><td>${fmtD(s.date)}</td><td><span class="badge badge-green">${s.type}</span></td><td style="font-weight:700;color:var(--pri)">${fmt(s.amount)}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card mt-2"><div class="card-header"><h3>Taarifa ya Mikopo</h3></div><div class="card-body">${loans.length===0?'<div class="empty-state"><i class="fas fa-hand-holding-dollar"></i><h3>Hakuna mikopo</h3></div>':loans.map(l=>{const b=l.amount+l.amount*l.interest/100-l.pct;return`<tr><td>${fmt(l.amount)}</td><td>${l.interest}%</td><td style="color:var(--pri)">${fmt(l.paid)}</td><td style="color:${b>0?'var(--danger)':'var(--pri)'}">${fmt(Math.max(0,b))}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+function renderMQR(c,v,m){
+    c.innerHTML=`<div class="card"><div class="card-header"><h3>QR Code</h3></div><div class="card-body"><div style="text-align:center;padding:30px"><div id="qrDiv" style="display:inline-block;padding:16px;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1)"></div><p style="margin-top:12px;font-size:.88rem;color:var(--muted)">Scan QR Code kuona taarifa za mwanachama</p></div></div></div>`;
+    setTimeout(()=>{const div=document.getElementById('qrDiv');if(!div)return;
+    div.innerHTML='';new QRCode(div,{text:JSON.stringify({membershipNo:m.membershipNo,name:m.name,status:m.status,savings:sav.reduce((a,s)=>a+s.amount,0),loans:loans.map(l=>({amount:l.amount,interest:l.interest,paid:l.paid})),heirs:(v.heirs||[]).filter(h=>h.memberId===m.id),fines:(v.fines||[]).filter(f=>f.memberId===m.id).reduce((a,f)=>a+f.amount,0)}),qrCode:Math.random().toString(36).substr(2,8)}),width:180,height:180,color:'#0D5E3F,correctLevel:1});
+},200);
+}
+
+function renderMNotify(c,v,m){
+    const ns=(S.get('notifications')||[]).filter(n=>n.userId===m.id);
+    // Mark all as read
+    ns.forEach(n=>n.read=true);S.set('notifications',S.get('notifications'));
+    c.innerHTML=`<div class="card"><div class="card-header"><h3>Arifa (${ns.length})</h3></div><div class="card-body">${ns.length===0?'<div class="empty-state"><i class="fas fa-check-circle" style="color:var(--success)"></i><h3>Hakuna arifa</h3></div>':ns.map(n=>`<div style="display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border);transition:all .2s" onmouseover="this.style.background='rgba(13,94,63,.03)'"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#0D5E3F,#1A8C5F);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:.9rem">${n.title?.charAt(0):''}</div><div style="flex:1;min-width:0"><div style="font-size:.9rem;font-weight:600">${n.title||'Arifa'}</div><div style="font-size:.78rem;color:var(--muted)">${n.message||''}</div></div></div></div>`).join('')}</div></div>`;
+}
+
+function renderMPayments(c,v,m){
+    c.innerHTML=`<div class="card"><div class="ch art-header"><h3>Malipo</h3></div><div class="card-body">
+    <p style="font-size:.9rem;color:var(--muted);margin-bottom:16px>Chagua njia ya malipo:</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr);gap:10px">${['M-Pesa','Airtel Money','Mixx by Yas','HaloPesa','Tigo Pesa','Benki','QR Code'].map(n=>`<div style="padding:16px;text-align:center;border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .2s" onclick="toast('${n} - Inatumwa kwa muda','info')" onmouseover="this.style.borderColor='var(--pri)';this.style.transform='translateY(-2px)'"><i class="fas ${n==='QR Code'?'fa-qrcode':n==='Benki'?'fa-university':n==='M-Pesa'?'fa-mobile-alt':n==='Airtel Money':'fa-mobile-alt':n==='Mixx by Yas':'fa-mobile-alt':n==='HaloPesa':'fa-mobile-alt':n==='Tigo Pesa':'fa-mobile-alt'}"></div><div style="font-size:.82rem;margin-top:6px;color:var(--muted)">${n}</div></div>`).join('')}</div></div></div>`;
+}
+
+function renderMDash(c,v,m){renderMDash(c,v,m)} // Recursive for chart init
+
+// ===== CHATBOT =====
+function toggleChat(){document.getElementById('chatPanel').classList.toggle('open')}
+function sendChat(){const inp=document.getElementById('chatIn');if(!inp)return;const msg=inp.value.trim();inp.value='';document.getElementById('chatMsgs').innerHTML+=`<div class="chat-msg user">${esc(msg)}</div>`;const m=APP.user?.name||'Mwanachama';const v=APP.vid?getV():null;
+    let reply='';
+    if(msg.toLowerCase().includes('salio')||msg.toLowerCase().includes('akiba'))reply=`Akiba yako ni ${fmt((v?.savings||[]).filter(s=>s.memberId===APP.user.mid).reduce((a,s)=>a+s.amount,0))}`;
+    else if(msg.toLowerCase().includes('mkopo')||msg.toLowerCase().includes('loan')){const loans=(v?.loans||[]).filter(l=>l.memberId===APP.user.mid);reply=`Mikopo: ${loans.length> mikopo. ${loans.filter(l=>l.status==='active').length} inayoendelea. Baki: ${fmt(loans.filter(l=>l.status==='active').reduce((a,l)=>a+l.amount+l.amount*l.0.1-l.paid,0)}`;
+    else if(msg.toLowerCase().includes('hisa')){const sh=(v?.shares||[]).find(s=>s.memberId===APP.user.mid);reply=`Hisa: ${sh?sh.count:0:'0'}`;
+    else if(msg.toLowerCase().includes('faini')){const fn=(v?.fines||[]).filter(f=>f.memberId===APP.user.mid);reply=`Faini: ${fn.length} faini, jumla ${fmt(fn.reduce((a,f)=>a+f.amount,0)}`;
+    else if(msg.toLowerCase().includes('warithi')||(msg.toLowerCase().heritage')){const wh=(v?.heirs||[]).filter(h=>h.memberId===APP.user.mid);reply=`Warithi: ${wh.length} warithi wameandikishwa. ${wh.length>0}% imeandikishwa.`;
+    else if(msg.toLowerCase().includes('vikao')||(msg.toLowerCase().schedule')){const sc=(v?.schedules||[]).filter(s=>s.status==='upcoming');reply={`Vikao: ${sc.length} vikao vijazo. ${sc.map(s=>s.title).join(', ')}.`;}
+    else{reply='Ninaelewa kukusaidika kuhusu: akiba, mikopo, hisa, faini, warithi, vikao, taarifa, malipo, au'll get a detailed response.';}
+    document.getElementById('chatMsgs').innerHTML+=`<div class="chat-msg bot">${reply}</div>`;
+    document.getElementById('chatMsgs').scrollTop=document.getElementById('chatMsgs').scrollHeight;
+}
+
+// ===== STARTUP =====
+document.getElementById('appLoader').classList.add('hide');
+window.addEventListener('error',function(e){console.error('[Vikoba Error]',e.message,e.filename,e.lineno)});
+window.onload=function(){initData();renderApp()};
+function renderApp(){
+    try{
+        if(!APP.user){showView('viewLanding');createParticles();return}
+        if(APP.user.role==='super'){showView('viewSuper');renderSuper()}
+        else if(APP.user.role==='admin'){showView('viewAdmin');renderAdmin()}
+        else if(APP.user.role==='member'){showView('viewMember');renderMember()}
+    }catch(e){console.error('Render Error:',e)}
+}
+function createParticles(){const c=document.getElementById('viewLanding')?.querySelector('.particles');if(!c)return;for(let i=0;i<20;i++){const p=document.createElement('div');p.className='particle';p.style.left=Math.random()*100+'%';p.style.animationDuration=(8+Math.random()*12)+'s';p.style.animationDelay=Math.random()*10+'s';p.style.width=p.style.height=(2+Math.random()*3)+'px';c.appendChild(p)}}
+</script>
+</body>
+</html>
+
+                                                        
