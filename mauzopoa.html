@@ -1950,30 +1950,203 @@ function exportReceiptPDF(saleId) {
   doc.save(`receipt_${sale.receiptNumber || 'sale'}.pdf`);
   Audit.log('receipt_exported', `Receipt ${sale.receiptNumber} exported as PDF`, s.businessId);
 }
+  // Add business information
+  XLSX.utils.sheet_add_aoa(ws, [
+    [biz?.businessName || 'Business'],
+    [biz?.address || ''],
+    ['Phone: ' + (biz?.phone || '')],
+    ['TIN: ' + (biz?.tin || '')],
+    ['Generated: ' + new Date().toLocaleString()],
+    []
+  ], { origin: "A1" });
 
-function bizExportProducts() {
-  const s = Session.get();
-  const products = DB.all('products', s.businessId);
-  const biz = DB.get('businesses', s.businessId);
-  const data = products.map(p => ({ 'Product Name': p.name, SKU: p.sku, Category: p.category, 'Cost Price': p.costPrice, 'Sell Price': p.sellPrice, Stock: p.stockQuantity, Status: p.status }));
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Products');
-  // Add business info row
-  ws['!rows'] = [{ hpt: 30 }, ...Array(data.length).fill({ hpt: 18 })];
-function changePW(e,type){
-    e.preventDefault();
-    const ids={dashboard:['pwDashCur','pwDashNew','pwDashConf'],formula:['pwFormCur','pwFormNew','pwFormConf'],sheet:['pwSheetCur','pwSheetNew','pwSheetConf']};
-    const [curId,newId,confId]=ids[type];
-    const cur=document.getElementById(curId).value;const nw=document.getElementById(newId).value;const conf=document.getElementById(confId).value;
-    if(cur!==PW[type]){toast(t('loginError'),'error');return false}
-    if(nw!==conf){toast(lang==='sw'?'Nenosiri haifanani!':'Passwords do not match!','error');return false}
-    PW[type]=nw;toast(t('successSave'));renderSecurity();return false;
+  // Shift product table down
+  XLSX.utils.sheet_add_json(ws, data, {
+    origin: "A7",
+    skipHeader: false
+  });
+
+  // Auto column widths
+  ws['!cols'] = [
+    { wch: 35 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 12 },
+    { wch: 15 }
+  ];
+
+  XLSX.writeFile(
+    wb,
+    `${(biz?.businessName || 'Business').replace(/\s+/g, '_')}_Products.xlsx`
+  );
+
+  Audit.log(
+    'products_exported',
+    'Products exported to Excel',
+    s.businessId
+  );
 }
 
-/* ===== INITIALIZATION ===== */
-initData();
-/* Check if already logged in (session) - for demo, always show login */
+// ============================================================
+// EXPORT SALES
+// ============================================================
+function bizExportSales() {
+
+  const s = Session.get();
+  const sales = DB.all('sales', s.businessId);
+  const biz = DB.get('businesses', s.businessId);
+
+  const data = sales.map(sale => ({
+    Receipt: sale.receiptNumber,
+    Date: U.date(sale.createdDate),
+    Customer: sale.customerName || 'Walk-in',
+    Cashier: sale.cashierName || '',
+    Payment: sale.paymentMethod,
+    Subtotal: sale.subtotalAmount,
+    Discount: sale.discountAmount,
+    Total: sale.totalAmount
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Sales");
+
+  XLSX.utils.sheet_add_aoa(ws, [
+    [biz?.businessName || 'Business'],
+    [biz?.address || ''],
+    ['Phone: ' + (biz?.phone || '')],
+    ['TIN: ' + (biz?.tin || '')],
+    ['Generated: ' + new Date().toLocaleString()],
+    []
+  ], { origin: "A1" });
+
+  XLSX.utils.sheet_add_json(ws, data, {
+    origin: "A7",
+    skipHeader: false
+  });
+
+  ws['!cols'] = [
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 25 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 18 }
+  ];
+
+  XLSX.writeFile(
+    wb,
+    `${(biz?.businessName || 'Business').replace(/\s+/g, '_')}_Sales.xlsx`
+  );
+
+  Audit.log(
+    'sales_exported',
+    'Sales exported to Excel',
+    s.businessId
+  );
+}
+
+// ============================================================
+// EXPORT CUSTOMERS
+// ============================================================
+function bizExportCustomers() {
+
+  const s = Session.get();
+  const customers = DB.all('customers', s.businessId);
+
+  const data = customers.map(c => ({
+    Name: c.name,
+    Phone: c.phone,
+    Email: c.email,
+    Address: c.address,
+    Balance: c.balance || 0,
+    Status: c.status
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Customers");
+
+  XLSX.writeFile(wb, "Customers.xlsx");
+
+  Audit.log(
+    'customers_exported',
+    'Customers exported',
+    s.businessId
+  );
+}
+
+// ============================================================
+// EXPORT SUPPLIERS
+// ============================================================
+function bizExportSuppliers() {
+
+  const s = Session.get();
+  const suppliers = DB.all('suppliers', s.businessId);
+
+  const data = suppliers.map(c => ({
+    Name: c.name,
+    Phone: c.phone,
+    Email: c.email,
+    Address: c.address,
+    Balance: c.balance || 0,
+    Status: c.status
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Suppliers");
+
+  XLSX.writeFile(wb, "Suppliers.xlsx");
+
+  Audit.log(
+    'suppliers_exported',
+    'Suppliers exported',
+    s.businessId
+  );
+}
+
+// ============================================================
+// EXPORT EXPENSES
+// ============================================================
+function bizExportExpenses() {
+
+  const s = Session.get();
+  const expenses = DB.all('expenses', s.businessId);
+
+  const data = expenses.map(e => ({
+    Date: U.date(e.createdDate),
+    Category: e.category,
+    Description: e.description,
+    Amount: e.amount,
+    PaymentMethod: e.paymentMethod,
+    Status: e.status
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+
+  XLSX.writeFile(wb, "Expenses.xlsx");
+
+  Audit.log(
+    'expenses_exported',
+    'Expenses exported',
+    s.businessId
+  );
+}
+
+// ============================================================
+// END OF PDF & EXCEL EXPORT MODULE
+// ============================================================
 </script>
 </body>
 </html>
