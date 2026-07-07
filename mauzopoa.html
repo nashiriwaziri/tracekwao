@@ -916,19 +916,76 @@ function updateExpiryBadge() {
   if(badge) badge.textContent = nearExp + exp;
 }
 
+/* ── NAVIGATION ── */
 function navigateTo(module) {
+
   currentModule = module;
-  document.getElementById('pageTitle').textContent = t(module);
-  renderSidebar();
-  // 关闭移动端侧边栏
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('show');
-  // 渲染页面
-  const pc = document.getElementById('pageContent');
-  pc.innerHTML = '<div class="animate-in">' + (moduleRenderers[module] ? moduleRenderers[module]() : '<div class="empty-state"><i class="fas fa-tools"></i><p>Module: '+t(module)+'</p></div>') + '</div>';
-  // 初始化图表
-  if(moduleIniters[module]) moduleIniters[module]();
-  addAudit('Navigate', 'Opened module: '+module);
+
+  // Update title
+  const title = document.getElementById("pageTitle");
+  if (title) {
+    title.textContent = t(module);
+  }
+
+  // Render sidebar
+  if (typeof renderSidebar === "function") {
+    renderSidebar();
+  }
+
+  // Close mobile sidebar
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar) {
+    sidebar.classList.remove("open");
+  }
+
+  const overlay = document.getElementById("sidebarOverlay");
+  if (overlay) {
+    overlay.classList.remove("show");
+  }
+
+  // Render page
+  const pageContent = document.getElementById("pageContent");
+
+  if (!pageContent) {
+    console.error("pageContent element not found.");
+    return;
+  }
+
+  let html = "";
+
+  if (
+    moduleRenderers &&
+    typeof moduleRenderers[module] === "function"
+  ) {
+
+    html = moduleRenderers[module]();
+
+  } else {
+
+    html = `
+      <div class="empty-state">
+        <i class="fas fa-tools"></i>
+        <p>Module: ${t(module)}</p>
+      </div>
+    `;
+
+  }
+
+  pageContent.innerHTML = `<div class="animate-in">${html}</div>`;
+
+  // Initialize module
+  if (
+    moduleIniters &&
+    typeof moduleIniters[module] === "function"
+  ) {
+    moduleIniters[module]();
+  }
+
+  // Audit log
+  if (typeof addAudit === "function") {
+    addAudit("Navigate", "Opened module: " + module);
+  }
+
 }
 
 function toggleSidebar() {
@@ -2017,10 +2074,12 @@ moduleRenderers.aiForecast = function() {
   </div>`;
 };
 };
-moduleIniters.aiForecast = function() {
+/* ── AI SALES FORECAST ── */
+moduleIniters.aiForecast = function () {
+
   destroyCharts();
 
-  const sales = DB.get('sales').filter(s => s.status === 'completed');
+  const sales = (DB.get('sales') || []).filter(s => s.status === 'completed');
 
   const labels = [];
   const actual = [];
@@ -2041,67 +2100,145 @@ moduleIniters.aiForecast = function() {
     );
 
     const daySales = sales
-      .filter(s => (s.createdAt || '').startsWith(ds))
-      .reduce((sum, s) => sum + Number(s.total || 0), 0);
+      .filter(function (s) {
+
+        if (!s.createdAt) return false;
+
+        if (typeof s.createdAt === "string") {
+          return s.createdAt.startsWith(ds);
+        }
+
+        if (s.createdAt.seconds) {
+          return new Date(s.createdAt.seconds * 1000)
+            .toISOString()
+            .split("T")[0] === ds;
+        }
+
+        return false;
+
+      })
+      .reduce(function (sum, s) {
+        return sum + Number(s.total || 0);
+      }, 0);
 
     actual.push(daySales);
 
-    // Simple AI Moving Average Forecast
-    const prev = actual.slice(Math.max(0, actual.length - 7));
-    const avg = prev.length
-      ? prev.reduce((a, b) => a + b, 0) / prev.length
+    const history = actual.slice(Math.max(0, actual.length - 7));
+
+    const avg = history.length
+      ? history.reduce((a, b) => a + b, 0) / history.length
       : 0;
 
     predicted.push(Math.round(avg));
+
   }
 
-  const canvas = document.getElementById('forecastChart');
+  const canvas = document.getElementById("forecastChart");
+
   if (!canvas) return;
 
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
+
+  if (charts.forecast) {
+    charts.forecast.destroy();
+  }
 
   charts.forecast = new Chart(ctx, {
-    type: 'line',
+
+    type: "line",
+
     data: {
-      labels,
+
+      labels: labels,
+
       datasets: [
+
         {
-          label: 'Actual Sales',
+          label: "Actual Sales",
           data: actual,
-          borderColor: '#2563eb',
-          backgroundColor: 'rgba(37,99,235,.15)',
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37,99,235,.15)",
           fill: true,
-          tension: .35
+          tension: 0.35
         },
+
         {
-          label: 'AI Forecast',
+          label: "AI Forecast",
           data: predicted,
-          borderColor: '#f59e0b',
-          borderDash: [6, 4],
-          backgroundColor: 'transparent',
+          borderColor: "#f59e0b",
+          borderDash: [6,4],
           fill: false,
-          tension: .35
+          tension: 0.35
         }
+
       ]
+
     },
+
     options: {
+
       responsive: true,
+
       maintainAspectRatio: false,
+
       interaction: {
-        mode: 'index',
+        mode: "index",
         intersect: false
       },
+
       plugins: {
         legend: {
           display: true
         }
       },
+
       scales: {
         y: {
           beginAtZero: true
         }
       }
+
     }
+
   });
+
 };
-  
+  <!-- ── INITIALIZATION ───────────────────────────────── -->
+
+<script>
+
+(function init() {
+
+  seedData();
+
+  getSession();
+
+  if (_isOffline) {
+    const banner = document.getElementById("off-banner");
+    if (banner) banner.classList.add("show");
+  }
+
+  render();
+
+  setTimeout(function () {
+
+    const loader = document.getElementById("ld-screen");
+
+    if (loader) {
+
+      loader.classList.add("gone");
+
+      setTimeout(function () {
+        loader.style.display = "none";
+      }, 500);
+
+    }
+
+  }, 600);
+
+})();
+
+</script>
+
+</body>
+</html>
