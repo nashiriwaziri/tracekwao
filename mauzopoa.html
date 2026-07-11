@@ -1169,3 +1169,978 @@ function askAI(){
   if(ql.includes('profit')||ql.includes('faida'))answer=`Your current net profit is ${fmt(profit)}, with revenue of ${fmt(rev)} and expenses of ${fmt(exp)}. ${profit>0?'You are in a healthy position.':'Consider reducing expenses or increasing sales volume.'}`;
   else if(ql.includes('stock')||ql.includes('stoko')||ql.includes('inventory')){const low=prods.filter(p=>p.stock<=p.minStock);answer=`You have ${low.length} products with low or out-of-stock levels. ${low.length?`Critical items: ${low.slice(0,3).map(p=>p.name+' ('+p.stock+')').join(', ')}.`:'All stock levels are healthy!'} Total inventory value: ${fmt(prods.reduce((a,p)=>a+p.stock*p.costPrice,0))}.`}
   else if(ql.includes('product')||ql.includes('bidhaa')||ql.includes('best')){const ps={};sales.forEach(s=>s.items.forEach(i=>{ps[i.name]=(ps[i.name]||0)+i.subtotal}));const top=
+/* ===== DASHBOARD ===== */
+function renderDashboard(){
+    const sales=getData('sales',[]),products=getData('products',[]);
+    const td=today(),wk=weekAgo(),mn=monthAgo(),yr=yearAgo();
+    const fs=(f,t)=>sales.filter(s=>s.date>=f&&s.date<=t);
+    const st=a=>a.reduce((s,x)=>s+x.total,0);
+    const sp=a=>a.reduce((s,x)=>s+(x.total-x.cost),0);
+    const sTD=fs(td,td),sWK=fs(wk,td),sMN=fs(mn,td),sYR=fs(yr,td);
+    document.getElementById('sec-dashboard').innerHTML=`
+        <div class="flex items-center justify-between mb-6"><div><h1 class="text-2xl font-display font-800">${t('dashboard')}</h1><p class="text-sm text-stone-400 mt-1">${fmtDate(td)}</p></div></div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card fade-up delay-1"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-umas-50 text-umas-600"><i class="fas fa-shopping-cart"></i></div><span class="text-xs font-600 text-stone-400">TODAY</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('salesToday')}</p><p class="text-xl font-display font-800">${fmt(st(sTD))} <span class="text-xs text-stone-400">TZS</span></p></div>
+            <div class="stat-card fade-up delay-2"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-chart-line"></i></div><span class="text-xs font-600 text-stone-400">WEEK</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('salesWeek')}</p><p class="text-xl font-display font-800">${fmt(st(sWK))} <span class="text-xs text-stone-400">TZS</span></p></div>
+            <div class="stat-card fade-up delay-3"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-blue-50 text-blue-600"><i class="fas fa-calendar-alt"></i></div><span class="text-xs font-600 text-stone-400">MONTH</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('salesMonth')}</p><p class="text-xl font-display font-800">${fmt(st(sMN))} <span class="text-xs text-stone-400">TZS</span></p></div>
+            <div class="stat-card fade-up delay-4"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-purple-50 text-purple-600"><i class="fas fa-calendar"></i></div><span class="text-xs font-600 text-stone-400">YEAR</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('salesYear')}</p><p class="text-xl font-display font-800">${fmt(st(sYR))} <span class="text-xs text-stone-400">TZS</span></p></div>
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card fade-up delay-1"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">TODAY</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('profitToday')}</p><p class="text-xl font-display font-800 text-green-600">${fmt(sp(sTD))} <span class="text-xs text-stone-400">TZS</span></p></div>
+            <div class="stat-card fade-up delay-2"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">WEEK</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('profitWeek')}</p><p class="text-xl font-display font-800 text-green-600">${fmt(sp(sWK))} <span class="text-xs text-stone-400">TZS</span></p></div>
+            <div class="stat-card fade-up delay-3"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">MONTH</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('profitMonth')}</p><p class="text-xl font-display font-800 text-green-600">${fmt(sp(sMN))} <span class="text-xs text-stone-400">TZS</span></p></div>
+            <div class="stat-card fade-up delay-4"><div class="flex items-center justify-between mb-3"><div class="icon-wrap bg-green-50 text-green-600"><i class="fas fa-coins"></i></div><span class="text-xs font-600 text-stone-400">YEAR</span></div><p class="text-xs font-600 text-stone-400 mb-1">${t('profitYear')}</p><p class="text-xl font-display font-800 text-green-600">${fmt(sp(sYR))} <span class="text-xs text-stone-400">TZS</span></p></div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4 mb-6">
+            <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4">${t('salesChart')}</h3><canvas id="salesChartCanvas" height="200"></canvas></div>
+            <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4">${t('profitChart')}</h3><canvas id="profitChartCanvas" height="200"></canvas></div>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-4">
+            <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4">${t('topProducts')}</h3><div id="topProductsList"></div></div>
+            <div class="stat-card"><h3 class="text-sm font-display font-700 mb-4">${t('lowStock')}</h3><div id="lowStockList"></div></div>
+        </div>`;
+    /* Grafu */
+    const days=[],sd=[],pd=[];
+    for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const ds=d.toISOString().split('T')[0];days.push(d.toLocaleDateString(lang==='sw'?'sw-TZ':'en-GB',{weekday:'short'}));const ds2=sales.filter(s=>s.date===ds);sd.push(ds2.reduce((a,s)=>a+s.total,0));pd.push(ds2.reduce((a,s)=>a+(s.total-s.cost),0))}
+    if(charts.sales)charts.sales.destroy();if(charts.profit)charts.profit.destroy();
+    const cs=document.getElementById('salesChartCanvas'),cp=document.getElementById('profitChartCanvas');
+    if(cs)charts.sales=new Chart(cs,{type:'bar',data:{labels:days,datasets:[{label:'Sales',data:sd,backgroundColor:'rgba(217,119,6,0.7)',borderRadius:8,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>fmt(v)}},x:{grid:{display:false}}}}});
+    if(cp)charts.profit=new Chart(cp,{type:'line',data:{labels:days,datasets:[{label:'Profit',data:pd,borderColor:'#059669',backgroundColor:'rgba(5,150,105,0.1)',fill:true,tension:0.4,pointRadius:4,pointBackgroundColor:'#059669'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>fmt(v)}},x:{grid:{display:false}}}}});
+    /* Top */
+    const pm={};sales.forEach(s=>{pm[s.product]=(pm[s.product]||0)+s.qty});const tp=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const te=document.getElementById('topProductsList');
+    if(!tp.length)te.innerHTML=`<p class="text-sm text-stone-400">${t('empty')}</p>`;
+    else te.innerHTML=tp.map(([code,qty],i)=>{const p=products.find(x=>x.code===code);const mx=tp[0][1];return `<div class="flex items-center gap-3 mb-3"><span class="text-xs font-bold text-stone-400 w-5">${i+1}</span><div class="flex-1"><p class="text-sm font-600">${p?p.name:code}</p><div class="w-full h-2 bg-stone-100 rounded-full mt-1"><div class="h-2 bg-umas-500 rounded-full" style="width:${Math.round(qty/mx*100)}%"></div></div></div><span class="text-sm font-700">${qty}</span></div>`}).join('');
+    /* Low */
+    const ls=products.filter(p=>p.stock<=p.reorder);const le=document.getElementById('lowStockList');
+    if(!ls.length)le.innerHTML=`<p class="text-sm text-stone-400">${t('empty')}</p>`;
+    else le.innerHTML=ls.map(p=>`<div class="flex items-center justify-between py-2 border-b border-stone-100 last:border-0"><div><p class="text-sm font-600">${p.name}</p><p class="text-xs text-stone-400">${p.code}</p></div><span class="badge-danger">${p.stock} / ${p.reorder}</span></div>`).join('');
+}
+
+/* ===== PRODUCTS ===== */
+function renderProducts(){
+    const products=getData('products',[]),suppliers=getData('suppliers',[]),cats=['all','groceries','toiletries','beverages','electronics','other'];
+    document.getElementById('sec-products').innerHTML=`
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3"><h1 class="text-2xl font-display font-800">${t('products')}</h1><button class="btn btn-primary" onclick="openProductModal()"><i class="fas fa-plus"></i> ${t('addProduct')}</button></div>
+        <div class="flex gap-3 mb-4 flex-wrap"><input type="text" class="form-input" style="max-width:300px" placeholder="${t('search')}" oninput="filterProducts(this.value)"><select class="form-select" style="max-width:200px" onchange="filterProductsCat(this.value)">${cats.map(c=>`<option value="${c}">${t(c)}</option>`).join('')}</select></div>
+        <div class="stat-card overflow-x-auto"><table class="data-table"><thead><tr><th>${t('productCode')}</th><th>${t('barcode')}</th><th>${t('productName')}</th><th>${t('category')}</th><th>${t('supplier')}</th><th>${t('costPrice')}</th><th>${t('sellingPrice')}</th><th>${t('stock')}</th><th>${t('actions')}</th></tr></thead><tbody id="productsBody"></tbody></table></div>`;
+    renderProductsTable(products);
+}
+function renderProductsTable(list){
+    const suppliers=getData('suppliers',[]),tbody=document.getElementById('productsBody');if(!tbody)return;
+    if(!list.length){tbody.innerHTML=`<tr><td colspan="9" class="text-center py-8 text-stone-400">${t('empty')}</td></tr>`;return}
+    tbody.innerHTML=list.map(p=>{const sup=suppliers.find(s=>s.code===p.supplier);const low=p.stock<=p.reorder;return `<tr><td class="font-mono text-xs font-600">${p.code}</td><td class="font-mono text-xs">${p.barcode}</td><td class="font-600">${p.name}</td><td><span class="badge-warning">${t(p.category)}</span></td><td class="text-sm">${sup?sup.name:p.supplier}</td><td>${fmt(p.cost)}</td><td class="font-700 text-umas-700">${fmt(p.price)}</td><td><span class="${low?'badge-danger':'badge-success'}">${p.stock}</span></td><td><button class="btn btn-sm btn-secondary" onclick="openProductModal('${p.code}')"><i class="fas fa-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.code}')"><i class="fas fa-trash"></i></button></td></tr>`}).join('');
+}
+let _pf='',_pc='all';
+function filterProducts(v){_pf=v.toLowerCase();_applyPF()}
+function filterProductsCat(v){_pc=v;_applyPF()}
+function _applyPF(){let l=getData('products',[]);if(_pf)l=l.filter(p=>p.name.toLowerCase().includes(_pf)||p.code.toLowerCase().includes(_pf)||p.barcode.includes(_pf));if(_pc!=='all')l=l.filter(p=>p.category===_pc);renderProductsTable(l)}
+function openProductModal(code){
+    const products=getData('products',[]),suppliers=getData('suppliers',[]),p=code?products.find(x=>x.code===code):null;
+    const cats=['groceries','toiletries','beverages','electronics','other'];
+    openModal(`<h2 class="text-lg font-display font-700 mb-6">${p?t('editProduct'):t('addProduct')}</h2>
+    <form onsubmit="return saveProduct(event,'${code||''}')">
+        <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="form-label">${t('productCode')}</label><input class="form-input" id="pCode" value="${p?p.code:genId('PRD')}" ${p?'readonly':''} required></div><div><label class="form-label">${t('barcode')}</label><input class="form-input" id="pBarcode" value="${p?p.barcode:''}" required></div></div>
+        <div class="mb-4"><label class="form-label">${t('productName')}</label><input class="form-input" id="pName" value="${p?p.name:''}" required></div>
+        <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="form-label">${t('category')}</label><select class="form-select" id="pCat">${cats.map(c=>`<option value="${c}" ${p&&p.category===c?'selected':''}>${t(c)}</option>`).join('')}</select></div><div><label class="form-label">${t('supplier')}</label><select class="form-select" id="pSup">${suppliers.map(s=>`<option value="${s.code}" ${p&&p.supplier===s.code?'selected':''}>${s.name}</option>`).join('')}</select></div></div>
+        <div class="grid grid-cols-3 gap-4 mb-4"><div><label class="form-label">${t('costPrice')}</label><input type="number" class="form-input" id="pCost" value="${p?p.cost:''}" required></div><div><label class="form-label">${t('overhead')}</label><input type="number" class="form-input" id="pOver" value="${p?p.overhead:10}" required></div><div><label class="form-label">${t('sellingPrice')}</label><input type="number" class="form-input" id="pPrice" value="${p?p.price:''}" required></div></div>
+        <div class="grid grid-cols-2 gap-4 mb-6"><div><label class="form-label">${t('reorderLevel')}</label><input type="number" class="form-input" id="pReorder" value="${p?p.reorder:10}" required></div><div><label class="form-label">${t('stock')}</label><input type="number" class="form-input" id="pStock" value="${p?p.stock:0}" required></div></div>
+        <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+    </form>`);
+}
+function saveProduct(e,code){
+    e.preventDefault();
+    const products=getData('products',[]);
+    const obj={code:document.getElementById('pCode').value,barcode:document.getElementById('pBarcode').value,name:document.getElementById('pName').value,category:document.getElementById('pCat').value,supplier:document.getElementById('pSup').value,cost:Number(document.getElementById('pCost').value),overhead:Number(document.getElementById('pOver').value),price:Number(document.getElementById('pPrice').value),reorder:Number(document.getElementById('pReorder').value),stock:Number(document.getElementById('pStock').value)};
+    if(code){const i=products.findIndex(p=>p.code===code);if(i>=0)products[i]=obj}else products.push(obj);
+    setData('products',products);closeModal();toast(t('successSave'));renderProducts();return false;
+}
+function deleteProduct(code){confirmAction(t('confirmDelete'),()=>{let p=getData('products',[]);p=p.filter(x=>x.code!==code);setData('products',p);toast(t('successDelete'));renderProducts()})}
+
+/* ===== STOCK IN ===== */
+function renderStockIn(){
+    const data=getData('stockIn',[]),products=getData('products',[]),suppliers=getData('suppliers',[]);
+    document.getElementById('sec-stockin').innerHTML=`
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3"><h1 class="text-2xl font-display font-800">${t('stockIn')}</h1><button class="btn btn-primary" onclick="openStockInModal()"><i class="fas fa-plus"></i> ${t('addStockIn')}</button></div>
+        <div class="stat-card overflow-x-auto"><table class="data-table"><thead><tr><th>ID</th><th>${t('date')}</th><th>${t('supplier')}</th><th>${t('invoiceNo')}</th><th>${t('productName')}</th><th>${t('quantity')}</th><th>${t('unitCost')}</th><th>${t('totalCost')}</th></tr></thead><tbody>${data.map(s=>{const p=products.find(x=>x.code===s.product);const sup=suppliers.find(x=>x.code===s.supplier);return `<tr><td class="font-mono text-xs">${s.id}</td><td>${fmtDate(s.date)}</td><td>${sup?sup.name:s.supplier}</td><td>${s.invoice}</td><td>${p?p.name:s.product}</td><td>${s.qty}</td><td>${fmt(s.unitCost)}</td><td class="font-700">${fmt(s.total)}</td></tr>`}).join('')}</tbody></table></div>`;
+}
+function openStockInModal(){
+    const suppliers=getData('suppliers',[]),products=getData('products',[]);
+    openModal(`<h2 class="text-lg font-display font-700 mb-6">${t('addStockIn')}</h2>
+    <form onsubmit="return saveStockIn(event)">
+        <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="form-label">${t('date')}</label><input type="date" class="form-input" id="siDate" value="${today()}" required></div><div><label class="form-label">${t('supplier')}</label><select class="form-select" id="siSup" required>${suppliers.map(s=>`<option value="${s.code}">${s.name}</option>`).join('')}</select></div></div>
+        <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="form-label">${t('invoiceNo')}</label><input class="form-input" id="siInv" required></div><div><label class="form-label">${t('productName')}</label><select class="form-select" id="siProd" required onchange="updateSIUnitCost()">${products.map(p=>`<option value="${p.code}" data-cost="${p.cost}">${p.name}</option>`).join('')}</select></div></div>
+        <div class="grid grid-cols-2 gap-4 mb-6"><div><label class="form-label">${t('quantity')}</label><input type="number" class="form-input" id="siQty" required oninput="updateSITotal()"></div><div><label class="form-label">${t('unitCost')}</label><input type="number" class="form-input" id="siUC" required oninput="updateSITotal()"></div></div>
+        <div class="mb-6 p-3 bg-stone-50 rounded-xl"><p class="text-sm font-600">${t('totalCost')}: <span id="siTotal" class="text-umas-700 font-700">0</span> TZS</p></div>
+        <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+    </form>`);
+    updateSIUnitCost();
+}
+function updateSIUnitCost(){const sel=document.getElementById('siProd');const cost=sel.options[sel.selectedIndex].dataset.cost;document.getElementById('siUC').value=cost;updateSITotal()}
+function updateSITotal(){const q=Number(document.getElementById('siQty').value)||0;const u=Number(document.getElementById('siUC').value)||0;document.getElementById('siTotal').textContent=fmt(q*u)}
+function saveStockIn(e){
+    e.preventDefault();const qty=Number(document.getElementById('siQty').value);const uc=Number(document.getElementById('siUC').value);
+    const si={id:genId('SI'),date:document.getElementById('siDate').value,supplier:document.getElementById('siSup').value,invoice:document.getElementById('siInv').value,product:document.getElementById('siProd').value,qty,unitCost:uc,total:qty*uc};
+    let data=getData('stockIn',[]);data.push(si);setData('stockIn',data);
+    let products=getData('products',[]);const pi=products.findIndex(p=>p.code===si.product);if(pi>=0)products[pi].stock+=qty;setData('products',products);
+    closeModal();toast(t('successSave'));renderStockIn();return false;
+}
+
+/* ===== STOCK OUT (MANUAL) ===== */
+function renderStockOut(){
+    const sales=getData('sales',[]),products=getData('products',[]),customers=getData('customers',[]);
+    document.getElementById('sec-stockout').innerHTML=`
+        <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-display font-800">${t('stockOut')}</h1></div>
+        <div class="stat-card overflow-x-auto"><table class="data-table"><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('customer')}</th><th>${t('productName')}</th><th>${t('qty')}</th><th>${t('price')}</th><th>${t('discount')}</th><th>${t('total')}</th><th>${t('paymentMethod')}</th></tr></thead><tbody>${sales.slice(-50).reverse().map(s=>{const p=products.find(x=>x.code===s.product);const c=customers.find(x=>x.code===s.customer);return `<tr><td class="font-mono text-xs">${s.id}</td><td>${fmtDate(s.date)}</td><td>${c?c.name:s.customer}</td><td>${p?p.name:s.product}</td><td>${s.qty}</td><td>${fmt(s.price)}</td><td>${s.discount}%</td><td class="font-700">${fmt(s.total)}</td><td><span class="badge-${s.payment==='cash'?'success':'warning'}">${s.payment==='cash'?t('cash'):t('mobileMoney')}</span></td></tr>`}).join('')}</tbody></table></div>`;
+}
+
+/* ===== SUPPLIERS ===== */
+function renderSuppliers(){
+    const data=getData('suppliers',[]);
+    document.getElementById('sec-suppliers').innerHTML=`
+        <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-display font-800">${t('suppliers')}</h1><button class="btn btn-primary" onclick="openSupplierModal()"><i class="fas fa-plus"></i> ${t('addSupplier')}</button></div>
+        <div class="grid md:grid-cols-3 gap-4">${data.map(s=>`<div class="stat-card"><h3 class="font-display font-700 mb-3">${s.name}</h3><p class="text-sm text-stone-500 mb-1"><i class="fas fa-phone mr-2"></i>${s.phone}</p><p class="text-sm text-stone-500 mb-1"><i class="fas fa-envelope mr-2"></i>${s.email}</p><p class="text-sm text-stone-500 mb-3"><i class="fas fa-map-marker-alt mr-2"></i>${s.address}</p><div class="flex gap-2"><button class="btn btn-sm btn-secondary" onclick="openSupplierModal('${s.code}')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-danger" onclick="deleteSupplier('${s.code}')"><i class="fas fa-trash"></i></button></div></div>`).join('')}</div>`;
+}
+function openSupplierModal(code){
+    const data=getData('suppliers',[]),s=code?data.find(x=>x.code===code):null;
+    openModal(`<h2 class="text-lg font-display font-700 mb-6">${s?t('edit'):t('addSupplier')}</h2>
+    <form onsubmit="return saveSupplier(event,'${code||''}')">
+        <div class="mb-4"><label class="form-label">${t('supplierCode')}</label><input class="form-input" id="sCode" value="${s?s.code:genId('SUP')}" ${s?'readonly':''} required></div>
+        <div class="mb-4"><label class="form-label">${t('name')}</label><input class="form-input" id="sName" value="${s?s.name:''}" required></div>
+        <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="form-label">${t('phone')}</label><input class="form-input" id="sPhone" value="${s?s.phone:''}" required></div><div><label class="form-label">${t('email')}</label><input class="form-input" id="sEmail" value="${s?s.email:''}" required></div></div>
+        <div class="mb-6"><label class="form-label">${t('address')}</label><input class="form-input" id="sAddr" value="${s?s.address:''}" required></div>
+        <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+    </form>`);
+}
+function saveSupplier(e,code){
+    e.preventDefault();const data=getData('suppliers',[]);const obj={code:document.getElementById('sCode').value,name:document.getElementById('sName').value,phone:document.getElementById('sPhone').value,email:document.getElementById('sEmail').value,address:document.getElementById('sAddr').value,balance:0};
+    if(code){const i=data.findIndex(s=>s.code===code);if(i>=0){obj.balance=data[i].balance;data[i]=obj}}else data.push(obj);
+    setData('suppliers',data);closeModal();toast(t('successSave'));renderSuppliers();return false;
+}
+function deleteSupplier(code){confirmAction(t('confirmDelete'),()=>{let d=getData('suppliers',[]);d=d.filter(x=>x.code!==code);setData('suppliers',d);toast(t('successDelete'));renderSuppliers()})}
+
+/* ===== CUSTOMERS ===== */
+function renderCustomers(){
+    const data=getData('customers',[]);
+    document.getElementById('sec-customers').innerHTML=`
+        <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-display font-800">${t('customers')}</h1><button class="btn btn-primary" onclick="openCustomerModal()"><i class="fas fa-plus"></i> ${t('addCustomer')}</button></div>
+        <div class="stat-card overflow-x-auto"><table class="data-table"><thead><tr><th>${t('customerCode')}</th><th>${t('name')}</th><th>${t('phone')}</th><th>${t('loyaltyPoints')}</th><th>${t('balance')}</th><th>${t('actions')}</th></tr></thead><tbody>${data.map(c=>`<tr><td class="font-mono text-xs">${c.code}</td><td class="font-600">${c.name}</td><td>${c.phone}</td><td><span class="badge-warning">${c.points}</span></td><td>${fmt(c.balance)}</td><td><button class="btn btn-sm btn-secondary" onclick="openCustomerModal('${c.code}')"><i class="fas fa-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="deleteCustomer('${c.code}')"><i class="fas fa-trash"></i></button></td></tr>`).join('')}</tbody></table></div>`;
+}
+function openCustomerModal(code){
+    const data=getData('customers',[]),c=code?data.find(x=>x.code===code):null;
+    openModal(`<h2 class="text-lg font-display font-700 mb-6">${c?t('edit'):t('addCustomer')}</h2>
+    <form onsubmit="return saveCustomer(event,'${code||''}')">
+        <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="form-label">${t('customerCode')}</label><input class="form-input" id="cCode" value="${c?c.code:genId('CUS')}" ${c?'readonly':''} required></div><div><label class="form-label">${t('name')}</label><input class="form-input" id="cName" value="${c?c.name:''}" required></div></div>
+        <div class="grid grid-cols-2 gap-4 mb-6"><div><label class="form-label">${t('phone')}</label><input class="form-input" id="cPhone" value="${c?c.phone:''}" required></div><div><label class="form-label">${t('loyaltyPoints')}</label><input type="number" class="form-input" id="cPoints" value="${c?c.points:0}"></div></div>
+        <div class="flex gap-3 justify-end"><button type="button" class="btn btn-secondary" onclick="closeModal()">${t('cancel')}</button><button type="submit" class="btn btn-primary">${t('save')}</button></div>
+    </form>`);
+}
+function saveCustomer(e,code){
+    e.preventDefault();const data=getData('customers',[]);const obj={code:document.getElementById('cCode').value,name:document.getElementById('cName').value,phone:document.getElementById('cPhone').value,points:Number(document.getElementById('cPoints').value),balance:0};
+    if(code){const i=data.findIndex(c=>c.code===code);if(i>=0){obj.balance=data[i].balance;data[i]=obj}}else data.push(obj);
+    setData('customers',data);closeModal();toast(t('successSave'));renderCustomers();return false;
+}
+function deleteCustomer(code){confirmAction(t('confirmDelete'),()=>{let d=getData('customers',[]);d=d.filter(x=>x.code!==code);setData('customers',d);toast(t('successDelete'));renderCustomers()})}
+
+/* ===== RECEIPTS ===== */
+function renderReceipts(){
+    const sales=getData('sales',[]),products=getData('products',[]),customers=getData('customers',[]);
+    document.getElementById('sec-receipts').innerHTML=`
+        <div class="flex items-center justify-between mb-6"><h1 class="text-2xl font-display font-800">${t('receipts')}</h1></div>
+        <div class="stat-card overflow-x-auto"><table class="data-table"><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('customer')}</th><th>Items</th><th>${t('total')}</th><th>${t('paymentMethod')}</th><th>${t('actions')}</th></tr></thead><tbody>${sales.slice(-30).reverse().map(s=>{const c=customers.find(x=>x.code===s.customer);return `<tr><td class="font-mono text-xs">${s.id}</td><td>${fmtDate(s.date)}</td><td>${c?c.name:s.customer}</td><td>${s.qty}x ${products.find(p=>p.code===s.product)?.name||s.product}</td><td class="font-700">${fmt(s.total)}</td><td><span class="badge-${s.payment==='cash'?'success':'warning'}">${s.payment==='cash'?t('cash'):t('mobileMoney')}</span></td><td><button class="btn btn-sm btn-secondary" onclick="viewReceipt('${s.id}')"><i class="fas fa-eye"></i></button></td></tr>`}).join('')}</tbody></table></div>`;
+}
+function viewReceipt(id){
+    const sales=getData('sales',[]),products=getData('products',[]),customers=getData('customers',[]),suppliers=getData('suppliers',[]);
+    const s=sales.find(x=>x.id===id);if(!s)return;
+    const p=products.find(x=>x.code===s.product);const c=customers.find(x=>x.code===s.customer);
+    const profit=s.total-s.cost;
+    openModal(`<div class="text-center mb-6"><h2 class="text-lg font-display font-700">${t('receiptTitle')}</h2><p class="text-sm text-stone-400">UMAS Tanzania</p></div>
+    <div class="space-y-2 mb-6">
+        <div class="flex justify-between text-sm"><span class="text-stone-400">${t('receiptNo')}</span><span class="font-600">${s.id}</span></div>
+        <div class="flex justify-between text-sm"><span class="text-stone-400">${t('date')}</span><span>${fmtDate(s.date)}</span></div>
+        <div class="flex justify-between text-sm"><span class="text-stone-400">${t('customer')}</span><span>${c?c.name:'-'}</span></div>
+        <hr class="my-3">
+        <div class="flex justify-between text-sm font-600"><span>${p?p.name:s.product}</span><span>${s.qty} x ${fmt(s.price)}</span></div>
+        ${s.discount?`<div class="flex justify-between text-sm text-red-500"><span>${t('discount')} (${s.discount}%)</span><span>-${fmt(Math.round(s.price*s.qty*s.discount/100))}</span></div>`:''}
+        <hr class="my-3">
+        <div class="flex justify-between text-lg font-display font-800"><span>${t('total')}</span><span class="text-umas-700">${fmt(s.total)} TZS</span></div>
+        <div class="flex justify-between text-sm text-green-600"><span>Profit</span><span>${fmt(profit)} TZS</span></div>
+        <div class="flex justify-between text-sm"><span>${t('paymentMethod')}</span><span>${s.payment==='cash'?t('cash'):t('mobileMoney')}</span></div>
+    </div>
+    <p class="text-center text-sm text-stone-400 mb-4">${t('thankYou')}</p>
+    <div class="flex gap-3 justify-center"><button class="btn btn-secondary" onclick="closeModal()">${t('close')}</button><button class="btn btn-primary" onclick="printReceipt('${s.id}')"><i class="fas fa-print"></i> ${t('printPOS')}</button></div>`);
+}
+function printReceipt(id){
+    const sales=getData('sales',[]),products=getData('products',[]),customers=getData('customers',[]);
+    const s=sales.find(x=>x.id===id);if(!s)return;
+    const p=products.find(x=>x.code===s.product);const c=customers.find(x=>x.code===s.customer);
+    const pa=document.getElementById('printArea');
+    pa.style.display='block';
+    pa.innerHTML=`<div class="receipt-pos"><p class="center" style="font-size:16px;font-weight:bold">UMAS TANZANIA</p><p class="center" style="font-size:10px">Pricing & Profit System</p><div class="line"></div><p>No: ${s.id}</p><p>${fmtDate(s.date)}</p><p>Customer: ${c?c.name:'Walk-in'}</p><div class="line"></div><table><tr><td>${p?p.name:s.product}</td><td style="text-align:right">${s.qty}x${fmt(s.price)}</td><td style="text-align:right">${fmt(s.total)}</td></tr></table><div class="line"></div><table><tr><td>TOTAL</td><td style="text-align:right;font-weight:bold">${fmt(s.total)}</td></tr><tr><td>Payment</td><td style="text-align:right">${s.payment}</td></tr></table><div class="line"></div><p class="center">${t('thankYou')}</p></div>`;
+    setTimeout(()=>{window.print();pa.style.display='none'},100);
+}
+
+/* ===== AUTO PRICING ===== */
+function renderAutoPricing(){
+    document.getElementById('sec-autopricing').innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800">${t('autoPricing')}</h1><p class="text-sm text-stone-400 mt-1">${t('pricingDesc')}</p></div>
+        <div class="max-w-lg">
+            <div class="stat-card">
+                <div class="mb-4"><label class="form-label">${t('costPriceLabel')}</label><input type="number" class="form-input" id="apCost" oninput="calcAutoPrice()" placeholder="25000"></div>
+                <div class="mb-4"><label class="form-label">${t('overheadLabel')}</label><input type="number" class="form-input" id="apOver" value="10" oninput="calcAutoPrice()"></div>
+                <div class="mb-6"><label class="form-label">${t('marginLabel')}</label><input type="number" class="form-input" id="apMargin" value="20" oninput="calcAutoPrice()"></div>
+                <div class="p-5 bg-gradient-to-r from-umas-50 to-umas-100 rounded-2xl text-center">
+                    <p class="text-sm text-umas-700 font-600 mb-1">${t('calculatedPrice')}</p>
+                    <p class="text-4xl font-display font-900 text-umas-800" id="apResult">0</p>
+                    <p class="text-xs text-umas-600 mt-1">TZS</p>
+                </div>
+            </div>
+        </div>`;
+}
+function calcAutoPrice(){
+    const c=Number(document.getElementById('apCost').value)||0;
+    const o=Number(document.getElementById('apOver').value)||0;
+    const m=Number(document.getElementById('apMargin').value)||0;
+    const price=Math.round(c*(1+o/100)*(1+m/100));
+    document.getElementById('apResult').textContent=fmt(price);
+}
+
+/* ===== PROFIT ALLOCATION ===== */
+function renderProfit(){
+    const sales=getData('sales',[]);const mn=monthAgo(),td=today();
+    const ms=sales.filter(s=>s.date>=mn&&s.date<=td);
+    const tp=ms.reduce((a,s)=>a+(s.total-s.cost),0);
+    document.getElementById('sec-profit').innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800">${t('profitAlloc')}</h1><p class="text-sm text-stone-400 mt-1">${t('profitDesc')}</p></div>
+        <div class="max-w-2xl">
+            <div class="stat-card mb-4 text-center"><p class="text-sm text-stone-400 mb-1">${t('totalProfit')} (${t('salesMonth')})</p><p class="text-4xl font-display font-900 text-green-600">${fmt(tp)} <span class="text-sm text-stone-400">TZS</span></p></div>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="stat-card text-center border-t-4 border-blue-500"><div class="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><i class="fas fa-redo text-blue-500 text-xl"></i></div><p class="text-xs text-stone-400 mb-1">${t('reinvestment')}</p><p class="text-xl font-display font-800">${fmt(tp*0.5)}</p></div>
+                <div class="stat-card text-center border-t-4 border-umas-500"><div class="w-12 h-12 rounded-xl bg-umas-50 flex items-center justify-center mx-auto mb-3"><i class="fas fa-piggy-bank text-umas-500 text-xl"></i></div><p class="text-xs text-stone-400 mb-1">${t('saving')}</p><p class="text-xl font-display font-800">${fmt(tp*0.2)}</p></div>
+                <div class="stat-card text-center border-t-4 border-green-500"><div class="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center mx-auto mb-3"><i class="fas fa-hand-holding-usd text-green-500 text-xl"></i></div><p class="text-xs text-stone-400 mb-1">${t('distribution')}</p><p class="text-xl font-display font-800">${fmt(tp*0.3)}</p></div>
+            </div>
+        </div>`;
+}
+
+/* ===== BREAK-EVEN ===== */
+function renderBreakEven(){
+    document.getElementById('sec-breakeven').innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800">${t('breakEven')}</h1><p class="text-sm text-stone-400 mt-1">${t('breakEvenDesc')}</p></div>
+        <div class="max-w-lg">
+            <div class="stat-card">
+                <div class="mb-4"><label class="form-label">${t('fixedCosts')}</label><input type="number" class="form-input" id="beFixed" value="2000000" oninput="calcBreakEven()"></div>
+                <div class="mb-4"><label class="form-label">${t('variableCost')}</label><input type="number" class="form-input" id="beVar" value="25000" oninput="calcBreakEven()"></div>
+                <div class="mb-6"><label class="form-label">${t('sellingPriceCalc')}</label><input type="number" class="form-input" id="beSell" value="33000" oninput="calcBreakEven()"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="p-4 bg-stone-50 rounded-2xl text-center"><p class="text-xs text-stone-400 mb-1">${t('breakEvenQty')}</p><p class="text-2xl font-display font-800 text-umas-700" id="beQty">0</p><p class="text-xs text-stone-400">units</p></div>
+                    <div class="p-4 bg-stone-50 rounded-2xl text-center"><p class="text-xs text-stone-400 mb-1">${t('breakEvenValue')}</p><p class="text-2xl font-display font-800 text-umas-700" id="beVal">0</p><p class="text-xs text-stone-400">TZS</p></div>
+                </div>
+            </div>
+        </div>`;
+    calcBreakEven();
+}
+function calcBreakEven(){
+    const f=Number(document.getElementById('beFixed').value)||0;
+    const v=Number(document.getElementById('beVar').value)||0;
+    const s=Number(document.getElementById('beSell').value)||0;
+    const margin=s-v;
+    if(margin<=0){document.getElementById('beQty').textContent='-';document.getElementById('beVal').textContent='-';return}
+    const qty=Math.ceil(f/margin);document.getElementById('beQty').textContent=fmt(qty);document.getElementById('beVal').textContent=fmt(qty*s);
+}
+
+/* ===== REPORTS ===== */
+function renderReports(){
+    document.getElementById('sec-reports').innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800">${t('reports')}</h1></div>
+        <div class="stat-card max-w-lg">
+            <div class="grid grid-cols-2 gap-4 mb-4"><div><label class="form-label">${t('fromDate')}</label><input type="date" class="form-input" id="rpFrom" value="${monthAgo()}"></div><div><label class="form-label">${t('toDate')}</label><input type="date" class="form-input" id="rpTo" value="${today()}"></div></div>
+            <div class="mb-6"><label class="form-label">${t('reportType')}</label><select class="form-select" id="rpType"><option value="profit">${t('profitReport')}</option><option value="expense">${t('expenseReport')}</option><option value="inventory">${t('inventoryReport')}</option></select></div>
+            <button class="btn btn-primary" onclick="generateReport()"><i class="fas fa-file-alt"></i> ${t('generate')}</button>
+            <div id="reportOutput" class="mt-6"></div>
+        </div>`;
+}
+function generateReport(){
+    const from=document.getElementById('rpFrom').value,to=document.getElementById('rpTo').value,type=document.getElementById('rpType').value;
+    const sales=getData('sales',[]),products=getData('products',[]),stockIn=getData('stockIn',[]);
+    const fs=sales.filter(s=>s.date>=from&&s.date<=to);
+    const out=document.getElementById('reportOutput');
+    if(type==='profit'){
+        const tot=fs.reduce((a,s)=>a+s.total,0);const cost=fs.reduce((a,s)=>a+s.cost,0);const prof=tot-cost;
+        out.innerHTML=`<div class="p-4 bg-green-50 rounded-xl"><p class="font-600 text-green-800 mb-2">${t('profitReport')}</p><p class="text-sm">Sales: ${fmt(tot)} | Cost: ${fmt(cost)} | <strong>Profit: ${fmt(prof)}</strong> | Transactions: ${fs.length}</p></div>`;
+    }else if(type==='expense'){
+        const si=stockIn.filter(s=>s.date>=from&&s.date<=to);const tot=si.reduce((a,s)=>a+s.total,0);
+        out.innerHTML=`<div class="p-4 bg-red-50 rounded-xl"><p class="font-600 text-red-800 mb-2">${t('expenseReport')}</p><p class="text-sm">Total Stock Purchases: ${fmt(tot)} | Invoices: ${si.length}</p></div>`;
+    }else{
+        out.innerHTML=`<div class="p-4 bg-blue-50 rounded-xl"><p class="font-600 text-blue-800 mb-2">${t('inventoryReport')}</p><table class="w-full text-sm mt-2"><tr class="border-b"><th class="text-left py-1">Product</th><th>Stock</th><th>Value</th></tr>${products.map(p=>`<tr class="border-b border-blue-100"><td class="py-1">${p.name}</td><td class="text-center">${p.stock}</td><td class="text-right">${fmt(p.stock*p.cost)}</td></tr>`).join('')}<tr class="font-700"><td>Total</td><td></td><td class="text-right">${fmt(products.reduce((a,p)=>a+p.stock*p.cost,0))}</td></tr></table></div>`;
+    }
+}
+
+/* ===== SECURITY ===== */
+function renderSecurity(){
+    document.getElementById('sec-security').innerHTML=`
+        <div class="mb-6"><h1 class="text-2xl font-display font-800">${t('security')}</h1></div>
+        <div class="max-w-lg space-y-4">
+            <div class="stat-card"><label class="form-label">${t('dashboardPass')}</label><input type="password" class="form-input mb-3" id="secDash" value="${PW.dashboard}"><label class="form-label">${t('formulaPass')}</label><input type="password" class="form-input mb-3" id="secForm" value="${PW.formula}"><label class="form-label">${t('sheetPass')}</label><input type="password" class="form-input mb-4" id="secSheet" value="${PW.sheet}"><button class="btn btn-primary" onclick="updatePasswords()"><i class="fas fa-key"></i> ${t('update')}</button></div>
+        </div>`;
+}
+function updatePasswords(){PW.dashboard=document.getElementById('secDash').value;PW.formula=document.getElementById('secForm').value;PW.sheet=document.getElementById('secSheet').value;toast(t('successSave'))}
+
+/* ======================================================================
+   ===== POS - MFUMO WA KUSCAN BARCODE (NNDOA KUU) =====
+   ====================================================================== */
+function renderPOS(){
+    posCart=[];
+    const products=getData('products',[]),customers=getData('customers',[]);
+    const sec=document.getElementById('sec-pos');
+    sec.innerHTML=`
+    <div class="flex items-center justify-between mb-5">
+        <div>
+            <h1 class="text-2xl font-display font-800">${t('pos')}</h1>
+            <p class="text-sm text-stone-400 mt-1">${t('scanSubtitle')}</p>
+        </div>
+        <button class="btn btn-secondary" onclick="navigateTo('dashboard')"><i class="fas fa-arrow-left"></i> ${t('dashboard')}</button>
+    </div>
+
+    <div class="grid lg:grid-cols-5 gap-5">
+
+        <!-- KIGANJA CHA KUSHOTO: SCANNER + FLOW (3 columns) -->
+        <div class="lg:col-span-3 space-y-5">
+
+            <!-- ZONE YA KUSCAN BARCODE -->
+            <div class="scan-zone" id="scanZone">
+                <div class="scan-line" id="scanLine"></div>
+                <div id="scanContent">
+                    <div class="mb-4">
+                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-umas-100 mb-3">
+                            <i class="fas fa-barcode text-3xl text-umas-600"></i>
+                        </div>
+                    </div>
+                    <h2 class="text-xl font-display font-700 mb-2">${t('scanTitle')}</h2>
+                    <p class="text-sm text-stone-500 mb-5">${t('scanBarcodeHint')}</p>
+
+                    <!-- Chaguo la kuscan -->
+                    <div class="flex gap-3 max-w-md mx-auto mb-4">
+                        <div class="flex-1 relative">
+                            <i class="fas fa-keyboard absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"></i>
+                            <input type="text" class="form-input pl-10 text-center font-mono text-lg tracking-wider" id="barcodeInput" placeholder="6191001000011" onkeydown="if(event.key==='Enter'){event.preventDefault();processBarcode(this.value);this.value=''}" autocomplete="off">
+                        </div>
+                        <button class="btn btn-primary px-4" onclick="toggleCamera()" id="cameraBtn" title="${t('startCamera')}">
+                            <i class="fas fa-camera text-lg"></i>
+                        </button>
+                    </div>
+                    <!-- Video element for camera -->
+                    <video id="cameraVideo" style="display:none" playsinline></video>
+                    <p class="text-xs text-stone-400" id="cameraStatus"></p>
+                </div>
+            </div>
+
+            <!-- MCHAKATO WA BARCODE FLOW (Steps) -->
+            <div id="barcodeFlow" style="display:none">
+                <div class="stat-card">
+                    <h3 class="text-sm font-display font-700 mb-4 text-stone-500 uppercase tracking-wide">Mchakato wa Barcode</h3>
+                    <div class="space-y-0">
+                        <!-- Step 1: Simu Inascan -->
+                        <div class="flow-step p-3 rounded-xl border-2 border-transparent" id="flowStep1">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0" id="flowIcon1"><i class="fas fa-mobile-alt text-stone-400"></i></div>
+                                <div class="flex-1"><p class="text-sm font-600" id="flowText1">Simu Inascan Barcode</p><p class="text-xs text-stone-400 font-mono" id="flowVal1"></p></div>
+                                <div id="flowStatus1"></div>
+                            </div>
+                        </div>
+                        <div class="flow-connector" id="flowConn1"></div>
+                        <!-- Step 2: Mfumo unasoma -->
+                        <div class="flow-step p-3 rounded-xl border-2 border-transparent" id="flowStep2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0" id="flowIcon2"><i class="fas fa-search text-stone-400"></i></div>
+                                <div class="flex-1"><p class="text-sm font-600" id="flowText2">Mfumo unasoma Barcode</p><p class="text-xs text-stone-400 font-mono" id="flowVal2"></p></div>
+                                <div id="flowStatus2"></div>
+                            </div>
+                        </div>
+                        <div class="flow-connector" id="flowConn2"></div>
+                        <!-- Step 3: Inatafuta kwenye Database -->
+                        <div class="flow-step p-3 rounded-xl border-2 border-transparent" id="flowStep3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0" id="flowIcon3"><i class="fas fa-database text-stone-400"></i></div>
+                                <div class="flex-1"><p class="text-sm font-600" id="flowText3">Inatafuta kwenye Database</p><p class="text-xs text-stone-400" id="flowVal3"></p></div>
+                                <div id="flowStatus3"></div>
+                            </div>
+                        </div>
+                        <div class="flow-connector" id="flowConn3"></div>
+                        <!-- Step 4: Matokeo -->
+                        <div class="flow-step p-3 rounded-xl border-2 border-transparent" id="flowStep4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0" id="flowIcon4"><i class="fas fa-box-open text-stone-400"></i></div>
+                                <div class="flex-1"><p class="text-sm font-600" id="flowText4">Matokeo</p><p class="text-xs text-stone-400" id="flowVal4"></p></div>
+                                <div id="flowStatus4"></div>
+                            </div>
+                        </div>
+                        <div class="flow-connector" id="flowConn4"></div>
+                        <!-- Step 5: Kuongeza kwenye Cart -->
+                        <div class="flow-step p-3 rounded-xl border-2 border-transparent" id="flowStep5">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0" id="flowIcon5"><i class="fas fa-cart-plus text-stone-400"></i></div>
+                                <div class="flex-1"><p class="text-sm font-600" id="flowText5">Inaongezwa kwenye Cart</p><p class="text-xs text-stone-400" id="flowVal5"></p></div>
+                                <div id="flowStatus5"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KADI YA BIDHAA ILIYOPATIKANA -->
+                <div id="foundProductCard" style="display:none" class="mt-4"></div>
+            </div>
+
+            <!-- GRID YA BIDHAA (kwa kubonyeza) -->
+            <div class="stat-card">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-display font-700">${t('products')}</h3>
+                    <input type="text" class="form-input" style="max-width:200px;padding:8px 12px;font-size:13px" placeholder="${t('searchName')}" oninput="filterPOSProducts(this.value)">
+                </div>
+                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3" id="posProductGrid"></div>
+            </div>
+        </div>
+
+        <!-- KIGANJA CHA KULI: CART + MALIPO (2 columns) -->
+        <div class="lg:col-span-2 space-y-5">
+
+            <!-- Chagua Mteja -->
+            <div class="stat-card">
+                <label class="form-label mb-2">${t('selectCustomer')}</label>
+                <select class="form-select" id="posCustomer">
+                    <option value="">${t('walkInCustomer')}</option>
+                    ${customers.map(c=>`<option value="${c.code}">${c.name} (${c.phone})</option>`).join('')}
+                </select>
+            </div>
+
+            <!-- CART -->
+            <div class="stat-card" id="posCartCard">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-display font-700"><i class="fas fa-shopping-cart mr-2 text-umas-500"></i>${t('cart')} <span class="text-stone-400" id="cartCount">(0)</span></h3>
+                    <button class="text-xs text-red-500 hover:text-red-700 font-600" onclick="clearCart()">${t('clearCart')}</button>
+                </div>
+                <div id="cartItems" class="max-h-64 overflow-y-auto">
+                    <p class="text-sm text-stone-400 text-center py-8" id="emptyCartMsg">${t('empty')}</p>
+                </div>
+                <div id="cartSummary" style="display:none" class="border-t border-stone-200 pt-4 mt-4">
+                    <div class="flex justify-between text-sm mb-2"><span class="text-stone-400">${t('subtotal')}</span><span id="cartSubtotal" class="font-600">0</span></div>
+                    <div class="flex justify-between text-sm mb-2"><span class="text-stone-400">${t('discount')}</span><input type="number" class="form-input w-20 text-right text-sm" style="padding:4px 8px" id="cartDiscount" value="0" min="0" max="100" oninput="updateCartTotals()">%</div>
+                    <div class="flex justify-between text-lg font-display font-800 mt-3 pt-3 border-t border-stone-200"><span>${t('total')}</span><span class="text-umas-700" id="cartTotal">0 TZS</span></div>
+                </div>
+            </div>
+
+            <!-- MALIPO -->
+            <div class="stat-card" id="paymentSection" style="display:none">
+                <h3 class="text-sm font-display font-700 mb-4"><i class="fas fa-credit-card mr-2 text-green-500"></i>${t('pay')}</h3>
+                <div class="mb-4">
+                    <label class="form-label">${t('paymentMethod')}</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button class="p-3 rounded-xl border-2 border-umas-500 bg-umas-50 text-center font-600 text-sm transition-all" id="payCash" onclick="selectPayment('cash')"><i class="fas fa-money-bill-wave mr-2"></i>${t('cash')}</button>
+                        <button class="p-3 rounded-xl border-2 border-stone-200 text-center font-600 text-sm transition-all" id="payMobile" onclick="selectPayment('mobile')"><i class="fas fa-mobile-alt mr-2"></i>${t('mobileMoney')}</button>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">${t('amountPaid')}</label>
+                    <input type="number" class="form-input text-lg font-700" id="payAmount" oninput="calcChange()" placeholder="0">
+                </div>
+                <div class="mb-4 p-3 rounded-xl bg-green-50 text-center" id="changeDisplay" style="display:none">
+                    <p class="text-xs text-green-600">${t('changeReturned')}</p>
+                    <p class="text-2xl font-display font-900 text-green-700" id="changeAmount">0</p>
+                </div>
+                <button class="btn btn-success w-full text-lg py-4" onclick="processPayment()" id="payBtn"><i class="fas fa-check-circle mr-2"></i>${t('pay')}</button>
+            </div>
+
+            <!-- ANZA MAUZO MAPYA -->
+            <button class="btn btn-primary w-full" onclick="resetPOSTransaction()" id="newTransBtn" style="display:none"><i class="fas fa-plus mr-2"></i>${t('newTransaction')}</button>
+        </div>
+    </div>`;
+
+    renderPOSProductGrid(products);
+    updateCartDisplay();
+}
+
+/* === RENDER PRODUCT GRID === */
+function renderPOSProductGrid(list){
+    const grid=document.getElementById('posProductGrid');if(!grid)return;
+    if(!list.length){grid.innerHTML=`<p class="col-span-full text-center text-sm text-stone-400 py-4">${t('noResults')}</p>`;return}
+    grid.innerHTML=list.map(p=>{
+        const low=p.stock<=p.reorder;
+        return `<div class="pos-product-card ${low?'opacity-60':''}" onclick="addToCartByProduct('${p.code}')">
+            <div class="w-10 h-10 rounded-lg ${low?'bg-red-50':'bg-umas-50'} flex items-center justify-center mx-auto mb-2"><i class="fas fa-barcode ${low?'text-red-400':'text-umas-500'}"></i></div>
+            <p class="text-xs font-600 leading-tight mb-1" style="min-height:28px">${p.name}</p>
+            <p class="text-sm font-display font-800 text-umas-700">${fmt(p.price)}</p>
+            <p class="text-xs text-stone-400">Stock: ${p.stock}</p>
+        </div>`;
+    }).join('');
+}
+function filterPOSProducts(v){
+    let list=getData('products',[]);
+    if(v)list=list.filter(p=>p.name.toLowerCase().includes(v.toLowerCase())||p.barcode.includes(v));
+    renderPOSProductGrid(list);
+}
+
+/* === BARCODE PROCESSING - MCHAKATO WA KUU === */
+async function processBarcode(barcode){
+    barcode=barcode.trim();
+    if(!barcode)return;
+
+    /* Ficha video wakati wa ku-process */
+    const video=document.getElementById('cameraVideo');
+    if(video)video.style.display='none';
+
+    /* Onyesha flow */
+    const flow=document.getElementById('barcodeFlow');
+    flow.style.display='block';
+    document.getElementById('foundProductCard').style.display='none';
+
+    /* Reseti steps zote */
+    for(let i=1;i<=5;i++){
+        const step=document.getElementById('flowStep'+i);
+        step.className='flow-step p-3 rounded-xl border-2 border-transparent';
+        document.getElementById('flowIcon'+i).className='w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0';
+        document.getElementById('flowIcon'+i).querySelector('i').className=document.getElementById('flowIcon'+i).querySelector('i').className.replace(/text-\S+/g,'text-stone-400');
+        document.getElementById('flowStatus'+i).innerHTML='';
+        if(i<5)document.getElementById('flowConn'+i).className='flow-connector';
+    }
+
+    /* Step 1: Simu Inascan Barcode */
+    await flowAnimate(1,'active','fa-mobile-alt',t('flowReading'),barcode,'<i class="fas fa-spinner fa-spin text-umas-500"></i>');
+    await delay(800);
+    await flowDone(1);
+
+    /* Step 2: Mfumo unasoma Barcode */
+    await flowAnimate(2,'active','fa-search',t('flowReading'),barcode,'<i class="fas fa-spinner fa-spin text-umas-500"></i>');
+    await delay(600);
+    await flowDone(2);
+
+    /* Step 3: Inatafuta kwenye Database */
+    await flowAnimate(3,'active','fa-database',t('flowSearching'),'','<i class="fas fa-spinner fa-spin text-umas-500"></i>');
+    await delay(700);
+
+    const products=getData('products',[]);
+    const suppliers=getData('suppliers',[]);
+    const found=products.find(p=>p.barcode===barcode);
+
+    if(found){
+        await flowDone(3);
+        const sup=suppliers.find(s=>s.code===found.supplier);
+
+        /* Step 4: Bidhaa Imepatikana - Onyesha maelezo */
+        await flowAnimate(4,'done','fa-box-open',t('flowFound'),'','<i class="fas fa-check-circle text-green-500 text-lg"></i>');
+        document.getElementById('flowVal4').innerHTML=`
+            <div class="mt-2 space-y-1">
+                <p><span class="text-stone-400">Jina:</span> <strong>${found.name}</strong></p>
+                <p><span class="text-stone-400">Bei:</span> <strong class="text-umas-700">${fmt(found.price)} TZS</strong></p>
+                <p><span class="text-stone-400">Stock:</span> <strong>${found.stock}</strong></p>
+                <p><span class="text-stone-400">Mtoaji:</span> ${sup?sup.name:'-'}</p>
+                <p><span class="text-stone-400">Category:</span> ${t(found.category)}</p>
+            </div>`;
+
+        /* Onyesha kadi ya bidhaa */
+        const card=document.getElementById('foundProductCard');
+        card.style.display='block';
+        card.innerHTML=`
+        <div class="product-found stat-card border-l-4 border-green-500">
+            <div class="flex items-start gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center flex-shrink-0"><i class="fas fa-check-circle text-2xl text-green-500"></i></div>
+                <div class="flex-1">
+                    <h3 class="font-display font-700 text-lg">${found.name}</h3>
+                    <div class="grid grid-cols-2 gap-x-6 gap-y-2 mt-3">
+                        <div><p class="text-xs text-stone-400">${t('barcode')}</p><p class="font-mono text-sm font-600">${found.barcode}</p></div>
+                        <div><p class="text-xs text-stone-400">${t('sellingPrice')}</p><p class="font-display font-800 text-umas-700">${fmt(found.price)} TZS</p></div>
+                        <div><p class="text-xs text-stone-400">${t('stockLabel')}</p><p class="font-700 ${found.stock<=found.reorder?'text-red-500':'text-green-600'}">${found.stock} units</p></div>
+                        <div><p class="text-xs text-stone-400">${t('supplierLabel')}</p><p class="text-sm">${sup?sup.name:'-'}</p></div>
+                        <div><p class="text-xs text-stone-400">${t('categoryLabel')}</p><p class="text-sm"><span class="badge-warning">${t(found.category)}</span></p></div>
+                        <div><p class="text-xs text-stone-400">${t('costPrice')}</p><p class="text-sm">${fmt(found.cost)} TZS</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+        await delay(600);
+
+        /* Step 5: Kuongeza kwenye Cart */
+        await flowAnimate(5,'active','fa-cart-plus',t('flowAdding'),'','<i class="fas fa-spinner fa-spin text-umas-500"></i>');
+        await delay(500);
+
+        /* Add to cart */
+        addToCartByProduct(found.code);
+
+        await flowDone(5);
+        document.getElementById('flowText5').textContent=t('flowAdded');
+
+        toast(found.name+' - '+t('flowAdded'),'success');
+
+    }else{
+        /* Bidhaa haipatikani */
+        await flowError(3);
+        await flowAnimate(4,'error','fa-times-circle',t('flowNotFound'),barcode,'<i class="fas fa-times-circle text-red-500 text-lg"></i>');
+        document.getElementById('flowVal4').innerHTML=`<p class="text-red-500 text-sm mt-1">Barcode "${barcode}" haipo kwenye database</p>`;
+        toast(t('flowNotFound'),'error');
+    }
+}
+
+/* Flow animation helpers */
+function flowAnimate(step,type,icon,text,val,statusHtml){
+    return new Promise(resolve=>{
+        const el=document.getElementById('flowStep'+step);
+        el.className=`flow-step p-3 rounded-xl border-2 border-transparent ${type==='active'?'active-step':type==='done'?'done-step':'error-step'} visible`;
+        document.getElementById('flowText'+step).textContent=text;
+        document.getElementById('flowVal'+step).textContent=val||'';
+        document.getElementById('flowStatus'+step).innerHTML=statusHtml||'';
+        const iconEl=document.getElementById('flowIcon'+step);
+        const colors={active:'bg-umas-50',done:'bg-green-50',error:'bg-red-50'};
+        const textColors={active:'text-umas-600',done:'text-green-500',error:'text-red-500'};
+        iconEl.className=`w-9 h-9 rounded-lg ${colors[type]} flex items-center justify-center flex-shrink-0`;
+        iconEl.querySelector('i').className=`fas ${icon} ${textColors[type]}`;
+        if(step>1)document.getElementById('flowConn'+(step-1)).className=`flow-connector ${type==='error'?'':'active-conn'}`;
+        resolve();
+    });
+}
+function flowDone(step){
+    return flowAnimate(step,'done',
+        step===1?'fa-mobile-alt':step===2?'fa-search':step===3?'fa-database':step===4?'fa-box-open':'fa-cart-plus',
+        document.getElementById('flowText'+step).textContent,
+        document.getElementById('flowVal'+step).textContent,
+        '<i class="fas fa-check-circle text-green-500 text-lg"></i>'
+    ).then(()=>{if(step<5)document.getElementById('flowConn'+step).className='flow-connector done-conn'});
+}
+function flowError(step){
+    return flowAnimate(step,'error','fa-exclamation-triangle','Hakuna Matokeo','','<i class="fas fa-times-circle text-red-500 text-lg"></i>');
+}
+function delay(ms){return new Promise(r=>setTimeout(r,ms))}
+
+/* === CAMERA BARCODE SCANNING === */
+async function toggleCamera(){
+    if(cameraStream){
+        stopCameraScan();return;
+    }
+    const video=document.getElementById('cameraVideo');
+    const btn=document.getElementById('cameraBtn');
+    const status=document.getElementById('cameraStatus');
+    const zone=document.getElementById('scanZone');
+
+    try{
+        /* Angalia kama BarcodeDetector inapatikana */
+        if('BarcodeDetector' in window){
+            barcodeDetector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']});
+        }
+
+        cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:640},height:{ideal:480}}});
+        video.srcObject=cameraStream;video.style.display='block';
+        await video.play();
+        zone.classList.add('active');
+        btn.innerHTML='<i class="fas fa-stop text-lg text-red-400"></i>';
+        btn.title=t('stopCamera');
+        status.textContent=lang==='sw'?'Kamera imewashwa... Inangoja barcode':'Camera on... Waiting for barcode';
+
+        /* Anza ku-scan */
+        scanCameraFrame(video);
+    }catch(err){
+        status.textContent=lang==='sw'?'Kamera haipatikani. Tumia manual input.':'Camera not available. Use manual input.';
+        status.style.color='var(--danger)';
+        toast(lang==='sw'?'Kamera haipatikani':'Camera not available','warning');
+    }
+}
+
+async function scanCameraFrame(video){
+    if(!cameraStream||!video.srcObject)return;
+    try{
+        if(barcodeDetector){
+            const barcodes=await barcodeDetector.detect(video);
+            if(barcodes.length>0){
+                const code=barcodes[0].rawValue;
+                stopCameraScan();
+                processBarcode(code);
+                return;
+            }
+        }
+    }catch(e){}
+    scanAnimTimer=requestAnimationFrame(()=>scanCameraFrame(video));
+}
+
+function stopCameraScan(){
+    if(scanAnimTimer){cancelAnimationFrame(scanAnimTimer);scanAnimTimer=null}
+    if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}
+    const video=document.getElementById('cameraVideo');
+    if(video){video.srcObject=null;video.style.display='none'}
+    const btn=document.getElementById('cameraBtn');
+    if(btn){btn.innerHTML='<i class="fas fa-camera text-lg"></i>';btn.title=t('startCamera')}
+    const zone=document.getElementById('scanZone');
+    if(zone)zone.classList.remove('active');
+    const status=document.getElementById('cameraStatus');
+    if(status){status.textContent='';status.style.color=''}
+}
+
+/* === CART MANAGEMENT === */
+function addToCartByProduct(code){
+    const products=getData('products',[]);
+    const p=products.find(x=>x.code===code);
+    if(!p)return;
+    if(p.stock<=0){toast(lang==='sw'?'Bidhaa hii haipo stock':'Product out of stock','error');return}
+
+    const existing=posCart.find(c=>c.code===code);
+    if(existing){
+        if(existing.qty>=p.stock){toast(lang==='sw'?'Stock haiitoshi':'Not enough stock','warning');return}
+        existing.qty++;
+    }else{
+        posCart.push({code:p.code,barcode:p.barcode,name:p.name,price:p.price,cost:p.cost,qty:1,maxStock:p.stock,category:p.category,supplier:p.supplier});
+    }
+    updateCartDisplay();
+
+    /* Flash cart */
+    const cartCard=document.getElementById('posCartCard');
+    cartCard.classList.remove('cart-flash');
+    void cartCard.offsetWidth;
+    cartCard.classList.add('cart-flash');
+}
+
+function removeFromCart(idx){
+    posCart.splice(idx,1);
+    updateCartDisplay();
+}
+
+function changeCartQty(idx,delta){
+    const item=posCart[idx];if(!item)return;
+    const newQty=item.qty+delta;
+    if(newQty<=0){removeFromCart(idx);return}
+    if(newQty>item.maxStock){toast(lang==='sw'?'Stock haiitoshi':'Not enough stock','warning');return}
+    item.qty=newQty;
+    updateCartDisplay();
+}
+
+function clearCart(){
+    if(!posCart.length)return;
+    posCart=[];updateCartDisplay();
+}
+
+function updateCartDisplay(){
+    const itemsEl=document.getElementById('cartItems');
+    const summaryEl=document.getElementById('cartSummary');
+    const emptyEl=document.getElementById('emptyCartMsg');
+    const countEl=document.getElementById('cartCount');
+    const paySection=document.getElementById('paymentSection');
+    const newBtn=document.getElementById('newTransBtn');
+
+    if(!posCart.length){
+        itemsEl.innerHTML=`<p class="text-sm text-stone-400 text-center py-8" id="emptyCartMsg">${t('empty')}</p>`;
+        summaryEl.style.display='none';
+        paySection.style.display='none';
+        newBtn.style.display='none';
+        countEl.textContent='(0)';
+        return;
+    }
+
+    countEl.textContent=`(${posCart.reduce((a,c)=>a+c.qty,0)})`;
+    summaryEl.style.display='block';
+    paySection.style.display='block';
+    newBtn.style.display='none';
+
+    itemsEl.innerHTML=posCart.map((item,i)=>`
+        <div class="cart-item">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-600 truncate">${item.name}</p>
+                <p class="text-xs text-stone-400">${fmt(item.price)} x ${item.qty}</p>
+            </div>
+            <div class="flex items-center gap-1">
+                <button class="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 text-xs" onclick="changeCartQty(${i},-1)"><i class="fas fa-minus"></i></button>
+                <span class="w-8 text-center text-sm font-700">${item.qty}</span>
+                <button class="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 text-xs" onclick="changeCartQty(${i},1)"><i class="fas fa-plus"></i></button>
+            </div>
+            <p class="text-sm font-700 w-20 text-right">${fmt(item.price*item.qty)}</p>
+            <button class="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 text-xs" onclick="removeFromCart(${i})"><i class="fas fa-trash"></i></button>
+        </div>
+    `).join('');
+
+    updateCartTotals();
+}
+
+function updateCartTotals(){
+    const disc=Number(document.getElementById('cartDiscount')?.value)||0;
+    const sub=posCart.reduce((a,c)=>a+c.price*c.qty,0);
+    const discAmt=Math.round(sub*disc/100);
+    const total=sub-discAmt;
+    if(document.getElementById('cartSubtotal'))document.getElementById('cartSubtotal').textContent=fmt(sub)+' TZS';
+    if(document.getElementById('cartTotal'))document.getElementById('cartTotal').textContent=fmt(total)+' TZS';
+    /* Weka kiasi cha kulipwa kuwa total */
+    const payInput=document.getElementById('payAmount');
+    if(payInput&&!payInput.value)payInput.placeholder=total.toString();
+    calcChange();
+}
+
+function selectPayment(method){
+    const cashBtn=document.getElementById('payCash');
+    const mobileBtn=document.getElementById('payMobile');
+    if(method==='cash'){
+        cashBtn.className='p-3 rounded-xl border-2 border-umas-500 bg-umas-50 text-center font-600 text-sm transition-all';
+        mobileBtn.className='p-3 rounded-xl border-2 border-stone-200 text-center font-600 text-sm transition-all';
+    }else{
+        mobileBtn.className='p-3 rounded-xl border-2 border-umas-500 bg-umas-50 text-center font-600 text-sm transition-all';
+        cashBtn.className='p-3 rounded-xl border-2 border-stone-200 text-center font-600 text-sm transition-all';
+    }
+}
+
+function calcChange(){
+    const disc=Number(document.getElementById('cartDiscount')?.value)||0;
+    const sub=posCart.reduce((a,c)=>a+c.price*c.qty,0);
+    const total=sub-Math.round(sub*disc/100);
+    const paid=Number(document.getElementById('payAmount')?.value)||0;
+    const change=paid-total;
+    const display=document.getElementById('changeDisplay');
+    const amount=document.getElementById('changeAmount');
+    if(paid>0&&change>=0){
+        display.style.display='block';amount.textContent=fmt(change)+' TZS';
+    }else{
+        display.style.display='none';
+    }
+}
+
+/* === PROCESS PAYMENT - MALIPO NA SHUGHULI ZOTE === */
+async function processPayment(){
+    if(!posCart.length){toast(t('errorFill'),'error');return}
+    const disc=Number(document.getElementById('cartDiscount').value)||0;
+    const sub=posCart.reduce((a,c)=>a+c.price*c.qty,0);
+    const total=sub-Math.round(sub*disc/100);
+    const paid=Number(document.getElementById('payAmount').value)||0;
+
+    if(paid<total){toast(lang==='sw'?'Kiasi cha kulipwa si cha kutosha':'Insufficient amount','error');return}
+
+    const payBtn=document.getElementById('payBtn');
+    payBtn.disabled=true;
+    payBtn.innerHTML='<i class="fas fa-spinner fa-spin mr-2"></i>'+t('paymentProcessing');
+
+    const customer=document.getElementById('posCustomer').value;
+    const payment=document.getElementById('payCash').classList.contains('border-umas-500')?'cash':'mobile';
+
+    /* Onyesha modal ya malipo inayoendelea */
+    const processSteps=[
+        {icon:'fa-boxes-stacked',text:t('procDeductStock'),color:'umas'},
+        {icon:'fa-file-invoice',text:t('procRecordSale'),color:'blue'},
+        {icon:'fa-coins',text:t('procAddProfit'),color:'green'},
+        {icon:'fa-receipt',text:t('procMakeReceipt'),color:'purple'},
+        {icon:'fa-chart-line',text:t('procShowDash'),color:'green'}
+    ];
+
+    openModal(`
+        <div class="text-center">
+            <h2 class="text-lg font-display font-700 mb-6">${t('paymentProcessing')}</h2>
+            <div class="space-y-4" id="processSteps">
+                ${processSteps.map((s,i)=>`
+                    <div class="flex items-center gap-4 p-3 rounded-xl border-2 border-transparent transition-all" id="procStep${i}">
+                        <div class="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center flex-shrink-0" id="procIcon${i}"><i class="fas ${s.icon} text-stone-300"></i></div>
+                        <p class="text-sm font-600 flex-1" id="procText${i}">${s.text}</p>
+                        <div id="procStatus${i}"></div>
+                    </div>
+                `).join('')}
+            </div>
+            <div id="paymentResult" style="display:none" class="mt-6"></div>
+        </div>
+    `);
+
+    const products=getData('products',[]);
+    const sales=getData('sales',[]);
+    let receiptId='';
+
+    for(let i=0;i<processSteps.length;i++){
+        const step=document.getElementById('procStep'+i);
+        const icon=document.getElementById('procIcon'+i);
+        const status=document.getElementById('procStatus'+i);
+
+        /* Active */
+        step.className='flex items-center gap-4 p-3 rounded-xl border-2 border-umas-200 bg-umas-50 transition-all';
+        icon.className='w-10 h-10 rounded-xl bg-umas-100 flex items-center justify-center flex-shrink-0';
+        icon.innerHTML='<i class="fas fa-spinner fa-spin text-umas-600"></i>';
+        status.innerHTML='';
+
+        await delay(700);
+
+        /* Execute */
+        if(i===0){
+            /* Ondoa stock */
+            posCart.forEach(item=>{
+                const pi=products.findIndex(p=>p.code===item.code);
+                if(pi>=0)products[pi].stock-=item.qty;
+            });
+            setData('products',products);
+        }else if(i===1){
+            /* Andika sale */
+            const totalCost=posCart.reduce((a,c)=>a+c.cost*c.qty,0);
+            receiptId=genId('RCPT');
+            posCart.forEach(item=>{
+                sales.push({
+                    id:receiptId,date:today(),customer:customer||'WALKIN',
+                    product:item.code,qty:item.qty,price:item.price,
+                    discount:disc,vat:0,payment,total:item.price*item.qty-Math.round(item.price*item.qty*disc/100),
+                    cost:item.cost*item.qty
+                });
+            });
+            setData('sales',sales);
+        }else if(i===2){
+            /* Faida - haihitaji kufanya kitu maana inahesabiwa kutoka sale */
+        }else if(i===3){
+            /* Receipt tayari imetengenezwa kupitia sale */
+        }else if(i===4){
+            /* Dashboard itaonyeshwa baadaye */
+        }
+
+        /* Done */
+        const colors={umas:'bg-umas-50',blue:'bg-blue-50',green:'bg-green-50',purple:'bg-purple-50'};
+        const iconColors={umas:'text-umas-600',blue:'text-blue-600',green:'text-green-600',purple:'text-purple-600'};
+        step.className='flex items-center gap-4 p-3 rounded-xl border-2 border-green-200 bg-green-50 transition-all';
+        icon.className=`w-10 h-10 rounded-xl ${colors[processSteps[i].color]||'bg-green-50'} flex items-center justify-center flex-shrink-0`;
+        icon.innerHTML=`<i class="fas fa-check-circle ${iconColors[processSteps[i].color]||'text-green-600'}"></i>`;
+        status.innerHTML='<i class="fas fa-check text-green-500"></i>';
+    }
+
+    await delay(500);
+
+    /* Onyesha matokeo */
+    const profit=posCart.reduce((a,c)=>a+(c.price-c.cost)*c.qty,0)-Math.round(sub*disc/100);
+    const totalDiscAmt=Math.round(sub*disc/100);
+    document.getElementById('paymentResult').style.display='block';
+    document.getElementById('paymentResult').innerHTML=`
+        <div class="receipt-slide p-6 bg-gradient-to-b from-green-50 to-white rounded-2xl border border-green-200">
+            <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                <svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="#059669" stroke-width="3"/><path d="M12 20l6 6 10-12" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="check-animate"/></svg>
+            </div>
+            <h3 class="text-xl font-display font-800 text-green-700 mb-2">${t('paymentDone')}</h3>
+            <div class="space-y-2 text-sm mt-4">
+                <div class="flex justify-between"><span class="text-stone-400">${t('receiptNo')}</span><span class="font-mono font-600">${receiptId}</span></div>
+                <div class="flex justify-between"><span class="text-stone-400">${t('subtotal')}</span><span>${fmt(sub)} TZS</span></div>
+                ${disc?`<div class="flex justify-between text-red-500"><span>${t('discount')} (${disc}%)</span><span>-${fmt(totalDiscAmt)}</span></div>`:''}
+                <div class="flex justify-between font-700 text-lg border-t pt-2 mt-2"><span>${t('total')}</span><span class="text-umas-700">${fmt(total)} TZS</span></div>
+                <div class="flex justify-between"><span class="text-stone-400">${t('amountPaid')}</span><span>${fmt(paid)} TZS</span></div>
+                <div class="flex justify-between text-green-600 font-600"><span>${t('changeReturned')}</span><span>${fmt(paid-total)} TZS</span></div>
+                <div class="flex justify-between text-green-600 border-t pt-2 mt-2"><span>Profit</span><span>${fmt(profit)} TZS</span></div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button class="btn btn-secondary flex-1" onclick="closeModal();navigateTo('dashboard')"><i class="fas fa-chart-line mr-2"></i>${t('dashboard')}</button>
+                <button class="btn btn-primary flex-1" onclick="closeModal();viewReceipt('${receiptId}')"><i class="fas fa-receipt mr-2"></i>${t('viewReceipt')}</button>
+            </div>
+        </div>
+    `;
+
+    /* Reseti POS */
+    posCart=[];
+    payBtn.disabled=false;
+    payBtn.innerHTML=`<i class="fas fa-check-circle mr-2"></i>${t('pay')}`;
+    document.getElementById('newTransBtn').style.display='block';
+    document.getElementById('paymentSection').style.display='none';
+    toast(t('paymentDone'),'success');
+}
+
+function resetPOSTransaction(){
+    posCart=[];
+    document.getElementById('barcodeFlow').style.display='none';
+    document.getElementById('foundProductCard').style.display='none';
+    document.getElementById('cartDiscount').value='0';
+    document.getElementById('payAmount').value='';
+    renderPOS();
+}
+
+/* ===== INIT ===== */
+initData();
+</script>
+</body>
+</html>
+
+                                                               
