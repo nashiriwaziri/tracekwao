@@ -498,23 +498,111 @@ function setLang(l){
     const active=document.querySelector('.section.active');if(active)navigateTo(active.id.replace('sec-',''));
 }
 
-/* ===== AUTH ===== */
-function handleLogin(e){
+function doSignIn(e){
+
     e.preventDefault();
-    const user=document.getElementById('loginUser').value;
-    const pass=document.getElementById('loginPass').value;
-    const role=document.getElementById('loginRole').value;
-    if(pass!==PW.dashboard){toast(t('loginError'),'error');return false}
-    currentUser={name:user.charAt(0).toUpperCase()+user.slice(1),role};
-    document.getElementById('loginScreen').style.display='none';
-    document.getElementById('mainApp').style.display='block';
-    document.getElementById('userName').textContent=currentUser.name;
-    document.getElementById('userAvatar').textContent=currentUser.name.charAt(0).toUpperCase();
-    const rn={admin:'Administrator',manager:'Manager',cashier:'Cashier',storekeeper:'Storekeeper'};
-    document.getElementById('userRole').textContent=rn[role]||role;
-    buildNav();navigateTo('dashboard');return false;
+
+    const username = document.getElementById("siUser").value.trim().toLowerCase();
+    const password = document.getElementById("siPass").value;
+
+    const err = document.getElementById("siErr");
+    err.textContent = "";
+
+    // Super Admin
+    if(username==="superadmin" && password==="super2024"){
+
+        currentUser={
+            name:"Super Administrator",
+            username:"superadmin",
+            role:"superadmin"
+        };
+
+        openSystem();
+
+        return false;
+    }
+
+    let users = JSON.parse(localStorage.getItem("umasUsers")) || [];
+
+    const user = users.find(u =>
+        u.username===username &&
+        u.password===password
+    );
+
+    if(!user){
+        err.textContent="Incorrect username or password.";
+        return false;
+    }
+
+    if(user.status!=="Approved"){
+        err.textContent="Administrator has not approved your account.";
+        return false;
+    }
+
+    currentUser={
+        name:user.fullname,
+        username:user.username,
+        business:user.business,
+        role:user.role
+    };
+
+    openSystem();
+
+    return false;
 }
 
+    let users = JSON.parse(localStorage.getItem("umasUsers")) || [];
+
+function doSignUp(e){
+    e.preventDefault();
+
+    const business = document.getElementById("suBiz").value.trim();
+    const username = document.getElementById("suUser").value.trim().toLowerCase();
+    const email = document.getElementById("suEmail").value.trim();
+    const phone = document.getElementById("suPhone").value.trim();
+    const fullname = document.getElementById("suFullname").value.trim();
+    const pass = document.getElementById("suPass").value;
+    const confirm = document.getElementById("suPassC").value;
+
+    const err = document.getElementById("suErr");
+    err.textContent = "";
+
+    if(pass !== confirm){
+        err.textContent = "Passwords do not match.";
+        return false;
+    }
+
+    if(users.find(u => u.username === username)){
+        err.textContent = "Username already exists.";
+        return false;
+    }
+
+    users.push({
+        business,
+        username,
+        email,
+        phone,
+        fullname,
+        password: pass,
+
+        // Administrator atabadilisha baadaye
+        role: "pending",
+
+        status: "Pending",
+
+        created: new Date().toISOString()
+    });
+
+    localStorage.setItem("umasUsers", JSON.stringify(users));
+
+    toast("Registration successful. Wait for Administrator approval.","success");
+
+    switchTab("si");
+
+    document.getElementById("siUser").value = username;
+
+    return false;
+}
 /* ===== NAVIGATION ===== */
 const navItems=[
     {id:'dashboard',icon:'fa-th-large',key:'dashboard',roles:['admin','manager','cashier','storekeeper']},
@@ -574,7 +662,39 @@ const navI=[{id:'dashboard',icon:'fa-th-large',key:'dashboard'},{id:'pos',icon:'
 function buildNav(){const c=document.getElementById('navC');const pm=CU.permissions||{};let h='';if(CU.role==='superadmin'&&!origU)h+=`<div class="nav-item" data-nav="cp" onclick="nav('cp')"><i class="fas fa-crown text-umas-400"></i><span>${t('cp')}</span></div><div class="mx-3 my-1.5 border-t border-white/5"></div>`;navI.forEach(n=>{if(pm[n.id]!==false||CU.role==='superadmin')h+=`<div class="nav-item" data-nav="${n.id}" onclick="nav('${n.id}')"><i class="fas ${n.icon}"></i><span>${t(n.key)}</span></div>`});h+=`<div class="nav-item mt-2" style="color:rgba(255,255,255,0.22);border-top:1px solid rgba(255,255,255,0.06);padding-top:13px;margin-top:5px" onclick="doSignOut()"><i class="fas fa-sign-out-alt"></i><span>${t('logout')}</span></div>`;c.innerHTML=h}
 function nav(id){stopCam();document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));const s=document.getElementById('sec-'+id);if(s){s.classList.add('active');renderS(id)}const n=document.querySelector(`[data-nav="${id}"]`);if(n)n.classList.add('active');document.getElementById('sidebar').classList.remove('open')}
 function renderS(id){const r={dashboard:rDash,products:rProd,stockin:rSI,stockout:rSO,suppliers:rSup,customers:rCust,receipts:rRec,autopricing:rAP,profit:rProf,breakeven:rBE,reports:rRep,pos:rPOS,security:rSec,cp:rCP,ma:rMA};if(r[id])r[id]()}
+function openSystem(){
 
+    document.getElementById("authScreen").style.display="none";
+
+    document.getElementById("mainApp").style.display="block";
+
+    document.getElementById("userName").textContent=currentUser.name;
+
+    document.getElementById("userAvatar").textContent=currentUser.name.charAt(0).toUpperCase();
+
+    const rn={
+
+        superadmin:"Super Administrator",
+
+        admin:"Administrator",
+
+        manager:"Manager",
+
+        cashier:"Cashier",
+
+        storekeeper:"Storekeeper",
+
+        pending:"Pending"
+
+    };
+
+    document.getElementById("userRole").textContent =
+        rn[currentUser.role] || currentUser.role;
+
+    buildNav();
+
+    navigateTo("dashboard");
+}
 /* === CONTROL PANEL === */
 function rCP(){if(CU.role!=='superadmin'){nav('dashboard');return}const us=allU().filter(u=>u.role!=='superadmin');const ac=us.filter(u=>u.isActive).length;const ic=us.length-ac;let ts=0,tp=0;us.forEach(u=>{ts+=TD(u.id,'sales',[]).reduce((a,s)=>a+s.total,0);tp+=TD(u.id,'products',[]).length});document.getElementById('sec-cp').innerHTML=`<div class="flex items-center justify-between mb-5"><h1 class="text-2xl font-display font-800"><i class="fas fa-crown text-umas-500 mr-2"></i>${t('cpTitle')}</h1></div><div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5"><div class="stat-card fu delay-1"><div class="iw bg-umas-50 text-umas-600 mb-2"><i class="fas fa-users"></i></div><p class="text-xs text-stone-400">${t('cpTotalUsers')}</p><p class="text-xl font-display font-800">${us.length}</p></div><div class="stat-card fu delay-2"><div class="iw bg-green-50 text-green-600 mb-2"><i class="fas fa-user-check"></i></div><p class="text-xs text-stone-400">${t('cpActiveUsers')}</p><p class="text-xl font-display font-800 text-green-600">${ac}</p></div><div class="stat-card fu delay-3"><div class="iw bg-red-50 text-red-500 mb-2"><i class="fas fa-user-times"></i></div><p class="text-xs text-stone-400">${t('cpInactiveUsers')}</p><p class="text-xl font-display font-800 text-red-500">${ic}</p></div><div class="stat-card fu delay-4"><div class="iw bg-blue-50 text-blue-600 mb-2"><i class="fas fa-box"></i></div><p class="text-xs text-stone-400">${t('cpProducts')}</p><p class="text-xl font-display font-800">${tp}</p></div><div class="stat-card fu delay-4"><div class="iw bg-purple-50 text-purple-600 mb-2"><i class="fas fa-coins"></i></div><p class="text-xs text-stone-400">${t('cpTotalSales')}</p><p class="text-xl font-display font-800 text-purple-600">${fmt(ts)}</p></div></div><div class="stat-card"><div class="flex items-center justify-between mb-4"><h3 class="text-sm font-display font-700">${t('cpAllUsers')}</h3><input type="text" class="form-input" style="max-width:240px;padding:7px 11px;font-size:12px" placeholder="${t('cpSearchUsers')}" oninput="filterCPU(this.value)"></div><div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3" id="cpGrid"></div></div>`;renderCPG(us)}
 function renderCPG(list){const g=document.getElementById('cpGrid');if(!g)return;if(!list.length){g.innerHTML=`<p class="col-span-full text-center text-sm text-stone-400 py-8">${t('empty')}</p>`;return}g.innerHTML=list.map(u=>{const ps=TD(u.id,'products',[]);const sl=TD(u.id,'sales',[]);const tS=sl.reduce((a,s)=>a+s.total,0);const tP=sl.reduce((a,s)=>a+(s.total-s.cost),0);return `<div class="user-card"><div class="flex items-center gap-2.5 mb-2.5"><div class="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-stone-200">${u.businessLogo?`<img src="${u.businessLogo}" class="w-full h-full object-cover">`:`<div class="w-full h-full bg-gradient-to-br from-umas-400 to-umas-600 flex items-center justify-center text-white font-bold text-sm">${(u.businessName||'U').charAt(0)}</div>`}</div><div class="flex-1 min-w-0"><p class="text-sm font-display font-700 truncate">${u.businessName}</p><p class="text-xs text-stone-400">@${u.username}</p></div><span class="${u.isActive?'badge-success':'badge-danger'}">${u.isActive?t('cpActive'):t('cpInactive')}</span></div><div class="grid grid-cols-2 gap-1.5 mb-2.5 text-xs"><div class="bg-stone-50 rounded-lg p-2"><p class="text-stone-400">${t('cpProducts')}</p><p class="font-700">${ps.length}</p></div><div class="bg-stone-50 rounded-lg p-2"><p class="text-stone-400">${t('cpTotalSales')}</p><p class="font-700">${fmt(tS)}</p></div><div class="bg-stone-50 rounded-lg p-2"><p class="text-stone-400">Profit</p><p class="font-700 text-green-600">${fmt(tP)}</p></div><div class="bg-stone-50 rounded-lg p-2"><p class="text-stone-400">${t('cpCreated')}</p><p class="font-700">${fmtD(u.createdAt)}</p></div></div><div class="flex items-center gap-1.5 text-xs text-stone-500 mb-2.5"><i class="fas fa-user"></i><span class="truncate">${u.fullname||u.username}</span><span class="mx-0.5">|</span><i class="fas fa-phone"></i><span>${u.phone}</span></div><div class="flex gap-1.5"><button class="btn btn-sm btn-secondary flex-1" onclick="openPM('${u.id}')"><i class="fas fa-key"></i> ${t('cpEditPerms')}</button><button class="btn btn-sm ${u.isActive?'btn-danger':'btn-success'}" onclick="togAct('${u.id}')"><i class="fas fa-${u.isActive?'ban':'check'}"></i></button><button class="btn btn-sm btn-secondary" onclick="viewAs('${u.id}')" title="${t('cpViewAs')}"><i class="fas fa-eye"></i></button><button class="btn btn-sm btn-danger" onclick="delU('${u.id}')" title="${t('cpDeleteUser')}"><i class="fas fa-trash"></i></button></div></div>`}).join('')}
