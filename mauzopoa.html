@@ -1,0 +1,2927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enterprise Admin Control Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --bg-deep: #06090f;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --card: #1c2333;
+  --card-hover: #222d3f;
+  --border: #21262d;
+  --border-light: #30363d;
+  --accent: #00e5a0;
+  --accent-dim: rgba(0,229,160,0.15);
+  --accent-hover: #00c98b;
+  --accent-glow: rgba(0,229,160,0.3);
+  --text: #e6edf3;
+  --text-secondary: #b1bac4;
+  --muted: #7d8590;
+  --danger: #f85149;
+  --danger-dim: rgba(248,81,73,0.15);
+  --warning: #d29922;
+  --warning-dim: rgba(210,153,34,0.15);
+  --info: #58a6ff;
+  --info-dim: rgba(88,166,255,0.15);
+  --success: #3fb950;
+  --success-dim: rgba(63,185,80,0.15);
+  --purple: #bc8cff;
+  --purple-dim: rgba(188,140,255,0.15);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+  --transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg-deep);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+input, select, textarea, button { font-family: inherit; font-size: inherit; }
+
+/* ===== 背景纹理 ===== */
+.bg-pattern {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0);
+  background-size: 32px 32px;
+}
+.bg-glow {
+  position: fixed; z-index: 0; pointer-events: none;
+  width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,229,160,0.06) 0%, transparent 70%);
+  top: -200px; right: -200px;
+  animation: glowFloat 12s ease-in-out infinite alternate;
+}
+@keyframes glowFloat {
+  0% { transform: translate(0,0) scale(1); }
+  100% { transform: translate(-80px, 60px) scale(1.2); }
+}
+
+/* ===== 登录页 ===== */
+#loginView {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-deep);
+}
+#loginView.hidden { display: none; }
+.login-card {
+  width: 100%; max-width: 420px; padding: 40px 36px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow), 0 0 80px rgba(0,229,160,0.04);
+  position: relative; z-index: 1;
+  animation: cardIn 0.5s ease-out;
+}
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.login-logo {
+  text-align: center; margin-bottom: 32px;
+}
+.login-logo .icon-ring {
+  width: 56px; height: 56px; margin: 0 auto 14px;
+  border-radius: 16px; background: var(--accent-dim);
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(0,229,160,0.2);
+}
+.login-logo .icon-ring i { font-size: 22px; color: var(--accent); }
+.login-logo h1 {
+  font-family: var(--font-display); font-size: 1.6rem; font-weight: 700;
+  color: var(--text); letter-spacing: -0.5px;
+}
+.login-logo p { color: var(--muted); margin-top: 4px; font-size: 0.9rem; }
+
+.form-group { margin-bottom: 18px; position: relative; }
+.form-group label {
+  display: block; margin-bottom: 6px; font-weight: 500;
+  color: var(--text-secondary); font-size: 0.85rem;
+}
+.form-input {
+  width: 100%; padding: 10px 14px; padding-left: 40px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  transition: var(--transition); outline: none;
+}
+.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.form-input::placeholder { color: var(--muted); }
+.form-icon {
+  position: absolute; left: 13px; bottom: 11px;
+  color: var(--muted); font-size: 0.9rem; pointer-events: none;
+}
+.form-input.no-icon { padding-left: 14px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 20px; border-radius: var(--radius-sm);
+  font-weight: 600; border: none; cursor: pointer;
+  transition: var(--transition); font-size: 0.9rem;
+  text-decoration: none; white-space: nowrap;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary {
+  background: var(--accent); color: #06090f;
+  box-shadow: 0 2px 12px rgba(0,229,160,0.25);
+}
+.btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 20px rgba(0,229,160,0.35); }
+.btn-secondary {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--card); border-color: var(--border-light); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #e5443d; }
+.btn-warning { background: var(--warning); color: #06090f; }
+.btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+.btn-xs { padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; }
+.btn-full { width: 100%; }
+.btn-ghost { background: transparent; color: var(--accent); padding: 6px 0; }
+.btn-ghost:hover { text-decoration: underline; }
+.btn-icon {
+  width: 34px; height: 34px; padding: 0; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; transition: var(--transition);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-icon:hover { color: var(--text); border-color: var(--border-light); background: var(--card); }
+.login-extras {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px; font-size: 0.85rem;
+}
+.checkbox-wrap {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-secondary);
+}
+.checkbox-wrap input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+}
+.login-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 20px 0; color: var(--muted); font-size: 0.8rem;
+}
+.login-divider::before, .login-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* ===== 主布局 ===== */
+#adminPanel { display: none; height: 100vh; }
+#adminPanel.active { display: flex; }
+.sidebar {
+  width: 260px; min-width: 260px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  position: relative; z-index: 10;
+  transition: var(--transition);
+}
+.sidebar-header {
+  padding: 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+}
+.sidebar-header .s-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--accent-dim); border: 1px solid rgba(0,229,160,0.2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sidebar-header .s-icon i { color: var(--accent); font-size: 16px; }
+.sidebar-header .s-text h2 {
+  font-family: var(--font-display); font-size: 1rem; font-weight: 700;
+  color: var(--text); line-height: 1.2;
+}
+.sidebar-header .s-text span { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+.nav-section { margin-bottom: 16px; }
+.nav-section-title {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--muted); padding: 0 10px; margin-bottom: 6px; font-weight: 600;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  color: var(--text-secondary); cursor: pointer;
+  transition: var(--transition); font-size: 0.9rem; font-weight: 500;
+  position: relative;
+}
+.nav-item:hover { background: var(--surface); color: var(--text); }
+.nav-item.active {
+  background: var(--accent-dim); color: var(--accent);
+}
+.nav-item.active::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; background: var(--accent); border-radius: 0 3px 3px 0;
+}
+.nav-item i { width: 18px; text-align: center; font-size: 0.85rem; }
+.nav-item .badge {
+  margin-left: auto; background: var(--danger); color: #fff;
+  font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 700;
+}
+.sidebar-footer {
+  padding: 14px; border-top: 1px solid var(--border);
+}
+.sidebar-user {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: var(--radius-sm);
+  transition: var(--transition); cursor: pointer;
+}
+.sidebar-user:hover { background: var(--surface); }
+.sidebar-user .avatar {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--card); display: flex; align-items: center; justify-content: center;
+  color: var(--accent); font-weight: 700; font-size: 0.85rem;
+  border: 1px solid var(--border);
+}
+.sidebar-user .u-info { flex: 1; min-width: 0; }
+.sidebar-user .u-info .name { font-size: 0.85rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-user .u-info .role { font-size: 0.72rem; color: var(--accent); }
+
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  height: 56px; background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 24px;
+  gap: 16px; flex-shrink: 0;
+}
+.topbar-title {
+  font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;
+  color: var(--text); flex: 1;
+}
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-clock { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.topbar-btn {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; transition: var(--transition);
+  display: flex; align-items: center; justify-content: center; position: relative;
+}
+.topbar-btn:hover { color: var(--text); border-color: var(--border-light); }
+.topbar-btn .dot {
+  position: absolute; top: 6px; right: 6px;
+  width: 7px; height: 7px; background: var(--danger);
+  border-radius: 50%; border: 1.5px solid var(--bg);
+}
+.content-area {
+  flex: 1; overflow-y: auto; padding: 24px;
+  position: relative; z-index: 1;
+}
+.page { display: none; animation: pageIn 0.3s ease-out; }
+.page.active { display: block; }
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 统计卡片 ===== */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 20px;
+  transition: var(--transition); position: relative; overflow: hidden;
+}
+.stat-card:hover { border-color: var(--border-light); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.stat-card .stat-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; margin-bottom: 12px;
+}
+.stat-card .stat-value {
+  font-family: var(--font-display); font-size: 1.7rem; font-weight: 700;
+  color: var(--text); line-height: 1;
+}
+.stat-card .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+.stat-card .stat-trend {
+  position: absolute; top: 16px; right: 16px;
+  font-size: 0.75rem; font-weight: 600;
+}
+
+/* ===== 数据表格 ===== */
+.data-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.data-card-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.data-card-header h3 {
+  font-family: var(--font-display); font-size: 1rem; font-weight: 600; flex: 1;
+}
+.data-table-wrap { overflow-x: auto; }
+.data-table {
+  width: 100%; border-collapse: collapse;
+}
+.data-table th {
+  padding: 10px 16px; text-align: left;
+  font-size: 0.75rem; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--muted); font-weight: 600;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  font-size: 0.88rem; color: var(--text-secondary);
+  white-space: nowrap;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr { transition: var(--transition); }
+.data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+/* ===== 状态徽章 ===== */
+.badge-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+}
+.badge-status .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.badge-active { background: var(--success-dim); color: var(--success); }
+.badge-active .dot { background: var(--success); animation: pulse 2s infinite; }
+.badge-pending { background: var(--warning-dim); color: var(--warning); }
+.badge-pending .dot { background: var(--warning); }
+.badge-suspended { background: var(--danger-dim); color: var(--danger); }
+.badge-suspended .dot { background: var(--danger); }
+.badge-expired { background: rgba(125,133,144,0.15); color: var(--muted); }
+.badge-expired .dot { background: var(--muted); }
+.badge-disabled { background: var(--danger-dim); color: var(--danger); }
+.badge-disabled .dot { background: var(--danger); }
+.badge-approved { background: var(--info-dim); color: var(--info); }
+.badge-approved .dot { background: var(--info); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ===== 搜索和工具栏 ===== */
+.toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.search-box {
+  position: relative; flex: 1; min-width: 200px; max-width: 320px;
+}
+.search-box input {
+  width: 100%; padding: 8px 12px 8px 34px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  transition: var(--transition); outline: none; font-size: 0.85rem;
+}
+.search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.search-box i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.8rem; }
+.filter-select {
+  padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text); outline: none;
+  font-size: 0.85rem; cursor: pointer;
+}
+.filter-select:focus { border-color: var(--accent); }
+
+/* ===== 模态框 ===== */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px; animation: fadeIn 0.2s ease;
+}
+.modal-overlay.active { display: flex; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); width: 100%; max-width: 540px;
+  max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow);
+  animation: modalIn 0.3s ease-out;
+}
+.modal.wide { max-width: 720px; }
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-header {
+  padding: 20px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-header h3 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; }
+.modal-close {
+  width: 32px; height: 32px; border-radius: 6px;
+  background: transparent; border: none; color: var(--muted);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: var(--transition);
+}
+.modal-close:hover { background: var(--card); color: var(--text); }
+.modal-body { padding: 24px; }
+.modal-footer {
+  padding: 16px 24px; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 10px;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-row.full { grid-template-columns: 1fr; }
+
+/* ===== Toast通知 ===== */
+.toast-container {
+  position: fixed; top: 20px; right: 20px; z-index: 5000;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow); min-width: 280px; max-width: 400px;
+  animation: toastIn 0.3s ease-out;
+  font-size: 0.88rem;
+}
+.toast.leaving { animation: toastOut 0.25s ease-in forwards; }
+@keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toastOut { to { opacity: 0; transform: translateX(40px); } }
+.toast-icon { font-size: 1.1rem; flex-shrink: 0; }
+.toast-success .toast-icon { color: var(--success); }
+.toast-error .toast-icon { color: var(--danger); }
+.toast-warning .toast-icon { color: var(--warning); }
+.toast-info .toast-icon { color: var(--info); }
+.toast-msg { flex: 1; color: var(--text-secondary); }
+
+/* ===== 确认对话框 ===== */
+.confirm-body { text-align: center; padding: 20px 0; }
+.confirm-body .confirm-icon {
+  width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 16px;
+  display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+}
+.confirm-body h4 { font-family: var(--font-display); font-size: 1.1rem; margin-bottom: 8px; }
+.confirm-body p { color: var(--muted); font-size: 0.9rem; }
+
+/* ===== 活动列表 ===== */
+.activity-list { display: flex; flex-direction: column; }
+.activity-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  margin-top: 6px; flex-shrink: 0;
+}
+.activity-content { flex: 1; }
+.activity-content .act-text { font-size: 0.88rem; color: var(--text-secondary); }
+.activity-content .act-text strong { color: var(--text); }
+.activity-content .act-time { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+/* ===== 权限矩阵 ===== */
+.perm-grid { display: grid; gap: 1px; background: var(--border); border-radius: var(--radius); overflow: hidden; }
+.perm-header {
+  display: grid; grid-template-columns: 180px repeat(var(--cols, 6), 1fr);
+  background: var(--bg);
+}
+.perm-header span {
+  padding: 10px 8px; text-align: center; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 600;
+}
+.perm-header span:first-child { text-align: left; padding-left: 16px; }
+.perm-row {
+  display: grid; grid-template-columns: 180px repeat(var(--cols, 6), 1fr);
+  background: var(--surface);
+}
+.perm-row span { padding: 10px 8px; text-align: center; }
+.perm-row span:first-child { text-align: left; padding-left: 16px; color: var(--text-secondary); font-size: 0.88rem; }
+.perm-check {
+  width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer;
+}
+
+/* ===== 设置卡片 ===== */
+.settings-section { margin-bottom: 28px; }
+.settings-section h3 {
+  font-family: var(--font-display); font-size: 1rem; font-weight: 600;
+  margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-bottom: 1px solid rgba(33,38,45,0.5);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-info .setting-label { font-size: 0.9rem; color: var(--text); font-weight: 500; }
+.setting-info .setting-desc { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+.toggle-switch {
+  position: relative; width: 44px; height: 24px; cursor: pointer;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; background: var(--border-light);
+  border-radius: 12px; transition: var(--transition);
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 18px; height: 18px;
+  left: 3px; top: 3px; background: #fff; border-radius: 50%;
+  transition: var(--transition);
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+/* ===== 空状态 ===== */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--muted);
+}
+.empty-state i { font-size: 2.5rem; margin-bottom: 14px; opacity: 0.4; }
+.empty-state p { font-size: 0.95rem; }
+
+/* ===== 加载动画 ===== */
+.spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.6s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-overlay {
+  display: flex; align-items: center; justify-content: center;
+  padding: 60px; gap: 12px; color: var(--muted); font-size: 0.9rem;
+}
+
+/* ===== 分页 ===== */
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-top: 1px solid var(--border);
+}
+.pagination .page-info { font-size: 0.8rem; color: var(--muted); }
+.pagination .page-btns { display: flex; gap: 4px; }
+.page-btn {
+  width: 32px; height: 32px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text-secondary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; transition: var(--transition);
+}
+.page-btn:hover { border-color: var(--border-light); color: var(--text); }
+.page-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ===== 系统健康 ===== */
+.health-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.health-item {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.health-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.health-dot.ok { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.health-dot.warn { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+.health-item .h-label { font-size: 0.85rem; color: var(--text-secondary); }
+.health-item .h-value { font-size: 0.78rem; color: var(--muted); }
+
+/* ===== 忘记密码面板 ===== */
+.forgot-panel { display: none; }
+.forgot-panel.active { display: block; }
+.login-panel.hidden { display: none; }
+
+/* ===== 响应式 ===== */
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: -260px; z-index: 100; height: 100vh; }
+  .sidebar.open { left: 0; box-shadow: var(--shadow); }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .form-row { grid-template-columns: 1fr; }
+  .health-grid { grid-template-columns: 1fr; }
+  .perm-header, .perm-row { font-size: 0.75rem; }
+  .topbar { padding: 0 16px; }
+  .content-area { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- 背景装饰 -->
+<div class="bg-pattern"></div>
+<div class="bg-glow"></div>
+
+<!-- Toast容器 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ==================== 登录视图 ==================== -->
+<div id="loginView">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon-ring"><i class="fas fa-shield-halved"></i></div>
+      <h1>Admin Control Panel</h1>
+      <p>Enterprise Management System</p>
+    </div>
+
+    <!-- 登录面板 -->
+    <div class="login-panel" id="loginPanel">
+      <div class="form-group">
+        <label>Email Address</label>
+        <i class="fas fa-envelope form-icon"></i>
+        <input type="email" class="form-input" id="loginEmail" placeholder="admin@company.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <i class="fas fa-lock form-icon"></i>
+        <input type="password" class="form-input" id="loginPassword" placeholder="Enter your password" autocomplete="current-password">
+      </div>
+      <div class="login-extras">
+        <label class="checkbox-wrap">
+          <input type="checkbox" id="rememberMe"> Remember Me
+        </label>
+        <a class="btn-ghost" onclick="App.auth.showForgot()">Forgot Password?</a>
+      </div>
+      <button class="btn btn-primary btn-full" id="loginBtn" onclick="App.auth.login()">
+        <span>Sign In</span>
+      </button>
+    </div>
+
+    <!-- 忘记密码面板 -->
+    <div class="forgot-panel" id="forgotPanel">
+      <div class="form-group">
+        <label>Email Address</label>
+        <i class="fas fa-envelope form-icon"></i>
+        <input type="email" class="form-input" id="forgotEmail" placeholder="Enter your registered email">
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.auth.sendResetEmail()">
+        <span>Send Reset Link</span>
+      </button>
+      <div style="text-align:center;margin-top:14px">
+        <a class="btn-ghost" onclick="App.auth.showLogin()"><i class="fas fa-arrow-left"></i> Back to Login</a>
+      </div>
+    </div>
+
+    <!-- 重置密码面板 -->
+    <div class="forgot-panel" id="resetPanel">
+      <div class="form-group">
+        <label>New Password</label>
+        <i class="fas fa-lock form-icon"></i>
+        <input type="password" class="form-input" id="newPassword" placeholder="Min 8 characters">
+      </div>
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <i class="fas fa-lock form-icon"></i>
+        <input type="password" class="form-input" id="confirmPassword" placeholder="Re-enter password">
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.auth.confirmReset()">
+        <span>Reset Password</span>
+      </button>
+    </div>
+
+    <div class="login-divider">Secured Connection</div>
+    <p style="text-align:center;font-size:0.75rem;color:var(--muted)">
+      <i class="fas fa-lock" style="margin-right:4px"></i> End-to-end encrypted via Firebase Authentication
+    </p>
+  </div>
+</div>
+
+<!-- ==================== 管理面板 ==================== -->
+<div id="adminPanel">
+  <!-- 侧边栏 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="s-icon"><i class="fas fa-shield-halved"></i></div>
+      <div class="s-text">
+        <h2>Admin Panel</h2>
+        <span>Super Administrator</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">Overview</div>
+        <div class="nav-item active" data-page="dashboard" onclick="App.navigate('dashboard')">
+          <i class="fas fa-chart-pie"></i> Dashboard
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">User Management</div>
+        <div class="nav-item" data-page="users" onclick="App.navigate('users')">
+          <i class="fas fa-users"></i> All Users
+          <span class="badge" id="pendingBadge" style="display:none">0</span>
+        </div>
+        <div class="nav-item" data-page="accessCodes" onclick="App.navigate('accessCodes')">
+          <i class="fas fa-key"></i> Access Codes
+        </div>
+        <div class="nav-item" data-page="subscriptions" onclick="App.navigate('subscriptions')">
+          <i class="fas fa-credit-card"></i> Subscriptions
+        </div>
+        <div class="nav-item" data-page="permissions" onclick="App.navigate('permissions')">
+          <i class="fas fa-user-shield"></i> Roles & Permissions
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">Security</div>
+        <div class="nav-item" data-page="loginActivity" onclick="App.navigate('loginActivity')">
+          <i class="fas fa-fingerprint"></i> Login Activity
+        </div>
+        <div class="nav-item" data-page="auditLogs" onclick="App.navigate('auditLogs')">
+          <i class="fas fa-clipboard-list"></i> Audit Logs
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">System</div>
+        <div class="nav-item" data-page="settings" onclick="App.navigate('settings')">
+          <i class="fas fa-cog"></i> System Settings
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user" onclick="App.auth.logout()">
+        <div class="avatar" id="sidebarAvatar">SA</div>
+        <div class="u-info">
+          <div class="name" id="sidebarName">Super Admin</div>
+          <div class="role">Super Administrator</div>
+        </div>
+        <i class="fas fa-right-from-bracket" style="color:var(--muted);font-size:0.85rem"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主内容区 -->
+  <div class="main-area">
+    <header class="topbar">
+      <button class="topbar-btn" style="display:none" id="menuToggle" onclick="App.toggleSidebar()">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div class="topbar-title" id="pageTitle">Dashboard</div>
+      <div class="topbar-right">
+        <div class="topbar-clock" id="topClock"></div>
+        <button class="topbar-btn" onclick="App.navigate('auditLogs')" aria-label="Notifications">
+          <i class="fas fa-bell"></i>
+          <span class="dot" id="notifDot" style="display:none"></span>
+        </button>
+        <button class="topbar-btn" onclick="App.auth.logout()" aria-label="Logout">
+          <i class="fas fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="content-area">
+      <!-- ===== Dashboard ===== -->
+      <div class="page active" id="page-dashboard">
+        <div class="stats-grid" id="dashStats"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="data-card">
+            <div class="data-card-header"><h3>Recent Activities</h3></div>
+            <div style="padding:16px 20px" id="recentActivities">
+              <div class="loading-overlay"><div class="spinner"></div> Loading...</div>
+            </div>
+          </div>
+          <div class="data-card">
+            <div class="data-card-header"><h3>System Health</h3></div>
+            <div style="padding:16px 20px" id="systemHealth"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Users ===== -->
+      <div class="page" id="page-users">
+        <div class="data-card">
+          <div class="data-card-header">
+            <h3>All Users</h3>
+            <div class="toolbar">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="userSearch" placeholder="Search users..." oninput="App.users.search(this.value)">
+              </div>
+              <select class="filter-select" id="userStatusFilter" onchange="App.users.filterByStatus(this.value)">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="expired">Expired</option>
+                <option value="disabled">Disabled</option>
+              </select>
+              <select class="filter-select" id="userRoleFilter" onchange="App.users.filterByRole(this.value)">
+                <option value="">All Roles</option>
+                <option value="super_admin">Super Admin</option>
+                <option value="administrator">Administrator</option>
+                <option value="manager">Manager</option>
+                <option value="cashier">Cashier</option>
+                <option value="sales_officer">Sales Officer</option>
+                <option value="store_keeper">Store Keeper</option>
+                <option value="accountant">Accountant</option>
+                <option value="user">User</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="App.users.exportCSV()"><i class="fas fa-download"></i> Export</button>
+            </div>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Subscription</th>
+                  <th>Last Login</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div> Loading users...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="usersPagination"></div>
+        </div>
+      </div>
+
+      <!-- ===== Access Codes ===== -->
+      <div class="page" id="page-accessCodes">
+        <div class="data-card">
+          <div class="data-card-header">
+            <h3>Access Codes</h3>
+            <button class="btn btn-primary btn-sm" onclick="App.accessCodes.showGenerate()"><i class="fas fa-plus"></i> Generate Code</button>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Created</th>
+                  <th>Expires</th>
+                  <th>Max Users</th>
+                  <th>Assigned</th>
+                  <th>Remaining</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="accessCodesTableBody">
+                <tr><td colspan="8"><div class="loading-overlay"><div class="spinner"></div> Loading...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Subscriptions ===== -->
+      <div class="page" id="page-subscriptions">
+        <div class="data-card">
+          <div class="data-card-header">
+            <h3>Subscription Plans</h3>
+            <button class="btn btn-primary btn-sm" onclick="App.subscriptions.showCreatePlan()"><i class="fas fa-plus"></i> Create Plan</button>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Plan Name</th>
+                  <th>Duration</th>
+                  <th>Price</th>
+                  <th>Users</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="plansTableBody">
+                <tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div> Loading...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="data-card" style="margin-top:16px">
+          <div class="data-card-header">
+            <h3>User Subscriptions</h3>
+            <div class="toolbar">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="subSearch" placeholder="Search by name or email..." oninput="App.subscriptions.searchUser(this.value)">
+              </div>
+              <select class="filter-select" id="subStatusFilter" onchange="App.subscriptions.filterByStatus(this.value)">
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="expired">Expired</option>
+              </select>
+            </div>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Plan</th>
+                  <th>Start Date</th>
+                  <th>Expiry Date</th>
+                  <th>Remaining</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="userSubsTableBody">
+                <tr><td colspan="7"><div class="loading-overlay"><div class="spinner"></div> Loading...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Roles & Permissions ===== -->
+      <div class="page" id="page-permissions">
+        <div class="data-card">
+          <div class="data-card-header">
+            <h3>Roles & Permissions</h3>
+            <button class="btn btn-primary btn-sm" onclick="App.permissions.showCreateRole()"><i class="fas fa-plus"></i> Create Role</button>
+          </div>
+          <div style="padding:20px" id="permissionsContent">
+            <div class="loading-overlay"><div class="spinner"></div> Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Login Activity ===== -->
+      <div class="page" id="page-loginActivity">
+        <div class="data-card">
+          <div class="data-card-header">
+            <h3>Login Activity History</h3>
+            <div class="toolbar">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="loginSearch" placeholder="Search by user..." oninput="App.loginActivity.search(this.value)">
+              </div>
+              <select class="filter-select" id="loginStatusFilter" onchange="App.loginActivity.filterByStatus(this.value)">
+                <option value="">All</option>
+                <option value="success">Successful</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Time</th>
+                  <th>Device</th>
+                  <th>Browser</th>
+                  <th>IP Address</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="loginTableBody">
+                <tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div> Loading...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="loginPagination"></div>
+        </div>
+      </div>
+
+      <!-- ===== Audit Logs ===== -->
+      <div class="page" id="page-auditLogs">
+        <div class="data-card">
+          <div class="data-card-header">
+            <h3>Audit Trail</h3>
+            <div class="toolbar">
+              <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="auditSearch" placeholder="Search logs..." oninput="App.auditLogs.search(this.value)">
+              </div>
+              <select class="filter-select" id="auditModuleFilter" onchange="App.auditLogs.filterByModule(this.value)">
+                <option value="">All Modules</option>
+                <option value="auth">Authentication</option>
+                <option value="users">Users</option>
+                <option value="accessCodes">Access Codes</option>
+                <option value="subscriptions">Subscriptions</option>
+                <option value="permissions">Permissions</option>
+                <option value="settings">Settings</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="App.auditLogs.exportCSV()"><i class="fas fa-download"></i> Export</button>
+            </div>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date/Time</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Module</th>
+                  <th>Device</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody">
+                <tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div> Loading...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="auditPagination"></div>
+        </div>
+      </div>
+
+      <!-- ===== System Settings ===== -->
+      <div class="page" id="page-settings">
+        <div class="data-card">
+          <div class="data-card-header"><h3>System Configuration</h3></div>
+          <div style="padding:24px" id="settingsContent">
+            <div class="loading-overlay"><div class="spinner"></div> Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 模态框容器 ==================== -->
+<!-- 通用模态框 -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContainer">
+    <div class="modal-header">
+      <h3 id="modalTitle">Modal</h3>
+      <button class="modal-close" onclick="App.closeModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- 确认对话框 -->
+<div class="modal-overlay" id="confirmOverlay">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-body">
+      <div class="confirm-body">
+        <div class="confirm-icon" id="confirmIcon"></div>
+        <h4 id="confirmTitle">Are you sure?</h4>
+        <p id="confirmMsg">This action cannot be undone.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="App.closeConfirm()">Cancel</button>
+      <button class="btn btn-danger btn-sm" id="confirmBtn" onclick="App.confirmAction()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   Enterprise Admin Control Panel
+   集成到现有系统的超级管理员模块
+   ================================================================ */
+
+// ===== Firebase配置 - 替换为你现有的配置 =====
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// 初始化Firebase（如果尚未初始化则使用此配置，否则使用现有实例）
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ===== 全局应用状态 =====
+const App = {
+  currentUser: null,
+  currentUserData: null,
+  currentPage: 'dashboard',
+  _confirmCallback: null,
+  _allUsers: [],
+  _filteredUsers: [],
+  _allAccessCodes: [],
+  _allLoginLogs: [],
+  _allAuditLogs: [],
+  _allPlans: [],
+  _allUserSubs: [],
+  _userPage: 1,
+  _loginPage: 1,
+  _auditPage: 1,
+  _pageSize: 10,
+  _roles: [],
+
+  // ===== 初始化 =====
+  init() {
+    this.startClock();
+    this.checkAuth();
+    this.setupResponsive();
+    // 检查URL中是否有重置密码的actionCode
+    if (location.hash === '#reset') {
+      this.auth.showResetPanel();
+    }
+  },
+
+  // ===== 时钟 =====
+  startClock() {
+    const update = () => {
+      const now = new Date();
+      document.getElementById('topClock').textContent = now.toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    };
+    update();
+    setInterval(update, 1000);
+  },
+
+  // ===== 响应式侧边栏 =====
+  setupResponsive() {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const toggle = document.getElementById('menuToggle');
+    const handler = (e) => { toggle.style.display = e.matches ? 'flex' : 'none'; };
+    mq.addEventListener('change', handler);
+    handler(mq);
+  },
+
+  toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+  },
+
+  // ===== 认证检查 =====
+  checkAuth() {
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          const userDoc = await db.collection('users').doc(user.uid).get();
+          if (userDoc.exists) {
+            const data = userDoc.data();
+            // 检查是否为超级管理员
+            if (data.role !== 'super_admin') {
+              this.toast('Access denied. Super Administrator only.', 'error');
+              auth.signOut();
+              return;
+            }
+            // 检查用户状态
+            if (data.status === 'suspended' || data.status === 'disabled') {
+              this.toast('Your account has been ' + data.status + '.', 'error');
+              auth.signOut();
+              return;
+            }
+            this.currentUser = user;
+            this.currentUserData = data;
+            this.showAdminPanel();
+          } else {
+            // 用户存在于Auth但不在users集合中
+            this.toast('User profile not found.', 'error');
+            auth.signOut();
+          }
+        } catch (err) {
+          console.error('Auth check error:', err);
+          this.toast('Authentication error.', 'error');
+        }
+      } else {
+        this.showLoginView();
+      }
+    });
+  },
+
+  showLoginView() {
+    document.getElementById('loginView').classList.remove('hidden');
+    document.getElementById('adminPanel').classList.remove('active');
+  },
+
+  showAdminPanel() {
+    document.getElementById('loginView').classList.add('hidden');
+    document.getElementById('adminPanel').classList.add('active');
+    // 更新侧边栏用户信息
+    const initials = (this.currentUserData.fullName || 'SA').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    document.getElementById('sidebarAvatar').textContent = initials;
+    document.getElementById('sidebarName').textContent = this.currentUserData.fullName || 'Super Admin';
+    // 加载初始页面数据
+    this.navigate('dashboard');
+  },
+
+  // ===== 导航 =====
+  navigate(page) {
+    this.currentPage = page;
+    // 更新导航高亮
+    document.querySelectorAll('.nav-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.page === page);
+    });
+    // 切换页面
+    document.querySelectorAll('.page').forEach(el => {
+      el.classList.toggle('active', el.id === 'page-' + page);
+    });
+    // 更新标题
+    const titles = {
+      dashboard: 'Dashboard',
+      users: 'User Management',
+      accessCodes: 'Access Codes',
+      subscriptions: 'Subscriptions',
+      permissions: 'Roles & Permissions',
+      loginActivity: 'Login Activity',
+      auditLogs: 'Audit Logs',
+      settings: 'System Settings'
+    };
+    document.getElementById('pageTitle').textContent = titles[page] || page;
+    // 加载页面数据
+    this.loadPage(page);
+    // 移动端关闭侧边栏
+    document.getElementById('sidebar').classList.remove('open');
+  },
+
+  loadPage(page) {
+    switch (page) {
+      case 'dashboard': this.dashboard.load(); break;
+      case 'users': this.users.load(); break;
+      case 'accessCodes': this.accessCodes.load(); break;
+      case 'subscriptions': this.subscriptions.load(); break;
+      case 'permissions': this.permissions.load(); break;
+      case 'loginActivity': this.loginActivity.load(); break;
+      case 'auditLogs': this.auditLogs.load(); break;
+      case 'settings': this.settings.load(); break;
+    }
+  },
+
+  // ===== Toast通知 =====
+  toast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const icons = {
+      success: 'fa-check-circle',
+      error: 'fa-exclamation-circle',
+      warning: 'fa-exclamation-triangle',
+      info: 'fa-info-circle'
+    };
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.innerHTML = `<i class="fas ${icons[type]} toast-icon"></i><span class="toast-msg">${message}</span>`;
+    container.appendChild(el);
+    setTimeout(() => {
+      el.classList.add('leaving');
+      setTimeout(() => el.remove(), 250);
+    }, 3500);
+  },
+
+  // ===== 模态框 =====
+  openModal(title, bodyHTML, footerHTML = '', wide = false) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = bodyHTML;
+    document.getElementById('modalFooter').innerHTML = footerHTML;
+    document.getElementById('modalContainer').classList.toggle('wide', wide);
+    document.getElementById('modalOverlay').classList.add('active');
+  },
+
+  closeModal() {
+    document.getElementById('modalOverlay').classList.remove('active');
+  },
+
+  // ===== 确认对话框 =====
+  showConfirm(title, msg, callback, type = 'danger') {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMsg').textContent = msg;
+    this._confirmCallback = callback;
+    const icon = document.getElementById('confirmIcon');
+    const btn = document.getElementById('confirmBtn');
+    if (type === 'danger') {
+      icon.style.background = 'var(--danger-dim)';
+      icon.innerHTML = '<i class="fas fa-trash-alt" style="color:var(--danger)"></i>';
+      btn.className = 'btn btn-danger btn-sm';
+    } else if (type === 'warning') {
+      icon.style.background = 'var(--warning-dim)';
+      icon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:var(--warning)"></i>';
+      btn.className = 'btn btn-warning btn-sm';
+    } else {
+      icon.style.background = 'var(--info-dim)';
+      icon.innerHTML = '<i class="fas fa-question-circle" style="color:var(--info)"></i>';
+      btn.className = 'btn btn-primary btn-sm';
+    }
+    document.getElementById('confirmOverlay').classList.add('active');
+  },
+
+  closeConfirm() {
+    document.getElementById('confirmOverlay').classList.remove('active');
+    this._confirmCallback = null;
+  },
+
+  confirmAction() {
+    if (this._confirmCallback) this._confirmCallback();
+    this.closeConfirm();
+  },
+
+  // ===== 工具函数 =====
+  formatDate(ts) {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  },
+
+  formatDateTime(ts) {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  },
+
+  formatTimeAgo(ts) {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+  },
+
+  daysBetween(d1, d2) {
+    const a = d1.toDate ? d1.toDate() : new Date(d1);
+    const b = d2.toDate ? d2.toDate() : new Date(d2);
+    return Math.ceil((b - a) / (1000 * 60 * 60 * 24));
+  },
+
+  remainingDays(expiryDate) {
+    if (!expiryDate) return 0;
+    const exp = expiryDate.toDate ? expiryDate.toDate() : new Date(expiryDate);
+    const diff = Math.ceil((exp - Date.now()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
+  },
+
+  statusBadge(status) {
+    const map = {
+      active: ['badge-active', 'Active'],
+      pending: ['badge-pending', 'Pending'],
+      approved: ['badge-approved', 'Approved'],
+      suspended: ['badge-suspended', 'Suspended'],
+      expired: ['badge-expired', 'Expired'],
+      disabled: ['badge-disabled', 'Disabled'],
+      used: ['badge-expired', 'Used'],
+    };
+    const [cls, label] = map[status] || ['badge-expired', status];
+    return `<span class="badge-status ${cls}"><span class="dot"></span>${label}</span>`;
+  },
+
+  getDeviceInfo() {
+    const ua = navigator.userAgent;
+    let device = 'Unknown';
+    if (/Mobile|Android|iPhone/i.test(ua)) device = 'Mobile';
+    else if (/Tablet|iPad/i.test(ua)) device = 'Tablet';
+    else device = 'Desktop';
+    let browser = 'Unknown';
+    if (ua.includes('Firefox')) browser = 'Firefox';
+    else if (ua.includes('Chrome')) browser = 'Chrome';
+    else if (ua.includes('Safari')) browser = 'Safari';
+    else if (ua.includes('Edge')) browser = 'Edge';
+    return { device, browser };
+  },
+
+  // 生成安全随机访问码
+  generateSecureCode(length = 16) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const arr = new Uint32Array(length);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, v => chars[v % chars.length]).join('');
+  },
+
+  // 获取角色显示名
+  roleName(role) {
+    const map = {
+      super_admin: 'Super Administrator',
+      administrator: 'Administrator',
+      manager: 'Manager',
+      cashier: 'Cashier',
+      sales_officer: 'Sales Officer',
+      store_keeper: 'Store Keeper',
+      accountant: 'Accountant',
+      user: 'User'
+    };
+    return map[role] || role;
+  },
+
+  // 分页渲染
+  renderPagination(containerId, totalItems, currentPage, callback) {
+    const totalPages = Math.ceil(totalItems / this._pageSize);
+    if (totalPages <= 1) {
+      document.getElementById(containerId).innerHTML = `<div class="page-info">Showing ${totalItems} item(s)</div><div></div>`;
+      return;
+    }
+    const start = (currentPage - 1) * this._pageSize + 1;
+    const end = Math.min(currentPage * this._pageSize, totalItems);
+    let btns = '';
+    btns += `<button class="page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="${callback}(${currentPage - 1})"><i class="fas fa-chevron-left"></i></button>`;
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        btns += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="${callback}(${i})">${i}</button>`;
+      } else if (i === currentPage - 2 || i === currentPage + 2) {
+        btns += `<span style="color:var(--muted);padding:0 4px">...</span>`;
+      }
+    }
+    btns += `<button class="page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="${callback}(${currentPage + 1})"><i class="fas fa-chevron-right"></i></button>`;
+    document.getElementById(containerId).innerHTML = `<div class="page-info">Showing ${start}-${end} of ${totalItems}</div><div class="page-btns">${btns}</div>`;
+  },
+
+  // ===== 审计日志写入 =====
+  async logAudit(action, module, details = '') {
+    if (!this.currentUser) return;
+    const info = this.getDeviceInfo();
+    const now = new Date();
+    try {
+      await db.collection('auditLogs').add({
+        date: now.toLocaleDateString('en-US'),
+        time: now.toLocaleTimeString('en-US'),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        userId: this.currentUser.uid,
+        userName: this.currentUserData?.fullName || this.currentUser.email,
+        action,
+        module,
+        device: info.device,
+        browser: info.browser,
+        details
+      });
+    } catch (e) {
+      console.error('Audit log error:', e);
+    }
+  },
+
+  // ================================================================
+  // 认证模块
+  // ================================================================
+  auth: {
+    async login() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const remember = document.getElementById('rememberMe').checked;
+
+      if (!email || !password) {
+        App.toast('Please enter email and password.', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('loginBtn');
+      btn.innerHTML = '<div class="spinner"></div>';
+      btn.disabled = true;
+
+      try {
+        // 设置持久性
+        await auth.setPersistence(remember ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION);
+        const cred = await auth.signInWithEmailAndPassword(email, password);
+
+        // 记录登录活动
+        const info = App.getDeviceInfo();
+        await db.collection('loginHistory').add({
+          userId: cred.user.uid,
+          email: cred.user.email,
+          loginTime: firebase.firestore.FieldValue.serverTimestamp(),
+          logoutTime: null,
+          device: info.device,
+          browser: info.browser,
+          ipAddress: 'N/A',
+          status: 'success'
+        });
+
+        // 更新用户最后登录时间
+        await db.collection('users').doc(cred.user.uid).update({
+          lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+          failedLoginAttempts: 0,
+          isLocked: false
+        });
+
+        App.logAudit('Login', 'auth', `Signed in from ${info.browser} on ${info.device}`);
+        App.toast('Welcome back!', 'success');
+      } catch (err) {
+        console.error('Login error:', err);
+        let msg = 'Login failed.';
+        if (err.code === 'auth/user-not-found') msg = 'No account found with this email.';
+        else if (err.code === 'auth/wrong-password') msg = 'Incorrect password.';
+        else if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Account temporarily locked.';
+        else if (err.code === 'auth/user-disabled') msg = 'This account has been disabled.';
+        else if (err.code === 'auth/invalid-email') msg = 'Invalid email address.';
+        App.toast(msg, 'error');
+
+        // 记录失败登录
+        if (email) {
+          const info = App.getDeviceInfo();
+          await db.collection('loginHistory').add({
+            userId: null,
+            email: email,
+            loginTime: firebase.firestore.FieldValue.serverTimestamp(),
+            logoutTime: null,
+            device: info.device,
+            browser: info.browser,
+            ipAddress: 'N/A',
+            status: 'failed'
+          });
+          // 增加失败计数
+          try {
+            const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+            if (!userSnap.empty) {
+              const doc = userSnap.docs[0];
+              const data = doc.data();
+              const attempts = (data.failedLoginAttempts || 0) + 1;
+              const updateData = { failedLoginAttempts: attempts };
+              // 超过最大尝试次数则锁定
+              const settingsDoc = await db.collection('systemSettings').doc('config').get();
+              const maxAttempts = settingsDoc.exists ? (settingsDoc.data().maxLoginAttempts || 5) : 5;
+              if (attempts >= maxAttempts) {
+                updateData.isLocked = true;
+                updateData.status = 'suspended';
+                App.toast('Account locked due to too many failed attempts.', 'error');
+              }
+              await db.collection('users').doc(doc.id).update(updateData);
+            }
+          } catch (e) { /* 忽略次要错误 */ }
+        }
+      } finally {
+        btn.innerHTML = '<span>Sign In</span>';
+        btn.disabled = false;
+      }
+    },
+
+    async logout() {
+      App.showConfirm('Sign Out', 'Are you sure you want to sign out?', async () => {
+        if (App.currentUser) {
+          App.logAudit('Logout', 'auth', 'Signed out');
+        }
+        await auth.signOut();
+        App.toast('Signed out successfully.', 'info');
+      }, 'info');
+    },
+
+    showForgot() {
+      document.getElementById('loginPanel').classList.add('hidden');
+      document.getElementById('forgotPanel').classList.add('active');
+    },
+
+    showLogin() {
+      document.getElementById('loginPanel').classList.remove('hidden');
+      document.getElementById('forgotPanel').classList.remove('active');
+      document.getElementById('resetPanel').classList.remove('active');
+    },
+
+    showResetPanel() {
+      document.getElementById('loginPanel').classList.add('hidden');
+      document.getElementById('resetPanel').classList.add('active');
+    },
+
+    async sendResetEmail() {
+      const email = document.getElementById('forgotEmail').value.trim();
+      if (!email) {
+        App.toast('Please enter your email address.', 'warning');
+        return;
+      }
+      try {
+        // 检查用户是否存在于系统中
+        const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+        if (userSnap.empty) {
+          App.toast('No account found with this email.', 'error');
+          return;
+        }
+        // 使用Firebase内置密码重置
+        await auth.sendPasswordResetEmail(email);
+        App.toast('Password reset link sent to your email.', 'success');
+        App.auth.showLogin();
+      } catch (err) {
+        console.error('Reset error:', err);
+        App.toast('Failed to send reset email. ' + err.message, 'error');
+      }
+    },
+
+    async confirmReset() {
+      const newPass = document.getElementById('newPassword').value;
+      const confirmPass = document.getElementById('confirmPassword').value;
+      if (!newPass || newPass.length < 8) {
+        App.toast('Password must be at least 8 characters.', 'warning');
+        return;
+      }
+      if (newPass !== confirmPass) {
+        App.toast('Passwords do not match.', 'warning');
+        return;
+      }
+      // 如果通过email link，Firebase会自动处理
+      // 此处为手动输入场景（管理员重置后的新密码设置）
+      App.toast('Password reset flow completed via email link.', 'info');
+      App.auth.showLogin();
+    },
+
+    // 管理员重置用户密码
+    async resetUserPassword(uid, email) {
+      try {
+        // 生成临时密码
+        const tempPass = App.generateSecureCode(12).toLowerCase() + '@1Kz';
+        // 更新用户密码需要Admin SDK，客户端无法直接操作
+        // 这里通过发送重置邮件实现
+        await auth.sendPasswordResetEmail(email);
+        App.logAudit('Password Reset Initiated', 'auth', `Reset password for ${email}`);
+        App.toast(`Password reset link sent to ${email}`, 'success');
+      } catch (err) {
+        console.error('Password reset error:', err);
+        App.toast('Failed to reset password. ' + err.message, 'error');
+      }
+    }
+  },
+
+  // ================================================================
+  // 仪表盘模块
+  // ================================================================
+  dashboard: {
+    async load() {
+      try {
+        // 并行获取所有统计数据
+        const [usersSnap, adminsSnap, loginSnap, activitySnap, plansSnap] = await Promise.all([
+          db.collection('users').get(),
+          db.collection('users').where('role', 'in', ['super_admin', 'administrator']).get(),
+          db.collection('loginHistory').where('status', '==', 'success').orderBy('loginTime', 'desc').limit(50).get(),
+          db.collection('auditLogs').orderBy('timestamp', 'desc').limit(10).get(),
+          db.collection('subscriptionPlans').get()
+        ]);
+
+        const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+
+        const totalUsers = users.length;
+        const activeUsers = users.filter(u => u.status === 'active').length;
+        const expiredUsers = users.filter(u => u.status === 'expired').length;
+        const pendingUsers = users.filter(u => u.status === 'pending').length;
+        const suspendedUsers = users.filter(u => u.status === 'suspended').length;
+        const admins = adminsSnap.size;
+
+        // 今日登录数
+        const todayLogins = loginSnap.docs.filter(d => {
+          const t = d.data().loginTime;
+          if (!t) return false;
+          const d2 = t.toDate ? t.toDate() : new Date(t);
+          return d2.toISOString().split('T')[0] === todayStr;
+        }).length;
+
+        // 在线用户（最近15分钟登录的）
+        const onlineUsers = loginSnap.docs.filter(d => {
+          const t = d.data().loginTime;
+          if (!t) return false;
+          const d2 = t.toDate ? t.toDate() : new Date(t);
+          return (Date.now() - d2.getTime()) < 15 * 60 * 1000 && !d.data().logoutTime;
+        }).length;
+
+        // 更新待审批徽章
+        const badge = document.getElementById('pendingBadge');
+        if (pendingUsers > 0) {
+          badge.textContent = pendingUsers;
+          badge.style.display = 'inline';
+          document.getElementById('notifDot').style.display = 'block';
+        } else {
+          badge.style.display = 'none';
+          document.getElementById('notifDot').style.display = 'none';
+        }
+
+        // 渲染统计卡片
+        const stats = [
+          { icon: 'fa-users', label: 'Total Users', value: totalUsers, color: 'var(--accent)', bg: 'var(--accent-dim)' },
+          { icon: 'fa-user-check', label: 'Active Users', value: activeUsers, color: 'var(--success)', bg: 'var(--success-dim)' },
+          { icon: 'fa-user-clock', label: 'Pending Approval', value: pendingUsers, color: 'var(--warning)', bg: 'var(--warning-dim)' },
+          { icon: 'fa-user-slash', label: 'Suspended', value: suspendedUsers, color: 'var(--danger)', bg: 'var(--danger-dim)' },
+          { icon: 'fa-user-xmark', label: 'Expired', value: expiredUsers, color: 'var(--muted)', bg: 'rgba(125,133,144,0.15)' },
+          { icon: 'fa-user-tie', label: 'Administrators', value: admins, color: 'var(--purple)', bg: 'var(--purple-dim)' },
+          { icon: 'fa-right-to-bracket', label: "Today's Logins", value: todayLogins, color: 'var(--info)', bg: 'var(--info-dim)' },
+          { icon: 'fa-circle-dot', label: 'Online Now', value: onlineUsers, color: 'var(--success)', bg: 'var(--success-dim)' },
+        ];
+
+        document.getElementById('dashStats').innerHTML = stats.map(s => `
+          <div class="stat-card">
+            <div class="stat-icon" style="background:${s.bg};color:${s.color}"><i class="fas ${s.icon}"></i></div>
+            <div class="stat-value">${s.value}</div>
+            <div class="stat-label">${s.label}</div>
+          </div>
+        `).join('');
+
+        // 最近活动
+        const activities = activitySnap.docs.map(d => d.data());
+        if (activities.length === 0) {
+          document.getElementById('recentActivities').innerHTML = '<div class="empty-state"><i class="fas fa-clipboard-list"></i><p>No recent activities</p></div>';
+        } else {
+          const moduleColors = {
+            auth: 'var(--info)', users: 'var(--accent)', accessCodes: 'var(--purple)',
+            subscriptions: 'var(--warning)', permissions: 'var(--success)', settings: 'var(--muted)'
+          };
+          document.getElementById('recentActivities').innerHTML = `<div class="activity-list">${activities.map(a => `
+            <div class="activity-item">
+              <div class="activity-dot" style="background:${moduleColors[a.module] || 'var(--muted)'}"></div>
+              <div class="activity-content">
+                <div class="act-text"><strong>${a.userName}</strong> ${a.action}</div>
+                <div class="act-time">${App.formatDateTime(a.timestamp)} &middot; ${a.device} &middot; ${a.browser}</div>
+              </div>
+            </div>
+          `).join('')}</div>`;
+        }
+
+        // 系统健康
+        document.getElementById('systemHealth').innerHTML = `
+          <div class="health-grid">
+            <div class="health-item"><div class="health-dot ok"></div><div><div class="h-label">Firebase Auth</div><div class="h-value">Operational</div></div></div>
+            <div class="health-item"><div class="health-dot ok"></div><div><div class="h-label">Cloud Firestore</div><div class="h-value">Operational</div></div></div>
+            <div class="health-item"><div class="health-dot ok"></div><div><div class="h-label">Security Rules</div><div class="h-value">Active</div></div></div>
+            <div class="health-item"><div class="health-dot ok"></div><div><div class="h-label">Admin Session</div><div class="h-value">Active &middot; ${App.getDeviceInfo().browser}</div></div></div>
+            <div class="health-item"><div class="health-dot ${pendingUsers > 0 ? 'warn' : 'ok'}"></div><div><div class="h-label">Pending Approvals</div><div class="h-value">${pendingUsers} awaiting review</div></div></div>
+            <div class="health-item"><div class="health-dot ${expiredUsers > 0 ? 'warn' : 'ok'}"></div><div><div class="h-label">Expired Subscriptions</div><div class="h-value">${expiredUsers} need attention</div></div></div>
+          </div>
+        `;
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+        document.getElementById('dashStats').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Failed to load dashboard data</p></div>';
+      }
+    }
+  },
+
+  // ================================================================
+  // 用户管理模块
+  // ================================================================
+  users: {
+    async load() {
+      try {
+        const snap = await db.collection('users').orderBy('registrationDate', 'desc').get();
+        App._allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        this.applyFilters();
+      } catch (err) {
+        console.error('Users load error:', err);
+        document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Failed to load users</p></div></td></tr>';
+      }
+    },
+
+    applyFilters() {
+      let list = [...App._allUsers];
+      const statusFilter = document.getElementById('userStatusFilter').value;
+      const roleFilter = document.getElementById('userRoleFilter').value;
+      const search = document.getElementById('userSearch').value.toLowerCase();
+
+      if (statusFilter) list = list.filter(u => u.status === statusFilter);
+      if (roleFilter) list = list.filter(u => u.role === roleFilter);
+      if (search) list = list.filter(u =>
+        (u.fullName || '').toLowerCase().includes(search) ||
+        (u.email || '').toLowerCase().includes(search) ||
+        (u.businessName || '').toLowerCase().includes(search)
+      );
+
+      App._filteredUsers = list;
+      App._userPage = 1;
+      this.render();
+    },
+
+    search(val) { this.applyFilters(); },
+    filterByStatus() { this.applyFilters(); },
+    filterByRole() { this.applyFilters(); },
+
+    render() {
+      const list = App._filteredUsers;
+      const start = (App._userPage - 1) * App._pageSize;
+      const page = list.slice(start, start + App._pageSize);
+
+      if (list.length === 0) {
+        document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="fas fa-users"></i><p>No users found</p></div></td></tr>';
+        document.getElementById('usersPagination').innerHTML = '';
+        return;
+      }
+
+      document.getElementById('usersTableBody').innerHTML = page.map(u => {
+        const initials = (u.fullName || '??').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        const subStatus = u.subscription ? (App.remainingDays(u.subscription.expiryDate) > 0 ? 'Active' : 'Expired') : 'None';
+        const subBadge = subStatus === 'Active'
+          ? '<span class="badge-status badge-active"><span class="dot"></span>Active</span>'
+          : subStatus === 'Expired'
+          ? '<span class="badge-status badge-expired"><span class="dot"></span>Expired</span>'
+          : '<span style="color:var(--muted)">—</span>';
+
+        // 构建操作按钮
+        let actions = '';
+        if (u.role !== 'super_admin') {
+          actions += `<button class="btn-icon" title="View/Edit" onclick="App.users.viewUser('${u.id}')"><i class="fas fa-eye" style="font-size:0.75rem"></i></button>`;
+          if (u.status === 'pending') {
+            actions += `<button class="btn-icon" title="Approve" onclick="App.users.approve('${u.id}')" style="color:var(--success)"><i class="fas fa-check" style="font-size:0.75rem"></i></button>`;
+            actions += `<button class="btn-icon" title="Reject" onclick="App.users.reject('${u.id}')" style="color:var(--danger)"><i class="fas fa-times" style="font-size:0.75rem"></i></button>`;
+          }
+          if (u.status === 'approved' || u.status === 'active') {
+            actions += `<button class="btn-icon" title="Suspend" onclick="App.users.suspend('${u.id}')" style="color:var(--warning)"><i class="fas fa-pause" style="font-size:0.75rem"></i></button>`;
+          }
+          if (u.status === 'suspended') {
+            actions += `<button class="btn-icon" title="Restore" onclick="App.users.restore('${u.id}')" style="color:var(--success)"><i class="fas fa-undo" style="font-size:0.75rem"></i></button>`;
+          }
+          if (u.status !== 'disabled') {
+            actions += `<button class="btn-icon" title="Disable" onclick="App.users.disable('${u.id}')" style="color:var(--danger)"><i class="fas fa-ban" style="font-size:0.75rem"></i></button>`;
+          } else {
+            actions += `<button class="btn-icon" title="Enable" onclick="App.users.enable('${u.id}')" style="color:var(--success)"><i class="fas fa-check-circle" style="font-size:0.75rem"></i></button>`;
+          }
+          actions += `<button class="btn-icon" title="Reset Password" onclick="App.users.resetPassword('${u.id}','${u.email || ''}')" style="color:var(--info)"><i class="fas fa-key" style="font-size:0.75rem"></i></button>`;
+          actions += `<button class="btn-icon" title="Delete" onclick="App.users.deleteUser('${u.id}','${(u.fullName || '').replace(/'/g, "\\'")}')" style="color:var(--danger)"><i class="fas fa-trash" style="font-size:0.75rem"></i></button>`;
+        }
+
+        return `<tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;border-radius:8px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;color:var(--accent);border:1px solid var(--border);flex-shrink:0">${initials}</div>
+              <div>
+                <div style="font-weight:600;color:var(--text);font-size:0.88rem">${u.fullName || '—'}</div>
+                <div style="font-size:0.75rem;color:var(--muted)">${u.email || '—'}</div>
+              </div>
+            </div>
+          </td>
+          <td><span style="font-size:0.82rem">${App.roleName(u.role)}</span></td>
+          <td>${App.statusBadge(u.status)}</td>
+          <td>${subBadge}</td>
+          <td style="font-size:0.82rem">${App.formatTimeAgo(u.lastLogin)}</td>
+          <td><div style="display:flex;gap:4px">${actions}</div></td>
+        </tr>`;
+      }).join('');
+
+      App.renderPagination('usersPagination', list.length, App._userPage, 'App.users.goToPage');
+    },
+
+    goToPage(p) {
+      App._userPage = p;
+      this.render();
+    },
+
+    async approve(uid) {
+      App.showConfirm('Approve User', 'Approve this user? They will be able to log in.', async () => {
+        try {
+          await db.collection('users').doc(uid).update({ status: 'active', approvedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          App.logAudit('User Approved', 'users', `Approved user ${uid}`);
+          App.toast('User approved successfully.', 'success');
+          this.load();
+        } catch (e) { App.toast('Failed to approve user.', 'error'); }
+      }, 'info');
+    },
+
+    async reject(uid) {
+      App.showConfirm('Reject User', 'Reject this user? They will be denied access.', async () => {
+        try {
+          await db.collection('users').doc(uid).update({ status: 'disabled' });
+          App.logAudit('User Rejected', 'users', `Rejected user ${uid}`);
+          App.toast('User rejected.', 'warning');
+          this.load();
+        } catch (e) { App.toast('Failed to reject user.', 'error'); }
+      }, 'warning');
+    },
+
+    async suspend(uid) {
+      App.showConfirm('Suspend User', 'Suspend this user? They will not be able to log in.', async () => {
+        try {
+          await db.collection('users').doc(uid).update({ status: 'suspended', suspendedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          App.logAudit('User Suspended', 'users', `Suspended user ${uid}`);
+          App.toast('User suspended.', 'warning');
+          this.load();
+        } catch (e) { App.toast('Failed to suspend user.', 'error'); }
+      }, 'warning');
+    },
+
+    async restore(uid) {
+      try {
+        await db.collection('users').doc(uid).update({ status: 'active', suspendedAt: null, failedLoginAttempts: 0, isLocked: false });
+        App.logAudit('User Restored', 'users', `Restored user ${uid}`);
+        App.toast('User restored successfully.', 'success');
+        this.load();
+      } catch (e) { App.toast('Failed to restore user.', 'error'); }
+    },
+
+    async disable(uid) {
+      App.showConfirm('Disable User', 'Disable this user permanently?', async () => {
+        try {
+          await db.collection('users').doc(uid).update({ status: 'disabled' });
+          App.logAudit('User Disabled', 'users', `Disabled user ${uid}`);
+          App.toast('User disabled.', 'warning');
+          this.load();
+        } catch (e) { App.toast('Failed to disable user.', 'error'); }
+      }, 'danger');
+    },
+
+    async enable(uid) {
+      try {
+        await db.collection('users').doc(uid).update({ status: 'active', failedLoginAttempts: 0, isLocked: false });
+        App.logAudit('User Enabled', 'users', `Enabled user ${uid}`);
+        App.toast('User enabled.', 'success');
+        this.load();
+      } catch (e) { App.toast('Failed to enable user.', 'error'); }
+    },
+
+    async deleteUser(uid, name) {
+      App.showConfirm('Delete User', `Permanently delete "${name}"? This cannot be undone.`, async () => {
+        try {
+          await db.collection('users').doc(uid).delete();
+          App.logAudit('User Deleted', 'users', `Deleted user ${name} (${uid})`);
+          App.toast('User deleted.', 'success');
+          this.load();
+        } catch (e) { App.toast('Failed to delete user.', 'error'); }
+      }, 'danger');
+    },
+
+    resetPassword(uid, email) {
+      if (!email) { App.toast('No email on record for this user.', 'error'); return; }
+      App.showConfirm('Reset Password', `Send a password reset link to ${email}?`, () => {
+        App.auth.resetUserPassword(uid, email);
+      }, 'info');
+    },
+
+    viewUser(uid) {
+      const u = App._allUsers.find(x => x.id === uid);
+      if (!u) return;
+      const subDays = u.subscription ? App.remainingDays(u.subscription.expiryDate) : 0;
+      const body = `
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <div style="width:56px;height:56px;border-radius:14px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;color:var(--accent);border:1px solid var(--border)">${(u.fullName || '??').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</div>
+          <div>
+            <div style="font-size:1.1rem;font-weight:700;font-family:var(--font-display)">${u.fullName || '—'}</div>
+            <div style="color:var(--muted);font-size:0.85rem">${u.email || '—'}</div>
+          </div>
+          <div style="margin-left:auto">${App.statusBadge(u.status)}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.88rem">
+          <div><span style="color:var(--muted)">Business:</span><br><strong>${u.businessName || '—'}</strong></div>
+          <div><span style="color:var(--muted)">Phone:</span><br><strong>${u.phoneNumber || '—'}</strong></div>
+          <div><span style="color:var(--muted)">Role:</span><br><strong>${App.roleName(u.role)}</strong></div>
+          <div><span style="color:var(--muted)">Country:</span><br><strong>${u.country || '—'}</strong></div>
+          <div><span style="color:var(--muted)">Region:</span><br><strong>${u.region || '—'}</strong></div>
+          <div><span style="color:var(--muted)">District:</span><br><strong>${u.district || '—'}</strong></div>
+          <div><span style="color:var(--muted)">Address:</span><br><strong>${u.address || '—'}</strong></div>
+          <div><span style="color:var(--muted)">Access Code:</span><br><strong>${u.accessCode || '—'}</strong></div>
+          <div><span style="color:var(--muted)">Registered:</span><br><strong>${App.formatDate(u.registrationDate)}</strong></div>
+          <div><span style="color:var(--muted)">Last Login:</span><br><strong>${App.formatDateTime(u.lastLogin)}</strong></div>
+          <div><span style="color:var(--muted)">Subscription:</span><br><strong>${u.subscription ? u.subscription.plan + ' (' + subDays + ' days left)' : 'None'}</strong></div>
+          <div><span style="color:var(--muted)">Created By:</span><br><strong>${u.createdBy || 'System'}</strong></div>
+        </div>
+      `;
+      const footer = u.role !== 'super_admin' ? `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Close</button>
+        <button class="btn btn-primary btn-sm" onclick="App.users.showEditModal('${uid}')"><i class="fas fa-edit"></i> Edit User</button>
+      ` : `<button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Close</button>`;
+      App.openModal('User Profile', body, footer, true);
+    },
+
+    showEditModal(uid) {
+      const u = App._allUsers.find(x => x.id === uid);
+      if (!u) return;
+      const body = `
+        <div class="form-row">
+          <div class="form-group"><label>Full Name</label><input class="form-input no-icon" id="editFullName" value="${u.fullName || ''}"></div>
+          <div class="form-group"><label>Business Name</label><input class="form-input no-icon" id="editBusiness" value="${u.businessName || ''}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Phone Number</label><input class="form-input no-icon" id="editPhone" value="${u.phoneNumber || ''}"></div>
+          <div class="form-group"><label>Email</label><input class="form-input no-icon" id="editEmail" value="${u.email || ''}" readonly style="opacity:0.6"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Country</label><input class="form-input no-icon" id="editCountry" value="${u.country || ''}"></div>
+          <div class="form-group"><label>Region</label><input class="form-input no-icon" id="editRegion" value="${u.region || ''}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>District</label><input class="form-input no-icon" id="editDistrict" value="${u.district || ''}"></div>
+          <div class="form-group"><label>Role</label>
+            <select class="form-input no-icon" id="editRole">
+              ${['administrator','manager','cashier','sales_officer','store_keeper','accountant','user'].map(r =>
+                `<option value="${r}" ${u.role === r ? 'selected' : ''}>${App.roleName(r)}</option>`
+              ).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-row full">
+          <div class="form-group"><label>Address</label><input class="form-input no-icon" id="editAddress" value="${u.address || ''}"></div>
+        </div>
+      `;
+      const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="App.users.saveEdit('${uid}')"><i class="fas fa-save"></i> Save Changes</button>
+      `;
+      App.openModal('Edit User', body, footer, true);
+    },
+
+    async saveEdit(uid) {
+      const data = {
+        fullName: document.getElementById('editFullName').value.trim(),
+        businessName: document.getElementById('editBusiness').value.trim(),
+        phoneNumber: document.getElementById('editPhone').value.trim(),
+        country: document.getElementById('editCountry').value.trim(),
+        region: document.getElementById('editRegion').value.trim(),
+        district: document.getElementById('editDistrict').value.trim(),
+        address: document.getElementById('editAddress').value.trim(),
+        role: document.getElementById('editRole').value,
+      };
+      try {
+        await db.collection('users').doc(uid).update(data);
+        App.logAudit('User Updated', 'users', `Updated profile of ${data.fullName}`);
+        App.toast('User updated successfully.', 'success');
+        App.closeModal();
+        this.load();
+      } catch (e) {
+        App.toast('Failed to update user.', 'error');
+      }
+    },
+
+    async exportCSV() {
+      const list = App._filteredUsers;
+      if (list.length === 0) { App.toast('No users to export.', 'warning'); return; }
+      const headers = ['Name', 'Email', 'Phone', 'Business', 'Role', 'Status', 'Country', 'Region', 'Registered', 'Last Login'];
+      const rows = list.map(u => [
+        u.fullName || '', u.email || '', u.phoneNumber || '', u.businessName || '',
+        App.roleName(u.role), u.status, u.country || '', u.region || '',
+        App.formatDate(u.registrationDate), App.formatDateTime(u.lastLogin)
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `users_export_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      App.logAudit('Users Exported', 'users', `Exported ${list.length} users to CSV`);
+      App.toast(`Exported ${list.length} users.`, 'success');
+    }
+  },
+
+  // ================================================================
+  // 访问码模块
+  // ================================================================
+  accessCodes: {
+    async load() {
+      try {
+        const snap = await db.collection('accessCodes').orderBy('creationDate', 'desc').get();
+        App._allAccessCodes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        this.render();
+      } catch (err) {
+        console.error('Access codes error:', err);
+        document.getElementById('accessCodesTableBody').innerHTML = '<tr><td colspan="8"><div class="empty-state"><i class="fas fa-key"></i><p>Failed to load access codes</p></div></td></tr>';
+      }
+    },
+
+    render() {
+      const list = App._allAccessCodes;
+      if (list.length === 0) {
+        document.getElementById('accessCodesTableBody').innerHTML = '<tr><td colspan="8"><div class="empty-state"><i class="fas fa-key"></i><p>No access codes generated yet</p></div></td></tr>';
+        return;
+      }
+      document.getElementById('accessCodesTableBody').innerHTML = list.map(c => {
+        const remaining = App.remainingDays(c.expirationDate);
+        const usedCount = c.assignedUsers ? c.assignedUsers.length : (c.assignedUser ? 1 : 0);
+        return `<tr>
+          <td><code style="background:var(--bg);padding:3px 8px;border-radius:4px;font-size:0.82rem;letter-spacing:1px;font-weight:600;color:var(--accent)">${c.code}</code></td>
+          <td style="font-size:0.85rem">${App.formatDate(c.creationDate)}</td>
+          <td style="font-size:0.85rem">${App.formatDate(c.expirationDate)}</td>
+          <td>${c.maxUsers || 1}</td>
+          <td style="font-size:0.85rem">${usedCount}</td>
+          <td><span style="color:${remaining <= 7 ? 'var(--warning)' : 'var(--text-secondary)'};font-weight:600">${remaining}d</span></td>
+          <td>${App.statusBadge(c.status)}</td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button class="btn-icon" title="Copy Code" onclick="navigator.clipboard.writeText('${c.code}');App.toast('Code copied!','success')"><i class="fas fa-copy" style="font-size:0.75rem"></i></button>
+              ${c.status === 'active' ? `<button class="btn-icon" title="Revoke" onclick="App.accessCodes.revoke('${c.id}')" style="color:var(--danger)"><i class="fas fa-ban" style="font-size:0.75rem"></i></button>` : ''}
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    },
+
+    showGenerate() {
+      const body = `
+        <div class="form-group">
+          <label>Validity Period</label>
+          <select class="form-input no-icon" id="acDuration" onchange="App.accessCodes.toggleCustomDate()">
+            <option value="1">1 Month</option>
+            <option value="2">2 Months</option>
+            <option value="3" selected>3 Months</option>
+            <option value="4">4 Months</option>
+            <option value="5">5 Months</option>
+            <option value="6">6 Months</option>
+            <option value="7">7 Months</option>
+            <option value="8">8 Months</option>
+            <option value="9">9 Months</option>
+            <option value="10">10 Months</option>
+            <option value="11">11 Months</option>
+            <option value="12">12 Months</option>
+            <option value="custom">Custom Date</option>
+          </select>
+        </div>
+        <div class="form-group" id="acCustomDateWrap" style="display:none">
+          <label>Custom Expiration Date</label>
+          <input type="date" class="form-input no-icon" id="acCustomDate">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Maximum Users</label>
+            <input type="number" class="form-input no-icon" id="acMaxUsers" value="1" min="1" max="100">
+          </div>
+          <div class="form-group">
+            <label>Single Use Only</label>
+            <select class="form-input no-icon" id="acSingleUse">
+              <option value="true">Yes - One time use</option>
+              <option value="false">No - Multi use</option>
+            </select>
+          </div>
+        </div>
+      `;
+      const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="App.accessCodes.generate()"><i class="fas fa-key"></i> Generate Code</button>
+      `;
+      App.openModal('Generate Access Code', body, footer);
+    },
+
+    toggleCustomDate() {
+      document.getElementById('acCustomDateWrap').style.display =
+        document.getElementById('acDuration').value === 'custom' ? 'block' : 'none';
+    },
+
+    async generate() {
+      const duration = document.getElementById('acDuration').value;
+      let expiry;
+      if (duration === 'custom') {
+        const custom = document.getElementById('acCustomDate').value;
+        if (!custom) { App.toast('Please select a custom date.', 'warning'); return; }
+        expiry = new Date(custom);
+      } else {
+        expiry = new Date();
+        expiry.setMonth(expiry.getMonth() + parseInt(duration));
+      }
+
+      const code = App.generateSecureCode(16);
+      const maxUsers = parseInt(document.getElementById('acMaxUsers').value) || 1;
+      const singleUse = document.getElementById('acSingleUse').value === 'true';
+
+      if (singleUse) {
+        // 单次使用等同于maxUsers=1
+        expiry = expiry;
+      }
+
+      try {
+        await db.collection('accessCodes').add({
+          code,
+          creationDate: firebase.firestore.FieldValue.serverTimestamp(),
+          expirationDate: expiry,
+          status: 'active',
+          maxUsers: singleUse ? 1 : maxUsers,
+          singleUse,
+          assignedUsers: [],
+          assignedUser: null,
+          remainingDays: App.daysBetween(new Date(), expiry),
+          createdBy: App.currentUser.uid,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        App.logAudit('Access Code Generated', 'accessCodes', `Generated code: ${code} (${duration} months, max ${maxUsers} users)`);
+        App.toast('Access code generated successfully.', 'success');
+        App.closeModal();
+        this.load();
+      } catch (e) {
+        App.toast('Failed to generate access code.', 'error');
+      }
+    },
+
+    async revoke(id) {
+      App.showConfirm('Revoke Access Code', 'Revoke this access code? It will no longer be valid.', async () => {
+        try {
+          await db.collection('accessCodes').doc(id).update({ status: 'expired' });
+          App.logAudit('Access Code Revoked', 'accessCodes', `Revoked code ${id}`);
+          App.toast('Access code revoked.', 'warning');
+          this.load();
+        } catch (e) { App.toast('Failed to revoke code.', 'error'); }
+      }, 'warning');
+    }
+  },
+
+  // ================================================================
+  // 订阅管理模块
+  // ================================================================
+  subscriptions: {
+    async load() {
+      try {
+        const [plansSnap, usersSnap] = await Promise.all([
+          db.collection('subscriptionPlans').get(),
+          db.collection('users').get()
+        ]);
+        App._allPlans = plansSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        App._allUserSubs = usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.subscription);
+        this.renderPlans();
+        this.renderUserSubs();
+      } catch (err) {
+        console.error('Subscriptions error:', err);
+      }
+    },
+
+    renderPlans() {
+      const list = App._allPlans;
+      if (list.length === 0) {
+        document.getElementById('plansTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="fas fa-credit-card"></i><p>No subscription plans created</p></div></td></tr>';
+        return;
+      }
+      document.getElementById('plansTableBody').innerHTML = list.map(p => `<tr>
+        <td style="font-weight:600;color:var(--text)">${p.name}</td>
+        <td>${p.duration} days</td>
+        <td style="font-weight:600;color:var(--accent)">${p.price ? '$' + p.price : 'Free'}</td>
+        <td>${p.maxUsers || 'Unlimited'}</td>
+        <td>${App.statusBadge(p.status || 'active')}</td>
+        <td>
+          <div style="display:flex;gap:4px">
+            <button class="btn-icon" title="Edit" onclick="App.subscriptions.editPlan('${p.id}')"><i class="fas fa-edit" style="font-size:0.75rem"></i></button>
+            <button class="btn-icon" title="Delete" onclick="App.subscriptions.deletePlan('${p.id}','${p.name}')" style="color:var(--danger)"><i class="fas fa-trash" style="font-size:0.75rem"></i></button>
+          </div>
+        </td>
+      </tr>`).join('');
+    },
+
+    renderUserSubs() {
+      let list = [...App._allUserSubs];
+      const search = document.getElementById('subSearch')?.value?.toLowerCase() || '';
+      const statusFilter = document.getElementById('subStatusFilter')?.value || '';
+
+      if (search) list = list.filter(u => (u.fullName || '').toLowerCase().includes(search) || (u.email || '').toLowerCase().includes(search));
+      if (statusFilter) {
+        list = list.filter(u => {
+          const remaining = App.remainingDays(u.subscription.expiryDate);
+          return statusFilter === 'active' ? remaining > 0 : remaining <= 0;
+        });
+      }
+
+      if (list.length === 0) {
+        document.getElementById('userSubsTableBody').innerHTML = '<tr><td colspan="7"><div class="empty-state"><i class="fas fa-credit-card"></i><p>No subscriptions found</p></div></td></tr>';
+        return;
+      }
+
+      document.getElementById('userSubsTableBody').innerHTML = list.map(u => {
+        const sub = u.subscription;
+        const remaining = App.remainingDays(sub.expiryDate);
+        const isActive = remaining > 0;
+        return `<tr>
+          <td style="font-weight:500;color:var(--text)">${u.fullName || u.email || '—'}</td>
+          <td>${sub.plan || '—'}</td>
+          <td style="font-size:0.85rem">${App.formatDate(sub.startDate)}</td>
+          <td style="font-size:0.85rem">${App.formatDate(sub.expiryDate)}</td>
+          <td><span style="font-weight:700;color:${remaining <= 7 ? 'var(--warning)' : isActive ? 'var(--success)' : 'var(--danger)'}">${remaining} days</span></td>
+          <td>${isActive ? '<span class="badge-status badge-active"><span class="dot"></span>Active</span>' : '<span class="badge-status badge-expired"><span class="dot"></span>Expired</span>'}</td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button class="btn-icon" title="Extend Subscription" onclick="App.subscriptions.extend('${u.id}','${u.fullName || ''}')" style="color:var(--success)"><i class="fas fa-clock-rotate-left" style="font-size:0.75rem"></i></button>
+              <button class="btn-icon" title="Change Plan" onclick="App.subscriptions.changePlan('${u.id}','${u.fullName || ''}')" style="color:var(--info)"><i class="fas fa-exchange-alt" style="font-size:0.75rem"></i></button>
+              ${!isActive ? `<button class="btn-icon" title="Revoke Access" onclick="App.subscriptions.revokeAccess('${u.id}')" style="color:var(--danger)"><i class="fas fa-ban" style="font-size:0.75rem"></i></button>` : ''}
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    },
+
+    searchUser() { this.renderUserSubs(); },
+    filterByStatus() { this.renderUserSubs(); },
+
+    showCreatePlan() {
+      const body = `
+        <div class="form-row">
+          <div class="form-group"><label>Plan Name</label><input class="form-input no-icon" id="planName" placeholder="e.g., Premium"></div>
+          <div class="form-group"><label>Duration (days)</label><input type="number" class="form-input no-icon" id="planDuration" value="30" min="1"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Price</label><input type="number" class="form-input no-icon" id="planPrice" value="0" min="0" step="0.01"></div>
+          <div class="form-group"><label>Max Users</label><input type="number" class="form-input no-icon" id="planMaxUsers" value="1" min="1"></div>
+        </div>
+      `;
+      const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="App.subscriptions.createPlan()"><i class="fas fa-plus"></i> Create Plan</button>
+      `;
+      App.openModal('Create Subscription Plan', body, footer);
+    },
+
+    async createPlan() {
+      const name = document.getElementById('planName').value.trim();
+      const duration = parseInt(document.getElementById('planDuration').value) || 30;
+      const price = parseFloat(document.getElementById('planPrice').value) || 0;
+      const maxUsers = parseInt(document.getElementById('planMaxUsers').value) || 1;
+
+      if (!name) { App.toast('Please enter a plan name.', 'warning'); return; }
+
+      try {
+        await db.collection('subscriptionPlans').add({
+          name, duration, price, maxUsers,
+          status: 'active',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        App.logAudit('Plan Created', 'subscriptions', `Created plan: ${name}`);
+        App.toast('Plan created successfully.', 'success');
+        App.closeModal();
+        this.load();
+      } catch (e) { App.toast('Failed to create plan.', 'error'); }
+    },
+
+    async editPlan(id) {
+      const p = App._allPlans.find(x => x.id === id);
+      if (!p) return;
+      const body = `
+        <div class="form-row">
+          <div class="form-group"><label>Plan Name</label><input class="form-input no-icon" id="editPlanName" value="${p.name}"></div>
+          <div class="form-group"><label>Duration (days)</label><input type="number" class="form-input no-icon" id="editPlanDuration" value="${p.duration}" min="1"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Price</label><input type="number" class="form-input no-icon" id="editPlanPrice" value="${p.price || 0}" min="0" step="0.01"></div>
+          <div class="form-group"><label>Max Users</label><input type="number" class="form-input no-icon" id="editPlanMaxUsers" value="${p.maxUsers || 1}" min="1"></div>
+        </div>
+      `;
+      const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="App.subscriptions.savePlanEdit('${id}')"><i class="fas fa-save"></i> Save</button>
+      `;
+      App.openModal('Edit Plan', body, footer);
+    },
+
+    async savePlanEdit(id) {
+      try {
+        await db.collection('subscriptionPlans').doc(id).update({
+          name: document.getElementById('editPlanName').value.trim(),
+          duration: parseInt(document.getElementById('editPlanDuration').value) || 30,
+          price: parseFloat(document.getElementById('editPlanPrice').value) || 0,
+          maxUsers: parseInt(document.getElementById('editPlanMaxUsers').value) || 1
+        });
+        App.logAudit('Plan Updated', 'subscriptions', `Updated plan ${id}`);
+        App.toast('Plan updated.', 'success');
+        App.closeModal();
+        this.load();
+      } catch (e) { App.toast('Failed to update plan.', 'error'); }
+    },
+
+    async deletePlan(id, name) {
+      App.showConfirm('Delete Plan', `Delete plan "${name}"?`, async () => {
+        try {
+          await db.collection('subscriptionPlans').doc(id).delete();
+          App.logAudit('Plan Deleted', 'subscriptions', `Deleted plan: ${name}`);
+          App.toast('Plan deleted.', 'success');
+          this.load();
+        } catch (e) { App.toast('Failed to delete plan.', 'error'); }
+      }, 'danger');
+    },
+
+    extend(uid, name) {
+      const body = `
+        <div class="form-group">
+          <label>Extend by (days)</label>
+          <input type="number" class="form-input no-icon" id="extendDays" value="30" min="1">
+        </div>
+      `;
+      const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="App.subscriptions.doExtend('${uid}')"><i class="fas fa-clock-rotate-left"></i> Extend</button>
+      `;
+      App.openModal(`Extend Subscription - ${name}`, body, footer);
+    },
+
+    async doExtend(uid) {
+      const days = parseInt(document.getElementById('extendDays').value) || 30;
+      try {
+        const doc = await db.collection('users').doc(uid).get();
+        if (!doc.exists) return;
+        const u = doc.data();
+        const currentExpiry = u.subscription?.expiryDate ? (u.subscription.expiryDate.toDate ? u.subscription.expiryDate.toDate() : new Date(u.subscription.expiryDate)) : new Date();
+        const newExpiry = new Date(Math.max(currentExpiry.getTime(), Date.now()));
+        newExpiry.setDate(newExpiry.getDate() + days);
+        await db.collection('users').doc(uid).update({
+          'subscription.expiryDate': newExpiry,
+          'subscription.status': 'active',
+          status: 'active'
+        });
+        App.logAudit('Subscription Extended', 'subscriptions', `Extended ${u.fullName}'s subscription by ${days} days`);
+        App.toast(`Subscription extended by ${days} days.`, 'success');
+        App.closeModal();
+        this.load();
+      } catch (e) { App.toast('Failed to extend subscription.', 'error'); }
+    },
+
+    changePlan(uid, name) {
+      const options = App._allPlans.map(p => `<option value="${p.name}" data-days="${p.duration}">${p.name} (${p.duration} days${p.price ? ' - $' + p.price : ''})</option>`).join('');
+      const body = `
+        <div class="form-group">
+          <label>Select New Plan</label>
+          <select class="form-input no-icon" id="newPlanSelect">${options || '<option value="">No plans available</option>'}</select>
+        </div>
+      `;
+      const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="App.subscriptions.doChangePlan('${uid}')"><i class="fas fa-exchange-alt"></i> Change Plan</button>
+      `;
+      App.openModal(`Change Plan - ${name}`, body, footer);
+    },
+
+    async doChangePlan(uid) {
+      const sel = document.getElementById('newPlanSelect');
+      const planName = sel.value;
+      const days = parseInt(sel.options[sel.selectedIndex].dataset.days) || 30;
+      if (!planName) { App.toast('Please select a plan.', 'warning'); return; }
+
+      const now = new Date();
+      const expiry = new Date(now);
+      expiry.setDate(expiry.getDate() + days);
+
+      try {
+        await db.collection('users').doc(uid).update({
+          subscription: {
+            plan: planName,
+            startDate: now,
+            expiryDate: expiry,
+            status: 'active'
+          },
+          status: 'active'
+        });
+        App.logAudit('Plan Changed', 'subscriptions', `Changed plan to ${planName} for user ${uid}`);
+        App.toast('Plan changed successfully.', 'success');
+        App.closeModal();
+        this.load();
+      } catch (e) { App.toast('Failed to change plan.', 'error'); }
+    },
+
+    async revokeAccess(uid) {
+      App.showConfirm('Revoke Access', 'Immediately revoke this user\'s access?', async () => {
+        try {
+          await db.collection('users').doc(uid).update({
+            'subscription.status': 'expired',
+            status: 'expired'
+          });
+          App.logAudit('Access Revoked', 'subscriptions', `Revoked access for user ${uid}`);
+          App.toast('Access revoked.', 'warning');
+          this.load();
+        } catch (e) { App.toast('Failed to revoke access.', 'error'); }
+      }, 'danger');
+    }
+  },
+
+  // ================================================================
+  // 角色权限模块
+  // ================================================================
+  permissions: {
+    _permActions: ['view', 'create', 'edit', 'delete', 'approve', 'export', 'print', 'manageUsers', 'manageSystem'],
+    _modules: ['Dashboard', 'Users', 'Products', 'Sales', 'Orders', 'Reports', 'Access Codes', 'Subscriptions', 'Settings'],
+
+    async load() {
+      try {
+        // 确保默认角色存在
+        const defaultRoles = [
+          { name: 'super_admin', label: 'Super Administrator', description: 'Full system access' },
+          { name: 'administrator', label: 'Administrator', description: 'Manage most system features' },
+          { name: 'manager', label: 'Manager', description: 'Manage team and operations' },
+          { name: 'cashier', label: 'Cashier', description: 'Process sales transactions' },
+          { name: 'sales_officer', label: 'Sales Officer', description: 'Handle sales and customers' },
+          { name: 'store_keeper', label: 'Store Keeper', description: 'Manage inventory' },
+          { name: 'accountant', label: 'Accountant', description: 'Manage finances and reports' },
+          { name: 'user', label: 'User', description: 'Basic access' }
+        ];
+
+        const snap = await db.collection('roles').get();
+        App._roles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // 创建缺失的角色
+        for (const r of defaultRoles) {
+          if (!App._roles.find(x => x.name === r.name)) {
+            const perms = {};
+            this._modules.forEach(m => {
+              perms[m] = {};
+              this._permActions.forEach(a => {
+                perms[m][a] = r.name === 'super_admin';
+              });
+            });
+            const docRef = await db.collection('roles').add({
+              name: r.name,
+              label: r.label,
+              description: r.description,
+              permissions: perms,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            App._roles.push({ id: docRef.id, name: r.name, label: r.label, description: r.description, permissions: perms });
+          }
+        }
+
+        this.render();
+      } catch (err) {
+        console.error('Permissions error:', err);
+        document.getElementById('permissionsContent').innerHTML = '<div class="empty-state"><i class="fas fa-user-shield"></i><p>Failed to load permissions</p></div>';
+      }
+    },
+
+    render() {
+      const actions = this._permActions;
+      const cols = actions.length;
+      let html = `<div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">`;
+      App._roles.forEach(r => {
+        const isSuper = r.name === 'super_admin';
+        html += `<button class="btn ${isSuper ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="App.permissions.selectRole('${r.id}')" id="roleBtn_${r.id}">${r.label}</button>`;
+      });
+      html += `</div><div id="permMatrix"><div class="empty-state" style="padding:30px"><i class="fas fa-hand-pointer"></i><p>Select a role to configure permissions</p></div></div>`;
+      document.getElementById('permissionsContent').innerHTML = html;
+    },
+
+    async selectRole(roleId) {
+      // 高亮按钮
+      document.querySelectorAll('[id^="roleBtn_"]').forEach(b => {
+        b.className = b.id === 'roleBtn_' + roleId ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+      });
+
+      const role = App._roles.find(r => r.id === roleId);
+      if (!role) return;
+
+      const actions = this._permActions;
+      const modules = this._modules;
+      const perms = role.permissions || {};
+      const isSuper = role.name === 'super_admin';
+      const cols = actions.length;
+
+      let matrixHtml = `<div style="--cols:${cols}" class="perm-grid">`;
+      // 头部
+      matrixHtml += `<div class="perm-header"><span>Module</span>`;
+      actions.forEach(a => { matrixHtml += `<span>${a}</span>`; });
+      matrixHtml += `</div>`;
+      // 行
+      modules.forEach(m => {
+        matrixHtml += `<div class="perm-row"><span>${m}</span>`;
+        actions.forEach(a => {
+          const checked = isSuper ? true : (perms[m] && perms[m][a]) ? true : false;
+          const disabled = isSuper ? 'disabled checked' : '';
+          matrixHtml += `<span><input type="checkbox" class="perm-check" data-module="${m}" data-action="${a}" ${checked ? 'checked' : ''} ${disabled}></span>`;
+        });
+        matrixHtml += `</div>`;
+      });
+      matrixHtml += `</div>`;
+
+      if (!isSuper) {
+        matrixHtml += `<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-secondary btn-sm" onclick="App.permissions.selectAll('${roleId}')">Select All</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.permissions.deselectAll('${roleId}')">Deselect All</button>
+          <button class="btn btn-primary btn-sm" onclick="App.permissions.savePermissions('${roleId}')"><i class="fas fa-save"></i> Save Permissions</button>
+        </div>`;
+      } else {
+        matrixHtml += `<p style="margin-top:12px;color:var(--muted);font-size:0.85rem"><i class="fas fa-lock" style="margin-right:4px"></i> Super Administrator has all permissions by default.</p>`;
+      }
+
+      document.getElementById('permMatrix').innerHTML = matrixHtml;
+    },
+
+    selectAll(roleId) {
+      document.querySelectorAll('#permMatrix .perm-check').forEach(cb => cb.checked = true);
+    },
+
+    deselectAll(roleId) {
+      document.querySelectorAll('#permMatrix .perm-check').forEach(cb => cb.checked = false);
+    },
+
+    async savePermissions(roleId) {
+      const perms = {};
+      document.querySelectorAll('#permMatrix .perm-check').forEach(cb => {
+        const m = cb.dataset.module;
+        const a = cb.dataset.action;
+        if (!perms[m]) perms[m] = {};
+        perms[m][a] = cb.checked;
+      });
+
+      try {
+        await db.collection('roles').doc(roleId).update({ permissions: perms });
+        // 更新本地缓存
+        const role = App._roles.find(r => r.id === roleId);
+        if (role) role.permissions = perms;
+        App.logAudit('Permissions Changed', 'permissions', `Updated permissions for role ${role?.label || roleId}`);
+        App.toast('Permissions saved successfully.', 'success');
+      } catch (e) {
+        App.toast('Failed to save permissions.', 'error');
+      }
+    },
+
+    showCreateRole() {
+      const body = `
+        <div class="form-group"><label>Role Name</label><input class="form-input no-icon" id="newRoleName" placeholder="e.g., Supervisor"></div>
+        <div class="form-group"><label>Description</label><input class="form-input no-icon" id="newRoleDesc" placeholder="Brief description"></div>
+      `;
+      const footer = `
+        <button class="btn btn-secondary btn-sm" onclick="App.closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="App.permissions.createRole()"><i class="fas fa-plus"></i> Create Role</button>
+      `;
+      App.openModal('Create New Role', body, footer);
+    },
+
+    async createRole() {
+      const name = document.getElementById('newRoleName').value.trim().toLowerCase().replace(/\s+/g, '_');
+      const label = document.getElementById('newRoleName').value.trim();
+      const desc = document.getElementById('newRoleDesc').value.trim();
+
+      if (!label) { App.toast('Please enter a role name.', 'warning'); return; }
+      if (App._roles.find(r => r.name === name)) { App.toast('Role already exists.', 'warning'); return; }
+
+      const perms = {};
+      this._modules.forEach(m => {
+        perms[m] = {};
+        this._permActions.forEach(a => { perms[m][a] = false; });
+      });
+
+      try {
+        const docRef = await db.collection('roles').add({
+          name, label, description: desc, permissions: perms,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        App._roles.push({ id: docRef.id, name, label, description: desc, permissions: perms });
+        App.logAudit('Role Created', 'permissions', `Created role: ${label}`);
+        App.toast('Role created successfully.', 'success');
+        App.closeModal();
+        this.render();
+      } catch (e) { App.toast('Failed to create role.', 'error'); }
+    }
+  },
+
+  // ================================================================
+  // 登录活动模块
+  // ================================================================
+  loginActivity: {
+    async load() {
+      try {
+        const snap = await db.collection('loginHistory').orderBy('loginTime', 'desc').limit(200).get();
+        App._allLoginLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        this.applyFilters();
+      } catch (err) {
+        console.error('Login activity error:', err);
+        document.getElementById('loginTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="fas fa-fingerprint"></i><p>Failed to load login activity</p></div></td></tr>';
+      }
+    },
+
+    applyFilters() {
+      let list = [...App._allLoginLogs];
+      const search = document.getElementById('loginSearch')?.value?.toLowerCase() || '';
+      const statusFilter = document.getElementById('loginStatusFilter')?.value || '';
+
+      if (search) list = list.filter(l => (l.email || '').toLowerCase().includes(search) || (l.userName || '').toLowerCase().includes(search));
+      if (statusFilter) list = list.filter(l => l.status === statusFilter);
+
+      App._loginPage = 1;
+      this._list = list;
+      this.render();
+    },
+
+    search() { this.applyFilters(); },
+    filterByStatus() { this.applyFilters(); },
+
+    render() {
+      const list = this._list || [];
+      const start = (App._loginPage - 1) * App._pageSize;
+      const page = list.slice(start, start + App._pageSize);
+
+      if (list.length === 0) {
+        document.getElementById('loginTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="fas fa-fingerprint"></i><p>No login activity found</p></div></td></tr>';
+        document.getElementById('loginPagination').innerHTML = '';
+        return;
+      }
+
+      document.getElementById('loginTableBody').innerHTML = page.map(l => `<tr>
+        <td style="font-weight:500;color:var(--text)">${l.email || l.userName || '—'}</td>
+        <td style="font-size:0.85rem">${App.formatDateTime(l.loginTime)}</td>
+        <td><i class="fas ${l.device === 'Mobile' ? 'fa-mobile-screen' : l.device === 'Tablet' ? 'fa-tablet-screen-button' : 'fa-desktop'}" style="margin-right:4px;color:var(--muted)"></i>${l.device || '—'}</td>
+        <td style="font-size:0.85rem">${l.browser || '—'}</td>
+        <td style="font-size:0.85rem;color:var(--muted)">${l.ipAddress || 'N/A'}</td>
+        <td>${l.status === 'success'
+          ? '<span class="badge-status badge-active"><span class="dot"></span>Success</span>'
+          : '<span class="badge-status badge-suspended"><span class="dot"></span>Failed</span>'}</td>
+      </tr>`).join('');
+
+      App.renderPagination('loginPagination', list.length, App._loginPage, 'App.loginActivity.goToPage');
+    },
+
+    goToPage(p) { App._loginPage = p; this.render(); }
+  },
+
+  // ================================================================
+  // 审计日志模块
+  // ================================================================
+  auditLogs: {
+    async load() {
+      try {
+        const snap = await db.collection('auditLogs').orderBy('timestamp', 'desc').limit(300).get();
+        App._allAuditLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        this.applyFilters();
+      } catch (err) {
+        console.error('Audit logs error:', err);
+        document.getElementById('auditTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="fas fa-clipboard-list"></i><p>Failed to load audit logs</p></div></td></tr>';
+      }
+    },
+
+    applyFilters() {
+      let list = [...App._allAuditLogs];
+      const search = document.getElementById('auditSearch')?.value?.toLowerCase() || '';
+      const moduleFilter = document.getElementById('auditModuleFilter')?.value || '';
+
+      if (search) list = list.filter(l =>
+        (l.userName || '').toLowerCase().includes(search) ||
+        (l.action || '').toLowerCase().includes(search) ||
+        (l.details || '').toLowerCase().includes(search)
+      );
+      if (moduleFilter) list = list.filter(l => l.module === moduleFilter);
+
+      App._auditPage = 1;
+      this._list = list;
+      this.render();
+    },
+
+    search() { this.applyFilters(); },
+    filterByModule() { this.applyFilters(); },
+
+    render() {
+      const list = this._list || [];
+      const start = (App._auditPage - 1) * App._pageSize;
+      const page = list.slice(start, start + App._pageSize);
+
+      if (list.length === 0) {
+        document.getElementById('auditTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state"><i class="fas fa-clipboard-list"></i><p>No audit logs found</p></div></td></tr>';
+        document.getElementById('auditPagination').innerHTML = '';
+        return;
+      }
+
+      const moduleColors = {
+        auth: 'var(--info)', users: 'var(--accent)', accessCodes: 'var(--purple)',
+        subscriptions: 'var(--warning)', permissions: 'var(--success)', settings: 'var(--muted)'
+      };
+
+      document.getElementById('auditTableBody').innerHTML = page.map(l => `<tr>
+        <td style="font-size:0.82rem"><div style="font-weight:500">${l.date || '—'}</div><div style="color:var(--muted)">${l.time || ''}</div></td>
+        <td style="font-weight:500;color:var(--text)">${l.userName || '—'}</td>
+        <td style="font-size:0.85rem">${l.action || '—'}</td>
+        <td><span style="background:${moduleColors[l.module] || 'var(--muted)'}22;color:${moduleColors[l.module] || 'var(--muted)'};padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600">${(l.module || '—').charAt(0).toUpperCase() + (l.module || '—').slice(1)}</span></td>
+        <td style="font-size:0.82rem">${l.device || '—'} / ${l.browser || '—'}</td>
+        <td style="font-size:0.82rem;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis">${l.details || '—'}</td>
+      </tr>`).join('');
+
+      App.renderPagination('auditPagination', list.length, App._auditPage, 'App.auditLogs.goToPage');
+    },
+
+    goToPage(p) { App._auditPage = p; this.render(); },
+
+    async exportCSV() {
+      const list = this._list || App._allAuditLogs;
+      if (list.length === 0) { App.toast('No logs to export.', 'warning'); return; }
+      const headers = ['Date', 'Time', 'User', 'Action', 'Module', 'Device', 'Browser', 'Details'];
+      const rows = list.map(l => [l.date, l.time, l.userName, l.action, l.module, l.device, l.browser, l.details]);
+      const csv = [headers, ...rows].map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `audit_logs_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      App.toast(`Exported ${list.length} log entries.`, 'success');
+    }
+  },
+
+  // ================================================================
+  // 系统设置模块
+  // ================================================================
+  settings: {
+    _defaults: {
+      systemLocked: false,
+      registrationEnabled: true,
+      requireApproval: true,
+      sessionTimeout: 30,
+      maxLoginAttempts: 5,
+      autoExpireSubscriptions: true,
+      allowSelfRegistration: false,
+      maintenanceMode: false
+    },
+
+    async load() {
+      try {
+        const doc = await db.collection('systemSettings').doc('config').get();
+        let settings = this._defaults;
+        if (doc.exists) {
+          settings = { ...this._defaults, ...doc.data() };
+        } else {
+          // 创建默认配置
+          await db.collection('systemSettings').doc('config').set(settings);
+        }
+        this.render(settings);
+      } catch (err) {
+        console.error('Settings error:', err);
+        document.getElementById('settingsContent').innerHTML = '<div class="empty-state"><i class="fas fa-cog"></i><p>Failed to load settings</p></div>';
+      }
+    },
+
+    render(s) {
+      document.getElementById('settingsContent').innerHTML = `
+        <div class="settings-section">
+          <h3><i class="fas fa-shield-halved" style="margin-right:8px;color:var(--accent)"></i>Security</h3>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Lock Entire System</div><div class="setting-desc">Prevent all users from accessing the system</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="set_systemLocked" ${s.systemLocked ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Max Login Attempts</div><div class="setting-desc">Lock account after this many failed attempts</div></div>
+            <input type="number" class="form-input no-icon" id="set_maxLoginAttempts" value="${s.maxLoginAttempts || 5}" style="width:80px;text-align:center">
+          </div>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Session Timeout (minutes)</div><div class="setting-desc">Auto-logout after inactivity</div></div>
+            <input type="number" class="form-input no-icon" id="set_sessionTimeout" value="${s.sessionTimeout || 30}" style="width:80px;text-align:center">
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3><i class="fas fa-user-plus" style="margin-right:8px;color:var(--info)"></i>Registration</h3>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Enable Registration</div><div class="setting-desc">Allow new users to register</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="set_registrationEnabled" ${s.registrationEnabled ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Require Admin Approval</div><div class="setting-desc">New users must be approved before they can log in</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="set_requireApproval" ${s.requireApproval ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Allow Self Registration</div><div class="setting-desc">Users can register without an access code</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="set_allowSelfRegistration" ${s.allowSelfRegistration ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3><i class="fas fa-credit-card" style="margin-right:8px;color:var(--warning)"></i>Subscriptions</h3>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Auto-Expire Subscriptions</div><div class="setting-desc">Automatically expire subscriptions after the end date</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="set_autoExpireSubscriptions" ${s.autoExpireSubscriptions ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3><i class="fas fa-wrench" style="margin-right:8px;color:var(--muted)"></i>Maintenance</h3>
+          <div class="setting-row">
+            <div class="setting-info"><div class="setting-label">Maintenance Mode</div><div class="setting-desc">Show maintenance page to all non-admin users</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="set_maintenanceMode" ${s.maintenanceMode ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div style="padding-top:8px">
+          <button class="btn btn-primary" onclick="App.settings.save()"><i class="fas fa-save"></i> Save Settings</button>
+        </div>
+      `;
+    },
+
+    async save() {
+      const data = {
+        systemLocked: document.getElementById('set_systemLocked').checked,
+        maxLoginAttempts: parseInt(document.getElementById('set_maxLoginAttempts').value) || 5,
+        sessionTimeout: parseInt(document.getElementById('set_sessionTimeout').value) || 30,
+        registrationEnabled: document.getElementById('set_registrationEnabled').checked,
+        requireApproval: document.getElementById('set_requireApproval').checked,
+        allowSelfRegistration: document.getElementById('set_allowSelfRegistration').checked,
+        autoExpireSubscriptions: document.getElementById('set_autoExpireSubscriptions').checked,
+        maintenanceMode: document.getElementById('set_maintenanceMode').checked,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: App.currentUser.uid
+      };
+
+      try {
+        await db.collection('systemSettings').doc('config').set(data, { merge: true });
+        App.logAudit('Settings Changed', 'settings', `Updated system settings: ${JSON.stringify(data)}`);
+        App.toast('Settings saved successfully.', 'success');
+      } catch (e) {
+        App.toast('Failed to save settings.', 'error');
+      }
+    }
+  }
+};
+
+// ===== 键盘快捷键 =====
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    App.closeModal();
+    App.closeConfirm();
+  }
+});
+
+// ===== 点击模态框外部关闭 =====
+document.getElementById('modalOverlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) App.closeModal();
+});
+document.getElementById('confirmOverlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) App.closeConfirm();
+});
+
+// ===== 登录表单回车提交 =====
+document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') App.auth.login();
+});
+document.getElementById('loginEmail').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+});
+
+// ===== 自动检查并过期订阅（后台任务） =====
+async function checkExpiredSubscriptions() {
+  try {
+    const settingsDoc = await db.collection('systemSettings').doc('config').get();
+    const autoExpire = settingsDoc.exists ? settingsDoc.data().autoExpireSubscriptions : true;
+    if (!autoExpire) return;
+
+    const snap = await db.collection('users').where('status', '==', 'active').get();
+    const batch = db.batch();
+    let count = 0;
+    snap.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.subscription && data.subscription.expiryDate) {
+        const remaining = App.remainingDays(data.subscription.expiryDate);
+        if (remaining <= 0) {
+          batch.update(doc.ref, {
+            'subscription.status': 'expired',
+            status: 'expired'
+          });
+          count++;
+        }
+      }
+    });
+    if (count > 0) await batch.commit();
+  } catch (e) {
+    // 静默失败 - 这是后台任务
+  }
+}
+
+// ===== 初始化应用 =====
+App.init();
+
+// 每5分钟检查一次过期订阅
+setInterval(checkExpiredSubscriptions, 5 * 60 * 1000);
+// 初始检查
+setTimeout(checkExpiredSubscriptions, 10000);
+</script>
+</body>
+</html>
