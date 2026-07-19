@@ -964,34 +964,212 @@ Hakuna mazungumzo bado.<br>Bonyeza "Ujumbe Mpya" kuanza.
 </div>
 
 <!-- ========================================= -->
+
 <!-- ===== JAVASCRIPT ===== -->
+
 <!-- ========================================= -->
+
 <script>
-/* ===== DATA LAYER - Kila user ana data yake ===== */
-const DB_KEY='ncrs_users';
-const SU_KEY='ncrs_superuser';
-const SETTINGS_KEY='ncrs_sa_settings';
+/* =========================================================
+   NCRS-MAUZOPOA - DATA LAYER
+   Kila user ana data yake binafsi
+   ========================================================= */
 
-function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,6)}
-function getUsers(){return JSON.parse(localStorage.getItem(DB_KEY)||'[]')}
-function saveUsers(u){localStorage.setItem(DB_KEY,JSON.stringify(u))}
-function getSU(){return JSON.parse(localStorage.getItem(SU_KEY)||'null')}
-function saveSU(u){localStorage.setItem(SU_KEY,JSON.stringify(u))}
-function getSASettings(){return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{"regEnabled":true,"msgEnabled":true,"bruteForce":true,"maxAttempts":5}')}
-function saveSASettings(s){localStorage.setItem(SETTINGS_KEY,JSON.stringify(s))}
+/* ===== STORAGE KEYS ===== */
+const DB_KEY = 'ncrs_users';
+const SU_KEY = 'ncrs_superuser';
+const SETTINGS_KEY = 'ncrs_sa_settings';
 
-/* Data ya biashara kwa kila user - kutengwa kabisa */
-function bizKey(k,ownerId){return 'ncrs_biz_'+ownerId+'_'+k}
-function getBizData(k,ownerId){return JSON.parse(localStorage.getItem(bizKey(k,ownerId))||'[]')}
-function saveBizData(k,data,ownerId){localStorage.setItem(bizKey(k,ownerId),JSON.stringify(data))}
-function getBizSingle(k,ownerId){return JSON.parse(localStorage.getItem(bizKey(k,ownerId))||'null')}
-function saveBizSingle(k,data,ownerId){localStorage.setItem(bizKey(k,ownerId),JSON.stringify(data))}
+/* ===== UTILITY ===== */
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+}
 
-let currentUser=null;
-let loginAttempts=0;
-let loginLockUntil=0;
-let activeChatId=null;
-let posCart=[];
+/* ===== USERS ===== */
+function getUsers() {
+  try {
+    return JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+  } catch (error) {
+    console.error('Users data error:', error);
+    return [];
+  }
+}
+
+function saveUsers(users) {
+  localStorage.setItem(DB_KEY, JSON.stringify(users));
+}
+
+/* =========================================================
+   SUPER USER
+   Email: super@ncrs.com
+   Password: Admin@123
+   ========================================================= */
+
+function getSU() {
+  try {
+    return JSON.parse(localStorage.getItem(SU_KEY) || 'null');
+  } catch (error) {
+    console.error('Super User data error:', error);
+    return null;
+  }
+}
+
+function saveSU(user) {
+  localStorage.setItem(SU_KEY, JSON.stringify(user));
+}
+
+/* ===== CREATE DEFAULT SUPER USER ONCE ===== */
+function initializeSuperUser() {
+
+  let superUser = getSU();
+
+  if (!superUser) {
+
+    superUser = {
+      id: 'SU-' + Date.now(),
+      fname: 'Msimamizi',
+      lname: 'Mkuu',
+      email: 'super@ncrs.com',
+      phone: '+255 700 000 000',
+      password: btoa('Admin@123'),
+      role: 'superuser',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      createdBy: 'system'
+    };
+
+    saveSU(superUser);
+
+    console.log('Super User ameundwa kwa mafanikio.');
+  }
+
+  /* Hakikisha Super User yupo pia kwenye users list */
+  let users = getUsers();
+
+  const existingSuperUser = users.find(
+    user => user.email.toLowerCase() === 'super@ncrs.com'
+  );
+
+  if (!existingSuperUser) {
+
+    users.push({
+      id: superUser.id,
+      fname: superUser.fname,
+      lname: superUser.lname,
+      email: superUser.email,
+      phone: superUser.phone,
+      password: superUser.password,
+      role: 'superuser',
+      status: 'active',
+      createdAt: superUser.createdAt,
+      createdBy: 'system'
+    });
+
+    saveUsers(users);
+
+    console.log('Super User ameongezwa kwenye users list.');
+  }
+}
+
+/* ===== SYSTEM SETTINGS ===== */
+function getSASettings() {
+  try {
+    return JSON.parse(
+      localStorage.getItem(SETTINGS_KEY) ||
+      '{"regEnabled":true,"msgEnabled":true,"bruteForce":true,"maxAttempts":5}'
+    );
+  } catch (error) {
+    console.error('Settings data error:', error);
+
+    return {
+      regEnabled: true,
+      msgEnabled: true,
+      bruteForce: true,
+      maxAttempts: 5
+    };
+  }
+}
+
+function saveSASettings(settings) {
+  localStorage.setItem(
+    SETTINGS_KEY,
+    JSON.stringify(settings)
+  );
+}
+
+/* =========================================================
+   BUSINESS DATA
+   Kila user ana data yake binafsi
+   ========================================================= */
+
+function bizKey(key, ownerId) {
+  return 'ncrs_biz_' + ownerId + '_' + key;
+}
+
+function getBizData(key, ownerId) {
+
+  try {
+    return JSON.parse(
+      localStorage.getItem(
+        bizKey(key, ownerId)
+      ) || '[]'
+    );
+  } catch (error) {
+    console.error('Business data error:', error);
+    return [];
+  }
+}
+
+function saveBizData(key, data, ownerId) {
+
+  localStorage.setItem(
+    bizKey(key, ownerId),
+    JSON.stringify(data)
+  );
+}
+
+function getBizSingle(key, ownerId) {
+
+  try {
+    return JSON.parse(
+      localStorage.getItem(
+        bizKey(key, ownerId)
+      ) || 'null'
+    );
+  } catch (error) {
+    console.error('Business single data error:', error);
+    return null;
+  }
+}
+
+function saveBizSingle(key, data, ownerId) {
+
+  localStorage.setItem(
+    bizKey(key, ownerId),
+    JSON.stringify(data)
+  );
+}
+
+/* =========================================================
+   GLOBAL SESSION VARIABLES
+   ========================================================= */
+
+let currentUser = null;
+let loginAttempts = 0;
+let loginLockUntil = 0;
+let activeChatId = null;
+let posCart = [];
+
+/* =========================================================
+   INITIALIZE SYSTEM
+   ========================================================= */
+
+function initializeSystem() {
+  initializeSuperUser();
+}
+
+/* Run system initialization */
+initializeSystem();
 
 /* ===== TOAST ===== */
 function showToast(msg,type='success'){
