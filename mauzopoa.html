@@ -1726,140 +1726,324 @@ if(ctx2._chart)ctx2._chart.destroy();
 ctx2._chart=new Chart(ctx2,{type:'doughnut',data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats),backgroundColor:['#d97706','#059669','#0284c7','#dc2626','#8b5cf6','#ea580c']}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#a8a29e',padding:12}}}}});
 }
 
-/* ===== MESSAGES SYSTEM ===== */
-function getConvKey(u1,u2){return [u1,u2].sort().join('_')}
-function getAllConversations(){
-const key='ncrs_conversations';return JSON.parse(localStorage.getItem(key)||'{}');
-}
-function saveAllConversations(c){localStorage.setItem('ncrs_conversations',JSON.stringify(c))}
-function renderMessages(){
-const convs=getAllConversations();
-const users=getUsers();const su=getSU();
-const allUsers=[...users];if(su)allUsers.push(su);
-const myConvs=Object.keys(convs).filter(k=>k.includes(currentUser.id));
-const listBody=document.getElementById('msgListBody');
-if(myConvs.length===0){
-listBody.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px"><i class="fas fa-comments" style="font-size:32px;margin-bottom:12px;opacity:.3;display:block"></i>Hakuna mazungumzo bado.<br>Bonyeza "Ujumbe Mpya" kuanza.</div>';
-return;
-}
-let html='';
-myConvs.forEach(k=>{
-const otherId=k.replace(currentUser.id,'').replace('_','');
-const other=allUsers.find(u=>u.id===otherId);
-if(!other)return;
-const msgs=convs[k]||[];
-const last=msgs[msgs.length-1];
-const unread=msgs.filter(m=>m.from!==currentUser.id&&!m.read).length;
-const initials=(other.firstName||'S')[0]+(other.lastName||'U')[0];
-html+='<div class="msg-list-item '+(unread>0?'unread':'')+'" onclick="openChat(\''+otherId+'\')">';
-if(unread>0)html+='<div class="msg-unread-dot"></div>';
-html+='<div class="avatar" style="background:linear-gradient(135deg,#d97706,#b45309);width:36px;height:36px;font-size:13px">'+initials+'</div>';
-html+='<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">'+other.firstName+' '+other.lastName+'</div>';
-html+='<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(last?last.text:'')+'</div></div>';
-html+='<div style="font-size:10px;color:var(--muted)">'+(last?new Date(last.time).toLocaleTimeString('sw-TZ',{hour:'2-digit',minute:'2-digit'}):'')+'</div></div>';
-});
-listBody.innerHTML=html;
-/* Update badge */
-const totalUnread=myConvs.reduce((s,k)=>{const msgs=convs[k]||[];return s+msgs.filter(m=>m.from!==currentUser.id&&!m.read).length},0);
-const badge=document.getElementById('msgBadgeSidebar');
-if(totalUnread>0){badge.style.display='inline';badge.textContent=totalUnread}else{badge.style.display='none'}
-const notif=document.getElementById('notifCount');
-if(totalUnread>0){notif.style.display='flex';notif.textContent=totalUnread}else{notif.style.display='none'}
-}
-function openChat(otherId){
-activeChatId=otherId;
-const convs=getAllConversations();const users=getUsers();const su=getSU();
-const allUsers=[...users];if(su)allUsers.push(su);
-const other=allUsers.find(u=>u.id===otherId);if(!other)return;
-const key=getConvKey(currentUser.id,otherId);
-const msgs=convs[key]||[];
-/* Mark as read */
-msgs.forEach(m=>{if(m.from!==currentUser.id)m.read=true});
-convs[key]=msgs;saveAllConversations(convs);
-document.getElementById('chatHeader').style.display='flex';
-document.getElementById('chatFooter').style.display='flex';
-const initials=(other.firstName||'S')[0]+(other.lastName||'U')[0];
-document.getElementById('chatAvatar').textContent=initials;
-document.getElementById('chatName').textContent=other.firstName+' '+other.lastName;
-const roleMap={user:'Mtumiaji',manager:'Meneja',superuser:'Msimamizi Mkuu'};
-document.getElementById('chatRole').textContent=roleMap[other.role]||other.role;
-/* Render messages */
-let html='';
-msgs.forEach(m=>{
-const isSent=m.from===currentUser.id;
-html+='<div class="msg-bubble '+(isSent?'msg-sent':'msg-received')+'">';
-html+='<div>'+m.text+'</div><div class="msg-time">'+new Date(m.time).toLocaleTimeString('sw-TZ',{hour:'2-digit',minute:'2-digit'})+'</div></div>';
-});
-if(!msgs.length)html='<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">Anza mazungumzo...</div>';
-document.getElementById('chatBody').innerHTML=html;
-document.getElementById('chatBody').scrollTop=999999;
-renderMessages();
-/* Highlight active */
-document.querySelectorAll('.msg-list-item').forEach(el=>el.classList.remove('active-chat'));
-}
-function sendMessage(){
-if(!activeChatId)return;
-const text=document.getElementById('chatInput').value.trim();if(!text)return;
-const convs=getAllConversations();const key=getConvKey(currentUser.id,activeChatId);
-if(!convs[key])convs[key]=[];
-convs[key].push({from:currentUser.id,text,time:new Date().toISOString(),read:false});
-saveAllConversations(convs);
-document.getElementById('chatInput').value='';
-openChat(activeChatId);
-}
-function openNewMsgModal(){
-const users=getUsers();const su=getSU();
-const allUsers=[...users];if(su)allUsers.push(su);
-const sel=document.getElementById('newMsgTo');sel.innerHTML='';
-allUsers.filter(u=>u.id!==currentUser.id).forEach(u=>{
-sel.innerHTML+='<option value="'+u.id+'">'+u.firstName+' '+u.lastName+' ('+u.role+')</option>';
-});
-openModal('newMsgModal');
-}
-function sendNewMessage(){
-const to=document.getElementById('newMsgTo').value;
-const text=document.getElementById('newMsgBody').value.trim();
-if(!to||!text){showToast('Chagua mtumiaji na andika ujumbe','error');return}
-const convs=getAllConversations();const key=getConvKey(currentUser.id,to);
-if(!convs[key])convs[key]=[];
-convs[key].push({from:currentUser.id,text,time:new Date().toISOString(),read:false});
-saveAllConversations(convs);
-document.getElementById('newMsgBody').value='';closeModal('newMsgModal');
-activeChatId=to;renderMessages();openChat(to);
-showToast('Ujumbe umetumwa','success');
+// ===== MESSAGING SYSTEM =====
+function loadMessages() {
+  const uid = DB.currentUser.id;
+  const conversations = {};
+
+  DB.messages.forEach(m => {
+    if (m.from === uid || m.to === uid) {
+      const partnerId = m.from === uid ? m.to : m.from;
+      if (!conversations[partnerId]) conversations[partnerId] = [];
+      conversations[partnerId].push(m);
+    }
+  });
+
+  const listDiv = document.getElementById('msgListBody');
+  const partners = Object.keys(conversations);
+
+  if (partners.length === 0) {
+    listDiv.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px"><i class="fas fa-comments" style="font-size:32px;margin-bottom:12px;opacity:.3;display:block"></i>Hakuna mazungumzo bado.<br>Bonyeza "Ujumbe Mpya" kuanza.</div>';
+    return;
+  }
+
+  listDiv.innerHTML = partners.map(pid => {
+    const partner = DB.users.find(u => u.id === pid);
+    if (!partner) return '';
+    const msgs = conversations[pid].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const last = msgs[0];
+    const unread = msgs.filter(m => !m.read && m.to === uid).length;
+    const isActive = DB.currentChat === pid;
+    return `<div class="msg-list-item ${unread > 0 ? 'unread' : ''} ${isActive ? 'active-chat' : ''}" onclick="openChat('${pid}')">
+      <div class="avatar" style="width:40px;height:40px;font-size:14px;background:linear-gradient(135deg,#d97706,#b45309)">${partner.fname[0]}${partner.lname[0]}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:700;font-size:13px">${partner.fname} ${partner.lname}</span>
+          <span style="font-size:10px;color:var(--muted)">${timeAgo(last.timestamp)}</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${last.body.substring(0, 50)}...</div>
+      </div>
+      ${unread > 0 ? `<div class="msg-unread-dot" title="${unread} mpya"></div>` : ''}
+    </div>`;
+  }).join('');
 }
 
-/* ===== SUPPORT REQUESTS ===== */
-function submitSupportRequest(){
-const subj=document.getElementById('supportSubject').value.trim();
-const body=document.getElementById('supportBody').value.trim();
-if(!subj||!body){showToast('Jaza kichwa na maelezo','error');return}
-const reqs=getBizData('support_requests',currentUser.id);
-reqs.push({id:uid(),subject:subj,type:document.getElementById('supportType').value,body,priority:document.getElementById('supportPriority').value,status:'pending',date:new Date().toISOString(),ownerId:currentUser.id});
-saveBizData('support_requests',reqs,currentUser.id);
-['supportSubject','supportBody'].forEach(id=>document.getElementById(id).value='');
-showToast('Ombi la msaada limetumwa','success');renderMyRequests();
-}
-function renderMyRequests(){
-const reqs=getBizData('support_requests',currentUser.id);
-const priorityLabels={low:'Chini',medium:'Kati',high:'Juu',critical:'Hatari'};
-const priorityColors={low:'badge-success',medium:'badge-warning',high:'badge-danger',critical:'badge-danger'};
-const statusLabels={pending:'Inasubiri',resolved:'Imetatuliwa'};
-const statusColors={pending:'badge-warning',resolved:'badge-success'};
-let html='';
-[...reqs].reverse().forEach(r=>{
-html+='<div class="comm-card '+(r.status==='pending'?'unread':'')+'">';
-html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-html+='<span style="font-weight:700;font-size:14px">'+r.subject+'</span>';
-html+='<div style="display:flex;gap:6px"><span class="badge '+(priorityColors[r.priority]||'')+'">'+(priorityLabels[r.priority]||r.priority)+'</span><span class="badge '+(statusColors[r.status]||'')+'">'+(statusLabels[r.status]||r.status)+'</span></div></div>';
-html+='<div style="font-size:12px;color:var(--muted)">'+r.body.substring(0,100)+(r.body.length>100?'...':'')+'</div>';
-html+='<div style="font-size:11px;color:var(--muted);margin-top:6px">'+new Date(r.date).toLocaleString('sw-TZ')+'</div></div>';
-});
-document.getElementById('myRequestsList').innerHTML=html||'<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Hakuna ombi</div>';
+function openChat(partnerId) {
+  DB.currentChat = partnerId;
+  const partner = DB.users.find(u => u.id === partnerId);
+  if (!partner) return;
+
+  document.getElementById('chatHeader').style.display = 'flex';
+  document.getElementById('chatFooter').style.display = 'flex';
+  document.getElementById('chatAvatar').textContent = partner.fname[0] + partner.lname[0];
+  document.getElementById('chatName').textContent = partner.fname + ' ' + partner.lname;
+  const roleNames = { user: 'Mtumiaji', manager: 'Meneja', superuser: 'Super User' };
+  document.getElementById('chatRole').textContent = roleNames[partner.role] || partner.role;
+
+  // Mark as read
+  DB.messages.forEach(m => {
+    if (m.from === partnerId && m.to === DB.currentUser.id && !m.read) m.read = true;
+  });
+  saveDB();
+  updateMsgBadges();
+  loadMessages();
+  renderChat();
 }
 
-/* ===== FORMAT MONEY ===== */
-function formatMoney(n){return new Intl.NumberFormat('sw-TZ',{style:'currency',currency:'TZS',minimumFractionDigits:0,maximumFractionDigits:2}).format(n)}
+function renderChat() {
+  const pid = DB.currentChat;
+  if (!pid) return;
+  const uid = DB.currentUser.id;
+  const msgs = DB.messages.filter(m => (m.from === uid && m.to === pid) || (m.from === pid && m.to === uid)).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const body = document.getElementById('chatBody');
+  body.innerHTML = msgs.map(m => {
+    const isSent = m.from === uid;
+    return `<div class="msg-bubble ${isSent ? 'msg-sent' : 'msg-received'}">
+      <div>${m.body}</div>
+      <div class="msg-time">${new Date(m.timestamp).toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' })}</div>
+    </div>`;
+  }).join('');
+  body.scrollTop = body.scrollHeight;
+}
+
+function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const body = input.value.trim();
+  if (!body || !DB.currentChat) return;
+
+  DB.messages.push({
+    id: 'MSG-' + Date.now(),
+    from: DB.currentUser.id,
+    to: DB.currentChat,
+    subject: '',
+    body: body,
+    timestamp: new Date().toISOString(),
+    read: false
+  });
+  saveDB();
+  input.value = '';
+  renderChat();
+  loadMessages();
+  updateMsgBadges();
+}
+
+function openNewMsgModal() {
+  const sel = document.getElementById('newMsgTo');
+  sel.innerHTML = DB.users.filter(u => u.id !== DB.currentUser.id).map(u =>
+    `<option value="${u.id}">${u.fname} ${u.lname} (${u.role})</option>`
+  ).join('');
+  document.getElementById('newMsgSubject').value = '';
+  document.getElementById('newMsgBody').value = '';
+  openModal('newMsgModal');
+}
+
+function sendNewMessage() {
+  const to = document.getElementById('newMsgTo').value;
+  const subject = document.getElementById('newMsgSubject').value.trim();
+  const body = document.getElementById('newMsgBody').value.trim();
+  if (!body) { showToast('Andika ujumbe', 'warning'); return; }
+
+  DB.messages.push({
+    id: 'MSG-' + Date.now(),
+    from: DB.currentUser.id,
+    to: to,
+    subject: subject,
+    body: body,
+    timestamp: new Date().toISOString(),
+    read: false
+  });
+  saveDB();
+  closeModal('newMsgModal');
+  DB.currentChat = to;
+  loadMessages();
+  openChat(to);
+  updateMsgBadges();
+  showToast('Ujumbe umetumwa', 'success');
+}
+
+function updateMsgBadges() {
+  if (!DB.currentUser) return;
+  const unread = DB.messages.filter(m => !m.read && m.to === DB.currentUser.id).length;
+  const badge = document.getElementById('msgBadgeSidebar');
+  const notif = document.getElementById('notifCount');
+  if (unread > 0) {
+    badge.style.display = 'inline'; badge.textContent = unread;
+    notif.style.display = 'flex'; notif.textContent = unread;
+  } else {
+    badge.style.display = 'none';
+    notif.style.display = 'none';
+  }
+}
+
+// ===== SUPPORT REQUESTS =====
+function submitSupportRequest() {
+  const subject = document.getElementById('supportSubject').value.trim();
+  const type = document.getElementById('supportType').value;
+  const body = document.getElementById('supportBody').value.trim();
+  const priority = document.getElementById('supportPriority').value;
+
+  if (!subject || !body) { showToast('Jaza sehemu zote za lazima', 'warning'); return; }
+
+  // Pata Super User
+  const su = DB.users.find(u => u.role === 'superuser' && u.status === 'active');
+  if (!su) { showToast('Hakuna Msimamizi Mkuu aliye hai', 'error'); return; }
+
+  const req = {
+    id: 'REQ-' + Date.now(),
+    from: DB.currentUser.id,
+    to: su.id,
+    subject: subject,
+    type: type,
+    body: body,
+    priority: priority,
+    status: 'open',
+    createdAt: new Date().toISOString(),
+    replies: []
+  };
+  DB.supportRequests.push(req);
+
+  // Tuma ujumbe pia
+  DB.messages.push({
+    id: 'MSG-' + Date.now(),
+    from: DB.currentUser.id,
+    to: su.id,
+    subject: '[OMBI LA MSAADA] ' + subject,
+    body: body + '\n\nAina: ' + type + '\nKipaumbele: ' + priority,
+    timestamp: new Date().toISOString(),
+    read: false
+  });
+
+  saveDB();
+  document.getElementById('supportSubject').value = '';
+  document.getElementById('supportBody').value = '';
+  showToast('Ombi la msaada limetumwa kwa Msimamizi Mkuu', 'success');
+  updateMsgBadges();
+  loadMyRequests();
+}
+
+function loadMyRequests() {
+  const div = document.getElementById('myRequestsList');
+  const reqs = DB.supportRequests.filter(r => r.from === DB.currentUser.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (reqs.length === 0) {
+    div.innerHTML = '<p style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Hakuna ombi bado</p>';
+    return;
+  }
+  const statusBadge = { open: 'badge-warning', 'in-progress': 'badge-info', resolved: 'badge-success', closed: 'badge-muted' };
+  const statusName = { open: 'Wazi', 'in-progress': 'Inaendelea', resolved: 'Imetatuliwa', closed: 'Imefungwa' };
+  const prioColors = { low: '#059669', medium: '#f59207', high: '#ea580c', critical: '#dc2626' };
+  div.innerHTML = reqs.map(r => `<div class="comm-card ${r.status === 'open' ? 'unread' : ''}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+      <div><strong style="font-size:14px">${r.subject}</strong><div style="font-size:11px;color:var(--muted);margin-top:2px">${new Date(r.createdAt).toLocaleString('sw-TZ')}</div></div>
+      <span class="badge ${statusBadge[r.status] || 'badge-muted'}">${statusName[r.status] || r.status}</span>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:8px">${r.body.substring(0, 120)}${r.body.length > 120 ? '...' : ''}</p>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="width:8px;height:8px;border-radius:50%;background:${prioColors[r.priority] || '#888'}"></span>
+      <span style="font-size:11px;color:var(--muted)">${r.priority.toUpperCase()}</span>
+      ${r.replies.length > 0 ? `<span style="font-size:11px;color:var(--accent);margin-left:auto"><i class="fas fa-reply"></i> ${r.replies.length} majibu</span>` : ''}
+    </div>
+  </div>`).join('');
+}
+
+// ===== USER MANAGEMENT (Admin) =====
+function renderUsersTable() {
+  const search = (document.getElementById('userSearchInput')?.value || '').toLowerCase();
+  const filtered = DB.users.filter(u => {
+    if (DB.currentUser.role === 'manager' && u.role === 'superuser') return false;
+    if (search && !(`${u.fname} ${u.lname} ${u.email}`).toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  const statusBadge = { active: 'badge-success', suspended: 'badge-warning', pending: 'badge-muted' };
+  const statusName = { active: 'Hai', suspended: 'Imesimamishwa', pending: 'Inasubiri' };
+  const roleNames = { user: 'Mtumiaji', manager: 'Meneja', superuser: 'Super User' };
+
+  document.getElementById('usersTableBody').innerHTML = filtered.map(u => `<tr>
+    <td><div style="display:flex;align-items:center;gap:10px"><div class="avatar" style="width:34px;height:34px;font-size:12px;background:linear-gradient(135deg,#d97706,#b45309)">${u.fname[0]}${u.lname[0]}</div><span style="font-weight:600">${u.fname} ${u.lname}</span></div></td>
+    <td style="font-size:12px">${u.email}</td>
+    <td style="font-size:12px">${u.phone}</td>
+    <td><span class="badge badge-accent">${roleNames[u.role] || u.role}</span></td>
+    <td><span class="badge ${statusBadge[u.status] || 'badge-muted'}">${statusName[u.status] || u.status}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${new Date(u.createdAt).toLocaleDateString('sw-TZ')}</td>
+    <td>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-ghost" onclick="openEditUser('${u.id}')" title="Hariri"><i class="fas fa-pen" style="font-size:11px"></i></button>
+        ${u.status === 'active' ? `<button class="btn btn-sm btn-warning" onclick="toggleUserStatus('${u.id}','suspended')" title="Simamisha"><i class="fas fa-ban" style="font-size:11px"></i></button>` : `<button class="btn btn-sm btn-success" onclick="toggleUserStatus('${u.id}','active')" title="Washa"><i class="fas fa-check" style="font-size:11px"></i></button>`}
+        <button class="btn btn-sm btn-info" onclick="openChatWith('${u.id}')" title="Ujumbe"><i class="fas fa-comment" style="font-size:11px"></i></button>
+      </div>
+    </td>
+  </tr>`).join('');
+}
+
+function openAddUserModal() {
+  document.getElementById('userEditModalTitle').textContent = 'Ongeza Mtumiaji';
+  document.getElementById('editUserId').value = '';
+  ['editFname','editLname','editEmail','editPhone','editPass'].forEach(id => document.getElementById(id).value = '');
+  openModal('userEditModal');
+}
+
+function openEditUser(uid) {
+  const u = DB.users.find(x => x.id === uid);
+  if (!u) return;
+  document.getElementById('userEditModalTitle').textContent = 'Hariri Mtumiaji';
+  document.getElementById('editUserId').value = u.id;
+  document.getElementById('editFname').value = u.fname;
+  document.getElementById('editLname').value = u.lname;
+  document.getElementById('editEmail').value = u.email;
+  document.getElementById('editPhone').value = u.phone;
+  document.getElementById('editRole').value = u.role;
+  document.getElementById('editPass').value = '';
+  openModal('userEditModal');
+}
+
+function saveEditedUser() {
+  const id = document.getElementById('editUserId').value;
+  const fname = document.getElementById('editFname').value.trim();
+  const lname = document.getElementById('editLname').value.trim();
+  const email = document.getElementById('editEmail').value.trim();
+  const phone = document.getElementById('editPhone').value.trim();
+  const role = document.getElementById('editRole').value;
+  const pass = document.getElementById('editPass').value;
+
+  if (!fname || !email) { showToast('Jaza sehemu za lazima', 'warning'); return; }
+
+  if (id) {
+    // Edit
+    const u = DB.users.find(x => x.id === id);
+    if (u) {
+      u.fname = fname; u.lname = lname; u.email = email; u.phone = phone; u.role = role;
+      if (pass) u.password = btoa(pass);
+      showToast('Mtumiaji amehaririwa', 'success');
+    }
+  } else {
+    // Add
+    if (DB.users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+      showToast('Barua pepe tayari inatumika', 'error'); return;
+    }
+    DB.users.push({
+      id: 'US-' + Date.now(),
+      fname, lname, email, phone,
+      password: pass ? btoa(pass) : btoa('Default@123'),
+      role, status: 'active',
+      createdAt: new Date().toISOString(),
+      createdBy: DB.currentUser.id
+    });
+    showToast('Mtumiaji ameongezwa', 'success');
+  }
+  saveDB();
+  closeModal('userEditModal');
+  renderUsersTable();
+}
+
+function toggleUserStatus(uid, status) {
+  const u = DB.users.find(x => x.id === uid);
+  if (u) { u.status = status; saveDB(); renderUsersTable(); showToast(`Mtumiaji ${status === 'active' ? 'amewashwa' : 'amesimamishwa'}`, 'info'); }
+}
+
+function openChatWith(uid) {
+  navigateTo('messages');
+  setTimeout(() => openChat(uid), 100);
+}
 
 // ===== SUPER ADMIN PANEL =====
 function openSuperAdmin() {
