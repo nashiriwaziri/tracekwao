@@ -1626,4 +1626,437 @@ function parseImportedText(text){
   pdfImportBuffer=[];
   // Jaribu kupata mistari yenye data
   const lines=text.split('\n').map(l=>l.trim()).filter(l=>l);
-  // Muundo un
+  <return>
+<!-- ENDEO LA KODI ILIYOKATIKA - ANZA HAPA -->
+<script>
+/* ============================================= */
+/*   KUMALIZA: UPLOAD BIDHAA KWA PDF (KUENDLEA)  */
+/* ============================================= */
+function parseImportedText(text){
+  pdfImportBuffer=[];
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l);
+  // Jaribu muundo wa CSV: Jina,Kategoria,Gharama,Bei,Stock
+  const sep=text.includes('\t')?'\t':',';
+  let startIdx=0;
+  // Ruka header ikiwa ipo
+  if(lines.length>0&&(lines[0].toLowerCase().includes('jina')||lines[0].toLowerCase().includes('name')||lines[0].toLowerCase().includes('category'))) startIdx=1;
+  for(let i=startIdx;i<lines.length;i++){
+    const parts=lines[i].split(sep).map(p=>p.trim().replace(/"/g,''));
+    if(parts.length>=3){
+      const name=parts[0];
+      const category=parts[1]||'Nyingine';
+      const cost=parseFloat(parts[2])||0;
+      const price=parseFloat(parts[3])||Math.round(cost*1.3);
+      const stock=parseInt(parts[4])||0;
+      if(name&&name.length>1){
+        pdfImportBuffer.push({name,category,cost,price,stock,minStock:5,barcode:genBarcode()});
+      }
+    }
+  }
+  if(!pdfImportBuffer.length){toast('Hakuna bidhaa zilizotambuliwa kutoka kwenye faili. Hakikisha faili lina muundo: Jina,Kategoria,Gharama,Bei,Stock','warning');return}
+  // Onyesha preview
+  const tbody=document.getElementById('pdfImportTableBody');
+  tbody.innerHTML=pdfImportBuffer.map(p=>'<tr><td>'+p.name+'</td><td>'+p.category+'</td><td>'+fmt(p.cost)+'</td><td>'+fmt(p.price)+'</td><td>'+p.stock+'</td></tr>').join('');
+  document.getElementById('pdfImportPreview').style.display='block';
+  toast(pdfImportBuffer.length+' bidhaa zimetambuliwa');
+}
+
+function confirmPDFImport(){
+  if(!pdfImportBuffer.length) return;
+  const products=DB.getProducts(currentUser.id);
+  pdfImportBuffer.forEach(p=>{
+    products.push({id:genId(),...p,createdAt:now()});
+  });
+  DB.saveProducts(currentUser.id,products);
+  toast(pdfImportBuffer.length+' bidhaa zimeingizwa kwa mafanikio!');
+  pdfImportBuffer=[];
+  document.getElementById('pdfImportPreview').style.display='none';
+}
+
+function cancelPDFImport(){
+  pdfImportBuffer=[];
+  document.getElementById('pdfImportPreview').style.display='none';
+}
+
+/* ============================================= */
+/*       UJUMBE (KUTOKA FILE YA PILI)            */
+/* ============================================= */
+function renderMessagesList(){
+  const allMsgs=DB.getAllMessages();
+  const uid=currentUser.id;
+  // Mazungumzo ya mtumiaji huyu
+  const convos={};
+  allMsgs.forEach(m=>{
+    const otherId=m.from===uid?m.to:m.from;
+    if(!convos[otherId]) convos[otherId]={lastMsg:m,unread:0,messages:[]};
+    convos[otherId].messages.push(m);
+    if(m.to===uid&&!m.read) convos[otherId].unread++;
+  });
+  const list=document.getElementById('messagesList');
+  const users=DB.getUsers();
+  const convoIds=Object.keys(convos);
+  if(!convoIds.length){
+    list.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px"><i class="fas fa-comments" style="font-size:32px;margin-bottom:12px;opacity:.25;display:block"></i>Hakuna mazungumzo bado.</div>';
+    return;
+  }
+  // Panga kulingana na wakati wa ujumbe wa mwisho
+  convoIds.sort((a,b)=>new Date(convos[b].lastMsg.date)-new Date(convos[a].lastMsg.date));
+  let unreadTotal=0;
+  list.innerHTML=convoIds.map(otherId=>{
+    const convo=convos[otherId];
+    unreadTotal+=convo.unread;
+    const other=users.find(u=>u.id===otherId);
+    const name=other?other.firstName+' '+other.lastName:'Mtumiaji';
+    const init=name.charAt(0).toUpperCase();
+    const lastText=convo.lastMsg.text.substring(0,40)+(convo.lastMsg.text.length>40?'...':'');
+    const time=new Date(convo.lastMsg.date).toLocaleTimeString('sw',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="msg-list-item'+(convo.unread>0?' unread':'')+'" onclick="openConvo(\''+otherId+'\')"><div class="avatar" style="background:linear-gradient(135deg,#0284c7,#0369a1);font-size:12px;width:38px;height:38px">'+init+'</div><div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px">'+name+'</strong><span style="font-size:10px;color:var(--muted)">'+time+'</span></div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">'+lastText+'</div></div>'+(convo.unread>0?'<div style="width:18px;height:18px;border-radius:50%;background:var(--danger);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+convo.unread+'</div>':'')+'</div>';
+  }).join('');
+  // Badge
+  const badge=document.getElementById('msgBadgeSidebar');
+  if(unreadTotal>0){badge.style.display='inline';badge.textContent=unreadTotal}else{badge.style.display='none'}
+}
+
+function openConvo(otherId){
+  const allMsgs=DB.getAllMessages();
+  const uid=currentUser.id;
+  const msgs=allMsgs.filter(m=>(m.from===uid&&m.to===otherId)||(m.from===otherId&&m.to===uid)).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  // Tatua soma
+  let changed=false;
+  allMsgs.forEach(m=>{if(m.from===otherId&&m.to===uid&&!m.read){m.read=true;changed=true}});
+  if(changed) DB.saveAllMessages(allMsgs);
+  const users=DB.getUsers();
+  const other=users.find(u=>u.id===otherId);
+  const name=other?other.firstName+' '+other.lastName:'Mtumiaji';
+  const role=other?(other.role==='superuser'?'Super User':'Mtumiaji'):'';
+  // Header
+  const detail=document.getElementById('messageDetail');
+  detail.innerHTML='<div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px"><div class="avatar" style="background:linear-gradient(135deg,#0284c7,#0369a1)">'+name.charAt(0)+'</div><div><div style="font-weight:700;font-size:14px">'+name+'</div><div style="font-size:11px;color:var(--muted)">'+role+'</div></div></div><div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px" id="chatMessages"></div><div style="padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:10px"><input type="text" class="form-input" id="chatReplyInput" placeholder="Andika ujumbe..." onkeydown="if(event.key===\'Enter\')replyToConvo(\''+otherId+'\')" style="flex:1"><button class="btn btn-primary" onclick="replyToConvo(\''+otherId+'\')"><i class="fas fa-paper-plane"></i></button></div>';
+  const chatBody=document.getElementById('chatMessages');
+  chatBody.innerHTML=msgs.map(m=>{
+    const isSent=m.from===uid;
+    return '<div style="display:flex;'+(isSent?'justify-content:flex-end':'justify-content:flex-start')+'"><div class="bubble '+(isSent?'bbl-sent':'bbl-recv')+'">'+m.text+'<div class="bbl-time">'+new Date(m.date).toLocaleTimeString('sw',{hour:'2-digit',minute:'2-digit'})+'</div></div></div>';
+  }).join('');
+  chatBody.scrollTop=chatBody.scrollHeight;
+  renderMessagesList();
+}
+
+function replyToConvo(otherId){
+  const input=document.getElementById('chatReplyInput');
+  const text=input.value.trim();
+  if(!text) return;
+  const allMsgs=DB.getAllMessages();
+  allMsgs.push({id:genId(),from:currentUser.id,to:otherId,text,date:now(),read:false});
+  DB.saveAllMessages(allMsgs);
+  input.value='';
+  openConvo(otherId);
+}
+
+function openNewMessageModal(){
+  const users=DB.getUsers().filter(u=>u.id!==currentUser.id);
+  const sel=document.getElementById('msgTo');
+  sel.innerHTML=users.map(u=>'<option value="'+u.id+'">'+u.firstName+' '+u.lastName+' ('+(u.role==='superuser'?'Super User':'Mtumiaji')+')</option>').join('');
+  document.getElementById('msgText').value='';
+  openModal('newMsgModal');
+}
+
+function sendNewMessage(){
+  const to=document.getElementById('msgTo').value;
+  const text=document.getElementById('msgText').value.trim();
+  if(!to||!text){toast('Jaza sehemu zote','error');return}
+  const allMsgs=DB.getAllMessages();
+  allMsgs.push({id:genId(),from:currentUser.id,to,text,date:now(),read:false});
+  DB.saveAllMessages(allMsgs);
+  closeModal('newMsgModal');
+  toast('Ujumbe umetumwa');
+  renderMessagesList();
+}
+
+/* ============================================= */
+/*       OMBA MSAADA (KUTOKA FILE YA PILI)       */
+/* ============================================= */
+function submitSupport(){
+  const subject=document.getElementById('supSubject').value.trim();
+  const type=document.getElementById('supType').value;
+  const body=document.getElementById('supBody').value.trim();
+  const priority=document.getElementById('supPri').value;
+  if(!subject||!body){toast('Jaza kichwa na maelezo','error');return}
+  // Hifadhi kwa mtumiaji huyu
+  const myReqs=DB.getSupport(currentUser.id);
+  const req={id:genId(),userId:currentUser.id,userName:currentUser.firstName+' '+currentUser.lastName,subject,type,body,priority,status:'pending',date:now(),response:''};
+  myReqs.push(req);
+  DB.saveSupport(currentUser.id,myReqs);
+  // Hifadhi kwa orodha ya wote (Super User ataona)
+  const allReqs=DB.getAllSupport();
+  allReqs.push(req);
+  DB.saveAllSupport(allReqs);
+  document.getElementById('supSubject').value='';
+  document.getElementById('supBody').value='';
+  toast('Ombi la msaada limetumwa');
+  renderMyRequests();
+}
+
+function renderMyRequests(){
+  const reqs=DB.getSupport(currentUser.id);
+  const list=document.getElementById('myReqList');
+  if(!reqs.length){list.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px">Hakuna ombi bado</p>';return}
+  const priColors={low:'badge-success',medium:'badge-info',high:'badge-warning',critical:'badge-danger'};
+  const statusColors={pending:'badge-warning',resolved:'badge-success',rejected:'badge-danger'};
+  const statusLabels={pending:'Inasubiri',resolved:'Imetatuliwa',rejected:'Imekataliwa'};
+  list.innerHTML=reqs.reverse().map(r=>'<div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px"><div><strong style="font-size:14px">'+r.subject+'</strong><div style="font-size:11px;color:var(--muted);margin-top:2px">'+new Date(r.date).toLocaleString('sw')+'</div></div><div style="display:flex;gap:4px"><span class="badge '+priColors[r.priority]+'">'+r.priority+'</span><span class="badge '+statusColors[r.status]+'">'+statusLabels[r.status]+'</span></div></div><p style="font-size:13px;color:var(--muted);margin-bottom:8px">'+r.body.substring(0,120)+(r.body.length>120?'...':'')+'</p>'+(r.response?'<div style="background:var(--bg);border-radius:8px;padding:10px;font-size:13px"><strong style="color:var(--success)">Jibu:</strong> '+r.response+'</div>':'')+'</div>').join('');
+}
+
+/* ============================================= */
+/*       WATUMIAJI (SUPER USER TU - KUANGALIA TU)*/
+/* ============================================= */
+function renderUsers(){
+  if(currentUser.role!=='superuser') return;
+  const users=DB.getUsers();
+  const search=(document.getElementById('usrSearch').value||'').toLowerCase();
+  let filtered=users.filter(u=>(u.firstName+' '+u.lastName).toLowerCase().includes(search));
+  const tbody=document.getElementById('usersTableBody');
+  if(!filtered.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted)">Hakuna watumiaji</td></tr>';return}
+  tbody.innerHTML=filtered.map(u=>{
+    const roleLabel=u.role==='superuser'?'Super User':'Mtumiaji';
+    const statusBadge=u.status==='suspended'?'<span class="badge badge-danger">Imefungwa</span>':'<span class="badge badge-success">Hai</span>';
+    const actions=u.id===currentUser.id?'<span style="font-size:11px;color:var(--muted)">Wewe</span>':'<div style="display:flex;gap:4px">'+(u.status==='suspended'?'<button class="btn btn-success btn-xs" onclick="toggleUserStatus(\''+u.id+'\',\'active\')"><i class="fas fa-check"></i> Fungua</button>':'<button class="btn btn-warning btn-xs" onclick="toggleUserStatus(\''+u.id+'\',\'suspended\')"><i class="fas fa-ban"></i> Funga</button>')+'<button class="btn btn-info btn-xs" onclick="replyToUserSupport(\''+u.id+'\')"><i class="fas fa-headset"></i></button></div>';
+    return '<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="avatar" style="background:linear-gradient(135deg,'+(u.role==='superuser'?'#d97706,#b45309':'#0284c7,#0369a1')+')">'+u.firstName.charAt(0).toUpperCase()+'</div><strong>'+u.firstName+' '+u.lastName+'</strong></div></td><td><span class="badge '+(u.role==='superuser'?'badge-warning':'badge-info')+'">'+roleLabel+'</span></td><td>'+statusBadge+'</td><td style="font-size:12px;color:var(--muted)">'+new Date(u.createdAt).toLocaleDateString('sw')+'</td><td>'+actions+'</td></tr>';
+  }).join('');
+}
+
+function toggleUserStatus(userId,newStatus){
+  const users=DB.getUsers();
+  const user=users.find(u=>u.id===userId);
+  if(!user) return;
+  user.status=newStatus;
+  DB.saveUsers(users);
+  toast(newStatus==='suspended'?'Akaunti imefungwa':'Akaunti imefunguliwa');
+  renderUsers();
+}
+
+function replyToUserSupport(userId){
+  const allReqs=DB.getAllSupport();
+  const pending=allReqs.filter(r=>r.userId===userId&&r.status==='pending');
+  if(!pending.length){toast('Hakuna ombi zilizosubiri kwa mtumiaji huyu','warning');return}
+  const req=pending[0];
+  const response=prompt('Ombi: '+req.subject+'\n\nMaelezo: '+req.body+'\n\nJibu lako:');
+  if(!response) return;
+  req.status='resolved';
+  req.response=response;
+  DB.saveAllSupport(allReqs);
+  // Sasa hifadhi kwa mtumiaji pia
+  const userReqs=DB.getSupport(userId);
+  const idx=userReqs.findIndex(r=>r.id===req.id);
+  if(idx>=0){userReqs[idx]=req;DB.saveSupport(userId,userReqs)}
+  // Tuma ujumbe kwa mtumiaji
+  const allMsgs=DB.getAllMessages();
+  allMsgs.push({id:genId(),from:currentUser.id,to:userId,text:'Jibu la ombi lako "'+req.subject+'": '+response,date:now(),read:false});
+  DB.saveAllMessages(allMsgs);
+  toast('Jibu limetumwa');
+  renderUsers();
+}
+
+function exportUsersPDF(){
+  if(currentUser.role!=='superuser') return;
+  const users=DB.getUsers();
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  doc.setFontSize(18);doc.text('Orodha ya Watumiaji',105,20,{align:'center'});
+  doc.setFontSize(10);doc.text('Imetengenezwa: '+new Date().toLocaleString('sw'),105,28,{align:'center'});
+  doc.autoTable({startY:35,head:[['Jina','Jukumu','Hali','Tarehe']],body:users.map(u=>[u.firstName+' '+u.lastName,u.role==='superuser'?'Super User':'Mtumiaji',u.status==='suspended'?'Imefungwa':'Hai',new Date(u.createdAt).toLocaleDateString('sw')]),theme:'grid',headStyles:{fillColor:[217,119,6]}});
+  doc.save('watumiaji_'+today()+'.pdf');
+}
+
+function exportUsersCSV(){
+  if(currentUser.role!=='superuser') return;
+  const users=DB.getUsers();
+  let csv='Jina,Jukumu,Hali,Tarehe\n';
+  users.forEach(u=>{csv+='"'+u.firstName+' '+u.lastName+'","'+(u.role==='superuser'?'Super User':'Mtumiaji')+'","'+(u.status==='suspended'?'Imefungwa':'Hai')+'","'+new Date(u.createdAt).toLocaleDateString('sw')+'"\n'});
+  downloadCSV(csv,'watumiaji_'+today()+'.csv');
+}
+
+/* ============================================= */
+/*       WASIFU WANGU + LOGO UPLOAD (MAX 20MB)   */
+/* ============================================= */
+function renderProfile(){
+  const u=currentUser;
+  document.getElementById('profName').textContent=u.firstName+' '+u.lastName;
+  document.getElementById('profRoleLabel').textContent=u.role==='superuser'?'Super User':'Mtumiaji';
+  document.getElementById('profEmail').value=u.email;
+  document.getElementById('profPhone').value=u.phone||'';
+  document.getElementById('profRoleF').value=u.role==='superuser'?'Super User':'Mtumiaji';
+  document.getElementById('profDate').value=new Date(u.createdAt).toLocaleDateString('sw');
+  document.getElementById('profNewPass').value='';
+  // Logo
+  const logo=DB.getLogo(currentUser.id);
+  const pp=document.getElementById('logoPreview');
+  if(logo){pp.innerHTML='<img src="'+logo+'">'}else{pp.innerHTML='<i class="fas fa-camera" style="font-size:24px;color:var(--muted)"></i>'}
+}
+
+function handleLogoUpload(file){
+  if(!file) return;
+  // Angalia ukubwa - max 20MB
+  const maxBytes=20*1024*1024;
+  if(file.size>maxBytes){
+    toast('Logo ni kubwa sana! Ukubwa wa juu ni 20MB. Faili lako ni '+Math.round(file.size/1024/1024)+'MB','error');
+    return;
+  }
+  // Angalia aina
+  if(!file.type.startsWith('image/')){
+    toast('Tafadhali pakia faili la picha tu (PNG, JPG, SVG)','error');
+    return;
+  }
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const data=e.target.result;
+    // Hifadhi - kumbuka ukubwa wa localStorage
+    try{
+      DB.saveLogo(currentUser.id,data);
+      loadLogo();
+      renderProfile();
+      toast('Logo imepakua kwa mafanikio!');
+    }catch(err){
+      if(err.name==='QuotaExceededError'||err.code===22){
+        toast('Nafasi ya kuhifadhi imejaa. Jaribu logo ndogo zaidi.','error');
+      }else{
+        toast('Hitilafu kwa kuhifadhi logo','error');
+      }
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleProfileSave(){
+  const newPass=document.getElementById('profNewPass').value;
+  if(newPass){
+    if(newPass.length<4){toast('Nenosiri liwe na herufi 4 au zaidi','error');return}
+    const users=DB.getUsers();
+    const user=users.find(u=>u.id===currentUser.id);
+    if(user){
+      user.password=newPass;
+      DB.saveUsers(users);
+      currentUser.password=newPass;
+      localStorage.setItem('mp_currentUser',JSON.stringify(currentUser));
+      toast('Nenosiri limebadilishwa');
+    }
+  }else{
+    toast('Hakuna mabadiliko yaliyofanywa','warning');
+  }
+  document.getElementById('profNewPass').value='';
+}
+
+/* ============================================= */
+/*       EXPORT BIDHAA PDF NA CSV                 */
+/* ============================================= */
+function exportProductsPDF(){
+  const products=DB.getProducts(currentUser.id);
+  if(!products.length){toast('Hakuna bidhaa','warning');return}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  // Logo
+  const logo=DB.getLogo(currentUser.id);
+  if(logo){try{doc.addImage(logo,'PNG',80,5,50,20)}catch(e){}}
+  doc.setFontSize(18);doc.text('Orodha ya Bidhaa',105,logo?30:20,{align:'center'});
+  doc.setFontSize(10);doc.text('Jumla: '+products.length+' bidhaa | Tarehe: '+today(),105,logo?37:27,{align:'center'});
+  doc.autoTable({startY:logo?44:34,head:[['Kodi','Jina','Kategoria','Gharama','Bei','Stock','Barcode']],body:products.map(p=>[p.id.substr(0,8),p.name,p.category,fmtN(p.cost),fmtN(p.price),p.stock,p.barcode]),theme:'grid',headStyles:{fillColor:[217,119,6]},styles:{fontSize:9},columnStyles:{6:{fontSize:7}}});
+  doc.save('bidhaa_'+today()+'.pdf');
+}
+
+function exportProductsCSV(){
+  const products=DB.getProducts(currentUser.id);
+  if(!products.length){toast('Hakuna bidhaa','warning');return}
+  let csv='Kodi,Jina,Kategoria,Gharama,Bei,Stock,Barcode\n';
+  products.forEach(p=>{csv+='"'+p.id.substr(0,8)+'","'+p.name+'","'+p.category+'",'+p.cost+','+p.price+','+p.stock+',"'+p.barcode+'"\n'});
+  downloadCSV(csv,'bidhaa_'+today()+'.csv');
+}
+
+/* ============================================= */
+/*       VIFAA VYA KAWAIDA - DOWNLOAD CSV         */
+/* ============================================= */
+function downloadCSV(csv,filename){
+  const BOM='\uFEFF';
+  const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8;'});
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(blob);
+  link.download=filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
+/* ============================================= */
+/*       TEMPLATE YA CSV                          */
+/* ============================================= */
+(function setupCSVTemplate(){
+  const btn=document.getElementById('csvTemplateBtn');
+  const csv='Jina,Kategoria,Gharama,Bei,Stock\n';
+  csv+='"Samsung Galaxy A54","Elektroniki",500000,650000,10\n';
+  csv+='"Nike Air Max","Vikombe",80000,120000,25\n';
+  csv+='"Korosho 1kg","Vyakula",5000,8000,100\n';
+  csv+='"T-Shirt ya Cotton","Nguo",15000,25000,50\n';
+  csv+='"Panadol 500mg","Dawa",2000,3500,200\n';
+  btn.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+})();
+
+/* ============================================= */
+/*       BONYEO LA KUFUNGA MODAL KWA CLICK NJE   */
+/* ============================================= */
+document.addEventListener('click',function(e){
+  if(e.target.classList.contains('modal-overlay')&&e.target.classList.contains('show')){
+    // Usifunge scanner modal kwa ajili ya hili
+    if(e.target.id==='scannerModal'){closeScannerModal();return}
+    e.target.classList.remove('show');
+  }
+});
+
+/* ============================================= */
+/*       BONYEO LA KUFUNGA USER DROPDOWN         */
+/* ============================================= */
+document.addEventListener('click',function(e){
+  // Funga dropdown yoyote iliyo wazi nje ya yake
+  const menus=document.querySelectorAll('.ud-menu.show');
+  menus.forEach(m=>{
+    if(!m.parentElement.contains(e.target)){
+      m.classList.remove('show');
+    }
+  });
+});
+
+/* ============================================= */
+/*       ANZA MFUMO                               */
+/* ============================================= */
+(function init(){
+  // Unda Super User wa kwanza ikiwa hakuna
+  const users=DB.getUsers();
+  if(!users.length){
+    const su={id:genId(),firstName:'Msimamizi',lastName:'Mkuu',email:'admin@mauzopoa.com',phone:'+255 700 000 000',password:'admin123',role:'superuser',status:'active',createdAt:new Date().toISOString()};
+    users.push(su);
+    DB.saveUsers(users);
+  }
+  // Angalia kama mtumiaji ameingia tayari
+  const saved=localStorage.getItem('mp_currentUser');
+  if(saved){
+    try{
+      currentUser=JSON.parse(saved);
+      // Thibitisha bado yupo
+      const found=DB.getUsers().find(u=>u.id===currentUser.id);
+      if(found){
+        currentUser=found;
+        showApp();
+      }else{
+        localStorage.removeItem('mp_currentUser');
+      }
+    }catch(e){
+      localStorage.removeItem('mp_currentUser');
+    }
+  }
+  // Pakia tarehe za mauzo
+  const todayStr=today();
+  const weekAgo=new Date();weekAgo.setDate(weekAgo.getDate()-7);
+  document.getElementById('salesDateFrom').value=weekAgo.toISOString().split('T')[0];
+  document.getElementById('salesDateTo').value=todayStr;
+})();
+</script>
+</body>
+</html>
