@@ -1,0 +1,2315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ProductHub - Product Management & POS System</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--primary:#003366;--secondary:#e63946;--accent:#f4a261;--light:#f8f9fa;--dark:#1d3557;--text:#333;--muted:#6c757d;--white:#fff;--shadow:0 4px 6px rgba(0,0,0,.1);--success:#2b8a3e;--warning:#e67700;--danger:#c92a2a;--border:#dee2e6;--card-bg:#fff;--sidebar-w:260px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Roboto',sans-serif;background:var(--light);color:var(--text);line-height:1.6;overflow-x:hidden}
+a{text-decoration:none;color:inherit}
+ul{list-style:none}
+h1,h2,h3,h4{font-family:'Montserrat',sans-serif;font-weight:700}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#f1f1f1}
+::-webkit-scrollbar-thumb{background:#aaa;border-radius:3px}
+
+/* ===== NOTIFICATION TOAST ===== */
+.toast-container{position:fixed;top:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:10px;max-width:400px;width:100%;pointer-events:none}
+.toast{pointer-events:auto;padding:14px 18px;border-radius:8px;color:#fff;font-size:.9rem;font-weight:500;display:flex;align-items:flex-start;gap:12px;box-shadow:0 6px 20px rgba(0,0,0,.2);animation:toastIn .4s ease forwards;position:relative;overflow:hidden}
+.toast.success{background:linear-gradient(135deg,#2b8a3e,#40c057)}
+.toast.error{background:linear-gradient(135deg,#c92a2a,#e63946)}
+.toast.warning{background:linear-gradient(135deg,#e67700,#f4a261)}
+.toast.info{background:linear-gradient(135deg,#003366,#1d3557)}
+.toast .toast-icon{font-size:1.2rem;min-width:24px;text-align:center}
+.toast .toast-msg{flex:1}
+.toast .toast-close{background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:1rem;padding:0 2px}
+.toast .toast-close:hover{color:#fff}
+.toast .toast-bar{position:absolute;bottom:0;left:0;height:3px;background:rgba(255,255,255,.5);animation:toastBar 4s linear forwards}
+.toast.removing{animation:toastOut .3s ease forwards}
+@keyframes toastIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
+@keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(100%)}}
+@keyframes toastBar{from{width:100%}to{width:0%}}
+
+/* ===== TOP NAV ===== */
+.top-nav{background:var(--primary);color:#fff;padding:0 5%;display:flex;justify-content:space-between;align-items:center;height:56px;position:sticky;top:0;z-index:5000;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+.top-nav .logo{display:flex;align-items:center;gap:10px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:1.25rem;cursor:pointer;color:#fff}
+.top-nav .logo i{color:var(--accent);font-size:1.4rem}
+.nav-center{display:flex;gap:4px;align-items:center}
+.nav-center a,.nav-center button{color:rgba(255,255,255,.85);padding:8px 14px;border-radius:6px;font-size:.88rem;font-weight:500;transition:all .2s;background:none;border:none;cursor:pointer;white-space:nowrap}
+.nav-center a:hover,.nav-center button:hover,.nav-center a.active{background:rgba(255,255,255,.15);color:#fff}
+.nav-right{display:flex;gap:10px;align-items:center}
+.nav-btn{padding:7px 16px;border-radius:6px;font-size:.85rem;font-weight:600;cursor:pointer;border:2px solid;transition:all .2s;display:none;align-items:center;gap:6px}
+.nav-btn.outline{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+.nav-btn.outline:hover{border-color:#fff;background:rgba(255,255,255,.1)}
+.nav-btn.filled{background:var(--accent);color:var(--primary);border-color:var(--accent)}
+.nav-btn.filled:hover{background:#e8934a}
+.nav-btn.danger{background:var(--secondary);color:#fff;border-color:var(--secondary);display:none}
+.nav-btn.danger:hover{background:#c1121f}
+.nav-btn.show{display:inline-flex}
+.user-chip{display:none;align-items:center;gap:8px;background:rgba(255,255,255,.12);padding:5px 12px 5px 5px;border-radius:30px;cursor:pointer;position:relative}
+.user-chip.show{display:flex}
+.user-chip .avatar{width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem}
+.user-chip .uname{color:#fff;font-size:.85rem;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-dropdown{display:none;position:absolute;top:110%;right:0;background:#fff;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.15);border-radius:10px;overflow:hidden;z-index:5100}
+.user-dropdown.show{display:block}
+.user-dropdown a,.user-dropdown button{display:flex;align-items:center;gap:10px;padding:11px 16px;width:100%;text-align:left;border:none;background:none;cursor:pointer;font-size:.88rem;color:var(--text);border-bottom:1px solid #f0f0f0}
+.user-dropdown a:hover,.user-dropdown button:hover{background:#f5f5f5}
+.user-dropdown button{color:var(--secondary);font-weight:600}
+
+/* ===== SIDEBAR (Dashboard) ===== */
+.app-layout{display:flex;min-height:calc(100vh - 56px)}
+.sidebar{width:var(--sidebar-w);background:#fff;border-right:1px solid var(--border);padding:20px 0;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;flex-shrink:0;display:none;z-index:4000}
+.sidebar.show{display:block}
+.sidebar-section{margin-bottom:8px}
+.sidebar-label{font-size:.7rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);padding:8px 20px 4px;font-weight:700}
+.sidebar a{display:flex;align-items:center;gap:12px;padding:10px 20px;color:var(--text);font-size:.9rem;font-weight:500;transition:all .15s;border-left:3px solid transparent}
+.sidebar a:hover{background:#f0f4ff;color:var(--primary);border-left-color:var(--primary)}
+.sidebar a.active{background:#e8eef8;color:var(--primary);border-left-color:var(--primary);font-weight:700}
+.sidebar a i{width:20px;text-align:center;font-size:.95rem}
+.main-content{flex:1;padding:24px;min-width:0}
+
+/* ===== PUBLIC LANDING ===== */
+.landing-hero{background:linear-gradient(135deg,var(--primary) 0%,var(--dark) 60%,#0a1628 100%);color:#fff;padding:80px 5% 100px;text-align:center;position:relative;overflow:hidden}
+.landing-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
+.landing-hero h1{font-size:3rem;margin-bottom:16px;position:relative}
+.landing-hero p{font-size:1.15rem;opacity:.85;max-width:600px;margin:0 auto 30px;position:relative}
+.landing-search{max-width:650px;margin:0 auto;position:relative}
+.landing-search input{width:100%;padding:18px 60px 18px 24px;border:none;border-radius:12px;font-size:1.05rem;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+.landing-search button{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--accent);color:var(--primary);border:none;width:48px;height:48px;border-radius:8px;font-size:1.2rem;cursor:pointer}
+.landing-search button:hover{background:#e8934a}
+
+/* ===== CATALOGUE ===== */
+.catalogue-section{padding:40px 5%}
+.catalogue-filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;align-items:center}
+.filter-select,.filter-input{padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;background:#fff;min-width:150px}
+.filter-input{min-width:200px}
+.catalogue-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px}
+.product-card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06);border:1px solid #f0f0f0;transition:transform .2s,box-shadow .2s;display:flex;flex-direction:column}
+.product-card:hover{transform:translateY(-4px);box-shadow:0 8px 25px rgba(0,0,0,.1)}
+.product-card .card-img{width:100%;height:220px;object-fit:cover;background:#f0f0f0}
+.product-card .card-body{padding:16px;flex:1;display:flex;flex-direction:column}
+.product-card .card-cat{font-size:.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--accent);font-weight:700;margin-bottom:4px}
+.product-card .card-name{font-size:1.05rem;font-weight:700;color:var(--dark);margin-bottom:6px;line-height:1.3}
+.product-card .card-desc{font-size:.85rem;color:var(--muted);margin-bottom:12px;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.product-card .card-bottom{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f0f0f0;padding-top:12px;margin-top:auto}
+.product-card .card-price{font-family:'Montserrat',sans-serif;font-size:1.3rem;font-weight:800;color:var(--primary)}
+.product-card .card-stock{font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:20px}
+.stock-in{background:#d3f9d8;color:#2b8a3e}
+.stock-low{background:#fff3cd;color:#856404}
+.stock-out{background:#ffe3e3;color:#c92a2a}
+.product-card .card-store{font-size:.78rem;color:var(--muted);margin-top:8px;display:flex;align-items:center;gap:4px}
+.card-actions{display:flex;gap:8px;margin-top:12px}
+.btn-sm{padding:8px 14px;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;transition:all .2s;display:inline-flex;align-items:center;gap:5px}
+.btn-primary-sm{background:var(--primary);color:#fff}
+.btn-primary-sm:hover{background:#002244}
+.btn-accent-sm{background:var(--accent);color:var(--primary)}
+.btn-accent-sm:hover{background:#e8934a}
+.btn-outline-sm{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-outline-sm:hover{background:#f5f5f5}
+.btn-danger-sm{background:var(--secondary);color:#fff}
+.btn-danger-sm:hover{background:#c1121f}
+.btn-success-sm{background:var(--success);color:#fff}
+.btn-success-sm:hover{background:#237a33}
+
+/* ===== METRICS ===== */
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.metric-card{padding:20px;border-radius:12px;color:#fff;position:relative;overflow:hidden;transition:transform .2s}
+.metric-card:hover{transform:translateY(-3px)}
+.metric-card::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.1),transparent);pointer-events:none}
+.metric-card.mc-blue{background:linear-gradient(135deg,var(--primary),var(--dark))}
+.metric-card.mc-green{background:linear-gradient(135deg,#2b8a3e,#40c057)}
+.metric-card.mc-red{background:linear-gradient(135deg,#c92a2a,#e63946)}
+.metric-card.mc-orange{background:linear-gradient(135deg,#e67700,#f4a261)}
+.metric-card.mc-purple{background:linear-gradient(135deg,#5f3dc4,#7c4dff)}
+.metric-card h3{font-size:1.8rem;margin-bottom:4px;position:relative;z-index:1}
+.metric-card p{font-size:.78rem;text-transform:uppercase;letter-spacing:1px;opacity:.9;position:relative;z-index:1}
+.metric-card i{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:2.5rem;opacity:.15}
+
+/* ===== CHARTS ===== */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+.chart-card{background:#fff;padding:20px;border-radius:12px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.chart-card h4{margin-bottom:16px;color:var(--dark);font-size:.85rem;text-transform:uppercase;letter-spacing:.5px}
+.chart-wrap{position:relative;height:280px}
+@media(max-width:900px){.charts-grid{grid-template-columns:1fr}}
+
+/* ===== FORMS ===== */
+.form-card{background:#fff;padding:24px;border-radius:12px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.04);margin-bottom:24px}
+.form-card h3{margin-bottom:20px;color:var(--primary);font-size:1.1rem;display:flex;align-items:center;gap:10px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-grid .full{grid-column:1/-1}
+.fg{display:flex;flex-direction:column}
+.fg label{font-size:.82rem;font-weight:600;color:#555;margin-bottom:4px}
+.fg input,.fg select,.fg textarea{padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;width:100%;font-family:inherit;transition:border .2s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--primary);outline:none;box-shadow:0 0 0 3px rgba(0,51,102,.08)}
+.fg textarea{resize:vertical;min-height:80px}
+.fg .hint{font-size:.75rem;color:var(--muted);margin-top:3px}
+.img-upload-zone{border:2px dashed #ccc;border-radius:10px;padding:30px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.img-upload-zone:hover{border-color:var(--primary);background:#f8f9ff}
+.img-upload-zone img{max-width:100%;max-height:200px;object-fit:contain;border-radius:6px}
+.img-upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.btn-form{padding:12px 28px;border:none;border-radius:8px;font-size:.95rem;font-weight:700;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px}
+.btn-form.primary{background:var(--primary);color:#fff}
+.btn-form.primary:hover{background:#002244}
+.btn-form.accent{background:var(--accent);color:var(--primary)}
+.btn-form.accent:hover{background:#e8934a}
+.btn-form.danger{background:var(--secondary);color:#fff}
+.btn-form.danger:hover{background:#c1121f}
+.btn-form.success{background:var(--success);color:#fff}
+.btn-form.success:hover{background:#237a33}
+.btn-form.outline{background:transparent;border:2px solid var(--border);color:var(--text)}
+.btn-form.outline:hover{background:#f5f5f5}
+.form-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+
+/* ===== TABLE ===== */
+.table-card{background:#fff;border-radius:12px;border:1px solid var(--border);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.table-header{padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--border)}
+.table-header h3{color:var(--primary);font-size:1rem}
+.table-header .th-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.table-search{padding:8px 14px;border:1px solid var(--border);border-radius:6px;font-size:.88rem;min-width:220px}
+.table-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:800px}
+thead{background:var(--primary);color:#fff}
+th{padding:12px 14px;text-align:left;font-size:.82rem;text-transform:uppercase;letter-spacing:.5px;font-weight:600;white-space:nowrap}
+td{padding:10px 14px;font-size:.88rem;border-bottom:1px solid #f0f0f0;vertical-align:middle}
+tbody tr:hover{background:#f8f9ff}
+.td-img{width:50px;height:50px;object-fit:cover;border-radius:6px;cursor:pointer}
+.badge{padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600;display:inline-block}
+.badge-success{background:#d3f9d8;color:#2b8a3e}
+.badge-warning{background:#fff3cd;color:#856404}
+.badge-danger{background:#ffe3e3;color:#c92a2a}
+.badge-info{background:#d0ebff;color:#1864ab}
+.badge-muted{background:#e9ecef;color:#495057}
+.td-actions{display:flex;gap:5px}
+.td-actions button{padding:5px 8px;border:none;border-radius:4px;cursor:pointer;font-size:.78rem;font-weight:600;transition:opacity .2s}
+.td-actions button:hover{opacity:.8}
+.btn-tb-view{background:#17a2b8;color:#fff}
+.btn-tb-edit{background:#ffc107;color:#000}
+.btn-tb-del{background:#dc3545;color:#fff}
+.btn-tb-barcode{background:#6f42c1;color:#fff}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-state i{font-size:3rem;margin-bottom:12px;opacity:.4}
+.empty-state p{font-size:1rem}
+
+/* ===== POS ===== */
+.pos-layout{display:grid;grid-template-columns:1fr 380px;gap:20px;height:calc(100vh - 104px)}
+.pos-products{overflow-y:auto}
+.pos-cart{background:#fff;border-radius:12px;border:1px solid var(--border);display:flex;flex-direction:column;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.pos-cart-header{padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;color:var(--primary);display:flex;justify-content:space-between;align-items:center}
+.pos-cart-items{flex:1;overflow-y:auto;padding:10px}
+.pos-cart-item{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #f0f0f0}
+.pos-cart-item .pci-img{width:45px;height:45px;border-radius:6px;object-fit:cover;background:#f0f0f0}
+.pos-cart-item .pci-info{flex:1;min-width:0}
+.pos-cart-item .pci-name{font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pos-cart-item .pci-price{font-size:.82rem;color:var(--muted)}
+.pos-cart-item .pci-qty{display:flex;align-items:center;gap:6px}
+.pos-cart-item .pci-qty button{width:28px;height:28px;border-radius:4px;border:1px solid var(--border);background:#fff;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center}
+.pos-cart-item .pci-qty span{font-weight:700;min-width:24px;text-align:center}
+.pos-cart-item .pci-remove{background:none;border:none;color:var(--secondary);cursor:pointer;font-size:1rem;padding:4px}
+.pos-cart-footer{padding:16px 20px;border-top:2px solid var(--border);background:#fafafa}
+.pos-total{font-size:1.4rem;font-weight:800;color:var(--primary);margin-bottom:12px}
+.pos-customer{margin-bottom:12px}
+.pos-customer input{width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem}
+.pos-btn-complete{width:100%;padding:14px;background:var(--success);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;transition:background .2s}
+.pos-btn-complete:hover{background:#237a33}
+.pos-btn-complete:disabled{background:#ccc;cursor:not-allowed}
+.pos-product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding-bottom:20px}
+.pos-product-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:all .15s;text-align:center}
+.pos-product-card:hover{border-color:var(--primary);box-shadow:0 4px 12px rgba(0,51,102,.1);transform:translateY(-2px)}
+.pos-product-card .ppc-img{width:100%;height:100px;object-fit:cover;border-radius:6px;background:#f0f0f0;margin-bottom:8px}
+.pos-product-card .ppc-name{font-size:.82rem;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pos-product-card .ppc-price{font-size:.95rem;font-weight:800;color:var(--primary)}
+.pos-product-card .ppc-stock{font-size:.72rem;color:var(--muted)}
+.pos-scan-bar{display:flex;gap:8px;margin-bottom:16px}
+.pos-scan-bar input{flex:1;padding:12px;border:2px solid var(--border);border-radius:8px;font-size:.95rem}
+.pos-scan-bar button{padding:12px 18px;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:600;white-space:nowrap}
+.pos-scan-bar button:hover{background:#002244}
+@media(max-width:900px){.pos-layout{grid-template-columns:1fr;height:auto}.pos-cart{max-height:500px}}
+
+/* ===== BARCODE ===== */
+.barcode-display{text-align:center;padding:30px;background:#fff;border:2px solid var(--border);border-radius:12px;margin:16px 0}
+.barcode-display canvas{max-width:100%}
+.barcode-display .bc-value{font-family:'Courier New',monospace;font-size:1.1rem;font-weight:700;margin-top:8px;letter-spacing:3px}
+
+/* ===== MODAL ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:8000;padding:1rem;opacity:0;visibility:hidden;transition:all .25s}
+.modal-overlay.show{opacity:1;visibility:visible}
+.modal-box{background:#fff;border-radius:16px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;transform:scale(.9);transition:transform .25s;position:relative}
+.modal-overlay.show .modal-box{transform:scale(1)}
+.modal-box.wide{max-width:700px}
+.modal-box.xl{max-width:1000px}
+.modal-close{position:absolute;top:14px;right:16px;background:none;border:none;font-size:1.3rem;color:#aaa;cursor:pointer;z-index:10;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.modal-close:hover{background:#f0f0f0;color:#333}
+.modal-head{padding:20px 24px 0;font-size:1.1rem;color:var(--primary);display:flex;align-items:center;gap:10px}
+.modal-body{padding:16px 24px 24px}
+
+/* ===== LIGHTBOX ===== */
+.lightbox{z-index:9000;background:rgba(0,0,0,.92)}
+.lightbox img{max-width:90%;max-height:85vh;border-radius:8px;object-fit:contain}
+.lightbox .modal-close{color:#fff;font-size:2rem;top:16px;right:20px}
+
+/* ===== SETTINGS TABS ===== */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
+.tab-btn{padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;font-weight:600;color:var(--muted);transition:all .2s;font-size:.9rem}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:768px){
+.form-grid{grid-template-columns:1fr}
+.form-grid .full{grid-column:1}
+.nav-center{display:none}
+.landing-hero h1{font-size:2rem}
+.landing-hero{padding:50px 5% 70px}
+.catalogue-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.metrics-grid{grid-template-columns:1fr 1fr}
+.pos-product-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+.sidebar{position:fixed;left:-280px;top:56px;z-index:4500;height:calc(100vh - 56px);transition:left .3s;box-shadow:4px 0 20px rgba(0,0,0,.1)}
+.sidebar.open{left:0}
+.mobile-toggle{display:inline-flex !important}
+}
+@media(max-width:480px){
+.metrics-grid{grid-template-columns:1fr}
+.catalogue-grid{grid-template-columns:1fr}
+}
+
+/* ===== PRINT ===== */
+@media print{
+.top-nav,.sidebar,.toast-container,.form-actions,.td-actions,.btn-sm,.pos-scan-bar{display:none!important}
+.main-content{padding:0}
+.table-card{box-shadow:none;border:none}
+.product-card{break-inside:avoid;box-shadow:none;border:1px solid #ddd}
+}
+
+/* ===== MISC ===== */
+.page-title{margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.page-title h2{color:var(--primary);font-size:1.3rem;display:flex;align-items:center;gap:10px}
+.mobile-toggle{display:none;background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;padding:4px 8px}
+.text-right{text-align:right}
+.text-center{text-align:center}
+.mt-2{margin-top:16px}
+.mb-2{margin-bottom:16px}
+.flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.gap-2{gap:16px}
+.divider{border:none;border-top:1px solid var(--border);margin:16px 0}
+.receipt-preview{background:#fff;border:1px dashed #ccc;padding:20px;max-width:350px;margin:0 auto;font-family:'Courier New',monospace;font-size:.85rem}
+.receipt-preview .rp-header{text-align:center;border-bottom:2px dashed #ccc;padding-bottom:10px;margin-bottom:10px}
+.receipt-preview .rp-items{border-bottom:1px dashed #ccc;padding-bottom:10px;margin-bottom:10px}
+.receipt-preview .rp-item{display:flex;justify-content:space-between;margin-bottom:4px}
+.receipt-preview .rp-total{font-weight:700;font-size:1.1rem;text-align:right}
+</style>
+</head>
+<body>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- TOP NAV -->
+<nav class="top-nav">
+  <div style="display:flex;align-items:center;gap:12px">
+    <button class="mobile-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    <div class="logo" onclick="navigateTo('landing')"><i class="fas fa-cube"></i> ProductHub</div>
+  </div>
+  <div class="nav-center" id="navCenter">
+    <a href="#" onclick="navigateTo('catalogue');return false" class="active" data-nav="catalogue">Catalogue</a>
+    <a href="#" onclick="navigateTo('pos');return false" data-nav="pos">POS</a>
+  </div>
+  <div class="nav-right">
+    <button class="nav-btn outline" id="btnLogin" onclick="showModal('loginModal')"><i class="fas fa-sign-in-alt"></i> Login</button>
+    <button class="nav-btn filled" id="btnRegister" onclick="showModal('registerModal')"><i class="fas fa-user-plus"></i> Register</button>
+    <button class="nav-btn outline" id="btnDashboard" onclick="navigateTo('dashboard')"><i class="fas fa-tachometer-alt"></i> Dashboard</button>
+    <button class="nav-btn danger" id="btnLogout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+    <div class="user-chip" id="userChip" onclick="toggleUserDropdown()">
+      <div class="avatar" id="userAvatar">U</div>
+      <span class="uname" id="userNameNav">User</span>
+      <i class="fas fa-chevron-down" style="color:rgba(255,255,255,.6);font-size:.7rem"></i>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="#" onclick="navigateTo('dashboard');closeUserDropdown();return false"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="#" onclick="showModal('profileModal');closeUserDropdown();return false"><i class="fas fa-user-cog"></i> Profile</a>
+        <a href="#" onclick="navigateTo('settings');closeUserDropdown();return false"><i class="fas fa-cog"></i> Settings</a>
+        <button onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== LANDING PAGE ===== -->
+<div id="page-landing">
+  <div class="landing-hero">
+    <h1>Browse Products</h1>
+    <p>Search thousands of products from registered businesses. Find what you need by name, barcode, or category.</p>
+    <div class="landing-search">
+      <input type="text" id="landingSearch" placeholder="Search products by name, barcode, SKU..." onkeyup="handleLandingSearch(event)"/>
+      <button onclick="doLandingSearch()"><i class="fas fa-search"></i></button>
+    </div>
+  </div>
+  <div class="catalogue-section" id="landingCatalogue">
+    <div class="catalogue-filters" id="landingFilters">
+      <select class="filter-select" id="landingCatFilter" onchange="loadLandingCatalogue()">
+        <option value="">All Categories</option>
+      </select>
+      <select class="filter-select" id="landingBrandFilter" onchange="loadLandingCatalogue()">
+        <option value="">All Brands</option>
+      </select>
+      <input type="number" class="filter-input" id="landingPriceMin" placeholder="Min Price" onchange="loadLandingCatalogue()" style="min-width:120px"/>
+      <input type="number" class="filter-input" id="landingPriceMax" placeholder="Max Price" onchange="loadLandingCatalogue()" style="min-width:120px"/>
+    </div>
+    <div class="catalogue-grid" id="landingGrid"></div>
+  </div>
+</div>
+
+<!-- ===== DASHBOARD PAGE ===== -->
+<div id="page-dashboard" style="display:none">
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Main</div>
+        <a href="#" onclick="navigateTo('dashboard');return false" class="active" data-sb="dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="#" onclick="navigateTo('products');return false" data-sb="products"><i class="fas fa-boxes-stacked"></i> Products</a>
+        <a href="#" onclick="navigateTo('addProduct');return false" data-sb="addProduct"><i class="fas fa-plus-circle"></i> Add Product</a>
+        <a href="#" onclick="navigateTo('catalogue');return false" data-sb="catalogue"><i class="fas fa-store"></i> Catalogue</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Inventory</div>
+        <a href="#" onclick="navigateTo('inventory');return false" data-sb="inventory"><i class="fas fa-warehouse"></i> Inventory</a>
+        <a href="#" onclick="navigateTo('stockIn');return false" data-sb="stockIn"><i class="fas fa-arrow-down"></i> Stock In</a>
+        <a href="#" onclick="navigateTo('stockOut');return false" data-sb="stockOut"><i class="fas fa-arrow-up"></i> Stock Out</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Barcode</div>
+        <a href="#" onclick="navigateTo('barcodes');return false" data-sb="barcodes"><i class="fas fa-barcode"></i> Barcode Labels</a>
+        <a href="#" onclick="navigateTo('scanner');return false" data-sb="scanner"><i class="fas fa-camera"></i> Barcode Scanner</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Sales</div>
+        <a href="#" onclick="navigateTo('pos');return false" data-sb="pos"><i class="fas fa-cash-register"></i> POS / Sales</a>
+        <a href="#" onclick="navigateTo('salesHistory');return false" data-sb="salesHistory"><i class="fas fa-receipt"></i> Sales History</a>
+        <a href="#" onclick="navigateTo('customers');return false" data-sb="customers"><i class="fas fa-users"></i> Customers</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Management</div>
+        <a href="#" onclick="navigateTo('suppliers');return false" data-sb="suppliers"><i class="fas fa-truck"></i> Suppliers</a>
+        <a href="#" onclick="navigateTo('reports');return false" data-sb="reports"><i class="fas fa-chart-line"></i> Reports</a>
+        <a href="#" onclick="navigateTo('settings');return false" data-sb="settings"><i class="fas fa-cog"></i> Settings</a>
+      </div>
+    </aside>
+    <div class="main-content" id="dashContent">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOGIN MODAL ===== -->
+<div class="modal-overlay" id="loginModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="hideModal('loginModal')"><i class="fas fa-times"></i></button>
+    <div style="background:linear-gradient(135deg,var(--primary),var(--dark));padding:30px;border-radius:16px 16px 0 0;color:#fff;text-align:center">
+      <i class="fas fa-cube" style="font-size:2rem;margin-bottom:8px;color:var(--accent)"></i>
+      <h2 style="color:#fff;font-size:1.4rem;margin-bottom:4px">Welcome Back</h2>
+      <p style="font-size:.88rem;opacity:.8">Login to manage your products and sales</p>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="fg full"><label>Email</label><input type="email" id="loginEmail" placeholder="your@email.com"/></div>
+        <div class="fg full"><label>Password</label><input type="password" id="loginPassword" placeholder="Enter password" onkeyup="if(event.key==='Enter')doLogin()"/></div>
+        <div class="fg full">
+          <button class="btn-form primary" style="width:100%" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> Login</button>
+        </div>
+      </div>
+      <p class="text-center" style="margin-top:16px;font-size:.9rem;color:var(--muted)">Don't have an account? <a href="#" style="color:var(--secondary);font-weight:600" onclick="hideModal('loginModal');showModal('registerModal')">Register here</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== REGISTER MODAL ===== -->
+<div class="modal-overlay" id="registerModal">
+  <div class="modal-box wide">
+    <button class="modal-close" onclick="hideModal('registerModal')"><i class="fas fa-times"></i></button>
+    <div style="background:linear-gradient(135deg,var(--accent),#e8934a);padding:30px;border-radius:16px 16px 0 0;color:var(--primary);text-align:center">
+      <i class="fas fa-user-plus" style="font-size:2rem;margin-bottom:8px"></i>
+      <h2 style="font-size:1.4rem;margin-bottom:4px">Create Business Account</h2>
+      <p style="font-size:.88rem;opacity:.8">Start managing your products and sales today</p>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="fg"><label>Full Name</label><input type="text" id="regName" placeholder="John Doe"/></div>
+        <div class="fg"><label>Business Name</label><input type="text" id="regBusiness" placeholder="My Store"/></div>
+        <div class="fg"><label>Email</label><input type="email" id="regEmail" placeholder="your@email.com"/></div>
+        <div class="fg"><label>Phone</label><input type="tel" id="regPhone" placeholder="+255 700 000 000"/></div>
+        <div class="fg"><label>Password</label><input type="password" id="regPassword" placeholder="Min 6 characters"/></div>
+        <div class="fg"><label>Confirm Password</label><input type="password" id="regPassword2" placeholder="Re-enter password"/></div>
+        <div class="fg full"><label>Currency</label>
+          <select id="regCurrency"><option value="TZS">TZS - Tanzanian Shilling</option><option value="KES">KES - Kenyan Shilling</option><option value="USD">USD - US Dollar</option><option value="EUR">EUR - Euro</option><option value="GBP">GBP - British Pound</option><option value="RWF">RWF - Rwandan Franc</option><option value="UGX">UGX - Ugandan Shilling</option><option value="CNY">CNY - Chinese Yuan</option><option value="AED">AED - UAE Dirham</option></select>
+        </div>
+        <div class="fg full">
+          <button class="btn-form accent" style="width:100%" onclick="doRegister()"><i class="fas fa-user-plus"></i> Create Account</button>
+        </div>
+      </div>
+      <p class="text-center" style="margin-top:16px;font-size:.9rem;color:var(--muted)">Already have an account? <a href="#" style="color:var(--primary);font-weight:600" onclick="hideModal('registerModal');showModal('loginModal')">Login here</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROFILE MODAL ===== -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="hideModal('profileModal')"><i class="fas fa-times"></i></button>
+    <div class="modal-head"><i class="fas fa-user-cog"></i> User Profile</div>
+    <div class="modal-body" id="profileBody"></div>
+  </div>
+</div>
+
+<!-- ===== PRODUCT DETAIL MODAL ===== -->
+<div class="modal-overlay" id="productDetailModal">
+  <div class="modal-box wide">
+    <button class="modal-close" onclick="hideModal('productDetailModal')"><i class="fas fa-times"></i></button>
+    <div class="modal-body" id="productDetailBody"></div>
+  </div>
+</div>
+
+<!-- ===== BARCODE SCANNER MODAL ===== -->
+<div class="modal-overlay" id="scanModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="stopScanner();hideModal('scanModal')"><i class="fas fa-times"></i></button>
+    <div class="modal-head"><i class="fas fa-camera"></i> Barcode Scanner</div>
+    <div class="modal-body" style="text-align:center">
+      <video id="scanVideo" style="width:100%;border-radius:8px;background:#000" autoplay playsinline></video>
+      <canvas id="scanCanvas" style="display:none"></canvas>
+      <p id="scanStatus" style="margin-top:10px;color:var(--muted);font-size:.9rem">Initializing camera...</p>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:center">
+        <input type="text" id="manualBarcode" placeholder="Or enter barcode manually" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:6px"/>
+        <button class="btn-form primary" onclick="processManualBarcode()">Search</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RECEIPT MODAL ===== -->
+<div class="modal-overlay" id="receiptModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="hideModal('receiptModal')"><i class="fas fa-times"></i></button>
+    <div class="modal-head"><i class="fas fa-receipt"></i> Sale Receipt</div>
+    <div class="modal-body" id="receiptBody"></div>
+  </div>
+</div>
+
+<!-- ===== LIGHTBOX ===== -->
+<div class="modal-overlay lightbox" id="lightbox" onclick="hideModal('lightbox')">
+  <button class="modal-close" onclick="hideModal('lightbox')"><i class="fas fa-times"></i></button>
+  <img id="lightboxImg" src="" alt="Full image"/>
+</div>
+
+<script>
+/* =====================================================================
+   DATA LAYER - LocalStorage Operations
+   ===================================================================== */
+const DB = {
+  get(key) { try { return JSON.parse(localStorage.getItem('ph_' + key)) || []; } catch(e) { return []; } },
+  set(key, data) { localStorage.setItem('ph_' + key, JSON.stringify(data)); },
+  getOne(key) { try { return JSON.parse(localStorage.getItem('ph_' + key)); } catch(e) { return null; } },
+  setOne(key, data) { localStorage.setItem('ph_' + key, JSON.stringify(data)); },
+  remove(key) { localStorage.removeItem('ph_' + key); }
+};
+
+/* =====================================================================
+   UTILITY FUNCTIONS
+   ===================================================================== */
+function uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 9); }
+function formatCurrency(amount) {
+  const u = currentUser();
+  const c = u ? (u.currency || 'TZS') : 'TZS';
+  if (['TZS','KES','UGX','RWF'].includes(c)) return amount.toLocaleString() + ' ' + c;
+  return c + ' ' + amount.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function formatDate(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function formatDateTime(d) { if (!d) return '-'; return new Date(d).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
+function currentUser() { return DB.getOne('currentUser'); }
+function isLoggedIn() { return !!currentUser(); }
+function getStockStatus(product) {
+  if (product.status === 'INACTIVE' || product.status === 'ARCHIVED') return product.status;
+  if (product.stock <= 0) return 'OUT_OF_STOCK';
+  if (product.stock <= (product.minimumStock || 5)) return 'LOW_STOCK';
+  return 'IN_STOCK';
+}
+function stockBadge(status) {
+  const map = { IN_STOCK:'badge-success', LOW_STOCK:'badge-warning', OUT_OF_STOCK:'badge-danger', INACTIVE:'badge-muted', ARCHIVED:'badge-muted' };
+  const labels = { IN_STOCK:'In Stock', LOW_STOCK:'Low Stock', OUT_OF_STOCK:'Out of Stock', INACTIVE:'Inactive', ARCHIVED:'Archived' };
+  return `<span class="badge ${map[status]||'badge-muted'}">${labels[status]||status}</span>`;
+}
+
+/* =====================================================================
+   TOAST NOTIFICATION
+   ===================================================================== */
+function toast(msg, type='info', duration=4000) {
+  const c = document.getElementById('toastContainer');
+  const icons = { success:'fa-check-circle', error:'fa-exclamation-circle', warning:'fa-exclamation-triangle', info:'fa-info-circle' };
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<i class="fas ${icons[type]||icons.info} toast-icon"></i><span class="toast-msg">${escapeHtml(msg)}</span><button class="toast-close" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button><div class="toast-bar" style="animation-duration:${duration}ms"></div>`;
+  c.appendChild(t);
+  setTimeout(() => { t.classList.add('removing'); setTimeout(() => t.remove(), 300); }, duration);
+}
+
+/* =====================================================================
+   MODAL HELPERS
+   ===================================================================== */
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function hideModal(id) { document.getElementById(id).classList.remove('show'); }
+
+/* =====================================================================
+   AUTH SYSTEM
+   ===================================================================== */
+function updateAuthUI() {
+  const u = currentUser();
+  const loginBtn = document.getElementById('btnLogin');
+  const regBtn = document.getElementById('btnRegister');
+  const dashBtn = document.getElementById('btnDashboard');
+  const logoutBtn = document.getElementById('btnLogout');
+  const chip = document.getElementById('userChip');
+  if (u) {
+    loginBtn.classList.remove('show'); regBtn.classList.remove('show');
+    dashBtn.classList.add('show'); logoutBtn.classList.add('show');
+    chip.classList.add('show');
+    document.getElementById('userAvatar').textContent = (u.name||'U')[0].toUpperCase();
+    document.getElementById('userNameNav').textContent = u.name || 'User';
+  } else {
+    loginBtn.classList.add('show'); regBtn.classList.add('show');
+    dashBtn.classList.remove('show'); logoutBtn.classList.remove('show');
+    chip.classList.remove('show');
+  }
+}
+
+function doRegister() {
+  const name = document.getElementById('regName').value.trim();
+  const business = document.getElementById('regBusiness').value.trim();
+  const email = document.getElementById('regEmail').value.trim().toLowerCase();
+  const phone = document.getElementById('regPhone').value.trim();
+  const pw = document.getElementById('regPassword').value;
+  const pw2 = document.getElementById('regPassword2').value;
+  const currency = document.getElementById('regCurrency').value;
+  if (!name || !business || !email || !pw) { toast('Please fill all required fields','error'); return; }
+  if (pw.length < 6) { toast('Password must be at least 6 characters','error'); return; }
+  if (pw !== pw2) { toast('Passwords do not match','error'); return; }
+  const users = DB.get('users');
+  if (users.find(u => u.email === email)) { toast('Email already registered','error'); return; }
+  const user = { id: uid(), name, businessName: business, email, phone, password: pw, currency, role: 'business', createdAt: new Date().toISOString() };
+  users.push(user);
+  DB.set('users', users);
+  // Save business settings
+  DB.setOne('settings_' + user.id, { businessName: business, businessAddress: '', businessPhone: phone, businessEmail: email, currency, taxRate: 0, ownerId: user.id });
+  toast('Account created successfully! Please login.','success');
+  hideModal('registerModal');
+  showModal('loginModal');
+  document.getElementById('loginEmail').value = email;
+}
+
+function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const pw = document.getElementById('loginPassword').value;
+  if (!email || !pw) { toast('Please enter email and password','error'); return; }
+  const users = DB.get('users');
+  const user = users.find(u => u.email === email && u.password === pw);
+  if (!user) { toast('Invalid email or password','error'); return; }
+  DB.setOne('currentUser', user);
+  updateAuthUI();
+  hideModal('loginModal');
+  toast(`Welcome back, ${user.name}!`,'success');
+  navigateTo('dashboard');
+}
+
+function logoutUser() {
+  DB.remove('currentUser');
+  updateAuthUI();
+  closeUserDropdown();
+  navigateTo('landing');
+  toast('Logged out successfully','info');
+}
+
+function toggleUserDropdown() {
+  document.getElementById('userDropdown').classList.toggle('show');
+}
+function closeUserDropdown() {
+  document.getElementById('userDropdown').classList.remove('show');
+}
+document.addEventListener('click', e => {
+  const chip = document.getElementById('userChip');
+  if (chip && !chip.contains(e.target)) closeUserDropdown();
+});
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+let currentPage = 'landing';
+let dashPage = 'dashboard';
+const publicPages = ['landing', 'catalogue', 'pos'];
+
+function navigateTo(page) {
+  currentPage = page;
+  // Hide all pages
+  document.getElementById('page-landing').style.display = 'none';
+  document.getElementById('page-dashboard').style.display = 'none';
+  // Update nav center links
+  document.querySelectorAll('#navCenter a').forEach(a => {
+    a.classList.toggle('active', a.dataset.nav === page);
+  });
+  if (publicPages.includes(page)) {
+    document.getElementById('page-landing').style.display = 'block';
+    if (page === 'catalogue') loadLandingCatalogue();
+  } else {
+    if (!isLoggedIn()) { toast('Please login to access this page','warning'); showModal('loginModal'); return; }
+    document.getElementById('page-dashboard').style.display = 'block';
+    document.getElementById('sidebar').classList.add('show');
+    dashPage = page;
+    // Update sidebar active
+    document.querySelectorAll('#sidebar a').forEach(a => {
+      a.classList.toggle('active', a.dataset.sb === page);
+    });
+    renderDashPage();
+  }
+  window.scrollTo(0, 0);
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+function renderDashPage() {
+  const mc = document.getElementById('dashContent');
+  const renderers = {
+    dashboard: renderDashboard,
+    products: renderProducts,
+    addProduct: renderAddProduct,
+    catalogue: renderCatalogue,
+    inventory: renderInventory,
+    stockIn: renderStockIn,
+    stockOut: renderStockOut,
+    barcodes: renderBarcodes,
+    scanner: renderScanner,
+    pos: renderPOS,
+    salesHistory: renderSalesHistory,
+    customers: renderCustomers,
+    suppliers: renderSuppliers,
+    reports: renderReports,
+    settings: renderSettings
+  };
+  const fn = renderers[dashPage];
+  if (fn) fn(mc); else mc.innerHTML = '<div class="empty-state"><i class="fas fa-circle-question"></i><p>Page not found</p></div>';
+}
+
+/* =====================================================================
+   DASHBOARD
+   ===================================================================== */
+let dashCharts = [];
+function destroyDashCharts() { dashCharts.forEach(c => c.destroy()); dashCharts = []; }
+
+function renderDashboard(container) {
+  destroyDashCharts();
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  const sales = DB.get('sales').filter(s => s.ownerId === u.id);
+  const today = new Date().toDateString();
+  const todaySales = sales.filter(s => new Date(s.saleDate).toDateString() === today);
+  const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekSales = sales.filter(s => new Date(s.saleDate) >= weekAgo);
+  const totalRevenue = sales.reduce((a, s) => a + s.totalAmount, 0);
+  const totalProfit = sales.reduce((a, s) => a + s.totalProfit, 0);
+  const totalStockValue = products.reduce((a, p) => a + (p.costPrice * p.stock), 0);
+  const lowStock = products.filter(p => getStockStatus(p) === 'LOW_STOCK').length;
+  const outOfStock = products.filter(p => getStockStatus(p) === 'OUT_OF_STOCK').length;
+
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-tachometer-alt"></i> Dashboard</h2><span style="color:var(--muted);font-size:.9rem">${escapeHtml(u.businessName)}</span></div>
+    <div class="metrics-grid">
+      <div class="metric-card mc-blue"><i class="fas fa-boxes-stacked"></i><h3>${products.length}</h3><p>Total Products</p></div>
+      <div class="metric-card mc-green"><i class="fas fa-coins"></i><h3>${formatCurrency(totalStockValue)}</h3><p>Stock Value</p></div>
+      <div class="metric-card mc-orange"><i class="fas fa-exclamation-triangle"></i><h3>${lowStock}</h3><p>Low Stock</p></div>
+      <div class="metric-card mc-red"><i class="fas fa-ban"></i><h3>${outOfStock}</h3><p>Out of Stock</p></div>
+      <div class="metric-card mc-purple"><i class="fas fa-chart-line"></i><h3>${formatCurrency(totalRevenue)}</h3><p>Total Revenue</p></div>
+      <div class="metric-card mc-green"><i class="fas fa-piggy-bank"></i><h3>${formatCurrency(totalProfit)}</h3><p>Total Profit</p></div>
+    </div>
+    <div class="metrics-grid" style="margin-bottom:24px">
+      <div class="metric-card mc-blue"><i class="fas fa-calendar-day"></i><h3>${todaySales.length}</h3><p>Today's Sales</p></div>
+      <div class="metric-card mc-purple"><i class="fas fa-calendar-week"></i><h3>${weekSales.length}</h3><p>This Week</p></div>
+      <div class="metric-card mc-green"><i class="fas fa-money-bill-wave"></i><h3>${formatCurrency(todaySales.reduce((a,s)=>a+s.totalAmount,0))}</h3><p>Today Revenue</p></div>
+      <div class="metric-card mc-orange"><i class="fas fa-hand-holding-usd"></i><h3>${formatCurrency(weekSales.reduce((a,s)=>a+s.totalProfit,0))}</h3><p>Week Profit</p></div>
+    </div>
+    <div class="charts-grid">
+      <div class="chart-card"><h4><i class="fas fa-chart-bar"></i> Sales (Last 7 Days)</h4><div class="chart-wrap"><canvas id="chartSalesWeek"></canvas></div></div>
+      <div class="chart-card"><h4><i class="fas fa-chart-pie"></i> Sales by Category</h4><div class="chart-wrap"><canvas id="chartCatSales"></canvas></div></div>
+    </div>
+    <div class="charts-grid">
+      <div class="chart-card"><h4><i class="fas fa-trophy"></i> Top Selling Products</h4><div class="chart-wrap"><canvas id="chartTopProducts"></canvas></div></div>
+      <div class="chart-card"><h4><i class="fas fa-chart-area"></i> Profit Analysis</h4><div class="chart-wrap"><canvas id="chartProfit"></canvas></div></div>
+    </div>
+  `;
+
+  // Sales by Day chart
+  const dayLabels = [];
+  const dayData = [];
+  const dayProfit = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const ds = d.toDateString();
+    dayLabels.push(d.toLocaleDateString('en-GB',{weekday:'short'}));
+    dayData.push(sales.filter(s => new Date(s.saleDate).toDateString() === ds).reduce((a, s) => a + s.totalAmount, 0));
+    dayProfit.push(sales.filter(s => new Date(s.saleDate).toDateString() === ds).reduce((a, s) => a + s.totalProfit, 0));
+  }
+  const c1 = new Chart(document.getElementById('chartSalesWeek'), {
+    type: 'bar', data: { labels: dayLabels, datasets: [{ label: 'Revenue', data: dayData, backgroundColor: 'rgba(0,51,102,.7)', borderRadius: 6 }, { label: 'Profit', data: dayProfit, backgroundColor: 'rgba(244,162,97,.7)', borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+  });
+  dashCharts.push(c1);
+
+  // Category sales
+  const catMap = {};
+  sales.forEach(s => s.items.forEach(it => { const p = products.find(pr => pr.id === it.productId); const cat = p ? (p.category || 'Other') : 'Other'; catMap[cat] = (catMap[cat] || 0) + it.subtotal; }));
+  const catLabels = Object.keys(catMap);
+  const catColors = ['#003366','#e63946','#f4a261','#2b8a3e','#6f42c1','#17a2b8','#e67700','#d6336c'];
+  const c2 = new Chart(document.getElementById('chartCatSales'), {
+    type: 'doughnut', data: { labels: catLabels.length ? catLabels : ['No Data'], datasets: [{ data: catLabels.length ? catLabels.map(l => catMap[l]) : [1], backgroundColor: catLabels.length ? catColors.slice(0, catLabels.length) : ['#eee'], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+  });
+  dashCharts.push(c2);
+
+  // Top products
+  const prodSalesMap = {};
+  sales.forEach(s => s.items.forEach(it => { prodSalesMap[it.name] = (prodSalesMap[it.name] || 0) + it.quantity; }));
+  const topProds = Object.entries(prodSalesMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const c3 = new Chart(document.getElementById('chartTopProducts'), {
+    type: 'bar', data: { labels: topProds.length ? topProds.map(t => t[0]) : ['No Data'], datasets: [{ label: 'Qty Sold', data: topProds.length ? topProds.map(t => t[1]) : [0], backgroundColor: 'rgba(43,138,62,.7)', borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+  });
+  dashCharts.push(c3);
+
+  // Profit chart
+  const c4 = new Chart(document.getElementById('chartProfit'), {
+    type: 'line', data: { labels: dayLabels, datasets: [{ label: 'Profit', data: dayProfit, borderColor: '#2b8a3e', backgroundColor: 'rgba(43,138,62,.1)', fill: true, tension: .4, pointRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+  dashCharts.push(c4);
+}
+
+/* =====================================================================
+   PRODUCTS LIST
+   ===================================================================== */
+function renderProducts(container) {
+  const u = currentUser();
+  let products = DB.get('products').filter(p => p.ownerId === u.id);
+  const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
+
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-boxes-stacked"></i> Products</h2><button class="btn-form primary" onclick="navigateTo('addProduct')"><i class="fas fa-plus"></i> Add Product</button></div>
+    <div class="table-card">
+      <div class="table-header">
+        <h3>${products.length} Products</h3>
+        <div class="th-actions">
+          <input class="table-search" id="prodTableSearch" placeholder="Search products..." oninput="filterProductTable()"/>
+          <select class="filter-select" id="prodCatFilter" onchange="filterProductTable()"><option value="">All Categories</option>${cats.map(c=>`<option>${escapeHtml(c)}</option>`).join('')}</select>
+          <select class="filter-select" id="prodStatusFilter" onchange="filterProductTable()"><option value="">All Status</option><option>IN_STOCK</option><option>LOW_STOCK</option><option>OUT_OF_STOCK</option><option>INACTIVE</option><option>ARCHIVED</option></select>
+          <button class="btn-sm btn-primary-sm" onclick="exportProductsCSV()"><i class="fas fa-download"></i> Export</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table><thead><tr><th>Image</th><th>Name</th><th>SKU</th><th>Category</th><th>Cost</th><th>Selling</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="prodTableBody">${renderProductRows(products)}</tbody></table>
+      </div>
+    </div>
+  `;
+}
+
+function renderProductRows(products) {
+  if (!products.length) return '<tr><td colspan="9" class="empty-state"><i class="fas fa-box-open"></i><p>No products found</p></td></tr>';
+  return products.map(p => {
+    const status = getStockStatus(p);
+    const img = p.image ? `<img src="${p.image}" class="td-img" onclick="showLightbox('${p.image.replace(/'/g,"\\'")}')" alt="${escapeHtml(p.name)}"/>` : `<div style="width:50px;height:50px;background:#f0f0f0;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#ccc"><i class="fas fa-image"></i></div>`;
+    return `<tr data-name="${escapeHtml((p.name||'').toLowerCase())}" data-cat="${escapeHtml(p.category||'')}" data-status="${status}">
+      <td>${img}</td><td><strong>${escapeHtml(p.name)}</strong><br><small style="color:var(--muted)">${escapeHtml(p.brand||'')}</small></td>
+      <td><code style="font-size:.8rem">${escapeHtml(p.sku||'')}</code></td>
+      <td>${escapeHtml(p.category||'-')}</td>
+      <td>${formatCurrency(p.costPrice||0)}</td><td><strong>${formatCurrency(p.sellingPrice||0)}</strong></td>
+      <td>${p.stock}</td><td>${stockBadge(status)}</td>
+      <td><div class="td-actions">
+        <button class="btn-tb-view" title="View" onclick="viewProduct('${p.id}')"><i class="fas fa-eye"></i></button>
+        <button class="btn-tb-edit" title="Edit" onclick="editProduct('${p.id}')"><i class="fas fa-pen"></i></button>
+        <button class="btn-tb-barcode" title="Barcode" onclick="viewBarcode('${p.id}')"><i class="fas fa-barcode"></i></button>
+        <button class="btn-tb-del" title="Delete" onclick="deleteProduct('${p.id}')"><i class="fas fa-trash"></i></button>
+      </div></td></tr>`;
+  }).join('');
+}
+
+function filterProductTable() {
+  const q = (document.getElementById('prodTableSearch').value || '').toLowerCase();
+  const cat = document.getElementById('prodCatFilter').value;
+  const status = document.getElementById('prodStatusFilter').value;
+  const u = currentUser();
+  let products = DB.get('products').filter(p => p.ownerId === u.id);
+  if (q) products = products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.barcode||'').toLowerCase().includes(q) || (p.brand||'').toLowerCase().includes(q));
+  if (cat) products = products.filter(p => p.category === cat);
+  if (status) products = products.filter(p => getStockStatus(p) === status);
+  document.getElementById('prodTableBody').innerHTML = renderProductRows(products);
+}
+
+function exportProductsCSV() {
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  if (!products.length) { toast('No products to export','warning'); return; }
+  let csv = 'Name,SKU,Barcode,Category,Brand,Cost Price,Selling Price,Stock,Status\n';
+  products.forEach(p => {
+    csv += `"${p.name}","${p.sku}","${p.barcode}","${p.category}","${p.brand}",${p.costPrice},${p.sellingPrice},${p.stock},"${getStockStatus(p)}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'products_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  toast('Products exported','success');
+}
+
+/* =====================================================================
+   ADD / EDIT PRODUCT
+   ===================================================================== */
+let editingProductId = null;
+
+function renderAddProduct(container) {
+  editingProductId = null;
+  const u = currentUser();
+  const cats = [...new Set(DB.get('products').filter(p => p.ownerId === u.id).map(p => p.category).filter(Boolean))];
+  const brands = [...new Set(DB.get('products').filter(p => p.ownerId === u.id).map(p => p.brand).filter(Boolean))];
+  const suppliers = DB.get('suppliers').filter(s => s.ownerId === u.id);
+
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-plus-circle"></i> Add Product</h2></div>
+    <div class="form-card">
+      <h3><i class="fas fa-box"></i> Product Information</h3>
+      <div class="form-grid">
+        <div class="fg full"><label>Product Image</label>
+          <div class="img-upload-zone" id="prodImgZone">
+            <i class="fas fa-cloud-upload-alt" style="font-size:2rem;color:#ccc"></i>
+            <p style="color:var(--muted);font-size:.88rem">Click or drag to upload product image</p>
+            <img id="prodImgPreview" src="" style="display:none" alt="Preview"/>
+            <input type="file" accept="image/*" onchange="previewProductImage(this)"/>
+          </div>
+        </div>
+        <div class="fg"><label>Product Name *</label><input type="text" id="pName" placeholder="e.g. Samsung Galaxy A54"/></div>
+        <div class="fg"><label>SKU / Product Code *</label><input type="text" id="pSku" placeholder="e.g. SM-A546"/></div>
+        <div class="fg"><label>Category</label>
+          <input type="text" id="pCategory" list="catList" placeholder="Select or type category"/>
+          <datalist id="catList">${cats.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
+        </div>
+        <div class="fg"><label>Brand</label>
+          <input type="text" id="pBrand" list="brandList" placeholder="Select or type brand"/>
+          <datalist id="brandList">${brands.map(b=>`<option value="${escapeHtml(b)}">`).join('')}</datalist>
+        </div>
+        <div class="fg full"><label>Description</label><textarea id="pDesc" placeholder="Product description..." rows="3"></textarea></div>
+      </div>
+    </div>
+    <div class="form-card">
+      <h3><i class="fas fa-tag"></i> Pricing</h3>
+      <div class="form-grid">
+        <div class="fg"><label>Cost Price *</label><input type="number" id="pCostPrice" placeholder="0.00" min="0" step="0.01" oninput="calcSellingPrice()"/></div>
+        <div class="fg"><label>Operating Cost %</label><input type="number" id="pOpCost" placeholder="0" min="0" max="100" step="0.1" value="0" oninput="calcSellingPrice()"/><span class="hint">Overhead as % of cost price</span></div>
+        <div class="fg"><label>Profit %</label><input type="number" id="pProfit" placeholder="0" min="0" max="1000" step="0.1" value="20" oninput="calcSellingPrice()"/><span class="hint">Desired profit margin %</span></div>
+        <div class="fg"><label>Selling Price *</label><input type="number" id="pSellingPrice" placeholder="Auto-calculated" min="0" step="0.01"/><span class="hint">Auto-calculated or override manually</span></div>
+      </div>
+    </div>
+    <div class="form-card">
+      <h3><i class="fas fa-warehouse"></i> Inventory & Supplier</h3>
+      <div class="form-grid">
+        <div class="fg"><label>Stock Quantity *</label><input type="number" id="pStock" placeholder="0" min="0" value="0"/></div>
+        <div class="fg"><label>Minimum Stock Level</label><input type="number" id="pMinStock" placeholder="5" min="0" value="5"/></div>
+        <div class="fg"><label>Supplier</label>
+          <select id="pSupplier"><option value="">-- Select Supplier --</option>${suppliers.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select>
+        </div>
+        <div class="fg"><label>Visibility</label>
+          <select id="pVisibility"><option value="PUBLIC">Public (Visible in Catalogue)</option><option value="PRIVATE">Private (Hidden from Catalogue)</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="form-card">
+      <h3><i class="fas fa-barcode"></i> Barcode</h3>
+      <div class="form-grid">
+        <div class="fg"><label>Barcode</label><input type="text" id="pBarcode" placeholder="Auto-generated" readonly/><span class="hint">Automatically generated unique CODE128 barcode</span></div>
+        <div class="fg"><label>QR Code</label><div style="display:flex;align-items:center;gap:10px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400"><input type="checkbox" id="pQrEnabled" checked/> Generate QR Code</label>
+        </div></div>
+      </div>
+      <div class="barcode-display" id="prodBarcodePreview" style="display:none"><canvas id="prodBarcodeCanvas"></canvas><div class="bc-value" id="prodBarcodeValue"></div></div>
+      <div id="prodQrPreview" style="text-align:center;margin-top:12px"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-form primary" onclick="saveProduct()"><i class="fas fa-save"></i> Save Product</button>
+      <button class="btn-form outline" onclick="generateProductBarcode()"><i class="fas fa-barcode"></i> Generate Barcode</button>
+      <button class="btn-form outline" onclick="navigateTo('products')"><i class="fas fa-times"></i> Cancel</button>
+    </div>
+  `;
+  // Auto-generate barcode after a short delay
+  setTimeout(() => generateProductBarcode(), 100);
+}
+
+function previewProductImage(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = document.getElementById('prodImgPreview');
+      img.src = e.target.result;
+      img.style.display = 'block';
+      img.dataset.raw = e.target.result;
+    };
+    // Compress image
+    const file = input.files[0];
+    if (file.size > 500000) {
+      const canvas = document.createElement('canvas');
+      const img = new Image();
+      img.onload = function() {
+        let w = img.width, h = img.height;
+        const max = 800;
+        if (w > max || h > max) { if (w > h) { h = h * max / w; w = max; } else { w = w * max / h; h = max; } }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const data = canvas.toDataURL('image/jpeg', 0.7);
+        const prev = document.getElementById('prodImgPreview');
+        prev.src = data; prev.style.display = 'block'; prev.dataset.raw = data;
+      };
+      img.src = URL.createObjectURL(file);
+    } else {
+      reader.readAsDataURL(file);
+    }
+  }
+}
+
+function calcSellingPrice() {
+  const cost = parseFloat(document.getElementById('pCostPrice').value) || 0;
+  const opPct = parseFloat(document.getElementById('pOpCost').value) || 0;
+  const profPct = parseFloat(document.getElementById('pProfit').value) || 0;
+  const opCost = cost * (opPct / 100);
+  const profit = cost * (profPct / 100);
+  const selling = cost + opCost + profit;
+  document.getElementById('pSellingPrice').value = selling.toFixed(2);
+}
+
+function generateProductBarcode() {
+  const sku = document.getElementById('pSku').value.trim();
+  let barcode = document.getElementById('pBarcode').value;
+  if (!barcode) {
+    if (sku) {
+      barcode = 'PH' + sku.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10) + Math.random().toString(36).substr(2, 4).toUpperCase();
+    } else {
+      barcode = 'PH' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
+    }
+    // Ensure uniqueness
+    const existing = DB.get('products').map(p => p.barcode);
+    while (existing.includes(barcode)) {
+      barcode = 'PH' + Math.random().toString(36).substr(2, 12).toUpperCase();
+    }
+    document.getElementById('pBarcode').value = barcode;
+  }
+  renderBarcodeToCanvas('prodBarcodeCanvas', barcode);
+  document.getElementById('prodBarcodePreview').style.display = 'block';
+  document.getElementById('prodBarcodeValue').textContent = barcode;
+
+  // QR Code
+  const qrDiv = document.getElementById('prodQrPreview');
+  qrDiv.innerHTML = '';
+  if (document.getElementById('pQrEnabled') && document.getElementById('pQrEnabled').checked) {
+    new QRCode(qrDiv, { text: barcode, width: 100, height: 100, colorDark: '#003366', colorLight: '#ffffff' });
+  }
+}
+
+function saveProduct() {
+  const name = document.getElementById('pName').value.trim();
+  const sku = document.getElementById('pSku').value.trim();
+  const costPrice = parseFloat(document.getElementById('pCostPrice').value) || 0;
+  const sellingPrice = parseFloat(document.getElementById('pSellingPrice').value) || 0;
+  const stock = parseInt(document.getElementById('pStock').value) || 0;
+  const barcode = document.getElementById('pBarcode').value.trim();
+  if (!name) { toast('Product name is required','error'); return; }
+  if (!sku) { toast('SKU/Product Code is required','error'); return; }
+  if (!barcode) { toast('Barcode is required. Click "Generate Barcode"','error'); return; }
+  if (costPrice <= 0) { toast('Cost price must be greater than 0','error'); return; }
+  if (sellingPrice <= 0) { toast('Selling price must be greater than 0','error'); return; }
+
+  const u = currentUser();
+  const imgPreview = document.getElementById('prodImgPreview');
+  const image = imgPreview.style.display !== 'none' ? (imgPreview.dataset.raw || imgPreview.src) : '';
+  const supplierId = document.getElementById('pSupplier').value;
+  const suppliers = DB.get('suppliers').filter(s => s.ownerId === u.id);
+  const supplier = suppliers.find(s => s.id === supplierId);
+
+  const productData = {
+    name, sku, barcode,
+    image,
+    description: document.getElementById('pDesc').value.trim(),
+    category: document.getElementById('pCategory').value.trim(),
+    brand: document.getElementById('pBrand').value.trim(),
+    costPrice, operatingCostPercent: parseFloat(document.getElementById('pOpCost').value) || 0,
+    profitPercent: parseFloat(document.getElementById('pProfit').value) || 0,
+    sellingPrice, stock, minimumStock: parseInt(document.getElementById('pMinStock').value) || 5,
+    supplier: supplier ? supplier.name : '',
+    supplierId: supplierId || '',
+    visibility: document.getElementById('pVisibility').value,
+    status: stock > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+    ownerId: u.id, businessId: u.id, businessName: u.businessName
+  };
+
+  const products = DB.get('products');
+
+  if (editingProductId) {
+    // Update existing
+    const idx = products.findIndex(p => p.id === editingProductId && p.ownerId === u.id);
+    if (idx === -1) { toast('Product not found','error'); return; }
+    productData.id = editingProductId;
+    productData.createdAt = products[idx].createdAt;
+    productData.updatedAt = new Date().toISOString();
+    products[idx] = productData;
+    toast('Product updated successfully','success');
+    editingProductId = null;
+  } else {
+    // Check barcode uniqueness
+    if (products.find(p => p.barcode === barcode)) { toast('Barcode already exists. Generate a new one.','error'); return; }
+    // Check SKU uniqueness for this user
+    if (products.find(p => p.ownerId === u.id && p.sku === sku)) { toast('SKU already exists for your products','error'); return; }
+    productData.id = uid();
+    productData.createdAt = new Date().toISOString();
+    productData.updatedAt = new Date().toISOString();
+    products.push(productData);
+    toast('Product added successfully','success');
+  }
+
+  DB.set('products', products);
+  navigateTo('products');
+}
+
+function editProduct(id) {
+  const u = currentUser();
+  const products = DB.get('products');
+  const p = products.find(pr => pr.id === id && pr.ownerId === u.id);
+  if (!p) { toast('Product not found','error'); return; }
+  editingProductId = id;
+
+  // Navigate to add product page and populate
+  navigateTo('addProduct');
+  setTimeout(() => {
+    document.querySelector('.page-title h2').innerHTML = '<i class="fas fa-pen"></i> Edit Product';
+    document.getElementById('pName').value = p.name || '';
+    document.getElementById('pSku').value = p.sku || '';
+    document.getElementById('pCategory').value = p.category || '';
+    document.getElementById('pBrand').value = p.brand || '';
+    document.getElementById('pDesc').value = p.description || '';
+    document.getElementById('pCostPrice').value = p.costPrice || 0;
+    document.getElementById('pOpCost').value = p.operatingCostPercent || 0;
+    document.getElementById('pProfit').value = p.profitPercent || 0;
+    document.getElementById('pSellingPrice').value = p.sellingPrice || 0;
+    document.getElementById('pStock').value = p.stock || 0;
+    document.getElementById('pMinStock').value = p.minimumStock || 5;
+    document.getElementById('pBarcode').value = p.barcode || '';
+    document.getElementById('pVisibility').value = p.visibility || 'PUBLIC';
+    if (p.supplierId) document.getElementById('pSupplier').value = p.supplierId;
+    if (p.image) {
+      const img = document.getElementById('prodImgPreview');
+      img.src = p.image; img.style.display = 'block'; img.dataset.raw = p.image;
+    }
+    generateProductBarcode();
+  }, 50);
+}
+
+function deleteProduct(id) {
+  if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) return;
+  const u = currentUser();
+  let products = DB.get('products');
+  products = products.filter(p => !(p.id === id && p.ownerId === u.id));
+  DB.set('products', products);
+  toast('Product deleted','success');
+  renderProducts(document.getElementById('dashContent'));
+}
+
+function viewProduct(id) {
+  const u = currentUser();
+  const products = DB.get('products');
+  const p = products.find(pr => pr.id === id);
+  if (!p) { toast('Product not found','error'); return; }
+  const status = getStockStatus(p);
+  const profit = (p.sellingPrice || 0) - (p.costPrice || 0);
+  const profitPct = p.costPrice > 0 ? ((profit / p.costPrice) * 100).toFixed(1) : 0;
+
+  document.getElementById('productDetailBody').innerHTML = `
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <div style="flex:0 0 250px;max-width:100%">
+        ${p.image ? `<img src="${p.image}" style="width:100%;border-radius:10px;cursor:pointer" onclick="showLightbox('${p.image.replace(/'/g,"\\'")}')" alt="${escapeHtml(p.name)}"/>` : '<div style="width:100%;height:250px;background:#f0f0f0;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:3rem"><i class="fas fa-image"></i></div>'}
+      </div>
+      <div style="flex:1;min-width:250px">
+        <h2 style="color:var(--primary);margin-bottom:8px">${escapeHtml(p.name)}</h2>
+        <p style="color:var(--muted);margin-bottom:16px">${escapeHtml(p.description || 'No description')}</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.9rem">
+          <div><strong>SKU:</strong> <code>${escapeHtml(p.sku||'')}</code></div>
+          <div><strong>Category:</strong> ${escapeHtml(p.category||'-')}</div>
+          <div><strong>Brand:</strong> ${escapeHtml(p.brand||'-')}</div>
+          <div><strong>Status:</strong> ${stockBadge(status)}</div>
+          <div><strong>Cost Price:</strong> ${formatCurrency(p.costPrice||0)}</div>
+          <div><strong>Selling Price:</strong> <span style="font-size:1.2rem;font-weight:800;color:var(--primary)">${formatCurrency(p.sellingPrice||0)}</span></div>
+          <div><strong>Profit:</strong> <span style="color:var(--success)">${formatCurrency(profit)}</span> (${profitPct}%)</div>
+          <div><strong>Stock:</strong> ${p.stock} <small style="color:var(--muted)">(Min: ${p.minimumStock||5})</small></div>
+          <div><strong>Supplier:</strong> ${escapeHtml(p.supplier||'-')}</div>
+          <div><strong>Visibility:</strong> ${p.visibility === 'PUBLIC' ? '<span class="badge badge-success">Public</span>' : '<span class="badge badge-muted">Private</span>'}</div>
+          <div><strong>Created:</strong> ${formatDateTime(p.createdAt)}</div>
+          <div><strong>Updated:</strong> ${formatDateTime(p.updatedAt)}</div>
+        </div>
+        <div style="margin-top:16px" class="barcode-display">
+          <canvas id="detailBarcodeCanvas"></canvas>
+          <div class="bc-value">${escapeHtml(p.barcode||'')}</div>
+        </div>
+        <div id="detailQr" style="text-align:center;margin-top:8px"></div>
+      </div>
+    </div>
+  `;
+  showModal('productDetailModal');
+  setTimeout(() => {
+    if (p.barcode) renderBarcodeToCanvas('detailBarcodeCanvas', p.barcode);
+    new QRCode(document.getElementById('detailQr'), { text: p.barcode || p.sku || '', width: 80, height: 80, colorDark: '#003366', colorLight: '#fff' });
+  }, 100);
+}
+
+/* =====================================================================
+   PUBLIC CATALOGUE (Landing + Catalogue Page)
+   ===================================================================== */
+function loadLandingCatalogue() {
+  const allProducts = DB.get('products').filter(p => p.visibility === 'PUBLIC' && p.status !== 'ARCHIVED' && p.status !== 'INACTIVE');
+  const cat = document.getElementById('landingCatFilter');
+  const brand = document.getElementById('landingBrandFilter');
+  // Populate filters
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort();
+  const brands = [...new Set(allProducts.map(p => p.brand).filter(Boolean))].sort();
+  const currentCat = cat.value;
+  const currentBrand = brand.value;
+  cat.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${escapeHtml(c)}" ${c===currentCat?'selected':''}>${escapeHtml(c)}</option>`).join('');
+  brand.innerHTML = '<option value="">All Brands</option>' + brands.map(b => `<option value="${escapeHtml(b)}" ${b===currentBrand?'selected':''}>${escapeHtml(b)}</option>`).join('');
+
+  let filtered = allProducts;
+  const fCat = cat.value;
+  const fBrand = brand.value;
+  const fMin = parseFloat(document.getElementById('landingPriceMin').value) || 0;
+  const fMax = parseFloat(document.getElementById('landingPriceMax').value) || Infinity;
+  if (fCat) filtered = filtered.filter(p => p.category === fCat);
+  if (fBrand) filtered = filtered.filter(p => p.brand === fBrand);
+  filtered = filtered.filter(p => (p.sellingPrice || 0) >= fMin && (p.sellingPrice || 0) <= fMax);
+
+  const grid = document.getElementById('landingGrid');
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-search"></i><p>No products found matching your filters</p></div>';
+    return;
+  }
+  grid.innerHTML = filtered.map(p => {
+    const status = getStockStatus(p);
+    const stockClass = status === 'IN_STOCK' ? 'stock-in' : status === 'LOW_STOCK' ? 'stock-low' : 'stock-out';
+    const stockLabel = status === 'IN_STOCK' ? 'In Stock' : status === 'LOW_STOCK' ? 'Low Stock' : 'Out of Stock';
+    return `<div class="product-card">
+      ${p.image ? `<img src="${p.image}" class="card-img" alt="${escapeHtml(p.name)}" onclick="showLightbox('${p.image.replace(/'/g,"\\'")}')" style="cursor:pointer"/>` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:#ccc;font-size:2.5rem;background:#f0f0f0"><i class="fas fa-image"></i></div>'}
+      <div class="card-body">
+        <div class="card-cat">${escapeHtml(p.category||'General')}</div>
+        <div class="card-name">${escapeHtml(p.name)}</div>
+        <div class="card-desc">${escapeHtml(p.description||'')}</div>
+        <div class="card-bottom">
+          <div class="card-price">${formatCurrency(p.sellingPrice||0)}</div>
+          <span class="card-stock ${stockClass}">${stockLabel}</span>
+        </div>
+        <div class="card-store"><i class="fas fa-store"></i> ${escapeHtml(p.businessName||'Business')}</div>
+        <div class="card-actions">
+          <button class="btn-sm btn-primary-sm" onclick="viewPublicProduct('${p.id}')"><i class="fas fa-eye"></i> Details</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function handleLandingSearch(e) { if (e.key === 'Enter') doLandingSearch(); }
+function doLandingSearch() {
+  const q = document.getElementById('landingSearch').value.trim().toLowerCase();
+  if (!q) { loadLandingCatalogue(); return; }
+  const allProducts = DB.get('products').filter(p => p.visibility === 'PUBLIC' && p.status !== 'ARCHIVED' && p.status !== 'INACTIVE');
+  const filtered = allProducts.filter(p =>
+    (p.name||'').toLowerCase().includes(q) ||
+    (p.barcode||'').toLowerCase().includes(q) ||
+    (p.sku||'').toLowerCase().includes(q) ||
+    (p.category||'').toLowerCase().includes(q) ||
+    (p.brand||'').toLowerCase().includes(q) ||
+    (p.description||'').toLowerCase().includes(q)
+  );
+  const grid = document.getElementById('landingGrid');
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-search"></i><p>No products found for "' + escapeHtml(q) + '"</p></div>';
+    return;
+  }
+  grid.innerHTML = filtered.map(p => {
+    const status = getStockStatus(p);
+    const stockClass = status === 'IN_STOCK' ? 'stock-in' : status === 'LOW_STOCK' ? 'stock-low' : 'stock-out';
+    const stockLabel = status === 'IN_STOCK' ? 'In Stock' : status === 'LOW_STOCK' ? 'Low Stock' : 'Out of Stock';
+    return `<div class="product-card">
+      ${p.image ? `<img src="${p.image}" class="card-img" alt="${escapeHtml(p.name)}"/>` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:#ccc;font-size:2.5rem;background:#f0f0f0"><i class="fas fa-image"></i></div>'}
+      <div class="card-body">
+        <div class="card-cat">${escapeHtml(p.category||'General')}</div>
+        <div class="card-name">${escapeHtml(p.name)}</div>
+        <div class="card-desc">${escapeHtml(p.description||'')}</div>
+        <div class="card-bottom"><div class="card-price">${formatCurrency(p.sellingPrice||0)}</div><span class="card-stock ${stockClass}">${stockLabel}</span></div>
+        <div class="card-store"><i class="fas fa-store"></i> ${escapeHtml(p.businessName||'Business')}</div>
+        <div class="card-actions"><button class="btn-sm btn-primary-sm" onclick="viewPublicProduct('${p.id}')"><i class="fas fa-eye"></i> Details</button></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function viewPublicProduct(id) {
+  const p = DB.get('products').find(pr => pr.id === id);
+  if (!p) { toast('Product not found','error'); return; }
+  const status = getStockStatus(p);
+  document.getElementById('productDetailBody').innerHTML = `
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <div style="flex:0 0 250px;max-width:100%">
+        ${p.image ? `<img src="${p.image}" style="width:100%;border-radius:10px" alt="${escapeHtml(p.name)}"/>` : '<div style="width:100%;height:250px;background:#f0f0f0;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:3rem"><i class="fas fa-image"></i></div>'}
+      </div>
+      <div style="flex:1;min-width:250px">
+        <h2 style="color:var(--primary);margin-bottom:4px">${escapeHtml(p.name)}</h2>
+        <p style="color:var(--muted);font-size:.85rem;margin-bottom:12px">${escapeHtml(p.brand||'')} ${p.category ? '&bull; ' + escapeHtml(p.category) : ''}</p>
+        <p style="margin-bottom:16px;line-height:1.6">${escapeHtml(p.description||'No description available')}</p>
+        <div style="font-size:1.6rem;font-weight:800;color:var(--primary);margin-bottom:12px">${formatCurrency(p.sellingPrice||0)}</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">${stockBadge(status)} <span style="color:var(--muted);font-size:.88rem">${p.stock} units available</span></div>
+        <div style="font-size:.85rem;color:var(--muted)"><i class="fas fa-store"></i> Sold by <strong>${escapeHtml(p.businessName||'Business')}</strong></div>
+        <div style="margin-top:16px;font-size:.82rem;color:var(--muted)"><strong>SKU:</strong> ${escapeHtml(p.sku||'')} &nbsp; <strong>Barcode:</strong> <code>${escapeHtml(p.barcode||'')}</code></div>
+      </div>
+    </div>
+  `;
+  showModal('productDetailModal');
+}
+
+/* =====================================================================
+   CATALOGUE PAGE (inside dashboard)
+   ===================================================================== */
+function renderCatalogue(container) {
+  const u = currentUser();
+  const allPublic = DB.get('products').filter(p => p.visibility === 'PUBLIC' && p.status !== 'ARCHIVED' && p.status !== 'INACTIVE');
+  const cats = [...new Set(allPublic.map(p => p.category).filter(Boolean))].sort();
+  const brands = [...new Set(allPublic.map(p => p.brand).filter(Boolean))].sort();
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-store"></i> Product Catalogue</h2><span style="color:var(--muted);font-size:.88rem">${allPublic.length} public products</span></div>
+    <div class="catalogue-filters">
+      <input class="filter-input" id="catSearch" placeholder="Search..." oninput="filterCatalogue()"/>
+      <select class="filter-select" id="catCatFilter" onchange="filterCatalogue()"><option value="">All Categories</option>${cats.map(c=>`<option>${escapeHtml(c)}</option>`).join('')}</select>
+      <select class="filter-select" id="catBrandFilter" onchange="filterCatalogue()"><option value="">All Brands</option>${brands.map(b=>`<option>${escapeHtml(b)}</option>`).join('')}</select>
+    </div>
+    <div class="catalogue-grid" id="catalogueGrid">${renderCatalogueCards(allPublic)}</div>
+  `;
+}
+function renderCatalogueCards(products) {
+  if (!products.length) return '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-store-slash"></i><p>No public products available</p></div>';
+  return products.map(p => {
+    const status = getStockStatus(p);
+    const sc = status === 'IN_STOCK' ? 'stock-in' : status === 'LOW_STOCK' ? 'stock-low' : 'stock-out';
+    const sl = status === 'IN_STOCK' ? 'In Stock' : status === 'LOW_STOCK' ? 'Low Stock' : 'Out of Stock';
+    return `<div class="product-card">
+      ${p.image ? `<img src="${p.image}" class="card-img" alt="${escapeHtml(p.name)}"/>` : '<div class="card-img" style="display:flex;align-items:center;justify-content:center;color:#ccc;font-size:2.5rem;background:#f0f0f0"><i class="fas fa-image"></i></div>'}
+      <div class="card-body">
+        <div class="card-cat">${escapeHtml(p.category||'General')}</div>
+        <div class="card-name">${escapeHtml(p.name)}</div>
+        <div class="card-desc">${escapeHtml(p.description||'')}</div>
+        <div class="card-bottom"><div class="card-price">${formatCurrency(p.sellingPrice||0)}</div><span class="card-stock ${sc}">${sl}</span></div>
+        <div class="card-store"><i class="fas fa-store"></i> ${escapeHtml(p.businessName||'')}</div>
+        <div class="card-actions"><button class="btn-sm btn-primary-sm" onclick="viewPublicProduct('${p.id}')"><i class="fas fa-eye"></i> Details</button></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function filterCatalogue() {
+  const q = (document.getElementById('catSearch').value||'').toLowerCase();
+  const cat = document.getElementById('catCatFilter').value;
+  const brand = document.getElementById('catBrandFilter').value;
+  let products = DB.get('products').filter(p => p.visibility === 'PUBLIC' && p.status !== 'ARCHIVED' && p.status !== 'INACTIVE');
+  if (q) products = products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.barcode||'').toLowerCase().includes(q));
+  if (cat) products = products.filter(p => p.category === cat);
+  if (brand) products = products.filter(p => p.brand === brand);
+  document.getElementById('catalogueGrid').innerHTML = renderCatalogueCards(products);
+}
+
+/* =====================================================================
+   INVENTORY
+   ===================================================================== */
+function renderInventory(container) {
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  const inStock = products.filter(p => getStockStatus(p) === 'IN_STOCK').length;
+  const lowStock = products.filter(p => getStockStatus(p) === 'LOW_STOCK').length;
+  const outOfStock = products.filter(p => getStockStatus(p) === 'OUT_OF_STOCK').length;
+  const totalUnits = products.reduce((a, p) => a + (p.stock || 0), 0);
+  const totalValue = products.reduce((a, p) => a + ((p.costPrice || 0) * (p.stock || 0)), 0);
+
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-warehouse"></i> Inventory</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn-form success" onclick="navigateTo('stockIn')"><i class="fas fa-arrow-down"></i> Stock In</button>
+        <button class="btn-form accent" onclick="navigateTo('stockOut')"><i class="fas fa-arrow-up"></i> Stock Out</button>
+      </div>
+    </div>
+    <div class="metrics-grid">
+      <div class="metric-card mc-blue"><i class="fas fa-cubes"></i><h3>${totalUnits}</h3><p>Total Units</p></div>
+      <div class="metric-card mc-green"><i class="fas fa-check-circle"></i><h3>${inStock}</h3><p>In Stock</p></div>
+      <div class="metric-card mc-orange"><i class="fas fa-exclamation-circle"></i><h3>${lowStock}</h3><p>Low Stock</p></div>
+      <div class="metric-card mc-red"><i class="fas fa-times-circle"></i><h3>${outOfStock}</h3><p>Out of Stock</p></div>
+    </div>
+    <div class="table-card">
+      <div class="table-header"><h3>Inventory Overview</h3>
+        <div class="th-actions">
+          <input class="table-search" id="invSearch" placeholder="Search..." oninput="filterInvTable()"/>
+          <select class="filter-select" id="invStatusFilter" onchange="filterInvTable()"><option value="">All Status</option><option>IN_STOCK</option><option>LOW_STOCK</option><option>OUT_OF_STOCK</option></select>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Min Level</th><th>Status</th><th>Stock Value</th><th>Actions</th></tr></thead>
+        <tbody id="invTableBody">${renderInvRows(products)}</tbody></table>
+      </div>
+    </div>
+    <div class="form-card mt-2">
+      <h3><i class="fas fa-history"></i> Recent Stock Movements</h3>
+      <div class="table-scroll">
+        <table><thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Qty</th><th>Previous</th><th>New</th><th>Reason</th></tr></thead>
+        <tbody id="stockMovBody">${renderStockMovements()}</tbody></table>
+      </div>
+    </div>
+  `;
+}
+
+function renderInvRows(products) {
+  if (!products.length) return '<tr><td colspan="7" class="empty-state"><i class="fas fa-box-open"></i><p>No products in inventory</p></td></tr>';
+  return products.sort((a,b) => a.stock - b.stock).map(p => {
+    const status = getStockStatus(p);
+    const val = (p.costPrice || 0) * (p.stock || 0);
+    return `<tr data-name="${escapeHtml((p.name||'').toLowerCase())}" data-status="${status}">
+      <td><strong>${escapeHtml(p.name)}</strong></td><td><code>${escapeHtml(p.sku||'')}</code></td>
+      <td><strong>${p.stock}</strong></td><td>${p.minimumStock||5}</td><td>${stockBadge(status)}</td>
+      <td>${formatCurrency(val)}</td>
+      <td><div class="td-actions">
+        <button class="btn-tb-view" title="Quick Stock In" onclick="quickStockIn('${p.id}')"><i class="fas fa-plus"></i></button>
+        <button class="btn-tb-edit" title="Quick Stock Out" onclick="quickStockOut('${p.id}')"><i class="fas fa-minus"></i></button>
+      </div></td></tr>`;
+  }).join('');
+}
+
+function filterInvTable() {
+  const q = (document.getElementById('invSearch').value||'').toLowerCase();
+  const status = document.getElementById('invStatusFilter').value;
+  const u = currentUser();
+  let products = DB.get('products').filter(p => p.ownerId === u.id);
+  if (q) products = products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  if (status) products = products.filter(p => getStockStatus(p) === status);
+  document.getElementById('invTableBody').innerHTML = renderInvRows(products);
+}
+
+function renderStockMovements() {
+  const u = currentUser();
+  const moves = DB.get('stockMovements').filter(m => m.ownerId === u.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 20);
+  if (!moves.length) return '<tr><td colspan="7" class="empty-state"><p>No stock movements yet</p></td></tr>';
+  return moves.map(m => {
+    const typeBadge = m.type === 'STOCK_IN' ? 'badge-success' : m.type === 'STOCK_OUT' ? 'badge-danger' : m.type === 'SALE' ? 'badge-info' : 'badge-warning';
+    return `<tr><td>${formatDateTime(m.createdAt)}</td><td>${escapeHtml(m.productName)}</td><td><span class="badge ${typeBadge}">${m.type}</span></td>
+    <td>${m.type==='STOCK_IN'?'+':'-'}${m.quantity}</td><td>${m.previousStock}</td><td>${m.newStock}</td><td>${escapeHtml(m.reason||'-')}</td></tr>`;
+  }).join('');
+}
+
+/* =====================================================================
+   STOCK IN / STOCK OUT
+   ===================================================================== */
+function renderStockIn(container) {
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-arrow-down"></i> Stock In</h2></div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div class="fg full"><label>Product *</label>
+          <select id="siProduct"><option value="">-- Select Product --</option>${products.map(p=>`<option value="${p.id}">${escapeHtml(p.name)} (Current: ${p.stock})</option>`).join('')}</select>
+        </div>
+        <div class="fg"><label>Quantity to Add *</label><input type="number" id="siQty" placeholder="0" min="1" value="1"/></div>
+        <div class="fg"><label>Reason</label><input type="text" id="siReason" placeholder="e.g. New shipment, Restock"/></div>
+        <div class="fg full"><button class="btn-form success" onclick="doStockIn()"><i class="fas fa-arrow-down"></i> Add Stock</button></div>
+      </div>
+    </div>
+  `;
+}
+
+function doStockIn() {
+  const productId = document.getElementById('siProduct').value;
+  const qty = parseInt(document.getElementById('siQty').value) || 0;
+  const reason = document.getElementById('siReason').value.trim();
+  if (!productId) { toast('Select a product','error'); return; }
+  if (qty <= 0) { toast('Quantity must be greater than 0','error'); return; }
+  const u = currentUser();
+  const products = DB.get('products');
+  const idx = products.findIndex(p => p.id === productId && p.ownerId === u.id);
+  if (idx === -1) { toast('Product not found','error'); return; }
+  const prev = products[idx].stock;
+  products[idx].stock = prev + qty;
+  products[idx].status = products[idx].stock > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK';
+  products[idx].updatedAt = new Date().toISOString();
+  DB.set('products', products);
+  // Record movement
+  const moves = DB.get('stockMovements');
+  moves.push({ id: uid(), productId, productName: products[idx].name, type: 'STOCK_IN', quantity: qty, previousStock: prev, newStock: products[idx].stock, reason, ownerId: u.id, businessId: u.id, createdAt: new Date().toISOString() });
+  DB.set('stockMovements', moves);
+  toast(`Added ${qty} units to "${products[idx].name}"`,'success');
+  renderStockIn(document.getElementById('dashContent'));
+}
+
+function renderStockOut(container) {
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-arrow-up"></i> Stock Out</h2></div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div class="fg full"><label>Product *</label>
+          <select id="soProduct"><option value="">-- Select Product --</option>${products.map(p=>`<option value="${p.id}">${escapeHtml(p.name)} (Current: ${p.stock})</option>`).join('')}</select>
+        </div>
+        <div class="fg"><label>Quantity to Remove *</label><input type="number" id="soQty" placeholder="0" min="1" value="1"/></div>
+        <div class="fg"><label>Reason</label><input type="text" id="soReason" placeholder="e.g. Damaged, Returned"/></div>
+        <div class="fg full"><button class="btn-form accent" onclick="doStockOut()"><i class="fas fa-arrow-up"></i> Remove Stock</button></div>
+      </div>
+    </div>
+  `;
+}
+
+function doStockOut() {
+  const productId = document.getElementById('soProduct').value;
+  const qty = parseInt(document.getElementById('soQty').value) || 0;
+  const reason = document.getElementById('soReason').value.trim();
+  if (!productId) { toast('Select a product','error'); return; }
+  if (qty <= 0) { toast('Quantity must be greater than 0','error'); return; }
+  const u = currentUser();
+  const products = DB.get('products');
+  const idx = products.findIndex(p => p.id === productId && p.ownerId === u.id);
+  if (idx === -1) { toast('Product not found','error'); return; }
+  if (products[idx].stock < qty) { toast(`Insufficient stock. Only ${products[idx].stock} available.`,'error'); return; }
+  const prev = products[idx].stock;
+  products[idx].stock = prev - qty;
+  products[idx].updatedAt = new Date().toISOString();
+  DB.set('products', products);
+  const moves = DB.get('stockMovements');
+  moves.push({ id: uid(), productId, productName: products[idx].name, type: 'STOCK_OUT', quantity: qty, previousStock: prev, newStock: products[idx].stock, reason, ownerId: u.id, businessId: u.id, createdAt: new Date().toISOString() });
+  DB.set('stockMovements', moves);
+  toast(`Removed ${qty} units from "${products[idx].name}"`,'success');
+  renderStockOut(document.getElementById('dashContent'));
+}
+
+function quickStockIn(id) {
+  const u = currentUser();
+  const products = DB.get('products');
+  const idx = products.findIndex(p => p.id === id && p.ownerId === u.id);
+  if (idx === -1) return;
+  const qty = parseInt(prompt(`Add stock to "${products[idx].name}"\nCurrent stock: ${products[idx].stock}\nEnter quantity to add:`)) || 0;
+  if (qty <= 0) return;
+  const prev = products[idx].stock;
+  products[idx].stock = prev + qty;
+  products[idx].updatedAt = new Date().toISOString();
+  DB.set('products', products);
+  const moves = DB.get('stockMovements');
+  moves.push({ id: uid(), productId: id, productName: products[idx].name, type: 'STOCK_IN', quantity: qty, previousStock: prev, newStock: products[idx].stock, reason: 'Quick stock in', ownerId: u.id, businessId: u.id, createdAt: new Date().toISOString() });
+  DB.set('stockMovements', moves);
+  toast(`Added ${qty} units`,'success');
+  renderInventory(document.getElementById('dashContent'));
+}
+
+function quickStockOut(id) {
+  const u = currentUser();
+  const products = DB.get('products');
+  const idx = products.findIndex(p => p.id === id && p.ownerId === u.id);
+  if (idx === -1) return;
+  const qty = parseInt(prompt(`Remove stock from "${products[idx].name}"\nCurrent stock: ${products[idx].stock}\nEnter quantity to remove:`)) || 0;
+  if (qty <= 0) return;
+  if (products[idx].stock < qty) { toast('Insufficient stock','error'); return; }
+  const prev = products[idx].stock;
+  products[idx].stock = prev - qty;
+  products[idx].updatedAt = new Date().toISOString();
+  DB.set('products', products);
+  const moves = DB.get('stockMovements');
+  moves.push({ id: uid(), productId: id, productName: products[idx].name, type: 'STOCK_OUT', quantity: qty, previousStock: prev, newStock: products[idx].stock, reason: 'Quick stock out', ownerId: u.id, businessId: u.id, createdAt: new Date().toISOString() });
+  DB.set('stockMovements', moves);
+  toast(`Removed ${qty} units`,'success');
+  renderInventory(document.getElementById('dashContent'));
+}
+
+/* =====================================================================
+   BARCODE LABELS
+   ===================================================================== */
+function renderBarcodes(container) {
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-barcode"></i> Barcode Labels</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn-form primary" onclick="printAllBarcodes()"><i class="fas fa-print"></i> Print All</button>
+        <button class="btn-form outline" onclick="navigateTo('scanner')"><i class="fas fa-camera"></i> Open Scanner</button>
+      </div>
+    </div>
+    <div id="barcodeLabelsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+      ${products.map(p => `
+        <div class="form-card" style="text-align:center" id="bclabel_${p.id}">
+          <strong style="color:var(--primary);font-size:.9rem">${escapeHtml(p.name)}</strong>
+          <div class="barcode-display" style="margin:8px 0"><canvas id="bcl_${p.id}"></canvas><div class="bc-value">${escapeHtml(p.barcode||'')}</div></div>
+          <div style="font-size:.82rem;color:var(--muted)">${escapeHtml(p.sku||'')} &bull; ${formatCurrency(p.sellingPrice||0)}</div>
+          <div style="margin-top:8px"><button class="btn-sm btn-outline-sm" onclick="printSingleBarcode('${p.id}')"><i class="fas fa-print"></i> Print</button></div>
+        </div>
+      `).join('')}
+      ${!products.length ? '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-barcode"></i><p>No products to generate barcodes</p></div>' : ''}
+    </div>
+  `;
+  // Render all barcodes
+  setTimeout(() => {
+    products.forEach(p => {
+      if (p.barcode) {
+        const canvas = document.getElementById('bcl_' + p.id);
+        if (canvas) renderBarcodeToCanvas(canvas.id, p.barcode);
+      }
+    });
+  }, 50);
+}
+
+function viewBarcode(id) {
+  const p = DB.get('products').find(pr => pr.id === id);
+  if (!p) return;
+  document.getElementById('productDetailBody').innerHTML = `
+    <div style="text-align:center">
+      <h3 style="color:var(--primary);margin-bottom:4px">${escapeHtml(p.name)}</h3>
+      <p style="color:var(--muted);font-size:.88rem;margin-bottom:16px">${escapeHtml(p.sku||'')} &bull; ${formatCurrency(p.sellingPrice||0)}</p>
+      <div class="barcode-display"><canvas id="modalBarcodeCanvas"></canvas><div class="bc-value">${escapeHtml(p.barcode||'')}</div></div>
+      <div id="modalQr" style="margin-top:12px"></div>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center">
+        <button class="btn-form primary" onclick="printSingleBarcode('${p.id}')"><i class="fas fa-print"></i> Print</button>
+        <button class="btn-form outline" onclick="hideModal('productDetailModal')"><i class="fas fa-times"></i> Close</button>
+      </div>
+    </div>
+  `;
+  showModal('productDetailModal');
+  setTimeout(() => {
+    if (p.barcode) renderBarcodeToCanvas('modalBarcodeCanvas', p.barcode);
+    new QRCode(document.getElementById('modalQr'), { text: p.barcode || p.sku || '', width: 100, height: 100, colorDark: '#003366', colorLight: '#fff' });
+  }, 100);
+}
+
+function printSingleBarcode(id) {
+  const el = document.getElementById('bclabel_' + id);
+  if (!el) return;
+  const w = window.open('', '_blank', 'width=400,height=300');
+  w.document.write(`<html><head><title>Barcode Label</title><style>body{display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:monospace}canvas{max-width:100%}</style></head><body>${el.innerHTML}</body></html>`);
+  w.document.close();
+  w.print();
+}
+
+function printAllBarcodes() {
+  const grid = document.getElementById('barcodeLabelsGrid');
+  if (!grid) return;
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>All Barcode Labels</title><style>body{font-family:monospace;padding:20px}.label{text-align:center;border:1px dashed #ccc;padding:15px;margin:10px;display:inline-block;page-break-inside:avoid}canvas{max-width:100%}.bc-value{letter-spacing:3px;margin-top:4px}</style></head><body>${grid.innerHTML}</body></html>`);
+  w.document.close();
+  w.print();
+}
+
+/* =====================================================================
+   BARCODE SCANNER
+   ===================================================================== */
+let scanStream = null;
+let scanInterval = null;
+
+function renderScanner(container) {
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-camera"></i> Barcode Scanner</h2></div>
+    <div class="form-card" style="text-align:center">
+      <video id="scannerVideo" style="width:100%;max-width:500px;border-radius:10px;background:#000" autoplay playsinline></video>
+      <canvas id="scannerCanvas" style="display:none"></canvas>
+      <p id="scannerStatus" style="margin-top:12px;color:var(--muted)">Click "Start Scanner" to begin</p>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn-form primary" id="btnStartScan" onclick="startScanner()"><i class="fas fa-camera"></i> Start Scanner</button>
+        <button class="btn-form danger" id="btnStopScan" onclick="stopScanner()" style="display:none"><i class="fas fa-stop"></i> Stop Scanner</button>
+      </div>
+      <div style="margin-top:20px;max-width:500px;margin-left:auto;margin-right:auto">
+        <div style="display:flex;gap:8px">
+          <input type="text" id="scannerManualInput" placeholder="Or enter barcode manually..." style="flex:1;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem" onkeyup="if(event.key==='Enter')processManualScanBarcode()"/>
+          <button class="btn-form primary" onclick="processManualScanBarcode()"><i class="fas fa-search"></i> Search</button>
+        </div>
+        <div id="scanResult" style="margin-top:16px"></div>
+      </div>
+    </div>
+  `;
+}
+
+function startScanner() {
+  const video = document.getElementById('scannerVideo');
+  const status = document.getElementById('scannerStatus');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    status.textContent = 'Camera not supported in this browser. Use manual entry.';
+    status.style.color = 'var(--secondary)';
+    return;
+  }
+  status.textContent = 'Requesting camera access...';
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } } })
+    .then(stream => {
+      scanStream = stream;
+      video.srcObject = stream;
+      video.play();
+      document.getElementById('btnStartScan').style.display = 'none';
+      document.getElementById('btnStopScan').style.display = 'inline-flex';
+      status.textContent = 'Scanning... Point camera at a barcode';
+      status.style.color = 'var(--success)';
+
+      // Use BarcodeDetector API if available
+      if ('BarcodeDetector' in window) {
+        const detector = new BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'qr_code'] });
+        const canvas = document.getElementById('scannerCanvas');
+        const ctx = canvas.getContext('2d');
+        scanInterval = setInterval(async () => {
+          if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            try {
+              const barcodes = await detector.detect(canvas);
+              if (barcodes.length > 0) {
+                const code = barcodes[0].rawValue;
+                status.textContent = `Found: ${code}`;
+                handleScannedBarcode(code);
+                stopScanner();
+              }
+            } catch(e) {}
+          }
+        }, 500);
+      } else {
+        status.textContent = 'BarcodeDetector API not available. Please use manual entry or try Chrome.';
+        status.style.color = 'var(--warning)';
+      }
+    })
+    .catch(err => {
+      status.textContent = 'Camera access denied. Use manual entry below.';
+      status.style.color = 'var(--secondary)';
+    });
+}
+
+function stopScanner() {
+  if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+  if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+  const video = document.getElementById('scannerVideo');
+  if (video) video.srcObject = null;
+  const btnStart = document.getElementById('btnStartScan');
+  const btnStop = document.getElementById('btnStopScan');
+  if (btnStart) btnStart.style.display = 'inline-flex';
+  if (btnStop) btnStop.style.display = 'none';
+}
+
+function processManualScanBarcode() {
+  const input = document.getElementById('scannerManualInput');
+  if (!input) return;
+  const code = input.value.trim();
+  if (!code) { toast('Enter a barcode value','warning'); return; }
+  handleScannedBarcode(code);
+}
+
+function handleScannedBarcode(code) {
+  const products = DB.get('products');
+  const product = products.find(p => p.barcode === code || p.sku === code);
+  const resultDiv = document.getElementById('scanResult');
+  if (!resultDiv) return;
+  if (product) {
+    const status = getStockStatus(product);
+    resultDiv.innerHTML = `
+      <div style="background:#d3f9d8;border:1px solid #2b8a3e;border-radius:10px;padding:16px;text-align:left">
+        <h4 style="color:#2b8a3e;margin-bottom:8px"><i class="fas fa-check-circle"></i> Product Found</h4>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          ${product.image ? `<img src="${product.image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px"/>` : ''}
+          <div>
+            <strong style="font-size:1.1rem;color:var(--primary)">${escapeHtml(product.name)}</strong><br>
+            <span style="color:var(--muted)">SKU: ${escapeHtml(product.sku||'')} | Barcode: <code>${escapeHtml(product.barcode||'')}</code></span><br>
+            <span style="font-size:1.2rem;font-weight:800;color:var(--primary)">${formatCurrency(product.sellingPrice||0)}</span> &nbsp; ${stockBadge(status)}<br>
+            <span style="color:var(--muted)">Stock: ${product.stock}</span>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button class="btn-sm btn-success-sm" onclick="addToCartFromScan('${product.id}')"><i class="fas fa-cart-plus"></i> Add to POS Cart</button>
+          <button class="btn-sm btn-primary-sm" onclick="viewProduct('${product.id}')"><i class="fas fa-eye"></i> View Details</button>
+        </div>
+      </div>
+    `;
+    toast('Product found: ' + product.name, 'success');
+  } else {
+    resultDiv.innerHTML = `
+      <div style="background:#ffe3e3;border:1px solid #c92a2a;border-radius:10px;padding:16px;text-align:left">
+        <h4 style="color:#c92a2a"><i class="fas fa-times-circle"></i> Product Not Found</h4>
+        <p style="color:var(--muted)">No product matches barcode/SKU: <code>${escapeHtml(code)}</code></p>
+      </div>
+    `;
+    toast('No product found for this barcode', 'error');
+  }
+}
+
+function addToCartFromScan(productId) {
+  const products = DB.get('products');
+  const product = products.find(p => p.id === productId);
+  if (!product) return;
+  let cart = DB.getOne('posCart') || [];
+  const existing = cart.find(c => c.productId === productId);
+  if (existing) {
+    if (existing.quantity >= product.stock) { toast('Cannot add more. Insufficient stock.','warning'); return; }
+    existing.quantity++;
+  } else {
+    if (product.stock <= 0) { toast('Product is out of stock','warning'); return; }
+    cart.push({ productId, name: product.name, price: product.sellingPrice, costPrice: product.costPrice, quantity: 1, image: product.image });
+  }
+  DB.setOne('posCart', cart);
+  toast('Added to POS cart', 'success');
+}
+
+/* =====================================================================
+   POS / SALES SYSTEM
+   ===================================================================== */
+function renderPOS(container) {
+  let cart = DB.getOne('posCart') || [];
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id && p.status !== 'ARCHIVED' && p.status !== 'INACTIVE');
+  const total = cart.reduce((a, c) => a + (c.price * c.quantity), 0);
+  const totalProfit = cart.reduce((a, c) => a + ((c.price - (c.costPrice || 0)) * c.quantity), 0);
+
+  container.innerHTML = `
+    <div class="pos-layout">
+      <div class="pos-products">
+        <div class="pos-scan-bar">
+          <input type="text" id="posSearchInput" placeholder="Search products or scan barcode..." oninput="filterPOSProducts()" onkeyup="if(event.key==='Enter')posBarcodeLookup()"/>
+          <button onclick="posBarcodeLookup()"><i class="fas fa-barcode"></i> Lookup</button>
+          <button onclick="showModal('scanModal');setTimeout(startScanner,300)" style="background:var(--success);color:#fff;border:none;padding:12px 18px;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:600;white-space:nowrap"><i class="fas fa-camera"></i> Scan</button>
+        </div>
+        <div class="pos-product-grid" id="posProductGrid">${renderPOSProducts(products)}</div>
+      </div>
+      <div class="pos-cart">
+        <div class="pos-cart-header">
+          <span><i class="fas fa-shopping-cart"></i> Cart (${cart.reduce((a,c)=>a+c.quantity,0)})</span>
+          <button class="btn-sm btn-danger-sm" onclick="clearCart()" ${!cart.length?'disabled':''}><i class="fas fa-trash"></i> Clear</button>
+        </div>
+        <div class="pos-cart-items" id="posCartItems">
+          ${cart.length ? cart.map((c, i) => `
+            <div class="pos-cart-item">
+              ${c.image ? `<img src="${c.image}" class="pci-img"/>` : '<div class="pci-img" style="display:flex;align-items:center;justify-content:center;background:#f0f0f0;color:#ccc"><i class="fas fa-image"></i></div>'}
+              <div class="pci-info"><div class="pci-name">${escapeHtml(c.name)}</div><div class="pci-price">${formatCurrency(c.price)} each</div></div>
+              <div class="pci-qty">
+                <button onclick="updateCartQty(${i},-1)"><i class="fas fa-minus"></i></button>
+                <span>${c.quantity}</span>
+                <button onclick="updateCartQty(${i},1)"><i class="fas fa-plus"></i></button>
+              </div>
+              <button class="pci-remove" onclick="removeFromCart(${i})"><i class="fas fa-times"></i></button>
+            </div>
+          `).join('') : '<div class="empty-state" style="padding:40px 10px"><i class="fas fa-shopping-cart"></i><p>Cart is empty</p></div>'}
+        </div>
+        <div class="pos-cart-footer">
+          <div class="pos-total">Total: ${formatCurrency(total)}</div>
+          <div class="pos-customer"><input type="text" id="posCustomerName" placeholder="Customer name (optional)"/></div>
+          <button class="pos-btn-complete" onclick="completeSale()" ${!cart.length?'disabled':''}><i class="fas fa-check-circle"></i> Complete Sale - ${formatCurrency(total)}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPOSProducts(products) {
+  if (!products.length) return '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>No products available</p></div>';
+  return products.map(p => {
+    const status = getStockStatus(p);
+    return `<div class="pos-product-card" onclick="addToCart('${p.id}')" title="${escapeHtml(p.name)}">
+      ${p.image ? `<img src="${p.image}" class="ppc-img"/>` : '<div class="ppc-img" style="display:flex;align-items:center;justify-content:center;color:#ccc;font-size:1.5rem"><i class="fas fa-image"></i></div>'}
+      <div class="ppc-name">${escapeHtml(p.name)}</div>
+      <div class="ppc-price">${formatCurrency(p.sellingPrice||0)}</div>
+      <div class="ppc-stock" style="color:${status==='OUT_OF_STOCK'?'var(--secondary)':'var(--muted)'}">${p.stock} in stock</div>
+    </div>`;
+  }).join('');
+}
+
+function filterPOSProducts() {
+  const q = (document.getElementById('posSearchInput').value||'').toLowerCase();
+  const u = currentUser();
+  let products = DB.get('products').filter(p => p.ownerId === u.id && p.status !== 'ARCHIVED' && p.status !== 'INACTIVE');
+  if (q) products = products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.barcode||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  document.getElementById('posProductGrid').innerHTML = renderPOSProducts(products);
+}
+
+function posBarcodeLookup() {
+  const q = (document.getElementById('posSearchInput').value||'').trim();
+  if (!q) return;
+  const u = currentUser();
+  const product = DB.get('products').find(p => (p.ownerId === u.id) && (p.barcode === q || p.sku === q));
+  if (product) {
+    addToCart(product.id);
+    document.getElementById('posSearchInput').value = '';
+    filterPOSProducts();
+  } else {
+    toast('Product not found for this barcode/SKU', 'error');
+  }
+}
+
+function addToCart(productId) {
+  const u = currentUser();
+  const product = DB.get('products').find(p => p.id === productId && p.ownerId === u.id);
+  if (!product) return;
+  let cart = DB.getOne('posCart') || [];
+  const existing = cart.find(c => c.productId === productId);
+  if (existing) {
+    if (existing.quantity >= product.stock) { toast('Cannot add more. Only ' + product.stock + ' in stock.', 'warning'); return; }
+    existing.quantity++;
+  } else {
+    if (product.stock <= 0) { toast('Product is out of stock', 'warning'); return; }
+    cart.push({ productId, name: product.name, price: product.sellingPrice, costPrice: product.costPrice, quantity: 1, image: product.image });
+  }
+  DB.setOne('posCart', cart);
+  renderPOS(document.getElementById('dashContent'));
+}
+
+function updateCartQty(index, delta) {
+  let cart = DB.getOne('posCart') || [];
+  if (!cart[index]) return;
+  const newQty = cart[index].quantity + delta;
+  if (newQty <= 0) { removeFromCart(index); return; }
+  // Check stock
+  const product = DB.get('products').find(p => p.id === cart[index].productId);
+  if (product && newQty > product.stock) { toast('Only ' + product.stock + ' in stock', 'warning'); return; }
+  cart[index].quantity = newQty;
+  DB.setOne('posCart', cart);
+  renderPOS(document.getElementById('dashContent'));
+}
+
+function removeFromCart(index) {
+  let cart = DB.getOne('posCart') || [];
+  cart.splice(index, 1);
+  DB.setOne('posCart', cart);
+  renderPOS(document.getElementById('dashContent'));
+}
+
+function clearCart() {
+  if (!confirm('Clear all items from cart?')) return;
+  DB.setOne('posCart', []);
+  renderPOS(document.getElementById('dashContent'));
+}
+
+function completeSale() {
+  let cart = DB.getOne('posCart') || [];
+  if (!cart.length) { toast('Cart is empty','warning'); return; }
+  const u = currentUser();
+  const customerName = document.getElementById('posCustomerName') ? document.getElementById('posCustomerName').value.trim() : '';
+  const products = DB.get('products');
+  const totalAmount = cart.reduce((a, c) => a + (c.price * c.quantity), 0);
+  const totalProfit = cart.reduce((a, c) => a + ((c.price - (c.costPrice || 0)) * c.quantity), 0);
+  const receiptNumber = 'RCP-' + Date.now().toString(36).toUpperCase();
+
+  // Validate stock for each item
+  for (const item of cart) {
+    const product = products.find(p => p.id === item.productId && p.ownerId === u.id);
+    if (!product) { toast(`Product "${item.name}" not found`,'error'); return; }
+    if (product.stock < item.quantity) { toast(`Insufficient stock for "${item.name}". Only ${product.stock} available.`,'error'); return; }
+  }
+
+  // Reduce stock
+  const moves = DB.get('stockMovements');
+  for (const item of cart) {
+    const idx = products.findIndex(p => p.id === item.productId && p.ownerId === u.id);
+    if (idx === -1) continue;
+    const prev = products[idx].stock;
+    products[idx].stock -= item.quantity;
+    products[idx].updatedAt = new Date().toISOString();
+    moves.push({ id: uid(), productId: item.productId, productName: item.name, type: 'SALE', quantity: item.quantity, previousStock: prev, newStock: products[idx].stock, reason: 'POS Sale ' + receiptNumber, ownerId: u.id, businessId: u.id, createdAt: new Date().toISOString() });
+  }
+  DB.set('products', products);
+  DB.set('stockMovements', moves);
+
+  // Save sale
+  const sales = DB.get('sales');
+  const sale = {
+    id: uid(), items: cart.map(c => ({ productId: c.productId, name: c.name, price: c.price, costPrice: c.costPrice, quantity: c.quantity, subtotal: c.price * c.quantity })),
+    customerName, totalAmount, totalProfit, receiptNumber, ownerId: u.id, businessId: u.id, saleDate: new Date().toISOString()
+  };
+  sales.push(sale);
+  DB.set('sales', sales);
+
+  // Save/update customer
+  if (customerName) {
+    let customers = DB.get('customers');
+    let cust = customers.find(c => c.ownerId === u.id && c.name.toLowerCase() === customerName.toLowerCase());
+    if (cust) {
+      cust.totalPurchases = (cust.totalPurchases || 0) + 1;
+      cust.totalSpent = (cust.totalSpent || 0) + totalAmount;
+      cust.lastPurchase = new Date().toISOString();
+    } else {
+      customers.push({ id: uid(), name: customerName, phone: '', email: '', totalPurchases: 1, totalSpent: totalAmount, lastPurchase: new Date().toISOString(), ownerId: u.id, businessId: u.id, createdAt: new Date().toISOString() });
+    }
+    DB.set('customers', customers);
+  }
+
+  // Clear cart
+  DB.setOne('posCart', []);
+
+  // Show receipt
+  showReceipt(sale);
+
+  toast('Sale completed successfully!', 'success');
+}
+
+function showReceipt(sale) {
+  const u = currentUser();
+  const settings = DB.getOne('settings_' + u.id) || {};
+  const body = document.getElementById('receiptBody');
+  body.innerHTML = `
+    <div class="receipt-preview" id="receiptContent">
+      <div class="rp-header">
+        <strong style="font-size:1.1rem">${escapeHtml(settings.businessName || u.businessName || 'My Store')}</strong><br>
+        ${settings.businessAddress ? escapeHtml(settings.businessAddress) + '<br>' : ''}
+        ${settings.businessPhone ? 'Tel: ' + escapeHtml(settings.businessPhone) + '<br>' : ''}
+        <small>${formatDateTime(sale.saleDate)}</small><br>
+        <small>Receipt: ${escapeHtml(sale.receiptNumber)}</small>
+      </div>
+      ${sale.customerName ? `<div style="text-align:left;margin-bottom:8px"><strong>Customer:</strong> ${escapeHtml(sale.customerName)}</div>` : ''}
+      <div class="rp-items">
+        ${sale.items.map(it => `
+          <div class="rp-item"><span>${escapeHtml(it.name)} x${it.quantity}</span><span>${formatCurrency(it.subtotal)}</span></div>
+        `).join('')}
+      </div>
+      <div class="rp-total">
+        <div class="rp-item" style="margin-bottom:2px"><span>TOTAL</span><span>${formatCurrency(sale.totalAmount)}</span></div>
+      </div>
+      <div style="text-align:center;margin-top:12px;font-size:.75rem;color:var(--muted)">Thank you for your purchase!</div>
+    </div>
+    <div style="text-align:center;margin-top:16px;display:flex;gap:8px;justify-content:center">
+      <button class="btn-form primary" onclick="printReceipt()"><i class="fas fa-print"></i> Print</button>
+      <button class="btn-form outline" onclick="hideModal('receiptModal');renderPOS(document.getElementById('dashContent'))"><i class="fas fa-times"></i> Close</button>
+    </div>
+  `;
+  showModal('receiptModal');
+}
+
+function printReceipt() {
+  const content = document.getElementById('receiptContent');
+  if (!content) return;
+  const w = window.open('', '_blank', 'width=400,height=600');
+  w.document.write(`<html><head><title>Receipt</title><style>body{font-family:'Courier New',monospace;padding:20px;max-width:350px;margin:0 auto;font-size:12px}.rp-header{text-align:center;border-bottom:2px dashed #ccc;padding-bottom:10px;margin-bottom:10px}.rp-items{border-bottom:1px dashed #ccc;padding-bottom:10px;margin-bottom:10px}.rp-item{display:flex;justify-content:space-between;margin-bottom:4px}.rp-total{font-weight:700;font-size:14px;text-align:right}</style></head><body>${content.innerHTML}</body></html>`);
+  w.document.close();
+  w.print();
+}
+
+/* =====================================================================
+   SALES HISTORY
+   ===================================================================== */
+function renderSalesHistory(container) {
+  const u = currentUser();
+  const sales = DB.get('sales').filter(s => s.ownerId === u.id).sort((a, b) => new Date(b.saleDate) - new Date(a.saleDate));
+  const totalRev = sales.reduce((a, s) => a + s.totalAmount, 0);
+  const totalProf = sales.reduce((a, s) => a + s.totalProfit, 0);
+
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-receipt"></i> Sales History</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="color:var(--muted);font-size:.88rem">${sales.length} sales &bull; Revenue: ${formatCurrency(totalRev)} &bull; Profit: ${formatCurrency(totalProf)}</span>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header">
+        <h3>All Sales</h3>
+        <div class="th-actions">
+          <input class="table-search" id="salesSearch" placeholder="Search..." oninput="filterSalesTable()"/>
+          <button class="btn-sm btn-primary-sm" onclick="exportSalesCSV()"><i class="fas fa-download"></i> Export</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table><thead><tr><th>Receipt #</th><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Profit</th><th>Actions</th></tr></thead>
+        <tbody id="salesTableBody">${renderSalesRows(sales)}</tbody></table>
+      </div>
+    </div>
+  `;
+}
+
+function renderSalesRows(sales) {
+  if (!sales.length) return '<tr><td colspan="7" class="empty-state"><i class="fas fa-receipt"></i><p>No sales recorded yet</p></td></tr>';
+  return sales.map(s => `<tr data-search="${escapeHtml(((s.receiptNumber||'')+ ' ' +(s.customerName||'')).toLowerCase())}">
+    <td><code>${escapeHtml(s.receiptNumber||'')}</code></td>
+    <td>${formatDateTime(s.saleDate)}</td>
+    <td>${escapeHtml(s.customerName||'Walk-in')}</td>
+    <td>${s.items.length} item(s)</td>
+    <td><strong>${formatCurrency(s.totalAmount)}</strong></td>
+    <td style="color:var(--success)">${formatCurrency(s.totalProfit)}</td>
+    <td><div class="td-actions">
+      <button class="btn-tb-view" title="View Receipt" onclick='showReceipt(${JSON.stringify(s).replace(/'/g,"&#39;")})'><i class="fas fa-receipt"></i></button>
+    </div></td>
+  </tr>`).join('');
+}
+
+function filterSalesTable() {
+  const q = (document.getElementById('salesSearch').value||'').toLowerCase();
+  const u = currentUser();
+  let sales = DB.get('sales').filter(s => s.ownerId === u.id).sort((a, b) => new Date(b.saleDate) - new Date(a.saleDate));
+  if (q) sales = sales.filter(s => (s.receiptNumber||'').toLowerCase().includes(q) || (s.customerName||'').toLowerCase().includes(q));
+  document.getElementById('salesTableBody').innerHTML = renderSalesRows(sales);
+}
+
+function exportSalesCSV() {
+  const u = currentUser();
+  const sales = DB.get('sales').filter(s => s.ownerId === u.id);
+  if (!sales.length) { toast('No sales to export','warning'); return; }
+  let csv = 'Receipt,Date,Customer,Items,Total,Profit\n';
+  sales.forEach(s => {
+    csv += `"${s.receiptNumber}","${formatDateTime(s.saleDate)}","${s.customerName||'Walk-in'}",${s.items.length},${s.totalAmount},${s.totalProfit}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sales_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  toast('Sales exported','success');
+}
+
+/* =====================================================================
+   CUSTOMERS
+   ===================================================================== */
+function renderCustomers(container) {
+  const u = currentUser();
+  let customers = DB.get('customers').filter(c => c.ownerId === u.id).sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0));
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-users"></i> Customers</h2><span style="color:var(--muted);font-size:.88rem">${customers.length} customers</span></div>
+    <div class="table-card">
+      <div class="table-header"><h3>Customer List</h3>
+        <div class="th-actions"><input class="table-search" id="custSearch" placeholder="Search..." oninput="filterCustTable()"/></div>
+      </div>
+      <div class="table-scroll">
+        <table><thead><tr><th>Name</th><th>Phone</th><th>Purchases</th><th>Total Spent</th><th>Last Purchase</th></tr></thead>
+        <tbody id="custTableBody">${renderCustRows(customers)}</tbody></table>
+      </div>
+    </div>
+  `;
+}
+function renderCustRows(customers) {
+  if (!customers.length) return '<tr><td colspan="5" class="empty-state"><p>No customers yet. Customers are added automatically during sales.</p></td></tr>';
+  return customers.map(c => `<tr data-search="${escapeHtml((c.name||'').toLowerCase())}">
+    <td><strong>${escapeHtml(c.name)}</strong></td><td>${escapeHtml(c.phone||'-')}</td>
+    <td>${c.totalPurchases||0}</td><td><strong>${formatCurrency(c.totalSpent||0)}</strong></td>
+    <td>${formatDateTime(c.lastPurchase)}</td></tr>`).join('');
+}
+function filterCustTable() {
+  const q = (document.getElementById('custSearch').value||'').toLowerCase();
+  const u = currentUser();
+  let customers = DB.get('customers').filter(c => c.ownerId === u.id);
+  if (q) customers = customers.filter(c => (c.name||'').toLowerCase().includes(q) || (c.phone||'').toLowerCase().includes(q));
+  document.getElementById('custTableBody').innerHTML = renderCustRows(customers);
+}
+
+/* =====================================================================
+   SUPPLIERS
+   ===================================================================== */
+function renderSuppliers(container) {
+  const u = currentUser();
+  let suppliers = DB.get('suppliers').filter(s => s.ownerId === u.id);
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-truck"></i> Suppliers</h2><button class="btn-form primary" onclick="showAddSupplierForm()"><i class="fas fa-plus"></i> Add Supplier</button></div>
+    <div id="supplierFormArea"></div>
+    <div class="table-card">
+      <div class="table-header"><h3>${suppliers.length} Suppliers</h3></div>
+      <div class="table-scroll">
+        <table><thead><tr><th>Name</th><th>Contact</th><th>Email</th><th>Address</th><th>Actions</th></tr></thead>
+        <tbody id="suppTableBody">${renderSuppRows(suppliers)}</tbody></table>
+      </div>
+    </div>
+  `;
+}
+function renderSuppRows(suppliers) {
+  if (!suppliers.length) return '<tr><td colspan="5" class="empty-state"><p>No suppliers added yet</p></td></tr>';
+  return suppliers.map(s => `<tr><td><strong>${escapeHtml(s.name)}</strong></td><td>${escapeHtml(s.contact||'-')}</td><td>${escapeHtml(s.email||'-')}</td><td>${escapeHtml(s.address||'-')}</td>
+    <td><div class="td-actions"><button class="btn-tb-edit" onclick="editSupplier('${s.id}')"><i class="fas fa-pen"></i></button><button class="btn-tb-del" onclick="deleteSupplier('${s.id}')"><i class="fas fa-trash"></i></button></div></td></tr>`).join('');
+}
+function showAddSupplierForm() {
+  document.getElementById('supplierFormArea').innerHTML = `
+    <div class="form-card">
+      <h3><i class="fas fa-plus"></i> Add Supplier</h3>
+      <div class="form-grid">
+        <div class="fg"><label>Name *</label><input type="text" id="suppName" placeholder="Supplier name"/></div>
+        <div class="fg"><label>Contact</label><input type="text" id="suppContact" placeholder="Phone number"/></div>
+        <div class="fg"><label>Email</label><input type="email" id="suppEmail" placeholder="Email address"/></div>
+        <div class="fg"><label>Address</label><input type="text" id="suppAddress" placeholder="Physical address"/></div>
+        <div class="fg full"><button class="btn-form primary" onclick="saveSupplier()"><i class="fas fa-save"></i> Save Supplier</button></div>
+      </div>
+    </div>
+  `;
+}
+let editingSupplierId = null;
+function editSupplier(id) {
+  const u = currentUser();
+  const supp = DB.get('suppliers').find(s => s.id === id && s.ownerId === u.id);
+  if (!supp) return;
+  editingSupplierId = id;
+  document.getElementById('supplierFormArea').innerHTML = `
+    <div class="form-card">
+      <h3><i class="fas fa-pen"></i> Edit Supplier</h3>
+      <div class="form-grid">
+        <div class="fg"><label>Name *</label><input type="text" id="suppName" value="${escapeHtml(supp.name)}"/></div>
+        <div class="fg"><label>Contact</label><input type="text" id="suppContact" value="${escapeHtml(supp.contact||'')}"/></div>
+        <div class="fg"><label>Email</label><input type="email" id="suppEmail" value="${escapeHtml(supp.email||'')}"/></div>
+        <div class="fg"><label>Address</label><input type="text" id="suppAddress" value="${escapeHtml(supp.address||'')}"/></div>
+        <div class="fg full"><button class="btn-form primary" onclick="saveSupplier()"><i class="fas fa-save"></i> Update Supplier</button></div>
+      </div>
+    </div>
+  `;
+}
+function saveSupplier() {
+  const name = document.getElementById('suppName').value.trim();
+  if (!name) { toast('Supplier name is required','error'); return; }
+  const u = currentUser();
+  let suppliers = DB.get('suppliers');
+  const data = { name, contact: document.getElementById('suppContact').value.trim(), email: document.getElementById('suppEmail').value.trim(), address: document.getElementById('suppAddress').value.trim(), ownerId: u.id, businessId: u.id };
+  if (editingSupplierId) {
+    const idx = suppliers.findIndex(s => s.id === editingSupplierId && s.ownerId === u.id);
+    if (idx === -1) return;
+    data.id = editingSupplierId;
+    data.createdAt = suppliers[idx].createdAt;
+    suppliers[idx] = data;
+    editingSupplierId = null;
+    toast('Supplier updated','success');
+  } else {
+    data.id = uid();
+    data.createdAt = new Date().toISOString();
+    suppliers.push(data);
+    toast('Supplier added','success');
+  }
+  DB.set('suppliers', suppliers);
+  renderSuppliers(document.getElementById('dashContent'));
+}
+function deleteSupplier(id) {
+  if (!confirm('Delete this supplier?')) return;
+  const u = currentUser();
+  let suppliers = DB.get('suppliers');
+  suppliers = suppliers.filter(s => !(s.id === id && s.ownerId === u.id));
+  DB.set('suppliers', suppliers);
+  toast('Supplier deleted','success');
+  renderSuppliers(document.getElementById('dashContent'));
+}
+
+/* =====================================================================
+   REPORTS
+   ===================================================================== */
+function renderReports(container) {
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  const sales = DB.get('sales').filter(s => s.ownerId === u.id);
+  const totalRev = sales.reduce((a, s) => a + s.totalAmount, 0);
+  const totalProf = sales.reduce((a, s) => a + s.totalProfit, 0);
+  const avgSale = sales.length ? totalRev / sales.length : 0;
+
+  // Best sellers
+  const prodSales = {};
+  sales.forEach(s => s.items.forEach(it => { prodSales[it.name] = (prodSales[it.name] || 0) + it.quantity; }));
+  const bestSellers = Object.entries(prodSales).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  // Category revenue
+  const catRev = {};
+  sales.forEach(s => s.items.forEach(it => { const p = products.find(pr => pr.id === it.productId); const cat = p ? (p.category || 'Other') : 'Other'; catRev[cat] = (catRev[cat] || 0) + it.subtotal; }));
+
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-chart-line"></i> Reports</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn-form primary" onclick="generatePDFReport()"><i class="fas fa-file-pdf"></i> Download PDF</button>
+      </div>
+    </div>
+    <div class="metrics-grid">
+      <div class="metric-card mc-blue"><i class="fas fa-receipt"></i><h3>${sales.length}</h3><p>Total Sales</p></div>
+      <div class="metric-card mc-green"><i class="fas fa-coins"></i><h3>${formatCurrency(totalRev)}</h3><p>Total Revenue</p></div>
+      <div class="metric-card mc-purple"><i class="fas fa-piggy-bank"></i><h3>${formatCurrency(totalProf)}</h3><p>Total Profit</p></div>
+      <div class="metric-card mc-orange"><i class="fas fa-calculator"></i><h3>${formatCurrency(avgSale)}</h3><p>Avg Sale Value</p></div>
+    </div>
+    <div class="charts-grid">
+      <div class="chart-card"><h4>Revenue by Category</h4><div class="chart-wrap"><canvas id="rptCatChart"></canvas></div></div>
+      <div class="chart-card"><h4>Top 10 Best Sellers</h4><div class="chart-wrap"><canvas id="rptBestChart"></canvas></div></div>
+    </div>
+    <div class="form-card mt-2">
+      <h3><i class="fas fa-trophy"></i> Best Selling Products</h3>
+      <table><thead><tr><th>#</th><th>Product</th><th>Qty Sold</th></tr></thead>
+      <tbody>${bestSellers.length ? bestSellers.map((b, i) => `<tr><td>${i+1}</td><td><strong>${escapeHtml(b[0])}</strong></td><td>${b[1]}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-state"><p>No sales data yet</p></td></tr>'}</tbody></table>
+    </div>
+    <div class="form-card mt-2">
+      <h3><i class="fas fa-tags"></i> Revenue by Category</h3>
+      <table><thead><tr><th>Category</th><th>Revenue</th></tr></thead>
+      <tbody>${Object.entries(catRev).length ? Object.entries(catRev).sort((a,b)=>b[1]-a[1]).map(([cat, rev]) => `<tr><td><strong>${escapeHtml(cat)}</strong></td><td>${formatCurrency(rev)}</td></tr>`).join('') : '<tr><td colspan="2" class="empty-state"><p>No data</p></td></tr>'}</tbody></table>
+    </div>
+  `;
+
+  // Charts
+  const catLabels = Object.keys(catRev);
+  const catColors = ['#003366','#e63946','#f4a261','#2b8a3e','#6f42c1','#17a2b8','#e67700','#d6336c'];
+  new Chart(document.getElementById('rptCatChart'), {
+    type: 'pie', data: { labels: catLabels.length ? catLabels : ['No Data'], datasets: [{ data: catLabels.length ? catLabels.map(l => catRev[l]) : [1], backgroundColor: catLabels.length ? catColors.slice(0, catLabels.length) : ['#eee'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+  });
+  new Chart(document.getElementById('rptBestChart'), {
+    type: 'bar', data: { labels: bestSellers.length ? bestSellers.map(b => b[0]) : ['No Data'], datasets: [{ label: 'Qty Sold', data: bestSellers.length ? bestSellers.map(b => b[1]) : [0], backgroundColor: 'rgba(0,51,102,.7)', borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } }
+  });
+}
+
+function generatePDFReport() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const u = currentUser();
+  const products = DB.get('products').filter(p => p.ownerId === u.id);
+  const sales = DB.get('sales').filter(s => s.ownerId === u.id);
+  const totalRev = sales.reduce((a, s) => a + s.totalAmount, 0);
+  const totalProf = sales.reduce((a, s) => a + s.totalProfit, 0);
+
+  doc.setFontSize(18);
+  doc.text('Sales Report', 14, 20);
+  doc.setFontSize(10);
+  doc.text(`${u.businessName || 'My Store'} | Generated: ${new Date().toLocaleString()}`, 14, 28);
+  doc.setFontSize(12);
+  doc.text(`Total Sales: ${sales.length}`, 14, 40);
+  doc.text(`Total Revenue: ${totalRev.toLocaleString()}`, 14, 48);
+  doc.text(`Total Profit: ${totalProf.toLocaleString()}`, 14, 56);
+
+  doc.autoTable({
+    startY: 65, head: [['Receipt #', 'Date', 'Customer', 'Items', 'Total', 'Profit']],
+    body: sales.map(s => [s.receiptNumber, formatDateTime(s.saleDate), s.customerName || 'Walk-in', s.items.length, s.totalAmount, s.totalProfit]),
+    styles: { fontSize: 8 }
+  });
+  doc.save('sales_report_' + new Date().toISOString().slice(0, 10) + '.pdf');
+  toast('PDF report downloaded', 'success');
+}
+
+/* =====================================================================
+   SETTINGS
+   ===================================================================== */
+function renderSettings(container) {
+  const u = currentUser();
+  const s = DB.getOne('settings_' + u.id) || { businessName: u.businessName, businessAddress: '', businessPhone: u.phone || '', businessEmail: u.email, currency: u.currency || 'TZS', taxRate: 0, ownerId: u.id };
+  container.innerHTML = `
+    <div class="page-title"><h2><i class="fas fa-cog"></i> Settings</h2></div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchSettingsTab(this,'tabBusiness')">Business Info</button>
+      <button class="tab-btn" onclick="switchSettingsTab(this,'tabAccount')">Account</button>
+      <button class="tab-btn" onclick="switchSettingsTab(this,'tabData')">Data Management</button>
+    </div>
+    <div class="tab-content active" id="tabBusiness">
+      <div class="form-card">
+        <h3><i class="fas fa-building"></i> Business Information</h3>
+        <div class="form-grid">
+          <div class="fg"><label>Business Name</label><input type="text" id="setBizName" value="${escapeHtml(s.businessName||'')}"/></div>
+          <div class="fg"><label>Phone</label><input type="text" id="setBizPhone" value="${escapeHtml(s.businessPhone||'')}"/></div>
+          <div class="fg"><label>Email</label><input type="email" id="setBizEmail" value="${escapeHtml(s.businessEmail||'')}"/></div>
+          <div class="fg"><label>Currency</label>
+            <select id="setCurrency">${['TZS','KES','USD','EUR','GBP','RWF','UGX','CNY','AED'].map(c=>`<option value="${c}" ${c===s.currency?'selected':''}>${c}</option>`).join('')}</select>
+          </div>
+          <div class="fg full"><label>Address</label><input type="text" id="setBizAddr" value="${escapeHtml(s.businessAddress||'')}"/></div>
+          <div class="fg full"><button class="btn-form primary" onclick="saveSettings()"><i class="fas fa-save"></i> Save Settings</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="tab-content" id="tabAccount">
+      <div class="form-card">
+        <h3><i class="fas fa-user"></i> Account Settings</h3>
+        <div class="form-grid">
+          <div class="fg"><label>Full Name
