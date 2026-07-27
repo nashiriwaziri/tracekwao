@@ -325,6 +325,24 @@ tbody tr{transition:background .15s}tbody tr:hover{background:#f8fafc}tbody tr:l
   .user-business-logo{width:36px;height:36px}
 }
 
+
+/* ===== PRICE CALCULATOR ===== */
+.price-calc-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:9999}
+.price-calc-modal.show{display:flex}
+.price-calc-card{background:#fff;border-radius:20px;padding:30px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.18);position:relative}
+.price-calc-card h2{font-size:1.5rem;font-weight:800;margin-bottom:5px}
+.price-calc-sub{font-size:.85rem;color:#78716c;margin-bottom:24px;line-height:1.5}
+.price-calc-card label{display:block;font-size:.78rem;font-weight:700;color:#78716c;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px}
+.price-calc-card input{width:100%;padding:12px 14px;border:1.5px solid #e7e5e4;border-radius:10px;font-size:15px;background:#fff;color:#1c1917;font-family:inherit}
+.price-calc-card input:focus{outline:none;border-color:#d97706;box-shadow:0 0 0 3px rgba(217,119,6,.1)}
+.price-calc-field{margin-bottom:18px}
+.price-calc-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.price-calc-result{background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border-radius:14px;padding:22px;text-align:center;margin-top:22px}
+.price-calc-result p{font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;opacity:.8;margin-bottom:4px}
+.price-calc-result span{font-size:2rem;font-weight:800}
+.price-calc-result .hint{font-size:.7rem;opacity:.7;margin-top:7px}
+.price-calc-close{position:absolute;right:14px;top:14px;border:0;background:transparent;font-size:20px;cursor:pointer;color:#78716c}
+@media(max-width:520px){.price-calc-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -372,6 +390,34 @@ tbody tr{transition:background .15s}tbody tr:hover{background:#f8fafc}tbody tr:l
 </div>
 </div>
 
+
+<!-- PRICE CALCULATOR MODAL -->
+<div class="price-calc-modal" id="priceCalculatorModal" onclick="if(event.target===this)closePriceCalculator()">
+  <div class="price-calc-card">
+    <button class="price-calc-close" type="button" onclick="closePriceCalculator()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    <h2>Bei za Kiotomatiki</h2>
+    <p class="price-calc-sub">Bei ya kuuza ihesabiwe kwa kuzingatia Bei ya Gharama, Gharama za Uendeshaji, na Asilimia ya Faida.</p>
+    <div class="price-calc-field">
+      <label>Bei ya Gharama (TZS)</label>
+      <input type="number" id="cost" oninput="calc()" placeholder="25000" min="0" step="any">
+    </div>
+    <div class="price-calc-row">
+      <div class="price-calc-field">
+        <label>Gharama za Uendeshaji (%)</label>
+        <input type="number" id="overhead" value="10" oninput="calc()" placeholder="10" min="0" step="any">
+      </div>
+      <div class="price-calc-field">
+        <label>Asilimia ya Faida (%)</label>
+        <input type="number" id="margin" value="20" oninput="calc()" placeholder="20" min="0" step="any">
+      </div>
+    </div>
+    <div class="price-calc-result">
+      <p>Bei Iliyohesabiwa</p>
+      <span id="price">0</span>
+      <div class="hint">TZS</div>
+    </div>
+  </div>
+</div>
 
 <!-- SUPER ADMIN LOGIN / CONTROL PANEL -->
 <div class="super-screen hidden" id="superScreen">
@@ -590,6 +636,7 @@ tbody tr{transition:background .15s}tbody tr:hover{background:#f8fafc}tbody tr:l
 <div class="sb-lbl">Mfumo</div>
 <div class="ni" data-s="notifications" data-r="manager,storekeeper,cashier,seller" onclick="nav('notifications')"><i class="fa-solid fa-bell"></i><span>Arifa</span><span class="bdg" id="nBdg" style="display:none">0</span></div>
 <div class="ni" data-s="profile" data-r="manager,storekeeper,cashier,seller" onclick="nav('profile')"><i class="fa-solid fa-user-gear"></i><span>Profaili</span></div>
+<div class="ni" data-s="priceCalculator" data-r="manager,storekeeper,cashier,seller" onclick="openPriceCalculator()"><i class="fa-solid fa-calculator"></i><span>Calculator ya Bei</span></div>
 <div class="ni" data-s="users" data-r="manager" onclick="nav('users')"><i class="fa-solid fa-user-shield"></i><span>Watumiaji</span></div>
 </nav>
 <div class="sb-foot"><div class="fb-st"><span class="s-dot"></span><span>Local Mode</span></div></div>
@@ -1606,9 +1653,31 @@ function shareProduct(id){var p=superGet('bb_public_products',[]).find(function(
 function sharePublicCatalogue(){var text='BizBook Public Product Catalogue - '+location.href;if(navigator.share)navigator.share({title:'BizBook Product Catalogue',text:text,url:location.href}).catch(function(){});else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank')}
 function initPublicShowcase(){renderPublicShowcase()}
 
+/* ====== AUTOMATIC PRICE CALCULATOR ====== */
+function calc(){
+  var c=parseFloat(document.getElementById('cost')?.value)||0;
+  var o=parseFloat(document.getElementById('overhead')?.value)||0;
+  var m=parseFloat(document.getElementById('margin')?.value)||0;
+  var p=Math.round(c*(1+o/100+m/100));
+  var price=document.getElementById('price');
+  if(price)price.textContent=p.toLocaleString('en-US');
+}
+function openPriceCalculator(){
+  var modal=document.getElementById('priceCalculatorModal');
+  if(!modal)return;
+  modal.classList.add('show');
+  calc();
+}
+function closePriceCalculator(){
+  var modal=document.getElementById('priceCalculatorModal');
+  if(modal)modal.classList.remove('show');
+}
+
 /* ====== SAFE ERROR HANDLING ====== */
 window.addEventListener('error',function(e){console.error('BizBook Error:',e.error||e.message);});
 window.addEventListener('unhandledrejection',function(e){console.error('BizBook Promise Error:',e.reason);});
+
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closePriceCalculator()});
 
 /* ====== INIT ====== */
 applyBrandAssets();
