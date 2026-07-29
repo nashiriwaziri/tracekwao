@@ -1375,7 +1375,7 @@ function showApp(){
   document.getElementById('sidebar').classList.add('vis');
   document.getElementById('topbar').classList.add('vis');
   document.getElementById('mainArea').classList.add('vis');
-  applyRole();updateChip();fillBizSel();updateBusinessBranding();nav('dashboard');renderAll();
+  applyRole();updateChip();fillBizSel();updateBusinessBranding();nav('dashboard');renderSec(section);();
 }
 function backToLanding(){S={user:null,bizId:null,staffId:null,role:'manager',cart:[],fp:'month',charts:{}};showLanding()}
 
@@ -1691,12 +1691,34 @@ async function doStaffLogin(e){
 }
 
 /* ====== ROLE FILTER ====== */
-function applyRole(){
-  var perms=ROLE_PERMS[S.role]||[];
-  document.querySelectorAll('.ni[data-s]').forEach(function(ni){
-    var r=ni.getAttribute('data-r');if(!r){ni.classList.remove('rh');return}
-    ni.classList.toggle('rh',!r.split(',').some(function(x){return perms.indexOf(x)>=0}));
-  });
+
+function applyRole() {
+
+    if (!S || !S.role) return;
+
+    const perms = ROLE_PERMS[S.role] || [];
+
+    document.querySelectorAll(".ni[data-s]").forEach(item => {
+
+        const roles = item.dataset.r;
+
+        // Hakuna restriction
+        if (!roles) {
+            item.classList.remove("rh");
+            return;
+        }
+
+        // Ondoa nafasi zisizo hitajika
+        const allowed = roles
+            .split(",")
+            .map(r => r.trim());
+
+        const canAccess = allowed.some(r => perms.includes(r));
+
+        item.classList.toggle("rh", !canAccess);
+
+    });
+
 }
 
 /* ====== CHIP & BIZ ====== */
@@ -1712,30 +1734,131 @@ function fillBizSel(){
   S.user.businesses.forEach(function(b){var o=document.createElement('option');o.value=b.id;o.textContent=b.name;sel.appendChild(o)});
   sel.value=S.bizId;
 }
-function switchBiz(id){S.bizId=id;updateBusinessBranding();renderAll();nav('dashboard');toast('Umehamia: '+gBiz(id).name)}
+function switchBiz(id){S.bizId=id;updateBusinessBranding();renderSec(section);();nav('dashboard');toast('Umehamia: '+gBiz(id).name)}
 
 /* ====== NAVIGATION ====== */
-function nav(s){
-  var perms=ROLE_PERMS[S.role]||[];
-  if(perms.indexOf(s)<0){toast('Huna ruhusa','w');return}
-  document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});
-  var sec=document.getElementById('sec-'+s);if(sec)sec.classList.add('active');
-  document.querySelectorAll('.ni').forEach(function(ni){ni.classList.toggle('active',ni.getAttribute('data-s')===s)});
-  if(S.bizId)renderSec(s);
-  closeNP();
-  if(window.innerWidth<768){document.getElementById('sidebar').classList.remove('open');document.getElementById('sbBd').classList.remove('show')}
-}
-function togSB(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sbBd').classList.toggle('show')}
-function togNP(){document.getElementById('nPanel').classList.toggle('open')}
-function closeNP(){document.getElementById('nPanel').classList.remove('open')}
-document.addEventListener('click',function(e){if(!e.target.closest('.u-chip'))document.getElementById('uDD').classList.remove('show')});
 
-/* ====== RENDER ALL ====== */
-function renderAll(){
-  if(!S.bizId)return;
-  renderDash();renderFin();renderPOS();renderProducts();renderSales();renderPurchases();renderSuppliers();renderCustomers();renderDebtors();renderExpenses();renderEmployees();renderNotifs();renderProfile();renderUsers();updateNotifBdg();
+function hasPermission(permission) {
+    if (!S || !S.role) return false;
+    return (ROLE_PERMS[S.role] || []).includes(permission);
 }
 
+function nav(section) {
+
+    if (!hasPermission(section)) {
+        toast("Huna ruhusa ya kufungua sehemu hii.", "w");
+        return;
+    }
+
+    // Hide all sections
+    document.querySelectorAll(".section").forEach(sec => {
+        sec.classList.remove("active");
+    });
+
+    // Show selected section
+    const target = document.getElementById(`sec-${section}`);
+    if (target) {
+        target.classList.add("active");
+    }
+
+    // Highlight active menu
+    document.querySelectorAll(".ni").forEach(item => {
+        item.classList.toggle(
+            "active",
+            item.dataset.s === section
+        );
+    });
+
+    // Render selected page
+    if (S?.bizId) {
+        renderSec(section);
+    }
+
+    // Close notifications
+    closeNP();
+
+    // Close sidebar on mobile
+    if (window.innerWidth < 768) {
+
+        document
+            .getElementById("sidebar")
+            ?.classList.remove("open");
+
+        document
+            .getElementById("sbBd")
+            ?.classList.remove("show");
+    }
+
+}
+
+function togSB() {
+
+    document
+        .getElementById("sidebar")
+        ?.classList.toggle("open");
+
+    document
+        .getElementById("sbBd")
+        ?.classList.toggle("show");
+
+}
+
+function togNP() {
+
+    document
+        .getElementById("nPanel")
+        ?.classList.toggle("open");
+
+}
+
+function closeNP() {
+
+    document
+        .getElementById("nPanel")
+        ?.classList.remove("open");
+
+}
+
+// Close user dropdown
+document.addEventListener("click", function (e) {
+
+    if (!e.target.closest(".u-chip")) {
+
+        document
+            .getElementById("uDD")
+            ?.classList.remove("show");
+
+    }
+
+});
+function renderSec(section) {
+
+    const pages = {
+
+        dashboard: renderDash,
+        finance: renderFin,
+        pos: renderPOS,
+        products: renderProducts,
+        sales: renderSales,
+        purchases: renderPurchases,
+        suppliers: renderSuppliers,
+        customers: renderCustomers,
+        debtors: renderDebtors,
+        expenses: renderExpenses,
+        employees: renderEmployees,
+        notifications: renderNotifs,
+        profile: renderProfile,
+        users: renderUsers
+
+    };
+
+    if (pages[section]) {
+        pages[section]();
+    }
+
+    updateNotifBdg();
+
+}
 /* ====== DASHBOARD ====== */
 function renderDash(){
   var d=D(),perms=ROLE_PERMS[S.role],h='';
@@ -2093,7 +2216,7 @@ function saveEmp(){
 function delItem(collection,id){
   openMod('confirm');
   document.getElementById('confirmBtn').onclick=function(){
-    var d=D();d[collection]=d[collection].filter(function(x){return x.id!==id});uD(d);closeMod();renderAll();toast('Imefutwa');
+    var d=D();d[collection]=d[collection].filter(function(x){return x.id!==id});uD(d);closeMod();renderSec(section);();toast('Imefutwa');
   };
 }
 
