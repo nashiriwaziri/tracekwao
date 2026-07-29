@@ -1419,58 +1419,355 @@ function updateRoleUI(){
   if(mc){st.className='rs-status on';st.textContent='Akaunti imewekwa'}else{st.className='rs-status off';st.textContent='Bado haijawekwa'}
 }
 
-/* ====== MANAGER AUTH ====== */
+/* ==========================================================
+   MANAGER AUTH (FIREBASE VERSION)
+   ========================================================== */
+
 function openMgrAuth(){
-  var mc=gMC().find(function(c){return c.bizId===S.bizId});
-  var area=document.getElementById('mgrFormArea');
-  if(mc){
-    area.innerHTML='<form onsubmit="doMgrLogin(event)" style="text-align:left"><div class="fg"><label>Jina la Mtumiaji <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-user"></i><input type="text" class="fi" id="mgrU" required/></div></div><div class="fg"><label>Nenosiri <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrP" required/></div></div><button type="submit" class="btn-auth btn-auth-p"><i class="fa-solid fa-right-to-bracket"></i> Ingia</button></form>';
-  }else{
-    area.innerHTML='<form onsubmit="doMgrSetup(event)" style="text-align:left"><div class="fg"><label>Jina la Mtumiaji <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-user"></i><input type="text" class="fi" id="mgrNU" required placeholder="mfano: admin"/></div></div><div class="fg"><label>Nenosiri <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrNP" required minlength="4"/></div></div><div class="fg"><label>Thibitisha <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrNC" required/></div></div><button type="submit" class="btn-auth btn-auth-p"><i class="fa-solid fa-check"></i> Weka Akaunti</button></form>';
-  }
-  document.getElementById('mgrAuth').classList.add('show');
-}
-function doMgrSetup(e){
-  e.preventDefault();
-  var u=document.getElementById('mgrNU').value.trim(),p=document.getElementById('mgrNP').value,c=document.getElementById('mgrNC').value;
-  if(u.length<3){toast('Jina lazima liwe herufi 3+','w');return}
-  if(p!==c){toast('Nenosiri hazilingani','e');return}
-  if(p.length<4){toast('Nenosiri lazima iwe herufi 4+','w');return}
-  var mc=gMC();mc.push({bizId:S.bizId,userId:S.user.id,username:u,password:p});sMC(mc);
-  toast('Akaunti ya Meneja imewekwa!');updateRoleUI();openMgrAuth();
-}
-function doMgrLogin(e){
-  e.preventDefault();
-  var u=document.getElementById('mgrU').value.trim(),p=document.getElementById('mgrP').value;
-  var cr=gMC().find(function(c){return c.bizId===S.bizId&&c.username===u&&c.password===p});
-  if(!cr){toast('Jina au nenosiri sio sahihi','e');return}
-  S.role='manager';S.staffId=null;document.getElementById('mgrAuth').classList.remove('show');
-  toast('Karibu, Meneja!');showApp();
+
+    // Tumia mfumo mmoja wa Staff Authentication
+    openStaffAuth("manager");
+
 }
 
-/* ====== STAFF AUTH ====== */
+
+/* ==========================================================
+   MANAGER SETUP
+   ========================================================== */
+
+async function doMgrSetup(e){
+
+    e.preventDefault();
+
+    document.getElementById("stErr").classList.remove("show");
+
+    const username = document.getElementById("mgrNU").value.trim();
+    const password = document.getElementById("mgrNP").value;
+    const confirm = document.getElementById("mgrNC").value;
+
+    if(username.length < 3){
+        showSE("Jina lazima liwe na herufi 3 au zaidi.");
+        return;
+    }
+
+    if(password !== confirm){
+        showSE("Nenosiri hazilingani.");
+        return;
+    }
+
+    if(password.length < 6){
+        showSE("Nenosiri lazima liwe na herufi 6 au zaidi.");
+        return;
+    }
+
+    try{
+
+        // Email ya Manager
+        const email = username + "@manager.local";
+
+        const cred = await createUserWithEmailAndPassword(
+            auth,
+            email,
+            password
+        );
+
+        const uid = cred.user.uid;
+
+        await setDoc(
+            doc(db,"users",uid),
+            {
+
+                id:uid,
+
+                name:username,
+
+                username:username,
+
+                email:email,
+
+                role:"manager",
+
+                bizId:S.bizId,
+
+                ownerId:S.user.id,
+
+                status:"active",
+
+                createdAt:new Date().toISOString()
+
+            }
+
+        );
+
+        await signOut(auth);
+
+        toast("Akaunti ya Meneja imeundwa.");
+
+        openMgrAuth();
+
+    }
+
+    catch(err){
+
+        console.error(err);
+
+        showSE(err.message || "Imeshindikana kutengeneza akaunti.");
+
+    }
+
+}
+
+
+/* ==========================================================
+   MANAGER LOGIN
+   ========================================================== */
+
+async function doMgrLogin(e){
+
+    e.preventDefault();
+
+    document.getElementById("stErr").classList.remove("show");
+
+    const username =
+        document.getElementById("mgrU").value.trim();
+
+    const password =
+        document.getElementById("mgrP").value;
+
+    try{
+
+        const email = username + "@manager.local";
+
+        const cred =
+            await signInWithEmailAndPassword(
+                auth,
+                email,
+                password
+            );
+
+        const uid = cred.user.uid;
+
+        const snap =
+            await getDoc(
+                doc(db,"users",uid)
+            );
+
+        if(!snap.exists()){
+
+            await signOut(auth);
+
+            showSE("Akaunti haijapatikana.");
+
+            return;
+
+        }
+
+        const manager = snap.data();
+
+        if(manager.role !== "manager"){
+
+            await signOut(auth);
+
+            showSE("Akaunti si ya Meneja.");
+
+            return;
+
+        }
+
+        if(manager.bizId !== S.bizId){
+
+            await signOut(auth);
+
+            showSE("Meneja si wa biashara hii.");
+
+            return;
+
+        }
+
+        S.role = "manager";
+
+        S.staffId = uid;
+
+        S.user = manager;
+
+        sessionStorage.setItem(
+            "currentUser",
+            JSON.stringify(manager)
+        );
+
+        const modal =
+            document.getElementById("mgrAuth");
+
+        if(modal){
+
+            modal.classList.remove("show");
+
+        }
+
+        toast("Karibu, Meneja!");
+
+        showApp();
+
+        if(typeof updateNavigation==="function"){
+
+            updateNavigation();
+
+        }
+
+        if(typeof renderAll==="function"){
+
+            renderAll();
+
+        }
+
+    }
+
+    catch(err){
+
+        console.error(err);
+
+        showSE("Jina au nenosiri sio sahihi.");
+    }
+
+}
+   /* ====== STAFF AUTH ====== */
+
 function openStaffAuth(role){
-  curStaffRole=role;
-  var badge=document.getElementById('stBadge');
-  var cls={storekeeper:'rb-sk',cashier:'rb-cash',seller:'rb-sell'};
-  var ico={storekeeper:'warehouse',cashier:'cash-register',seller:'store'};
-  badge.className='role-badge '+(cls[role]||'');
-  badge.innerHTML='<i class="fa-solid fa-'+ico[role]+'"></i> '+ROLE_LBL[role];
-  document.getElementById('stTitle').textContent=ROLE_LBL[role]+' — Ingia au Jiunge';
-  document.getElementById('stBiz').textContent=gBiz(S.bizId)?gBiz(S.bizId).name:'';
-  document.getElementById('staffAuth').classList.add('show');
-  stab('login',document.querySelector('.stab'));
-  document.getElementById('stErr').classList.remove('show');
+
+    try{
+
+        if(!role){
+
+            console.error("Role haijatumwa.");
+
+            return;
+
+        }
+
+
+        curStaffRole = String(role).toLowerCase();
+
+
+
+        const badge = document.getElementById("stBadge");
+
+        const title = document.getElementById("stTitle");
+
+        const biz = document.getElementById("stBiz");
+
+        const auth = document.getElementById("staffAuth");
+
+
+
+        if(!badge || !title || !biz || !auth){
+
+            console.error("Staff Auth Modal haipo.");
+
+            return;
+
+        }
+
+
+
+        const cls={
+
+            manager:"rb-manager",
+
+            storekeeper:"rb-sk",
+
+            cashier:"rb-cash",
+
+            seller:"rb-sell"
+
+        };
+
+
+
+        const ico={
+
+            manager:"crown",
+
+            storekeeper:"warehouse",
+
+            cashier:"cash-register",
+
+            seller:"store"
+
+        };
+
+
+
+        badge.className="role-badge "+(cls[curStaffRole]||"");
+
+
+
+        badge.innerHTML=`
+            <i class="fa-solid fa-${ico[curStaffRole]||'user'}"></i>
+            ${ROLE_LBL[curStaffRole]||curStaffRole}
+        `;
+
+
+
+        title.textContent=
+        (ROLE_LBL[curStaffRole]||curStaffRole)
+        +" — Ingia au Jiunge";
+
+
+
+        if(typeof gBiz==="function" && S && S.bizId){
+
+            const b=gBiz(S.bizId);
+
+            biz.textContent=b ? b.name : "";
+
+        }
+
+        else{
+
+            biz.textContent="";
+
+        }
+
+
+
+        auth.classList.add("show");
+
+
+
+        stab(
+            "login",
+            document.querySelector(".stab")
+        );
+
+
+
+        const err=document.getElementById("stErr");
+
+        if(err){
+
+            err.classList.remove("show");
+
+        }
+
+
+
+        console.log(
+            "Staff Auth Open:",
+            curStaffRole
+        );
+
+    }
+
+    catch(err){
+
+        console.error(
+            "openStaffAuth Error:",
+            err
+        );
+
+    }
+
 }
-function stab(t,btn){
-  document.querySelectorAll('.stab').forEach(function(b){b.classList.remove('active')});
-  if(btn)btn.classList.add('active');
-  document.getElementById('stLoginF').classList.toggle('active',t==='login');
-  document.getElementById('stSignupF').classList.toggle('active',t==='signup');
-  document.getElementById('stErr').classList.remove('show');
-}
-function showSE(m){document.getElementById('stErr').classList.add('show');document.getElementById('stErrTxt').textContent=m}
-// ============================================
 // STAFF SIGNUP
 // ============================================
 
@@ -2647,6 +2944,7 @@ function closePriceCalculator(){
   var modal=document.getElementById('priceCalculatorModal');
   if(modal)modal.classList.remove('show');
 }
+
 /* ====== SAFE ERROR HANDLING ====== */
 window.addEventListener('error',function(e){console.error('BizBook Error:',e.error||e.message);});
 window.addEventListener('unhandledrejection',function(e){console.error('BizBook Promise Error:',e.reason);});
