@@ -10,8 +10,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root{--bg:#f0f2f5;--sidebar:#0f172a;--sidebar-hover:#1e293b;--card:#fff;--primary:#059669;--primary-dk:#047857;--primary-lt:#d1fae5;--accent:#d97706;--accent-lt:#fef3c7;--danger:#dc2626;--danger-lt:#fee2e2;--info:#0284c7;--info-lt:#e0f2fe;--text:#1f2937;--muted:#6b7280;--border:#e5e7eb;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow-md:0 4px 6px rgba(0,0,0,.07);--shadow-lg:0 10px 15px rgba(0,0,0,.1);--radius:10px;--radius-lg:16px;--font-ui:'Plus Jakarta Sans',sans-serif;--font-hd:'Space Grotesk',sans-serif;--sw:260px;--th:64px}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* 1. DESIGN TOKENS */
+:root{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji';
+  --primary-color:#2563eb;
+  --primary-dark:#1d4ed8;
+  --success-color:#10b981;
+  --text-dark:#1f2937;
+  --text-light:#64748b;
+  --surface:#ffffff;
+  --surface-soft:#f8fafc;
+  --border:#e5e7eb;
+  --font-sans:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji';
+  --spacing-md:1rem;
+  --radius-sm:8px;
+  --radius-md:14px;
+  --radius-lg:22px;
+  --shadow-sm:0 4px 14px rgba(15,23,42,.08);
+  --shadow-md:0 14px 38px rgba(15,23,42,.14);
+  --transition:220ms ease;
+}
 html{scroll-behavior:smooth}
 body{font-family:var(--font-ui);background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
 a{text-decoration:none;color:inherit}button{cursor:pointer;font-family:inherit}input,select,textarea{font-family:inherit}
@@ -302,26 +320,7 @@ tbody tr{transition:background .15s}tbody tr:hover{background:#f8fafc}tbody tr:l
    Clean, responsive, accessible and component-based
 ============================================================ */
 
-/* 1. DESIGN TOKENS */
-:root{
-  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji';
-  --primary-color:#2563eb;
-  --primary-dark:#1d4ed8;
-  --success-color:#10b981;
-  --text-dark:#1f2937;
-  --text-light:#64748b;
-  --surface:#ffffff;
-  --surface-soft:#f8fafc;
-  --border:#e5e7eb;
-  --font-sans:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji';
-  --spacing-md:1rem;
-  --radius-sm:8px;
-  --radius-md:14px;
-  --radius-lg:22px;
-  --shadow-sm:0 4px 14px rgba(15,23,42,.08);
-  --shadow-md:0 14px 38px rgba(15,23,42,.14);
-  --transition:220ms ease;
-}
+
 
 /* 2. CSS RESET / NORMALIZATION */
 *,*::before,*::after{
@@ -1488,28 +1487,429 @@ function stab(t,btn){
   document.getElementById('stErr').classList.remove('show');
 }
 function showSE(m){document.getElementById('stErr').classList.add('show');document.getElementById('stErrTxt').textContent=m}
-function doStaffSignup(e){
-  e.preventDefault();document.getElementById('stErr').classList.remove('show');
-  var n=document.getElementById('stsN').value.trim(),em=document.getElementById('stsE').value.trim(),p=document.getElementById('stsP').value,c=document.getElementById('stsC').value;
-  if(!n||!em||!p){showSE('Jaza sehemu zote');return}
-  if(p!==c){showSE('Nenosiri hazilingani');return}
-  if(p.length<6){showSE('Nenosiri lazima iwe 6+');return}
-  var staff=gSt();
-  if(staff.find(function(s){return s.email===em&&s.bizId===S.bizId})){showSE('Barua pepe tayari imesajiliwa');return}
-  staff.push({id:gid(),userId:S.user.id,bizId:S.bizId,name:n,email:em,phone:document.getElementById('stsPh').value.trim(),password:p,role:curStaffRole,createdAt:new Date().toISOString()});
-  sSt(staff);toast('Umefanikiwa kajiunge! Sasa ingia.');stab('login',document.querySelector('.stab'));
-  document.getElementById('stSignupF').reset();
-}
-function doStaffLogin(e){
-  e.preventDefault();document.getElementById('stErr').classList.remove('show');
-  var em=document.getElementById('stlE').value.trim(),p=document.getElementById('stlP').value;
-  var st=gSt().find(function(s){return s.email===em&&s.password===p&&s.bizId===S.bizId&&s.role===curStaffRole});
-  if(!st){showSE('Barua pepe, nenosiri, au jukumu sio sahihi');return}
-  S.role=st.role;S.staffId=st.id;document.getElementById('staffAuth').classList.remove('show');
-  toast('Karibu, '+st.name+'!');showApp();
+// ============================================
+// STAFF SIGNUP
+// ============================================
+
+async function doStaffSignup(e){
+
+    e.preventDefault();
+
+    document.getElementById('stErr').classList.remove('show');
+
+
+    const n  = document.getElementById('stsN').value.trim();
+    const em = document.getElementById('stsE').value.trim().toLowerCase();
+    const p  = document.getElementById('stsP').value;
+    const c  = document.getElementById('stsC').value;
+    const ph = document.getElementById('stsPh').value.trim();
+
+
+
+    if(!n || !em || !p){
+
+        showSE("Jaza sehemu zote");
+        return;
+
+    }
+
+
+
+    if(p !== c){
+
+        showSE("Nenosiri hazilingani");
+        return;
+
+    }
+
+
+
+    if(p.length < 6){
+
+        showSE("Nenosiri lazima liwe na herufi 6 au zaidi");
+        return;
+
+    }
+
+
+
+    try{
+
+
+        // CHECK EXISTING STAFF
+
+        const q = query(
+            collection(db,"users"),
+            where("email","==",em),
+            where("bizId","==",S.bizId)
+        );
+
+
+        const exist = await getDocs(q);
+
+
+
+        if(!exist.empty){
+
+            showSE("Barua pepe tayari imesajiliwa");
+            return;
+
+        }
+
+
+
+
+        // CREATE FIREBASE AUTH ACCOUNT
+
+        const cred = await createUserWithEmailAndPassword(
+            auth,
+            em,
+            p
+        );
+
+
+
+        const uid = cred.user.uid;
+
+
+
+
+        // SAVE STAFF DATA
+
+        await setDoc(
+            doc(db,"users",uid),
+            {
+
+                id:uid,
+
+                name:n,
+
+                email:em,
+
+                phone:ph,
+
+                role:curStaffRole.toLowerCase(),
+
+                bizId:S.bizId,
+
+                ownerId:S.user.id,
+
+                status:"active",
+
+                createdAt:new Date().toISOString()
+
+            }
+
+        );
+
+
+
+
+        // LOGOUT STAFF AFTER CREATE
+        // ili owner account isibadilike
+
+        await signOut(auth);
+
+
+
+        toast("Usajili umefanikiwa! Ingia sasa.");
+
+
+
+        stab(
+            'login',
+            document.querySelector('.stab')
+        );
+
+
+
+        document.getElementById('stSignupF').reset();
+
+
+
+    }
+
+
+
+    catch(err){
+
+
+        console.error("STAFF SIGNUP ERROR:",err);
+
+
+        showSE(
+            err.message ||
+            "Usajili umeshindikana"
+        );
+
+
+    }
+
+
 }
 
-/* ====== ROLE FILTER ====== */
+
+
+
+
+
+// ============================================
+// STAFF LOGIN
+// ============================================
+
+
+async function doStaffLogin(e){
+
+    e.preventDefault();
+
+
+    document.getElementById('stErr').classList.remove('show');
+
+
+
+    const email = document
+    .getElementById('stlE')
+    .value
+    .trim()
+    .toLowerCase();
+
+
+
+    const password =
+    document.getElementById('stlP').value;
+
+
+
+
+    try{
+
+
+
+        // FIREBASE LOGIN
+
+        const cred =
+        await signInWithEmailAndPassword(
+            auth,
+            email,
+            password
+        );
+
+
+
+        const uid = cred.user.uid;
+
+
+
+
+        // GET USER PROFILE
+
+        const snap =
+        await getDoc(
+            doc(db,"users",uid)
+        );
+
+
+
+
+
+        if(!snap.exists()){
+
+
+            showSE(
+            "Taarifa za mtumiaji hazipo."
+            );
+
+
+            await signOut(auth);
+
+            return;
+
+
+        }
+
+
+
+
+        const staff = snap.data();
+
+
+
+
+
+        console.log(
+            "STAFF LOGIN:",
+            staff
+        );
+
+
+
+
+
+
+        // CHECK ROLE
+
+        if(
+            String(staff.role).toLowerCase()
+            !==
+            String(curStaffRole).toLowerCase()
+
+        ){
+
+
+            showSE(
+            "Huna ruhusa ya kuingia kama "
+            +
+            ROLE_LBL[curStaffRole]
+            );
+
+
+            await signOut(auth);
+
+            return;
+
+
+        }
+
+
+
+
+
+
+        // CHECK BUSINESS
+
+        if(
+            String(staff.bizId)
+            !==
+            String(S.bizId)
+
+        ){
+
+
+            showSE(
+            "Mtumiaji si wa biashara hii."
+            );
+
+
+            await signOut(auth);
+
+            return;
+
+
+        }
+
+
+
+
+
+        // SAVE SESSION
+
+
+        S.role =
+        staff.role;
+
+
+        S.staffId =
+        uid;
+
+
+
+        S.user =
+        staff;
+
+
+
+
+        sessionStorage.setItem(
+            "currentUser",
+            JSON.stringify(staff)
+        );
+
+
+
+
+
+        // CLOSE LOGIN
+
+
+        document
+        .getElementById("staffAuth")
+        .classList
+        .remove("show");
+
+
+
+
+
+
+        toast(
+        "Karibu "+staff.name+"!"
+        );
+
+
+
+
+
+
+        // OPEN SYSTEM
+
+
+        showApp();
+
+
+
+
+
+        // UPDATE MENU
+
+        if(typeof updateNavigation==="function"){
+
+            updateNavigation();
+
+        }
+
+
+
+
+        // RELOAD DATA
+
+        if(typeof renderAll==="function"){
+
+            renderAll();
+
+        }
+
+
+
+        else if(typeof loadDashboard==="function"){
+
+            loadDashboard();
+
+        }
+
+
+
+
+    }
+
+
+
+    catch(err){
+
+
+        console.error(
+        "STAFF LOGIN ERROR:",
+        err
+        );
+
+
+
+        showSE(
+        "Email au nenosiri si sahihi."
+        );
+
+
+    }
+}/* ====== ROLE FILTER ====== */
 function applyRole(){
   var perms=ROLE_PERMS[S.role]||[];
   document.querySelectorAll('.ni[data-s]').forEach(function(ni){
