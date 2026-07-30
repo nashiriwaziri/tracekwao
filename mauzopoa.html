@@ -937,59 +937,285 @@ tbody tr{transition:background .15s}tbody tr:hover{background:#f8fafc}tbody tr:l
 
 <!-- ==================== MAIN APPLICATION SCRIPT ==================== -->
 <script type="module">
-import{initializeApp}from'firebase/app';
-import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged,updatePassword,sendPasswordResetEmail}from'firebase/auth';
-import{getFirestore,collection,doc,setDoc,getDoc,getDocs,addDoc,updateDoc,deleteDoc,query,where,orderBy,limit,serverTimestamp,writeBatch,onSnapshot,increment,Timestamp}from'firebase/firestore';
 
-/* ====== FIREBASE CONFIG — BADILISHA NA YAKO ====== */
-const firebaseConfig={
-  apiKey:"AIzaSyD-placeholder-REPLACE-ME",
-  authDomain:"your-app.firebaseapp.com",
-  projectId:"your-app-id",
-  storageBucket:"your-app.appspot.com",
-  messagingSenderId:"000000000000",
-  appId:"1:000000000000:web:0000000000000000"
+import {
+    initializeApp
+} from "firebase/app";
+
+import {
+    getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    updatePassword,
+    sendPasswordResetEmail
+} from "firebase/auth";
+
+import {
+    getFirestore,
+    collection,
+    doc,
+    setDoc,
+    getDoc,
+    getDocs,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    query,
+    where,
+    orderBy,
+    limit,
+    serverTimestamp,
+    writeBatch,
+    onSnapshot,
+    increment,
+    Timestamp
+} from "firebase/firestore";
+
+/* =============================================
+   FIREBASE CONFIG
+============================================= */
+
+const firebaseConfig = {
+    apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+    authDomain: "ncrs-aeb43.firebaseapp.com",
+    projectId: "ncrs-aeb43",
+    storageBucket: "ncrs-aeb43.firebasestorage.app",
+    messagingSenderId: "786434442929",
+    appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+    measurementId: "G-ZYB71RY8J5"
 };
 
-const app=initializeApp(firebaseConfig);
-const auth=getAuth(app);
-const db=getFirestore(app);
+/* =============================================
+   INITIALIZE FIREBASE
+============================================= */
 
-/* ====== APP STATE ====== */
-const S={
-  user:null,
-  uid:null,
-  businessId:null,
-  businessData:null,
-  role:'owner',
-  currentSection:'dashboard',
-  cart:[],
-  charts:{},
-  listeners:[],
-  productsCache:[],
-  categoriesCache:[],
-  customersCache:[],
-  suppliersCache:[],
-  staffCache:[],
-  salesCache:[],
-  stockInCache:[],
-  stockOutCache:[],
-  purchasesCache:[],
-  expensesCache:[],
-  paymentsCache:[],
-  quotationsCache:[],
-  notifications:[]
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+/* =============================================
+   DEFAULT DATABASE STRUCTURE
+============================================= */
+
+const DEFAULT_DATA = {
+    products: [],
+    sales: [],
+    purchases: [],
+    suppliers: [],
+    customers: [],
+    expenses: [],
+    employees: [],
+    notifications: []
 };
 
-/* ====== RBAC PERMISSIONS ====== */
-const PERMS={
-  owner:['dashboard','pos','products','categories','customers','sales','quotations','stockIn','stockOut','inventory','suppliers','purchases','payments','expenses','staff','reports','profile'],
-  manager:['dashboard','pos','products','categories','customers','sales','quotations','stockIn','stockOut','inventory','suppliers','purchases','payments','expenses','staff','reports','profile'],
-  storekeeper:['dashboard','stockIn','stockOut','inventory','suppliers','purchases','profile'],
-  seller:['dashboard','products','categories','customers','sales','quotations','profile'],
-  cashier:['dashboard','pos','payments','profile']
+/* =============================================
+   GLOBAL FIREBASE HELPER
+============================================= */
+
+window.__fb = {
+
+    app,
+    auth,
+    db,
+
+    cache: {
+        users: [],
+        staff: [],
+        managers: [],
+        businessData: {},
+        settings: {}
+    },
+
+    superSession: false,
+    ready: false,
+
+    async load() {
+
+        const c = this.cache;
+
+        const [
+            users,
+            staff,
+            managers,
+            businessData,
+            settings
+        ] = await Promise.all([
+            getDocs(collection(db, "users")),
+            getDocs(collection(db, "staff")),
+            getDocs(collection(db, "managers")),
+            getDocs(collection(db, "businessData")),
+            getDocs(collection(db, "systemSettings"))
+        ]);
+
+        c.users = users.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+        }));
+
+        c.staff = staff.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+        }));
+
+        c.managers = managers.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+        }));
+
+        c.businessData = {};
+
+        businessData.docs.forEach(d => {
+            c.businessData[d.id] = d.data();
+        });
+
+        c.settings = {};
+
+        settings.docs.forEach(d => {
+            c.settings[d.id] = d.data();
+        });
+
+        this.ready = true;
+
+        return this;
+    },
+
+    async writeArray(name, arr) {
+
+        const col = collection(db, name);
+
+        const old = await getDocs(col);
+
+        const ids = new Set(
+            arr.map(x => String(x.id))
+        );
+
+        await Promise.all(
+            old.docs
+                .filter(x => !ids.has(x.id))
+                .map(x => deleteDoc(x.ref))
+        );
+
+        await Promise.all(
+            arr.map(x =>
+                setDoc(
+                    doc(db, name, String(x.id)),
+                    x
+                )
+            )
+        );
+    },
+
+    async writeBusiness(id, data) {
+
+        await setDoc(
+            doc(db, "businessData", String(id)),
+            data,
+            { merge: true }
+        );
+
+    },
+
+    async writeSetting(key, value) {
+
+        await setDoc(
+            doc(db, "systemSettings", "global"),
+            {
+                [key]: value,
+                updatedAt: serverTimestamp()
+            },
+            { merge: true }
+        );
+
+    },
+
+    async deleteBusiness(id) {
+
+        delete this.cache.businessData[id];
+
+        await deleteDoc(
+            doc(db, "businessData", String(id))
+        );
+
+    }
+
 };
 
+window.__fbReady = window.__fb.load().catch(err => {
+
+    console.error("Firebase initialization failed:", err);
+
+    window.__fb.error = err;
+
+    throw err;
+
+});
+
+/* =============================================
+   APP STATE
+============================================= */
+
+const S = {
+    user: null,
+    uid: null,
+    businessId: null,
+    businessData: null,
+    role: "owner",
+    currentSection: "dashboard",
+    cart: [],
+    charts: {},
+    listeners: [],
+    productsCache: [],
+    categoriesCache: [],
+    customersCache: [],
+    suppliersCache: [],
+    staffCache: [],
+    salesCache: [],
+    stockInCache: [],
+    stockOutCache: [],
+    purchasesCache: [],
+    expensesCache: [],
+    paymentsCache: [],
+    quotationsCache: [],
+    notifications: []
+};
+
+/* =============================================
+   ROLE PERMISSIONS
+============================================= */
+
+const PERMS = {
+
+    owner: [
+        "dashboard","pos","products","categories","customers",
+        "sales","quotations","stockIn","stockOut","inventory",
+        "suppliers","purchases","payments","expenses",
+        "staff","reports","profile"
+    ],
+
+    manager: [
+        "dashboard","pos","products","categories","customers",
+        "sales","quotations","stockIn","stockOut","inventory",
+        "suppliers","purchases","payments","expenses",
+        "staff","reports","profile"
+    ],
+
+    storekeeper: [
+        "dashboard","stockIn","stockOut",
+        "inventory","suppliers","purchases","profile"
+    ],
+
+    seller: [
+        "dashboard","products","categories",
+        "customers","sales","quotations","profile"
+    ],
+
+    cashier: [
+        "dashboard","pos","payments","profile"
+    ]
+
+};
 /* ====== UTILITY FUNCTIONS ====== */
 const $=id=>document.getElementById(id);
 const fmt=n=>'TZS '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
