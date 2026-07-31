@@ -1432,7 +1432,15 @@ var DEFAULT_DATA = {
 };
 
 function gU() {
-  return window.__fb ? window.__fb.cache.users : [];
+
+    if (!window.__fb) return [];
+
+    if (!window.__fb.cache) return [];
+
+    return Array.isArray(window.__fb.cache.users)
+        ? window.__fb.cache.users
+        : [];
+
 }
 
 function sU(u) {
@@ -1455,21 +1463,63 @@ function gMC() {
   return window.__fb ? window.__fb.cache.managers : [];
 }
 
-function sMC(c) {
-  if (!window.__fb) return;
-  window.__fb.cache.managers = c;
-  window.__fb.writeArray('managers', c).catch(console.error);
+/* ==========================================================
+   MANAGERS CACHE
+========================================================== */
+
+function sMC(managers) {
+
+    if (!window.__fb) {
+        console.warn("Firebase is not initialized.");
+        return;
+    }
+
+    if (!window.__fb.cache) {
+        window.__fb.cache = {};
+    }
+
+    window.__fb.cache.managers = Array.isArray(managers)
+        ? managers
+        : [];
+
+    window.__fb
+        .writeArray("managers", window.__fb.cache.managers)
+        .catch(function (err) {
+            console.error("Failed to save managers:", err);
+        });
+
 }
 
-function gBiz(id) {
-  var u = gU().find(function(x) {
-    return x.businesses && x.businesses.find(function(b) {
-      return b.id === id;
-    });
-  });
-  return u ? u.businesses.find(function(b) { return b.id === id; }) : null;
-}
 
+/* ==========================================================
+   GET BUSINESS BY ID
+========================================================== */
+
+function gBiz(bizId) {
+
+    if (!bizId) return null;
+
+    const users = gU();
+
+    if (!Array.isArray(users)) return null;
+
+    for (const user of users) {
+
+        if (!Array.isArray(user.businesses)) continue;
+
+        const business = user.businesses.find(function (biz) {
+            return biz.id === bizId;
+        });
+
+        if (business) {
+            return business;
+        }
+
+    }
+
+    return null;
+
+}
 function sBiz(id, biz) {
   var users = gU();
   users.forEach(function(u) {
@@ -1637,61 +1687,184 @@ function suBack() {
   document.getElementById('sd2').className = 'sdot';
 }
 
-/* ====== USER SIGNUP ====== */
+/* ==========================================================
+   USER SIGNUP
+========================================================== */
+
 function handleSignup(e) {
-  e.preventDefault();
+    e.preventDefault();
 
-  var bn = document.getElementById('sBizN').value.trim();
-  if (!bn) { showAE('Jina la biashara linahitajika'); return; }
+    hideAE && hideAE();
 
-  var users = gU();
-  var email = document.getElementById('sEmail').value.trim();
+    /* ===== Read Form ===== */
 
-  if (users.find(function(u) { return u.email === email; })) {
-    showAE('Barua pepe tayari imesajiliwa');
-    return;
-  }
+    var fullName = document.getElementById("sName").value.trim();
+    var email = document.getElementById("sEmail").value.trim().toLowerCase();
+    var phone = document.getElementById("sPhone").value.trim();
 
-  var bizId = gid();
-  var user = {
-    id: gid(),
-    name: document.getElementById('sName').value.trim(),
-    email: email,
-    phone: document.getElementById('sPhone').value.trim(),
-    password: document.getElementById('sPass').value,
-    createdAt: new Date().toISOString(),
-    status: 'active',
-    systemRole: 'user',
-    lastSeen: new Date().toISOString(),
-    businesses: [{
-      id: bizId,
-      name: bn,
-      category: document.getElementById('sBizC').value,
-      email: document.getElementById('sBizE').value.trim(),
-      phone: document.getElementById('sBizP').value.trim(),
-      address: document.getElementById('sBizA').value.trim(),
-      logo: ''
-    }]
-  };
+    var password = document.getElementById("sPass").value;
+    var confirmPassword = document.getElementById("sConf").value;
 
-  users.push(user);
-  sU(users);
-  sD(bizId, {
-    products: [],
-    sales: [],
-    purchases: [],
-    suppliers: [],
-    customers: [],
-    expenses: [],
-    employees: [],
-    notifications: []
-  });
+    var bizName = document.getElementById("sBizN").value.trim();
+    var bizCategory = document.getElementById("sBizC").value;
+    var bizEmail = document.getElementById("sBizE").value.trim();
+    var bizPhone = document.getElementById("sBizP").value.trim();
+    var bizAddress = document.getElementById("sBizA").value.trim();
 
-  toast('Akaunti imeundwa!');
-  authTab('login');
-}
+    /* ===== Validation ===== */
 
-/* ====== USER LOGIN ====== */
+    if (!fullName) {
+        showAE("Jina kamili linahitajika.");
+        return;
+    }
+
+    if (!email) {
+        showAE("Barua pepe inahitajika.");
+        return;
+    }
+
+    if (!bizName) {
+        showAE("Jina la biashara linahitajika.");
+        return;
+    }
+
+    if (password.length < 6) {
+        showAE("Nenosiri lazima liwe na herufi angalau 6.");
+        return;
+    }
+
+    if (password !== confirmPassword) {
+        showAE("Nenosiri halifanani.");
+        return;
+    }
+
+    /* ===== Existing Users ===== */
+
+    var users = gU();
+
+    if (!Array.isArray(users)) {
+        users = [];
+    }
+
+    var exists = users.find(function (u) {
+        return (
+            u.email &&
+            u.email.toLowerCase() === email
+        );
+    });
+
+    if (exists) {
+        showAE("Barua pepe tayari imesajiliwa.");
+        return;
+    }
+
+    /* ===== Create IDs ===== */
+
+    var bizId = gid();
+
+    /* ===== Create User ===== */
+
+    var user = {
+
+        id: gid(),
+
+        name: fullName,
+
+        email: email,
+
+        phone: phone,
+
+        password: password,
+
+        createdAt: new Date().toISOString(),
+
+        lastSeen: new Date().toISOString(),
+
+        status: "active",
+
+        systemRole: "user",
+
+        businesses: [
+
+            {
+
+                id: bizId,
+
+                name: bizName,
+
+                category: bizCategory,
+
+                email: bizEmail,
+
+                phone: bizPhone,
+
+                address: bizAddress,
+
+                logo: ""
+
+            }
+
+        ]
+
+    };
+
+    /* ===== Save User ===== */
+
+    users.push(user);
+
+    try {
+
+        sU(users);
+
+    } catch (err) {
+
+        console.error(err);
+
+        showAE("Imeshindikana kuhifadhi mtumiaji.");
+
+        return;
+
+    }
+
+    /* ===== Create Business Database ===== */
+
+    try {
+
+        sD(bizId, {
+
+            products: [],
+
+            sales: [],
+
+            purchases: [],
+
+            suppliers: [],
+
+            customers: [],
+
+            expenses: [],
+
+            employees: [],
+
+            notifications: []
+
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+    }
+
+    /* ===== Success ===== */
+
+    toast("Akaunti imeundwa kikamilifu.");
+
+    document.getElementById("signupForm").reset();
+
+    authTab("login");
+
+}/* ====== USER LOGIN ====== */
 function handleLogin(e) {
   e.preventDefault();
   document.getElementById('authErr').classList.remove('show');
