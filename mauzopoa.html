@@ -4013,202 +4013,117 @@ tbody tr:last-child td {
     </form>
   </div>
 </div>
+
 <script type="module">
-
-/* =====================================================
-   FIREBASE FIRESTORE + BIZBOOK DATABASE CORE
-   ===================================================== */
-
+/* =============================================
+   ===== FIREBASE FIRESTORE CLOUD DATABASE =====
+   ============================================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-
 import {
-    getFirestore,
-    collection,
-    getDocs,
-    doc,
-    setDoc,
-    deleteDoc,
-    serverTimestamp
+  getFirestore,
+  collection,
+  getDocs,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-    authDomain: "ncrs-aeb43.firebaseapp.com",
-    projectId: "ncrs-aeb43",
-    storageBucket: "ncrs-aeb43.firebasestorage.app",
-    messagingSenderId: "786434442929",
-    appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-    measurementId: "G-ZYB71RY8J5"
+  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+  authDomain: "ncrs-aeb43.firebaseapp.com",
+  projectId: "ncrs-aeb43",
+  storageBucket: "ncrs-aeb43.firebasestorage.app",
+  messagingSenderId: "786434442929",
+  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+  measurementId: "G-ZYB71RY8J5"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-/* =====================================================
-   FIREBASE CLOUD CACHE
-   ===================================================== */
+const DEFAULT_DATA = {
+  products: [],
+  sales: [],
+  purchases: [],
+  suppliers: [],
+  customers: [],
+  expenses: [],
+  employees: [],
+  notifications: []
+};
 
 window.__fb = {
-    app,
-    db,
-    cache: {
-        users: [],
-        staff: [],
-        managers: [],
-        businessData: {},
-        settings: {}
-    },
-    ready: false,
+  app,
+  db,
+  cache: { users: [], staff: [], managers: [], businessData: {}, settings: {} },
+  superSession: false,
+  ready: false,
 
-    async load() {
-        const c = this.cache;
+  async load() {
+    const c = this.cache;
+    const [users, staff, managers, businessData, settings] = await Promise.all([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'staff')),
+      getDocs(collection(db, 'managers')),
+      getDocs(collection(db, 'businessData')),
+      getDocs(collection(db, 'systemSettings'))
+    ]);
 
-        const [users, staff, managers, businessData, settings] = await Promise.all([
-            getDocs(collection(db, "users")),
-            getDocs(collection(db, "staff")),
-            getDocs(collection(db, "managers")),
-            getDocs(collection(db, "businessData")),
-            getDocs(collection(db, "systemSettings"))
-        ]);
+    c.users = users.docs.map(x => ({ id: x.id, ...x.data() }));
+    c.staff = staff.docs.map(x => ({ id: x.id, ...x.data() }));
+    c.managers = managers.docs.map(x => ({ id: x.id, ...x.data() }));
+    c.businessData = {};
+    businessData.docs.forEach(x => c.businessData[x.id] = x.data());
+    c.settings = {};
+    settings.docs.forEach(x => c.settings[x.id] = x.data());
 
-        c.users = users.docs.map(x => ({ id: x.id, ...x.data() }));
-        c.staff = staff.docs.map(x => ({ id: x.id, ...x.data() }));
-        c.managers = managers.docs.map(x => ({ id: x.id, ...x.data() }));
+    this.ready = true;
+    return this;
+  },
 
-        c.businessData = {};
-        businessData.docs.forEach(x => { c.businessData[x.id] = x.data(); });
+  async writeArray(name, arr) {
+    const col = collection(db, name);
+    const old = await getDocs(col);
+    const ids = new Set(arr.map(x => String(x.id)));
 
-        c.settings = {};
-        settings.docs.forEach(x => { c.settings[x.id] = x.data(); });
+    await Promise.all(
+      old.docs
+        .filter(x => !ids.has(x.id))
+        .map(x => deleteDoc(x.ref))
+    );
+    await Promise.all(
+      arr.map(x => setDoc(doc(db, name, String(x.id)), x))
+    );
+  },
 
-        this.ready = true;
-        console.log("🔥 Firebase Ready", this.cache);
+  async writeBusiness(id, data) {
+    await setDoc(doc(db, 'businessData', String(id)), data, { merge: true });
+  },
 
-        return this;
-    },
+  async writeSetting(key, value) {
+    await setDoc(
+      doc(db, 'systemSettings', 'global'),
+      { [key]: value, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  },
 
-    async writeArray(name, data) {
-        const old = await getDocs(collection(db, name));
-        const ids = new Set(data.map(x => String(x.id)));
-
-        for (const item of old.docs) {
-            if (!ids.has(item.id)) {
-                await deleteDoc(item.ref);
-            }
-        }
-
-        for (const item of data) {
-            await setDoc(doc(db, name, String(item.id)), item);
-        }
-    },
-
-    async writeBusiness(id, data) {
-        await setDoc(doc(db, "businessData", String(id)), data, { merge: true });
-    },
-
-    async writeSetting(key, value) {
-        await setDoc(
-            doc(db, "systemSettings", "global"),
-            { [key]: value, updatedAt: serverTimestamp() },
-            { merge: true }
-        );
-    },
-
-    async deleteBusiness(id) {
-        delete this.cache.businessData[id];
-        await deleteDoc(doc(db, "businessData", String(id)));
-    }
+  async deleteBusiness(id) {
+    delete this.cache.businessData[id];
+    await deleteDoc(doc(db, 'businessData', String(id)));
+  }
 };
-
-/* =====================================================
-   LOCAL STORAGE BRIDGE
-   USER + SUPER ADMIN SESSION
-   ===================================================== */
-
-const DB = {
-    _get(key) {
-        try {
-            return JSON.parse(localStorage.getItem("bizbook_" + key)) || [];
-        } catch (e) {
-            return [];
-        }
-    },
-
-    _set(key, value) {
-        localStorage.setItem("bizbook_" + key, JSON.stringify(value));
-    },
-
-    _getOne(key) {
-        try {
-            return JSON.parse(localStorage.getItem("bizbook_" + key));
-        } catch (e) {
-            return null;
-        }
-    },
-
-    _setOne(key, value) {
-        localStorage.setItem("bizbook_" + key, JSON.stringify(value));
-    },
-
-    getUsers() {
-        return this._get("users");
-    },
-
-    saveUsers(users) {
-        this._set("users", users);
-    },
-
-    addUser(user) {
-        let users = this.getUsers();
-        users.push(user);
-        this.saveUsers(users);
-        return user;
-    },
-
-    findUser(email, password) {
-        return this.getUsers().find(u => u.email === email && u.password === password);
-    },
-
-    findUserByEmail(email) {
-        return this.getUsers().find(u => u.email === email);
-    },
-
-    getSession() {
-        return this._getOne("session");
-    },
-
-    setSession(data) {
-        this._setOne("session", data);
-    },
-
-    clearSession() {
-        localStorage.removeItem("bizbook_session");
-    },
-
-    getSuperSession() {
-        return this._getOne("super_session");
-    },
-
-    setSuperSession(data) {
-        this._setOne("super_session", data);
-    },
-
-    clearSuperSession() {
-        localStorage.removeItem("bizbook_super_session");
-    }
-};
-
-window.DB = DB;
-
-/* START FIREBASE */
 
 window.__fbReady = window.__fb.load().catch(err => {
-    console.error("Firebase Error:", err);
-    window.__fb.error = err;
+  console.error('Firebase initialization failed:', err);
+  window.__fb.error = err;
+  throw err;
 });
-
 </script>
-/* =====================================================
+
+<script>
+   /* =====================================================
    GENERAL UTILITIES
    ===================================================== */
 
