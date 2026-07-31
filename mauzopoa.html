@@ -4013,154 +4013,658 @@ tbody tr:last-child td {
     </form>
   </div>
 </div>
-
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+/* =====================================================
+   FIREBASE FIRESTORE + BIZBOOK DATABASE CORE
+   ===================================================== */
+
+import { initializeApp } 
+from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
 import {
-  getFirestore, collection, getDocs, doc, setDoc, deleteDoc, getDoc, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    getFirestore,
+    collection,
+    getDocs,
+    doc,
+    setDoc,
+    deleteDoc,
+    serverTimestamp
+}
+from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-  authDomain: "ncrs-aeb43.firebaseapp.com",
-  projectId: "ncrs-aeb43",
-  storageBucket: "ncrs-aeb43.firebasestorage.app",
-  messagingSenderId: "786434442929",
-  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-  measurementId: "G-ZYB71RY8J5"
+
+    apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+    authDomain: "ncrs-aeb43.firebaseapp.com",
+    projectId: "ncrs-aeb43",
+    storageBucket: "ncrs-aeb43.firebasestorage.app",
+    messagingSenderId: "786434442929",
+    appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+    measurementId: "G-ZYB71RY8J5"
+
 };
+
+
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+
+
+/* =====================================================
+   FIREBASE CLOUD CACHE
+   ===================================================== */
+
+
 window.__fb = {
-  app, db,
-  cache: { users: [], staff: [], managers: [], businessData: {}, settings: {} },
-  superSession: false,
-  ready: false,
 
-  async load() {
-    const c = this.cache;
-    const [users, staff, managers, businessData, settings] = await Promise.all([
-      getDocs(collection(db, 'users')),
-      getDocs(collection(db, 'staff')),
-      getDocs(collection(db, 'managers')),
-      getDocs(collection(db, 'businessData')),
-      getDocs(collection(db, 'systemSettings'))
-    ]);
-    c.users = users.docs.map(x => ({ id: x.id, ...x.data() }));
-    c.staff = staff.docs.map(x => ({ id: x.id, ...x.data() }));
-    c.managers = managers.docs.map(x => ({ id: x.id, ...x.data() }));
-    c.businessData = {};
-    businessData.docs.forEach(x => c.businessData[x.id] = x.data());
-    c.settings = {};
-    settings.docs.forEach(x => c.settings[x.id] = x.data());
-    this.ready = true;
-    return this;
-  },
+    app,
+    db,
 
-  async writeArray(name, arr) {
-    const col = collection(db, name);
-    const old = await getDocs(col);
-    const ids = new Set(arr.map(x => String(x.id)));
-    await Promise.all(old.docs.filter(x => !ids.has(x.id)).map(x => deleteDoc(x.ref)));
-    await Promise.all(arr.map(x => setDoc(doc(db, name, String(x.id)), x)));
-  },
+    cache:{
+        users:[],
+        staff:[],
+        managers:[],
+        businessData:{},
+        settings:{}
+    },
 
-  async writeBusiness(id, data) {
-    await setDoc(doc(db, 'businessData', String(id)), data, { merge: true });
-  },
 
-  async writeSetting(key, value) {
-    await setDoc(doc(db, 'systemSettings', 'global'), { [key]: value, updatedAt: serverTimestamp() }, { merge: true });
-  },
+    ready:false,
 
-  async deleteBusiness(id) {
-    delete this.cache.businessData[id];
-    await deleteDoc(doc(db, 'businessData', String(id)));
-  }
+
+
+    async load(){
+
+
+        const c=this.cache;
+
+
+        const [
+            users,
+            staff,
+            managers,
+            businessData,
+            settings
+
+        ] = await Promise.all([
+
+
+            getDocs(collection(db,"users")),
+            getDocs(collection(db,"staff")),
+            getDocs(collection(db,"managers")),
+            getDocs(collection(db,"businessData")),
+            getDocs(collection(db,"systemSettings"))
+
+        ]);
+
+
+
+        c.users =
+        users.docs.map(x=>({
+            id:x.id,
+            ...x.data()
+        }));
+
+
+        c.staff =
+        staff.docs.map(x=>({
+            id:x.id,
+            ...x.data()
+        }));
+
+
+        c.managers =
+        managers.docs.map(x=>({
+            id:x.id,
+            ...x.data()
+        }));
+
+
+
+        c.businessData={};
+
+        businessData.docs.forEach(x=>{
+            c.businessData[x.id]=x.data();
+        });
+
+
+
+        c.settings={};
+
+        settings.docs.forEach(x=>{
+            c.settings[x.id]=x.data();
+        });
+
+
+
+        this.ready=true;
+
+
+        console.log(
+            "🔥 Firebase Ready",
+            this.cache
+        );
+
+
+        return this;
+
+    },
+
+
+
+
+    async writeArray(name,data){
+
+
+        const old =
+        await getDocs(collection(db,name));
+
+
+        const ids =
+        new Set(
+            data.map(x=>String(x.id))
+        );
+
+
+
+        for(const item of old.docs){
+
+            if(!ids.has(item.id)){
+                await deleteDoc(item.ref);
+            }
+
+        }
+
+
+
+        for(const item of data){
+
+            await setDoc(
+                doc(db,name,String(item.id)),
+                item
+            );
+
+        }
+
+    },
+
+
+
+
+    async writeBusiness(id,data){
+
+        await setDoc(
+
+            doc(
+                db,
+                "businessData",
+                String(id)
+            ),
+
+            data,
+
+            {
+                merge:true
+            }
+
+        );
+
+    },
+
+
+
+
+    async writeSetting(key,value){
+
+        await setDoc(
+
+            doc(
+                db,
+                "systemSettings",
+                "global"
+            ),
+
+            {
+
+                [key]:value,
+                updatedAt:serverTimestamp()
+
+            },
+
+            {
+                merge:true
+            }
+
+        );
+
+    },
+
+
+
+
+    async deleteBusiness(id){
+
+        delete this.cache.businessData[id];
+
+
+        await deleteDoc(
+
+            doc(
+                db,
+                "businessData",
+                String(id)
+            )
+
+        );
+
+    }
+
+
 };
 
-window.__fbReady = window.__fb.load().catch(err => {
-  console.error('Firebase initialization failed:', err);
-  window.__fb.error = err;
-  throw err;
+
+
+
+/* =====================================================
+   LOCAL STORAGE BRIDGE
+   USER + SUPER ADMIN SESSION
+   ===================================================== */
+
+
+const DB = {
+
+
+    _get(key){
+
+        try{
+
+            return JSON.parse(
+                localStorage.getItem(
+                    "bizbook_"+key
+                )
+            ) || [];
+
+        }
+
+        catch(e){
+
+            return [];
+
+        }
+
+    },
+
+
+
+    _set(key,value){
+
+        localStorage.setItem(
+
+            "bizbook_"+key,
+
+            JSON.stringify(value)
+
+        );
+
+    },
+
+
+
+    _getOne(key){
+
+        try{
+
+            return JSON.parse(
+
+                localStorage.getItem(
+                    "bizbook_"+key
+                )
+
+            );
+
+        }
+
+        catch(e){
+
+            return null;
+
+        }
+
+    },
+
+
+
+    _setOne(key,value){
+
+        localStorage.setItem(
+
+            "bizbook_"+key,
+
+            JSON.stringify(value)
+
+        );
+
+    },
+
+
+
+    getUsers(){
+
+        return this._get("users");
+
+    },
+
+
+    saveUsers(users){
+
+        this._set(
+            "users",
+            users
+        );
+
+    },
+
+
+
+    addUser(user){
+
+        let users=this.getUsers();
+
+        users.push(user);
+
+        this.saveUsers(users);
+
+        return user;
+
+    },
+
+
+
+    findUser(email,password){
+
+        return this.getUsers().find(
+
+            u =>
+            u.email===email &&
+            u.password===password
+
+        );
+
+    },
+
+
+
+    findUserByEmail(email){
+
+        return this.getUsers().find(
+            u=>u.email===email
+        );
+
+    },
+
+
+
+    getSession(){
+
+        return this._getOne(
+            "session"
+        );
+
+    },
+
+
+    setSession(data){
+
+        this._setOne(
+            "session",
+            data
+        );
+
+    },
+
+
+    clearSession(){
+
+        localStorage.removeItem(
+            "bizbook_session"
+        );
+
+    },
+
+
+
+    getSuperSession(){
+
+        return this._getOne(
+            "super_session"
+        );
+
+    },
+
+
+
+    setSuperSession(data){
+
+        this._setOne(
+            "super_session",
+            data
+        );
+
+    },
+
+
+
+    clearSuperSession(){
+
+        localStorage.removeItem(
+            "bizbook_super_session"
+        );
+
+    }
+
+
+};
+
+
+
+window.DB = DB;
+
+
+
+/* START FIREBASE */
+
+window.__fbReady = window.__fb.load()
+
+.catch(err=>{
+
+    console.error(
+        "Firebase Error:",
+        err
+    );
+
+    window.__fb.error = err;
+
 });
+
+
+
 </script>
 
+
+
 <script>
-const DB = {
-  _get(key) { try { return JSON.parse(localStorage.getItem('bizbook_' + key)) || []; } catch(e) { return []; } },
-  _set(key, data) { localStorage.setItem('bizbook_' + key, JSON.stringify(data)); },
-  _getOne(key) { try { return JSON.parse(localStorage.getItem('bizbook_' + key)); } catch(e) { return null; } },
-  _setOne(key, data) { localStorage.setItem('bizbook_' + key, JSON.stringify(data)); },
 
-  getUsers() { return this._get('users'); },
-  saveUsers(u) { this._set('users', u); },
-  findUser(email, password) { return this.getUsers().find(u => u.email === email && u.password === password); },
-  findUserByEmail(email) { return this.getUsers().find(u => u.email === email); },
-  findStaffForBusiness(bizId, role, email, password) { return this.getUsers().find(u => u.businessId === bizId && u.role === role && u.email === email && u.password === password); },
-  getStaffForBusiness(bizId) { return this.getUsers().filter(u => u.businessId === bizId && u.role !== 'owner'); },
-  getStaffByRole(bizId, role) { return this.getUsers().filter(u => u.businessId === bizId && u.role === role); },
-  addUser(user) { const u = this.getUsers(); u.push(user); this.saveUsers(u); return user; },
-  updateUser(id, data) { const u = this.getUsers(); const i = u.findIndex(x => x.id === id); if(i > -1) { Object.assign(u[i], data); this.saveUsers(u); } },
-  deleteUser(id) { this.saveUsers(this.getUsers().filter(u => u.id !== id)); },
+/* =====================================================
+   GENERAL UTILITIES
+   ===================================================== */
 
-  getBusinesses() { return this._get('businesses'); },
-  saveBusinesses(b) { this._set('businesses', b); },
-  getBusiness(id) { return this.getBusinesses().find(b => b.id === id); },
-  getBusinessByOwner(ownerId) { return this.getBusinesses().find(b => b.ownerId === ownerId); },
-  addBusiness(biz) { const b = this.getBusinesses(); b.push(biz); this.saveBusinesses(b); return biz; },
-  updateBusiness(id, data) { const b = this.getBusinesses(); const i = b.findIndex(x => x.id === id); if(i > -1) { Object.assign(b[i], data); this.saveBusinesses(b); } },
 
-  getProducts(bizId) { return this._get('products').filter(p => p.businessId === bizId); },
-  getAllProducts() { return this._get('products'); },
-  addProduct(p) { const all = this._get('products'); all.push(p); this._set('products', all); },
-  updateProduct(id, data) { const all = this._get('products'); const i = all.findIndex(x => x.id === id); if(i > -1) { Object.assign(all[i], data); this._set('products', all); } },
-  deleteProduct(id) { this._set('products', this._get('products').filter(p => p.id !== id)); },
+function uid(){
 
-  getSales(bizId) { return this._get('sales').filter(s => s.businessId === bizId); },
-  addSale(s) { const all = this._get('sales'); all.push(s); this._set('sales', all); },
+    return Date.now().toString(36)
+    +
+    Math.random()
+    .toString(36)
+    .substr(2,6);
 
-  getCustomers(bizId) { return this._get('customers').filter(c => c.businessId === bizId); },
-  addCustomer(c) { const all = this._get('customers'); all.push(c); this._set('customers', all); },
-  updateCustomer(id, data) { const all = this._get('customers'); const i = all.findIndex(x => x.id === id); if(i > -1) { Object.assign(all[i], data); this._set('customers', all); } },
-  deleteCustomer(id) { this._set('customers', this._get('customers').filter(c => c.id !== id)); },
-
-  getExpenses(bizId) { return this._get('expenses').filter(e => e.businessId === bizId); },
-  addExpense(e) { const all = this._get('expenses'); all.push(e); this._set('expenses', all); },
-  updateExpense(id, data) { const all = this._get('expenses'); const i = all.findIndex(x => x.id === id); if(i > -1) { Object.assign(all[i], data); this._set('expenses', all); } },
-  deleteExpense(id) { this._set('expenses', this._get('expenses').filter(e => e.id !== id)); },
-
-  getSession() { return this._getOne('session'); },
-  setSession(s) { this._setOne('session', s); },
-  clearSession() { localStorage.removeItem('bizbook_session'); },
-  getSuperSession() { return this._getOne('super_session'); },
-  setSuperSession(s) { this._setOne('super_session', s); },
-  clearSuperSession() { localStorage.removeItem('bizbook_super_session'); }
-};
-// ==================== UTILITIES ====================
-function uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 6); }
-function fmt(n) { return 'TZS ' + Number(n||0).toLocaleString('en-TZ'); }
-function fmtDate(d) { return new Date(d).toLocaleDateString('sw-TZ', {day:'2-digit',month:'short',year:'numeric'}); }
-function getInitials(name) { return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().substr(0,2)||'?'; }
-const ROLE_LABELS = {owner:'Mmiliki',manager:'Meneja',storekeeper:'Mhifadhi',cashier:'Makasisha',seller:'Muuzaji'};
-const ROLE_ICONS = {owner:'fa-crown',manager:'fa-user-tie',storekeeper:'fa-warehouse',cashier:'fa-cash-register',seller:'fa-store'};
-const BIZ_TYPES = {general:'Biashara ya Jumla',retail:'Biashara ya Rejareja',restaurant:'Restoran/Mlango',service:'Huduma',manufacturing:'Ufanyaji'};
-const CAT_LABELS = {general:'Jumla',food:'Chakula',drink:'Kinywaji',electronics:'Elektroniki',clothing:'Nguo',other:'Nyingine'};
-const EXP_LABELS = {rent:'Kodi',salary:'Mshahara',utilities:'Huduma',supplies:'Vifaa',transport:'Usafiri',other:'Nyingine'};
-
-// ==================== TOAST ====================
-function toast(type, msg) {
-  const c = document.getElementById('toastContainer');
-  const icons = {s:'fa-check',e:'fa-xmark',w:'fa-exclamation',i:'fa-info'};
-  const t = document.createElement('div');
-  t.className = 'toast ' + type;
-  t.innerHTML = `<div class="ti"><i class="fa-solid ${icons[type]}"></i></div><div class="tb-body"><div class="tb-title">${msg}</div></div><button class="tb-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button><div class="t-bar" style="animation-duration:3s"></div>`;
-  c.appendChild(t);
-  setTimeout(() => { t.classList.add('rem'); setTimeout(() => t.remove(), 300); }, 3000);
 }
 
+
+
+function fmt(n){
+
+    return 'TZS ' +
+    Number(n||0)
+    .toLocaleString('en-TZ');
+
+}
+
+
+
+function fmtDate(d){
+
+    return new Date(d)
+    .toLocaleDateString(
+        'sw-TZ',
+        {
+            day:'2-digit',
+            month:'short',
+            year:'numeric'
+        }
+    );
+
+}
+
+
+
+function getInitials(name){
+
+    return (name||'')
+    .split(' ')
+    .map(w=>w[0])
+    .join('')
+    .toUpperCase()
+    .substr(0,2)
+    ||
+    '?';
+
+}
+
+
+
+const ROLE_LABELS = {
+    owner:'Mmiliki',
+    manager:'Meneja',
+    storekeeper:'Mhifadhi',
+    cashier:'Makasisha',
+    seller:'Muuzaji'
+};
+
+
+
+const ROLE_ICONS = {
+    owner:'fa-crown',
+    manager:'fa-user-tie',
+    storekeeper:'fa-warehouse',
+    cashier:'fa-cash-register',
+    seller:'fa-store'
+};
+
+
+
+const BIZ_TYPES = {
+    general:'Biashara ya Jumla',
+    retail:'Biashara ya Rejareja',
+    restaurant:'Restoran/Mlo',
+    service:'Huduma',
+    manufacturing:'Ufanyaji'
+};
+
+
+
+const CAT_LABELS = {
+    general:'Jumla',
+    food:'Chakula',
+    drink:'Kinywaji',
+    electronics:'Elektroniki',
+    clothing:'Nguo',
+    other:'Nyingine'
+};
+
+
+
+const EXP_LABELS = {
+    rent:'Kodi',
+    salary:'Mshahara',
+    utilities:'Huduma',
+    supplies:'Vifaa',
+    transport:'Usafiri',
+    other:'Nyingine'
+};
+
+
+
+/* TOAST */
+
+function toast(type,msg){
+
+    const c=document.getElementById(
+        'toastContainer'
+    );
+
+    const icons={
+        s:'fa-check',
+        e:'fa-xmark',
+        w:'fa-exclamation',
+        i:'fa-info'
+    };
+
+
+    const t=document.createElement('div');
+
+    t.className='toast '+type;
+
+
+    t.innerHTML=`
+
+    <div class="ti">
+    <i class="fa-solid ${icons[type]}"></i>
+    </div>
+
+    <div class="tb-body">
+    <div class="tb-title">${msg}</div>
+    </div>
+
+    <button class="tb-close"
+    onclick="this.parentElement.remove()">
+    <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <div class="t-bar"
+    style="animation-duration:3s">
+    </div>
+
+    `;
+
+
+    c.appendChild(t);
+
+
+    setTimeout(()=>{
+
+        t.classList.add('rem');
+
+        setTimeout(()=>{
+            t.remove();
+        },300);
+
+    },3000);
+
+}
 // ==================== MODAL ====================
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
