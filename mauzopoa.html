@@ -2364,53 +2364,87 @@ function renderDash(){
 }
 
 
-/* ====== GLOBAL SUPER ADMIN SYSTEM ====== */
-var SUPER_ADMIN_EMAIL='nashiriwaziri29@gmail.com';
-var SUPER_ADMIN_PASSWORD='WAZIRI2015';
-var SUPER_CHARTS={};
-function superGet(key, fallback){var g=window.__fb&&window.__fb.cache.settings.global;return g&&Object.prototype.hasOwnProperty.call(g,key)?g[key]:fallback}
-function superSet(key,val){if(!window.__fb)return;window.__fb.cache.settings.global=Object.assign({},window.__fb.cache.settings.global||{}, {[key]:val});window.__fb.writeSetting(key,val).catch(console.error)}
-function normalizeUsers(){var users=gU();var changed=false;users.forEach(function(u){if(!u.createdAt){u.createdAt=new Date().toISOString();changed=true}if(!u.status){u.status='active';changed=true}if(!u.systemRole){u.systemRole='user';changed=true}});if(changed)sU(users);return users}
-function showSuperAdmin(){hideAll();document.getElementById('superScreen').classList.remove('hidden');document.getElementById('superLoginBox').style.display='flex';document.getElementById('superPanel').style.display='none';document.getElementById('superErr').classList.remove('show');document.getElementById('superUser').value='';document.getElementById('superPass').value=''}
-function superLogin(e){e.preventDefault();var u=document.getElementById('superUser').value.trim().toLowerCase(),p=document.getElementById('superPass').value;if(u!==SUPER_ADMIN_EMAIL||p!==SUPER_ADMIN_PASSWORD){var er=document.getElementById('superErr');er.textContent='Username au password ya Super Administrator si sahihi.';er.classList.add('show');return}window.__fb.superSession=true;document.getElementById('superLoginBox').style.display='none';document.getElementById('superPanel').style.display='block';renderSuperAdmin();toast('Super Admin ameingia kwenye Global Control Panel')}
-function superLogout(){if(window.__fb)window.__fb.superSession=false;showLanding()}
-function renderSuperAdmin(){normalizeUsers();renderSuperMetrics();renderSuperCharts();renderSuperUsers();renderSuperAds();renderSuperProducts();renderPublicShowcase()}
-function getAllBusinesses(){var users=normalizeUsers(),out=[];users.forEach(function(u){(u.businesses||[]).forEach(function(b){out.push({user:u,biz:b})})});return out}
-function getGlobalSales(){var all=getAllBusinesses(),rows=[];all.forEach(function(x){var d=gD(x.biz.id);(d.sales||[]).forEach(function(s){rows.push({user:x.user,biz:x.biz,sale:s})})});return rows}
-function renderSuperMetrics(){var users=normalizeUsers(),active=users.filter(function(u){return u.status!=='suspended'}).length,suspended=users.filter(function(u){return u.status==='suspended'}).length,biz=getAllBusinesses().length,sales=getGlobalSales(),revenue=sales.reduce(function(a,x){return a+(Number(x.sale.total)||0)},0),products=superGet('bb_public_products',[]).filter(function(x){return x.visible!==false}).length;document.getElementById('superMetrics').innerHTML='<div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-users"></i></div><h2>'+users.length+'</h2><p>Total Users</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-user-check"></i></div><h2>'+active+'</h2><p>Active Users</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-user-slash"></i></div><h2>'+suspended+'</h2><p>Suspended / Inactive</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-building"></i></div><h2>'+biz+'</h2><p>Registered Businesses</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-chart-line"></i></div><h2>'+fmt(revenue)+'</h2><p>Global Sales Value</p></div>'}
-function destroySuperCharts(){Object.keys(SUPER_CHARTS).forEach(function(k){if(SUPER_CHARTS[k]&&SUPER_CHARTS[k].destroy)SUPER_CHARTS[k].destroy()});SUPER_CHARTS={}}
-function renderSuperCharts(){destroySuperCharts();var users=normalizeUsers(),months=[],now=new Date();for(var i=11;i>=0;i--){var d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({key:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),label:d.toLocaleDateString('en-US',{month:'short'})})}var trend=months.map(function(m){return users.filter(function(u){return String(u.createdAt||'').slice(0,7)===m.key}).length});SUPER_CHARTS.users=new Chart(document.getElementById('superUsersTrend'),{type:'line',data:{labels:months.map(function(m){return m.label}),datasets:[{label:'New Users',data:trend,tension:.35,fill:true,borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,.12)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,precision:0}}}});var cats={};getAllBusinesses().forEach(function(x){var c=x.biz.category||'Other';cats[c]=(cats[c]||0)+1});SUPER_CHARTS.cat=new Chart(document.getElementById('superCategoryChart'),{type:'doughnut',data:{labels:Object.keys(cats).length?Object.keys(cats):['No Data'],datasets:[{data:Object.keys(cats).length?Object.values(cats):[1],backgroundColor:['#7c3aed','#059669','#0284c7','#d97706','#dc2626','#64748b','#db2777'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right'}}}});var bizMap={};getGlobalSales().forEach(function(x){var id=x.biz.id;bizMap[id]=bizMap[id]||{name:x.biz.name,total:0};bizMap[id].total+=Number(x.sale.total)||0});var topB=Object.values(bizMap).sort(function(a,b){return b.total-a.total}).slice(0,7);SUPER_CHARTS.biz=new Chart(document.getElementById('superBusinessChart'),{type:'bar',data:{labels:topB.map(function(x){return x.name}),datasets:[{label:'Sales',data:topB.map(function(x){return x.total}),backgroundColor:'#059669',borderRadius:6}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});var prodMap={};getGlobalSales().forEach(function(x){(x.sale.items||[]).forEach(function(it){var key=it.name||'Unknown';prodMap[key]=(prodMap[key]||0)+Number(it.qty||0)})});var topP=Object.entries(prodMap).sort(function(a,b){return b[1]-a[1]}).slice(0,7);SUPER_CHARTS.prod=new Chart(document.getElementById('superProductChart'),{type:'bar',data:{labels:topP.map(function(x){return x[0]}),datasets:[{label:'Units Sold',data:topP.map(function(x){return x[1]}),backgroundColor:'#0284c7',borderRadius:6}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,precision:0}}}})}
-function renderSuperUsers(){var users=normalizeUsers(),q=(document.getElementById('superUserSearch').value||'').toLowerCase(),staff=gSt(),body=document.getElementById('superUsersBody');var filtered=users.filter(function(u){var bs=(u.businesses||[]).map(function(b){return b.name+' '+b.category}).join(' ');return (u.name+' '+u.email+' '+bs).toLowerCase().indexOf(q)>=0});body.innerHTML=filtered.length?filtered.map(function(u){var businesses=(u.businesses||[]);var role=u.systemRole||'user';var status=u.status==='suspended'?'suspended':'active';return '<tr><td><div class="super-user"><div class="super-user-av">'+(u.name||'U').charAt(0).toUpperCase()+'</div><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.phone||'No phone')+'</small></div></div></td><td>'+esc(u.email)+'</td><td>'+businesses.map(function(b){return '<div><strong>'+esc(b.name)+'</strong><small>'+esc(b.category||'Other')+'</small></div>'}).join('')+'</td><td><span class="super-role">'+esc(role)+'</span></td><td><span class="super-status '+status+'">'+(status==='active'?'ACTIVE':'SUSPENDED')+'</span></td><td>'+fmtD(u.createdAt)+'</td><td><div class="super-actions">'+(status==='active'?'<button class="sa-yellow" onclick="superSetUserStatus(\''+u.id+'\',\'suspended\')">Suspend</button>':'<button class="sa-green" onclick="superSetUserStatus(\''+u.id+'\',\'active\')">Activate</button>')+'<button class="sa-blue" onclick="superMakeManager(\''+u.id+'\')">Make Manager</button><button class="sa-red" onclick="superDeleteUser(\''+u.id+'\')">Delete</button></div></td></tr>'}).join(''):'<tr><td colspan="7" class="empty-s">No users found</td></tr>'}
-function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-function superSetUserStatus(id,status){var users=normalizeUsers(),u=users.find(function(x){return x.id===id});if(!u)return;u.status=status;u.lastSeen=new Date().toISOString();sU(users);renderSuperAdmin();toast(status==='suspended'?'User suspended':'User activated',status==='suspended'?'w':'s')}
-function superMakeManager(id){var users=normalizeUsers(),u=users.find(function(x){return x.id===id});if(!u)return;u.systemRole='manager';sU(users);renderSuperAdmin();toast('User role changed to System Manager')}
-function superDeleteUser(id){var users=normalizeUsers(),u=users.find(function(x){return x.id===id});if(!u)return;if(!confirm('Delete this user and all registered business data?'))return;(u.businesses||[]).forEach(function(b){if(window.__fb)window.__fb.deleteBusiness(b.id).catch(console.error)});sU(users.filter(function(x){return x.id!==id}));sSt(gSt().filter(function(x){return x.userId!==id}));sMC(gMC().filter(function(x){return x.userId!==id}));renderSuperAdmin();toast('User and business records deleted','e')}
-function exportUsersPDF(){var users=normalizeUsers(),J=window.jspdf&&window.jspdf.jsPDF;if(!J){toast('PDF library haijapakiwa','e');return}var doc=new J({orientation:'landscape'});doc.setFontSize(18);doc.text('BizBook - Users & Registered Businesses',14,16);doc.setFontSize(9);doc.text('Generated: '+new Date().toLocaleString('en-US'),14,23);var rows=[];users.forEach(function(u){(u.businesses||[]).forEach(function(b){rows.push([u.name,u.email,u.systemRole||'user',u.status||'active',b.name,b.category||'Other',b.phone||'',b.address||''])})});doc.autoTable({head:[['User','Email','Role','Status','Business','Category','Phone','Address']],body:rows,startY:30,styles:{fontSize:7}});doc.save('BizBook_Users_and_Businesses.pdf');toast('PDF report imepakuliwa')}
-function openSuperAdModal(id){var ads=superGet('bb_super_ads',[]),a=id?ads.find(function(x){return x.id===id}):null;document.getElementById('superAdId').value=a?a.id:'';document.getElementById('superAdTitle').value=a?a.title:'';document.getElementById('superAdText').value=a?a.text:'';document.getElementById('superAdImage').value=a?a.image:'';document.getElementById('superAdLink').value=a?a.link:'';document.getElementById('superAdModal').classList.add('show')}
-function saveSuperAd(e){e.preventDefault();var ads=superGet('bb_super_ads',[]),id=document.getElementById('superAdId').value||gid(),a={id:id,title:document.getElementById('superAdTitle').value.trim(),text:document.getElementById('superAdText').value.trim(),image:document.getElementById('superAdImage').value.trim(),link:document.getElementById('superAdLink').value.trim(),visible:true,updatedAt:new Date().toISOString()};var i=ads.findIndex(function(x){return x.id===id});if(i>=0)ads[i]=a;else ads.unshift(a);superSet('bb_super_ads',ads);closeSuperModal('superAdModal');renderSuperAds();renderPublicShowcase();toast('Advertisement published')}
-function renderSuperAds(){var ads=superGet('bb_super_ads',[]),el=document.getElementById('superAdsList');el.innerHTML=ads.length?ads.map(function(a){return '<div class="super-ad-row"><img class="super-thumb" src="'+esc(a.image||'')+'" onerror="this.style.visibility=\'hidden\'"/><div class="super-row-main"><strong>'+esc(a.title)+'</strong><small>'+esc(a.text||'No description')+'</small><small>'+ (a.visible!==false?'Visible on landing page':'Hidden from landing page')+'</small></div><div class="super-row-actions"><button onclick="toggleSuperAd(\''+a.id+'\')">'+(a.visible!==false?'Hide':'Show')+'</button><button onclick="openSuperAdModal(\''+a.id+'\')"><i class="fa-solid fa-pen"></i></button><button onclick="deleteSuperAd(\''+a.id+'\')"><i class="fa-solid fa-trash"></i></button></div></div>'}).join(''):'<div class="public-empty">No advertisements yet.</div>'}
-function toggleSuperAd(id){var ads=superGet('bb_super_ads',[]),a=ads.find(function(x){return x.id===id});if(a)a.visible=a.visible===false;superSet('bb_super_ads',ads);renderSuperAds();renderPublicShowcase()}
-function deleteSuperAd(id){if(!confirm('Delete this advertisement?'))return;superSet('bb_super_ads',superGet('bb_super_ads',[]).filter(function(x){return x.id!==id}));renderSuperAds();renderPublicShowcase()}
-function openSuperProductModal(id){
-  var ps=superGet('bb_public_products',[]),
-      p=id?ps.find(function(x){return x.id===id}):null,
-      set=function(id,v){var el=document.getElementById(id);if(el)el.value=v||''};
+/* ===== SUPER ADMIN ===== */
 
-  set('superProdId',p?p.id:'');
-  set('superProdName',p?p.name:'');
-  set('superProdCategory',p?p.category:'');
-  set('superProdSeller',p?p.seller:'');
-  set('superProdShop',p?p.shopName:'');
-  set('superProdPhone',p?p.phone:'');
-  set('superProdLocation',p?p.location:'');
-  set('superProdPrice',p?p.price:'');
-  set('superProdDesc',p?p.description:'');
-  set('superProdImageUrl',p&&p.image&&p.image.indexOf('data:')!==0?p.image:'');
-  set('superProdVideo',p?p.video||p.videoUrl:'');
-  var f=document.getElementById('superProdImage');if(f)f.value='';
-  document.getElementById('superProductModal').classList.add('show');
+function showSuperAdmin() {
+
+    hideAll();
+
+    document.getElementById("superScreen").classList.remove("hidden");
+
+    document.getElementById("superLogin").style.display = "flex";
+
+    document.getElementById("superPanel").style.display = "none";
+
+    document.getElementById("superErr").classList.remove("show");
+
+    document.getElementById("superEmail").value = "";
+
+    document.getElementById("superPassword").value = "";
+
+}
+const SUPER_ADMIN_EMAIL = "nashiriwaziri29@gmail.com";
+const SUPER_ADMIN_PASSWORD = "WAZIRI2015";
+
+function handleSuperLogin() {
+
+    const email = document.getElementById("superEmail").value.trim().toLowerCase();
+
+    const password = document.getElementById("superPassword").value;
+
+    const err = document.getElementById("superErr");
+
+
+
+    err.classList.remove("show");
+
+
+
+    if (email !== SUPER_ADMIN_EMAIL || password !== SUPER_ADMIN_PASSWORD) {
+
+        err.innerHTML = "<i class='fa-solid fa-circle-exclamation'></i> <span>Email au Password si sahihi.</span>";
+
+        err.classList.add("show");
+
+        return;
+
+    }
+
+
+
+    if(window.__fb){
+
+        window.__fb.superSession = true;
+
+    }
+
+
+
+    document.getElementById("superLogin").style.display = "none";
+
+    document.getElementById("superPanel").style.display = "block";
+
+
+
+    renderSuperAdmin();
+
+
+
+    toast("Karibu Super Administrator","s");
+
 }
 
+
+
+function hideSuperAdmin(){
+
+    document.getElementById("superScreen").classList.add("hidden");
+
+    document.getElementById("superLogin").style.display="flex";
+
+    document.getElementById("superPanel").style.display="none";
+
+}
 function saveSuperProduct(e){
   e.preventDefault();
   var val=function(id){var el=document.getElementById(id);return el?el.value.trim():''},
@@ -2600,7 +2634,6 @@ function shareProduct(id){
 function toggleSuperProduct(id){var ps=superGet('bb_public_products',[]),p=ps.find(function(x){return x.id===id});if(p)p.visible=p.visible===false;superSet('bb_public_products',ps);renderSuperProducts();renderPublicShowcase()}
 function deleteSuperProduct(id){if(!confirm('Delete this product from public catalogue?'))return;superSet('bb_public_products',superGet('bb_public_products',[]).filter(function(x){return x.id!==id}));renderSuperProducts();renderPublicShowcase()}
 function closeSuperModal(id){document.getElementById(id).classList.remove('show')}
-function renderPublicShowcase(){var ads=superGet('bb_super_ads',[]).filter(function(a){return a.visible!==false}),ps=superGet('bb_public_products',[]).filter(function(p){return p.visible!==false}),ag=document.getElementById('publicAdsGrid'),pg=document.getElementById('publicProductsGrid');if(!ag||!pg)return;ag.innerHTML=ads.length?ads.map(function(a){return '<article class="public-ad">'+(a.image?'<img src="'+esc(a.image)+'" onerror="this.style.display=\'none\'"/>':'')+'<div class="public-ad-body"><h4>'+esc(a.title)+'</h4><p>'+esc(a.text||'')+'</p><div class="public-actions"><button class="btn btn-p btn-sm" onclick="shareText(\''+encodeURIComponent(a.title+' - '+(a.text||''))+'\')"><i class="fa-solid fa-share-nodes"></i> Share</button>'+(a.link?'<a class="btn btn-o btn-sm" href="'+esc(a.link)+'" target="_blank" rel="noopener">Open</a>':'')+'</div></div></article>'}).join(''):'<div class="public-empty">Hakuna matangazo yaliyowekwa kwa sasa.</div>';pg.innerHTML=ps.length?ps.map(function(p){return '<article class="public-product">'+(p.image?'<img src="'+esc(p.image)+'" onerror="this.style.display=\'none\'"/>':'')+'<div class="public-product-body"><h4>'+esc(p.name)+'</h4><p>'+esc(p.category)+' • '+esc(p.seller)+'</p><div class="public-product-price">'+fmt(p.price)+'</div><p>'+esc(p.description||'')+'</p><button class="btn btn-i btn-sm" onclick="shareProduct(\''+p.id+'\')"><i class="fa-solid fa-share-nodes"></i> Share Product</button></div></article>'}).join(''):'<div class="public-empty">Hakuna bidhaa za catalogue kwa sasa.</div>'}
 function shareText(encoded){var text=decodeURIComponent(encoded),url=location.href;if(navigator.share){navigator.share({title:'BizBook',text:text,url:url}).catch(function(){})}else{window.open('https://wa.me/?text='+encodeURIComponent(text+' '+url),'_blank') }}
 function shareProduct(id){var p=superGet('bb_public_products',[]).find(function(x){return x.id===id});if(!p)return;shareText(encodeURIComponent(p.name+' | '+p.seller+' | '+fmt(p.price)+' | '+location.href))}
 function sharePublicCatalogue(){var text='BizBook Public Product Catalogue - '+location.href;if(navigator.share)navigator.share({title:'BizBook Product Catalogue',text:text,url:location.href}).catch(function(){});else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank')}
