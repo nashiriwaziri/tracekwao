@@ -4019,8 +4019,7 @@ tbody tr:last-child td {
    FIREBASE FIRESTORE + BIZBOOK DATABASE CORE
    ===================================================== */
 
-import { initializeApp } 
-from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 
 import {
     getFirestore,
@@ -4030,13 +4029,9 @@ import {
     setDoc,
     deleteDoc,
     serverTimestamp
-}
-from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
-
     apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
     authDomain: "ncrs-aeb43.firebaseapp.com",
     projectId: "ncrs-aeb43",
@@ -4044,460 +4039,175 @@ const firebaseConfig = {
     messagingSenderId: "786434442929",
     appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
     measurementId: "G-ZYB71RY8J5"
-
 };
-
-
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-
 
 /* =====================================================
    FIREBASE CLOUD CACHE
    ===================================================== */
 
-
 window.__fb = {
-
     app,
     db,
-
-    cache:{
-        users:[],
-        staff:[],
-        managers:[],
-        businessData:{},
-        settings:{}
+    cache: {
+        users: [],
+        staff: [],
+        managers: [],
+        businessData: {},
+        settings: {}
     },
+    ready: false,
 
+    async load() {
+        const c = this.cache;
 
-    ready:false,
-
-
-
-    async load(){
-
-
-        const c=this.cache;
-
-
-        const [
-            users,
-            staff,
-            managers,
-            businessData,
-            settings
-
-        ] = await Promise.all([
-
-
-            getDocs(collection(db,"users")),
-            getDocs(collection(db,"staff")),
-            getDocs(collection(db,"managers")),
-            getDocs(collection(db,"businessData")),
-            getDocs(collection(db,"systemSettings"))
-
+        const [users, staff, managers, businessData, settings] = await Promise.all([
+            getDocs(collection(db, "users")),
+            getDocs(collection(db, "staff")),
+            getDocs(collection(db, "managers")),
+            getDocs(collection(db, "businessData")),
+            getDocs(collection(db, "systemSettings"))
         ]);
 
+        c.users = users.docs.map(x => ({ id: x.id, ...x.data() }));
+        c.staff = staff.docs.map(x => ({ id: x.id, ...x.data() }));
+        c.managers = managers.docs.map(x => ({ id: x.id, ...x.data() }));
 
+        c.businessData = {};
+        businessData.docs.forEach(x => { c.businessData[x.id] = x.data(); });
 
-        c.users =
-        users.docs.map(x=>({
-            id:x.id,
-            ...x.data()
-        }));
+        c.settings = {};
+        settings.docs.forEach(x => { c.settings[x.id] = x.data(); });
 
-
-        c.staff =
-        staff.docs.map(x=>({
-            id:x.id,
-            ...x.data()
-        }));
-
-
-        c.managers =
-        managers.docs.map(x=>({
-            id:x.id,
-            ...x.data()
-        }));
-
-
-
-        c.businessData={};
-
-        businessData.docs.forEach(x=>{
-            c.businessData[x.id]=x.data();
-        });
-
-
-
-        c.settings={};
-
-        settings.docs.forEach(x=>{
-            c.settings[x.id]=x.data();
-        });
-
-
-
-        this.ready=true;
-
-
-        console.log(
-            "🔥 Firebase Ready",
-            this.cache
-        );
-
+        this.ready = true;
+        console.log("🔥 Firebase Ready", this.cache);
 
         return this;
-
     },
 
+    async writeArray(name, data) {
+        const old = await getDocs(collection(db, name));
+        const ids = new Set(data.map(x => String(x.id)));
 
-
-
-    async writeArray(name,data){
-
-
-        const old =
-        await getDocs(collection(db,name));
-
-
-        const ids =
-        new Set(
-            data.map(x=>String(x.id))
-        );
-
-
-
-        for(const item of old.docs){
-
-            if(!ids.has(item.id)){
+        for (const item of old.docs) {
+            if (!ids.has(item.id)) {
                 await deleteDoc(item.ref);
             }
-
         }
 
-
-
-        for(const item of data){
-
-            await setDoc(
-                doc(db,name,String(item.id)),
-                item
-            );
-
+        for (const item of data) {
+            await setDoc(doc(db, name, String(item.id)), item);
         }
-
     },
 
+    async writeBusiness(id, data) {
+        await setDoc(doc(db, "businessData", String(id)), data, { merge: true });
+    },
 
-
-
-    async writeBusiness(id,data){
-
+    async writeSetting(key, value) {
         await setDoc(
-
-            doc(
-                db,
-                "businessData",
-                String(id)
-            ),
-
-            data,
-
-            {
-                merge:true
-            }
-
+            doc(db, "systemSettings", "global"),
+            { [key]: value, updatedAt: serverTimestamp() },
+            { merge: true }
         );
-
     },
 
-
-
-
-    async writeSetting(key,value){
-
-        await setDoc(
-
-            doc(
-                db,
-                "systemSettings",
-                "global"
-            ),
-
-            {
-
-                [key]:value,
-                updatedAt:serverTimestamp()
-
-            },
-
-            {
-                merge:true
-            }
-
-        );
-
-    },
-
-
-
-
-    async deleteBusiness(id){
-
+    async deleteBusiness(id) {
         delete this.cache.businessData[id];
-
-
-        await deleteDoc(
-
-            doc(
-                db,
-                "businessData",
-                String(id)
-            )
-
-        );
-
+        await deleteDoc(doc(db, "businessData", String(id)));
     }
-
-
 };
-
-
-
 
 /* =====================================================
    LOCAL STORAGE BRIDGE
    USER + SUPER ADMIN SESSION
    ===================================================== */
 
-
 const DB = {
-
-
-    _get(key){
-
-        try{
-
-            return JSON.parse(
-                localStorage.getItem(
-                    "bizbook_"+key
-                )
-            ) || [];
-
-        }
-
-        catch(e){
-
+    _get(key) {
+        try {
+            return JSON.parse(localStorage.getItem("bizbook_" + key)) || [];
+        } catch (e) {
             return [];
-
         }
-
     },
 
-
-
-    _set(key,value){
-
-        localStorage.setItem(
-
-            "bizbook_"+key,
-
-            JSON.stringify(value)
-
-        );
-
+    _set(key, value) {
+        localStorage.setItem("bizbook_" + key, JSON.stringify(value));
     },
 
-
-
-    _getOne(key){
-
-        try{
-
-            return JSON.parse(
-
-                localStorage.getItem(
-                    "bizbook_"+key
-                )
-
-            );
-
-        }
-
-        catch(e){
-
+    _getOne(key) {
+        try {
+            return JSON.parse(localStorage.getItem("bizbook_" + key));
+        } catch (e) {
             return null;
-
         }
-
     },
 
-
-
-    _setOne(key,value){
-
-        localStorage.setItem(
-
-            "bizbook_"+key,
-
-            JSON.stringify(value)
-
-        );
-
+    _setOne(key, value) {
+        localStorage.setItem("bizbook_" + key, JSON.stringify(value));
     },
 
-
-
-    getUsers(){
-
+    getUsers() {
         return this._get("users");
-
     },
 
-
-    saveUsers(users){
-
-        this._set(
-            "users",
-            users
-        );
-
+    saveUsers(users) {
+        this._set("users", users);
     },
 
-
-
-    addUser(user){
-
-        let users=this.getUsers();
-
+    addUser(user) {
+        let users = this.getUsers();
         users.push(user);
-
         this.saveUsers(users);
-
         return user;
-
     },
 
-
-
-    findUser(email,password){
-
-        return this.getUsers().find(
-
-            u =>
-            u.email===email &&
-            u.password===password
-
-        );
-
+    findUser(email, password) {
+        return this.getUsers().find(u => u.email === email && u.password === password);
     },
 
-
-
-    findUserByEmail(email){
-
-        return this.getUsers().find(
-            u=>u.email===email
-        );
-
+    findUserByEmail(email) {
+        return this.getUsers().find(u => u.email === email);
     },
 
-
-
-    getSession(){
-
-        return this._getOne(
-            "session"
-        );
-
+    getSession() {
+        return this._getOne("session");
     },
 
-
-    setSession(data){
-
-        this._setOne(
-            "session",
-            data
-        );
-
+    setSession(data) {
+        this._setOne("session", data);
     },
 
-
-    clearSession(){
-
-        localStorage.removeItem(
-            "bizbook_session"
-        );
-
+    clearSession() {
+        localStorage.removeItem("bizbook_session");
     },
 
-
-
-    getSuperSession(){
-
-        return this._getOne(
-            "super_session"
-        );
-
+    getSuperSession() {
+        return this._getOne("super_session");
     },
 
-
-
-    setSuperSession(data){
-
-        this._setOne(
-            "super_session",
-            data
-        );
-
+    setSuperSession(data) {
+        this._setOne("super_session", data);
     },
 
-
-
-    clearSuperSession(){
-
-        localStorage.removeItem(
-            "bizbook_super_session"
-        );
-
+    clearSuperSession() {
+        localStorage.removeItem("bizbook_super_session");
     }
-
-
 };
-
-
 
 window.DB = DB;
 
-
-
 /* START FIREBASE */
 
-window.__fbReady = window.__fb.load()
-
-.catch(err=>{
-
-    console.error(
-        "Firebase Error:",
-        err
-    );
-
+window.__fbReady = window.__fb.load().catch(err => {
+    console.error("Firebase Error:", err);
     window.__fb.error = err;
-
 });
 
-
-
 </script>
-
-
-
-<script>
-
 /* =====================================================
    GENERAL UTILITIES
    ===================================================== */
