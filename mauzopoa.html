@@ -1418,16 +1418,83 @@ function handleSignup(e){
 
 /* ====== USER LOGIN ====== */
 function handleLogin(e){
-  e.preventDefault();document.getElementById('authErr').classList.remove('show');
-  var email=document.getElementById('lEmail').value.trim(),pass=document.getElementById('lPass').value;
-  var user=gU().find(function(u){return u.email===email&&u.password===pass});
-  if(!user){showAE('Barua pepe au nenosiri sio sahihi');return}
-  if(!user.businesses||!user.businesses.length){showAE('Hakuna biashara');return}
-  S.user=user;S.bizId=user.businesses[0].id;
-  toast('Karibu, '+user.name+'!');showRoles();
-}
+  e.preventDefault();
 
-/* ====== ROLE SELECT ====== */
+  document.getElementById('authErr').classList.remove('show');
+
+  var email = document.getElementById('lEmail').value.trim().toLowerCase();
+  var pass  = document.getElementById('lPass').value;
+
+  if(!email || !pass){
+    showAE('Jaza barua pepe na nenosiri.');
+    return;
+  }
+
+  /* ==========================
+     1. BUSINESS OWNER LOGIN
+     ========================== */
+
+  var user = gU().find(function(u){
+    return (
+      String(u.email).toLowerCase() === email &&
+      u.password === pass
+    );
+  });
+
+  if(user){
+
+    if(!user.businesses || !user.businesses.length){
+      showAE('Hakuna biashara iliyosajiliwa.');
+      return;
+    }
+
+    S.user = user;
+    S.role = "owner";
+    S.bizId = user.businesses[0].id;
+
+    toast('Karibu, ' + user.name + '!');
+    showRoles();
+    return;
+  }
+
+  /* ==========================
+     2. STAFF LOGIN
+     ========================== */
+
+  var staff = gSt().find(function(s){
+    return (
+      String(s.email).toLowerCase() === email &&
+      s.password === pass
+    );
+  });
+
+  if(!staff){
+    showAE('Barua pepe au nenosiri sio sahihi.');
+    return;
+  }
+
+  if(staff.active === false){
+    showAE('Account yako imefungwa.');
+    return;
+  }
+
+  S.staff = staff;
+  S.user  = staff;
+  S.role  = staff.role;
+  S.bizId = staff.bizId;
+
+  toast('Karibu, ' + staff.name + '!');
+
+  // Fungua dashboard moja kwa moja kwa staff
+  hideAll();
+
+  document.getElementById('app').classList.remove('hidden');
+
+  renderAll();
+
+  nav('dashboard');
+}
+   /* ====== ROLE SELECT ====== */
 function updateRoleUI(){
   var biz=gBiz(S.bizId);if(!biz)return;
   document.getElementById('rsBizName').textContent=biz.name;
@@ -1874,6 +1941,66 @@ function saveProd(editId){
   else{d.products.push({id:gid(),name:name,category:document.getElementById('mCat').value,sku:document.getElementById('mSku').value.trim(),price:price,cost:parseFloat(document.getElementById('mCost').value)||0,stock:stock,minStock:Number(document.getElementById('mMinStock')?document.getElementById('mMinStock').value:5)||5})}
   uD({products:d.products});closeMod();renderProducts();renderPOS();renderDash();toast(editId?'Imehaririwa':'Imeongezwa');
 }
+   /* ===== DELETE PRODUCT ===== */
+
+function delProd(id){
+
+  openMod('confirm');
+
+  document.getElementById('confirmBtn').onclick = function(){
+
+    try{
+
+      let d = D();
+
+
+      if(!Array.isArray(d.products)){
+        d.products = [];
+      }
+
+
+      d.products = d.products.filter(function(p){
+        return p.id !== id;
+      });
+
+
+      // Save local
+      uD({
+        products:d.products
+      });
+
+
+      closeMod();
+
+
+      renderProducts();
+      renderPOS();
+      renderDash();
+
+
+      toast(
+        'Bidhaa imefutwa kwa mafanikio.',
+        's'
+      );
+
+
+    }catch(err){
+
+      console.error(
+        "DELETE PRODUCT ERROR:",
+        err
+      );
+
+      toast(
+        'Hitilafu wakati wa kufuta bidhaa.',
+        'e'
+      );
+
+    }
+
+  };
+
+}
 function savePurch(){
   var pid=document.getElementById('mPP').value,qty=parseInt(document.getElementById('mPQ').value)||0,cost=parseFloat(document.getElementById('mPC').value)||0,sup=document.getElementById('mPS').value;
   if(!pid||!qty||!cost){toast('Jaza sehemu zote','e');return}
@@ -1904,19 +2031,231 @@ function saveExp(editId){
   else{d.expenses.push({id:gid(),description:desc,category:document.getElementById('mEC').value,amount:amt,date:today()})}
   uD({expenses:d.expenses});closeMod();renderExpenses();renderFin();renderDash();toast(editId?'Imehaririwa':'Imeongezwa');
 }
-function saveEmp(){
-  var name=document.getElementById('mEN').value.trim();if(!name){toast('Jina linahitajika','e');return}
-  var d=D();d.employees.push({id:gid(),name:name,position:document.getElementById('mEP').value,phone:document.getElementById('mEPH').value,salary:parseFloat(document.getElementById('mES').value)||0,hireDate:document.getElementById('mEDT').value||today()});
-  uD({employees:d.employees});closeMod();renderEmployees();toast('Mfanyakazi ameongezwa');
-}
-function delItem(collection,id){
-  openMod('confirm');
-  document.getElementById('confirmBtn').onclick=function(){
-    var d=D();d[collection]=d[collection].filter(function(x){return x.id!==id});uD(d);closeMod();renderAll();toast('Imefutwa');
-  };
-}
+/* ====== SAVE EMPLOYEE ====== */
+async function saveEmp() {
 
-/* ====== TABLE FILTER ====== */
+  try {
+
+    // Hakikisha user ameingia
+    if(!S || !S.bizId){
+
+      toast(
+        'Hakuna biashara iliyochaguliwa.',
+        'e'
+      );
+
+      return;
+
+    }
+
+
+    // Chukua taarifa kutoka form
+
+    const name =
+      document.getElementById('mEN')
+      .value
+      .trim();
+
+
+    const position =
+      document.getElementById('mEP')
+      .value
+      .trim();
+
+
+    const phone =
+      document.getElementById('mEPH')
+      .value
+      .trim();
+
+
+    const salary =
+      Number(
+        document.getElementById('mES').value
+      ) || 0;
+
+
+    const hireDate =
+      document.getElementById('mEDT').value ||
+      today();
+
+
+
+    // Validation
+
+    if(!name){
+
+      toast(
+        'Jina la mfanyakazi linahitajika.',
+        'e'
+      );
+
+      return;
+
+    }
+
+
+
+    if(phone && phone.length < 9){
+
+      toast(
+        'Namba ya simu sio sahihi.',
+        'e'
+      );
+
+      return;
+
+    }
+
+
+
+    // Pata business data ya sasa
+
+    let d = D();
+
+
+
+    if(!Array.isArray(d.employees)){
+
+      d.employees=[];
+
+    }
+
+
+
+    // Zuia duplicate
+
+    const exists =
+      d.employees.find(function(emp){
+
+        return (
+          emp.name.toLowerCase()
+          === name.toLowerCase()
+          &&
+          emp.phone === phone
+        );
+
+      });
+
+
+
+    if(exists){
+
+      toast(
+        'Mfanyakazi huyu tayari yupo.',
+        'e'
+      );
+
+      return;
+
+    }
+
+
+
+
+    // Tengeneza employee mpya
+
+    const employee={
+
+      id: gid(),
+
+      name:name,
+
+      position:position,
+
+      phone:phone,
+
+      salary:salary,
+
+      hireDate:hireDate,
+
+
+      // SaaS security tracking
+
+      businessId:S.bizId,
+
+      createdBy:
+        S.user ? S.user.id : null,
+
+
+      createdAt:
+        new Date().toISOString()
+
+    };
+
+
+
+    // Ongeza kwenye list
+
+    d.employees.push(employee);
+
+
+
+    // Update local cache
+
+    uD({
+
+      employees:d.employees
+
+    });
+
+
+
+    // Sync Firebase Business Data
+
+    await sD(
+
+      S.bizId,
+
+      {
+
+        employees:d.employees
+
+      }
+
+    );
+
+
+
+    // Funga modal
+
+    closeMod();
+
+
+
+    // Refresh UI
+
+    renderEmployees();
+
+
+
+    toast(
+      'Mfanyakazi ameongezwa kwa mafanikio.',
+      's'
+    );
+
+
+  }
+
+
+
+  catch(err){
+
+    console.error(
+      "SAVE EMPLOYEE ERROR:",
+      err
+    );
+
+
+    toast(
+      'Imeshindikana kuhifadhi mfanyakazi.',
+      'e'
+    );
+
+  }
+
+}
+   /* ====== TABLE FILTER ====== */
 function filterTb(tableId,val){
   var rows=document.querySelectorAll('#'+tableId+' tbody tr');
   val=val.toLowerCase();
