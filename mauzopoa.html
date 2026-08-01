@@ -5579,30 +5579,154 @@ function handleSignup(e) {
   document.getElementById('signupForm').reset();
   authTab('login');
 }
+/* ====== FIREBASE AUTH HELPERS ====== */
+const AuthDB = {
+  /* Save session to Firestore */
+  async saveSession(sessionData) {
+    if (!S.user) return;
+    try {
+      await window.__fb.db
+        .collection('sessions')
+        .doc(S.user.id)
+        .set({
+          ...sessionData,
+          updatedAt: window.__fb.Timestamp.now()
+        }, { merge: true });
+    } catch (err) {
+      console.error('Session save error:', err);
+    }
+  },
+
+  /* Get manager credentials from Firestore */
+  async getManagerCredentials(bizId) {
+    try {
+      var snap = await window.__fb.db
+        .collection('businesses')
+        .doc(bizId)
+        .collection('settings')
+        .doc('managerAuth')
+        .get();
+      return snap.exists ? snap.data() : null;
+    } catch (err) {
+      console.error('Get manager error:', err);
+      return null;
+    }
+  },
+
+  /* Save manager credentials to Firestore */
+  async saveManagerCredentials(bizId, credentials) {
+    try {
+      await window.__fb.db
+        .collection('businesses')
+        .doc(bizId)
+        .collection('settings')
+        .doc('managerAuth')
+        .set({
+          ...credentials,
+          bizId: bizId,
+          createdAt: window.__fb.Timestamp.now()
+        });
+      return true;
+    } catch (err) {
+      console.error('Save manager error:', err);
+      return false;
+    }
+  },
+
+  /* Get staff by email from Firestore */
+  async getStaffByEmail(email, bizId, role) {
+    try {
+      var query = window.__fb.db
+        .collection('businesses')
+        .doc(bizId)
+        .collection('staff')
+        .where('email', '==', email);
+      
+      if (role) query = query.where('role', '==', role);
+      
+      var snap = await query.get();
+      if (snap.empty) return null;
+      return { id: snap.docs[0].id, ...snap.docs[0].data() };
+    } catch (err) {
+      console.error('Get staff error:', err);
+      return null;
+    }
+  },
+
+  /* Create staff in Firestore */
+  async createStaff(staffData) {
+    try {
+      var docRef = await window.__fb.db
+        .collection('businesses')
+        .doc(staffData.bizId)
+        .collection('staff')
+        .add({
+          ...staffData,
+          createdAt: window.__fb.Timestamp.now()
+        });
+      return docRef.id;
+    } catch (err) {
+      console.error('Create staff error:', err);
+      return null;
+    }
+  },
+
+  /* Initialize business data in Firestore */
+  async initBusinessData(bizId) {
+    try {
+      var docRef = window.__fb.db.collection('businesses').doc(bizId);
+      var doc = await docRef.get();
+      if (!doc.exists) {
+        await docRef.set({
+          products: [],
+          sales: [],
+          purchases: [],
+          suppliers: [],
+          customers: [],
+          expenses: [],
+          employees: [],
+          notifications: [],
+          createdAt: window.__fb.Timestamp.now()
+        });
+      }
+    } catch (err) {
+      console.error('Init business error:', err);
+    }
+  },
+
+  /* Clear session from Firestore */
+  async clearSession(userId) {
+    if (!userId) return;
+    try {
+      await window.__fb.db
+        .collection('sessions')
+        .doc(userId)
+        .delete();
+    } catch (err) {
+      console.error('Clear session error:', err);
+    }
+  }
+};
 
 /* ====== USER LOGIN ====== */
 async function handleLogin(e) {
   e.preventDefault();
-
-  document.getElementById('authErr').classList.remove('show');
+  var errBox = document.getElementById('authErr');
+  if (errBox) errBox.classList.remove('show');
 
   try {
-    // Subiri Firebase ipakie users
     await window.__fbReady;
 
     var email = document.getElementById('lEmail').value.trim().toLowerCase();
     var pass = document.getElementById('lPass').value;
-
     var users = gU();
 
-    if (!Array.isArray(users)) {
-      users = [];
-    }
+    if (!Array.isArray(users)) users = [];
 
-    var user = users.find(function (u) {
+    var user = users.find(function(u) {
       return (
-        (u.email || "").toLowerCase() === email &&
-        u.password === pass
+        String(u.email || '').toLowerCase() === email &&
+        String(u.password || '') === pass
       );
     });
 
@@ -5616,28 +5740,32 @@ async function handleLogin(e) {
       return;
     }
 
-    // Hifadhi session
+    /* Set current session */
     S.user = user;
     S.bizId = user.businesses[0].id;
+    S.role = 'owner';
 
-    // Optional: hifadhi session kwenye localStorage
-    if (typeof DB !== "undefined" && DB.setSession) {
-      DB.setSession({
-        userId: user.id,
-        bizId: S.bizId,
-        email: user.email,
-        loginAt: new Date().toISOString()
-      });
-    }
+    /* Save session to Firestore */
+    await AuthDB.saveSession({
+      userId: user.id,
+      email: user.email,
+      bizId: S.bizId,
+      role: 'owner',
+      loginAt: new Date().toISOString()
+    });
+
+    /* Initialize business data if not exists */
+    await AuthDB.initBusinessData(S.bizId);
 
     toast('Karibu, ' + user.name + '!');
     showRoles();
 
   } catch (err) {
-    console.error("Login Error:", err);
-    showAE('Imeshindikana kuingia. Tafadhali jaribu tena.');
+    console.error('LOGIN ERROR:', err);
+    showAE('Hitilafu imetokea wakati wa kuingia.');
   }
 }
+
 /* ====== ROLE SELECT ====== */
 function updateRoleUI() {
   var biz = gBiz(S.bizId);
@@ -5646,21 +5774,22 @@ function updateRoleUI() {
   document.getElementById('rsBizName').textContent = biz.name;
   document.getElementById('rsBizCat').textContent = biz.category + ' • ' + biz.address;
 
-  var mc = gMC().find(function(c) { return c.bizId === S.bizId; });
-  var st = document.getElementById('mgrSt');
-
-  if (mc) {
-    st.className = 'rs-status on';
-    st.textContent = 'Akaunti imewekwa';
-  } else {
-    st.className = 'rs-status off';
-    st.textContent = 'Bado haijawekwa';
-  }
+  /* Check manager account status from Firestore (async) */
+  AuthDB.getManagerCredentials(S.bizId).then(function(mc) {
+    var st = document.getElementById('mgrSt');
+    if (mc) {
+      st.className = 'rs-status on';
+      st.textContent = 'Akaunti imewekwa';
+    } else {
+      st.className = 'rs-status off';
+      st.textContent = 'Bado haijawekwa';
+    }
+  });
 }
 
 /* ====== MANAGER AUTH ====== */
-function openMgrAuth() {
-  var mc = gMC().find(function(c) { return c.bizId === S.bizId; });
+async function openMgrAuth() {
+  var mc = await AuthDB.getManagerCredentials(S.bizId);
   var area = document.getElementById('mgrFormArea');
 
   if (mc) {
@@ -5668,37 +5797,44 @@ function openMgrAuth() {
       '<form onsubmit="doMgrLogin(event)" style="text-align:left">' +
         '<div class="fg">' +
           '<label>Jina la Mtumiaji <span class="req">*</span></label>' +
-          '<div class="iw"><i class="fa-solid fa-user"></i><input type="text" class="fi" id="mgrU" required/></div>' +
+          '<div class="iw"><i class="fa-solid fa-user"></i>' +
+          '<input type="text" class="fi" id="mgrU" required/></div>' +
         '</div>' +
         '<div class="fg">' +
           '<label>Nenosiri <span class="req">*</span></label>' +
-          '<div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrP" required/></div>' +
+          '<div class="iw"><i class="fa-solid fa-lock"></i>' +
+          '<input type="password" class="fi" id="mgrP" required/></div>' +
         '</div>' +
-        '<button type="submit" class="btn-auth btn-auth-p"><i class="fa-solid fa-right-to-bracket"></i> Ingia</button>' +
+        '<button type="submit" class="btn-auth btn-auth-p">' +
+        '<i class="fa-solid fa-right-to-bracket"></i> Ingia</button>' +
       '</form>';
   } else {
     area.innerHTML =
       '<form onsubmit="doMgrSetup(event)" style="text-align:left">' +
         '<div class="fg">' +
           '<label>Jina la Mtumiaji <span class="req">*</span></label>' +
-          '<div class="iw"><i class="fa-solid fa-user"></i><input type="text" class="fi" id="mgrNU" required placeholder="mfano: admin"/></div>' +
+          '<div class="iw"><i class="fa-solid fa-user"></i>' +
+          '<input type="text" class="fi" id="mgrNU" required placeholder="mfano: admin"/></div>' +
         '</div>' +
         '<div class="fg">' +
           '<label>Nenosiri <span class="req">*</span></label>' +
-          '<div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrNP" required minlength="4"/></div>' +
+          '<div class="iw"><i class="fa-solid fa-lock"></i>' +
+          '<input type="password" class="fi" id="mgrNP" required minlength="4"/></div>' +
         '</div>' +
         '<div class="fg">' +
           '<label>Thibitisha <span class="req">*</span></label>' +
-          '<div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrNC" required/></div>' +
+          '<div class="iw"><i class="fa-solid fa-lock"></i>' +
+          '<input type="password" class="fi" id="mgrNC" required/></div>' +
         '</div>' +
-        '<button type="submit" class="btn-auth btn-auth-p"><i class="fa-solid fa-check"></i> Weka Akaunti</button>' +
+        '<button type="submit" class="btn-auth btn-auth-p">' +
+        '<i class="fa-solid fa-check"></i> Weka Akaunti</button>' +
       '</form>';
   }
 
   document.getElementById('mgrAuth').classList.add('show');
 }
 
-function doMgrSetup(e) {
+async function doMgrSetup(e) {
   e.preventDefault();
 
   var u = document.getElementById('mgrNU').value.trim();
@@ -5709,28 +5845,45 @@ function doMgrSetup(e) {
   if (p !== c) { toast('Nenosiri hazilingani', 'e'); return; }
   if (p.length < 4) { toast('Nenosiri lazima iwe herufi 4+', 'w'); return; }
 
-  var mc = gMC();
-  mc.push({ bizId: S.bizId, userId: S.user.id, username: u, password: p });
-  sMC(mc);
+  var saved = await AuthDB.saveManagerCredentials(S.bizId, {
+    userId: S.user.id,
+    username: u,
+    password: p
+  });
+
+  if (!saved) {
+    toast('Hitilafu katika kuweka akaunti', 'e');
+    return;
+  }
 
   toast('Akaunti ya Meneja imewekwa!');
   updateRoleUI();
   openMgrAuth();
 }
 
-function doMgrLogin(e) {
+async function doMgrLogin(e) {
   e.preventDefault();
 
   var u = document.getElementById('mgrU').value.trim();
   var p = document.getElementById('mgrP').value;
-  var cr = gMC().find(function(c) {
-    return c.bizId === S.bizId && c.username === u && c.password === p;
-  });
+  var mc = await AuthDB.getManagerCredentials(S.bizId);
 
-  if (!cr) { toast('Jina au nenosiri sio sahihi', 'e'); return; }
+  if (!mc || mc.username !== u || mc.password !== p) {
+    toast('Jina au nenosiri sio sahihi', 'e');
+    return;
+  }
 
   S.role = 'manager';
   S.staffId = null;
+
+  /* Save session to Firestore */
+  await AuthDB.saveSession({
+    userId: S.user.id,
+    bizId: S.bizId,
+    role: 'manager',
+    loginAt: new Date().toISOString()
+  });
+
   document.getElementById('mgrAuth').classList.remove('show');
   toast('Karibu, Meneja!');
   showApp();
@@ -5766,57 +5919,75 @@ function showSE(m) {
   document.getElementById('stErrTxt').textContent = m;
 }
 
-function doStaffSignup(e) {
+async function doStaffSignup(e) {
   e.preventDefault();
   document.getElementById('stErr').classList.remove('show');
 
   var n = document.getElementById('stsN').value.trim();
-  var em = document.getElementById('stsE').value.trim();
+  var em = document.getElementById('stsE').value.trim().toLowerCase();
   var p = document.getElementById('stsP').value;
   var c = document.getElementById('stsC').value;
+  var ph = document.getElementById('stsPh').value.trim();
 
   if (!n || !em || !p) { showSE('Jaza sehemu zote'); return; }
   if (p !== c) { showSE('Nenosiri hazilingani'); return; }
   if (p.length < 6) { showSE('Nenosiri lazima iwe 6+'); return; }
 
-  var staff = gSt();
-  if (staff.find(function(s) { return s.email === em && s.bizId === S.bizId; })) {
+  /* Check if email already exists in Firestore */
+  var existing = await AuthDB.getStaffByEmail(em, S.bizId, curStaffRole);
+  if (existing) {
     showSE('Barua pepe tayari imesajiliwa');
     return;
   }
 
-  staff.push({
-    id: gid(),
+  /* Create staff in Firestore */
+  var staffId = await AuthDB.createStaff({
     userId: S.user.id,
     bizId: S.bizId,
     name: n,
     email: em,
-    phone: document.getElementById('stsPh').value.trim(),
+    phone: ph,
     password: p,
-    role: curStaffRole,
-    createdAt: new Date().toISOString()
+    role: curStaffRole
   });
 
-  sSt(staff);
+  if (!staffId) {
+    showSE('Hitilafu katika kusajili');
+    return;
+  }
+
   toast('Umefanikiwa kajiunge! Sasa ingia.');
   stab('login', document.querySelector('.stab'));
   document.getElementById('stSignupF').reset();
 }
 
-function doStaffLogin(e) {
+async function doStaffLogin(e) {
   e.preventDefault();
   document.getElementById('stErr').classList.remove('show');
 
-  var em = document.getElementById('stlE').value.trim();
+  var em = document.getElementById('stlE').value.trim().toLowerCase();
   var p = document.getElementById('stlP').value;
-  var st = gSt().find(function(s) {
-    return s.email === em && s.password === p && s.bizId === S.bizId && s.role === curStaffRole;
-  });
 
-  if (!st) { showSE('Barua pepe, nenosiri, au jukumu sio sahihi'); return; }
+  /* Get staff from Firestore */
+  var st = await AuthDB.getStaffByEmail(em, S.bizId, curStaffRole);
+
+  if (!st || st.password !== p) {
+    showSE('Barua pepe, nenosiri, au jukumu sio sahihi');
+    return;
+  }
 
   S.role = st.role;
   S.staffId = st.id;
+
+  /* Save session to Firestore */
+  await AuthDB.saveSession({
+    userId: S.user.id,
+    staffId: st.id,
+    bizId: S.bizId,
+    role: st.role,
+    loginAt: new Date().toISOString()
+  });
+
   document.getElementById('staffAuth').classList.remove('show');
   toast('Karibu, ' + st.name + '!');
   showApp();
@@ -5845,16 +6016,21 @@ function updateChip() {
   if (S.role === 'manager') {
     name = S.user ? S.user.name : 'Meneja';
     role = 'Meneja';
-    init = name.charAt(0).toUpperCase();
-  } else {
-    var st = gSt().find(function(s) { return s.id === S.staffId; });
-    if (st) {
-      name = st.name;
-      role = ROLE_LBL[st.role];
-      init = name.charAt(0).toUpperCase();
+  } else if (S.staffId) {
+    /* Get staff name from Firestore cache or use fallback */
+    var cachedStaff = window.__fb.cache.staffData
+      ? window.__fb.cache.staffData[S.staffId]
+      : null;
+    if (cachedStaff) {
+      name = cachedStaff.name;
+      role = ROLE_LBL[cachedStaff.role];
     }
+  } else if (S.role === 'owner') {
+    name = S.user ? S.user.name : 'Mmiliki';
+    role = 'Mmiliki';
   }
 
+  init = name.charAt(0).toUpperCase();
   document.getElementById('uName').textContent = name;
   document.getElementById('uRole').textContent = role;
   document.getElementById('uAv').textContent = init;
@@ -5882,7 +6058,24 @@ function switchBiz(id) {
   toast('Umehamia: ' + gBiz(id).name);
 }
 
-/* ====== NAVIGATION ====== */
+/* ====== LOGOUT ====== */
+async function handleLogout() {
+  var userId = S.user ? S.user.id : null;
+  
+  /* Clear session from Firestore */
+  await AuthDB.clearSession(userId);
+
+  /* Clear local session state */
+  S.user = null;
+  S.bizId = null;
+  S.role = null;
+  S.staffId = null;
+
+  /* Show login screen */
+  showLogin();
+  toast('Umekombokea');
+}
+   /* ====== NAVIGATION ====== */
 function nav(s) {
   var perms = ROLE_PERMS[S.role] || [];
   if (perms.indexOf(s) < 0) { toast('Huna ruhusa', 'w'); return; }
