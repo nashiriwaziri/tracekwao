@@ -5576,7 +5576,10 @@ function suBack() {
 /* ====== USER SIGNUP ====== */
 function handleSignup(e) {
   e.preventDefault();
-  hideAE && hideAE();
+
+  if (typeof hideAE === 'function') {
+    hideAE();
+  }
 
   var fullName = document.getElementById('sName').value.trim();
   var email = document.getElementById('sEmail').value.trim().toLowerCase();
@@ -5589,56 +5592,108 @@ function handleSignup(e) {
   var bizPhone = document.getElementById('sBizP').value.trim();
   var bizAddress = document.getElementById('sBizA').value.trim();
 
-  if (!fullName) { showAE('Jina kamili linahitajika.'); return; }
-  if (!email) { showAE('Barua pepe inahitajika.'); return; }
-  if (!bizName) { showAE('Jina la biashara linahitajika.'); return; }
-  if (password.length < 6) { showAE('Nenosiri lazima liwe na herufi angalau 6.'); return; }
-  if (password !== confirmPassword) { showAE('Nenosiri halifanani.'); return; }
 
+  // ===== VALIDATION =====
+  if (!fullName) {
+    showAE('Jina kamili linahitajika.');
+    return;
+  }
+
+  if (!email) {
+    showAE('Barua pepe inahitajika.');
+    return;
+  }
+
+  if (!bizName) {
+    showAE('Jina la biashara linahitajika.');
+    return;
+  }
+
+  if (password.length < 6) {
+    showAE('Nenosiri lazima liwe na herufi angalau 6.');
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    showAE('Nenosiri halifanani.');
+    return;
+  }
+
+
+  // ===== CHECK EXISTING USER =====
   var users = gU();
-  if (!Array.isArray(users)) { users = []; }
+
+  if (!Array.isArray(users)) {
+    users = [];
+  }
 
   var exists = users.find(function(u) {
     return u.email && u.email.toLowerCase() === email;
   });
 
-  if (exists) { showAE('Barua pepe tayari imesajiliwa.'); return; }
+  if (exists) {
+    showAE('Barua pepe tayari imesajiliwa.');
+    return;
+  }
 
+
+  // ===== CREATE BUSINESS ID =====
   var bizId = gid();
 
+
+  // ===== CREATE USER =====
   var user = {
     id: gid(),
     name: fullName,
     email: email,
     phone: phone,
     password: password,
+
     createdAt: new Date().toISOString(),
     lastSeen: new Date().toISOString(),
+
     status: 'active',
+
+    // USER ROLE
     systemRole: 'user',
-    businesses: [{
-      id: bizId,
-      name: bizName,
-      category: bizCategory,
-      email: bizEmail,
-      phone: bizPhone,
-      address: bizAddress,
-      logo: ''
-    }]
+
+    businesses: [
+      {
+        id: bizId,
+        name: bizName,
+        category: bizCategory,
+        email: bizEmail,
+        phone: bizPhone,
+        address: bizAddress,
+        logo: ''
+      }
+    ]
   };
+
 
   users.push(user);
 
+
+  // ===== SAVE USER =====
   try {
+
     sU(users);
-  } catch (err) {
-    console.error(err);
+
+  } catch(err) {
+
+    console.error("USER SAVE ERROR:", err);
+
     showAE('Imeshindikana kuhifadhi mtumiaji.');
     return;
   }
 
+
+
+  // ===== CREATE BUSINESS DATABASE =====
   try {
+
     sD(bizId, {
+
       products: [],
       sales: [],
       purchases: [],
@@ -5646,15 +5701,84 @@ function handleSignup(e) {
       customers: [],
       expenses: [],
       employees: [],
-      notifications: []
+      notifications: [],
+
+      createdAt: new Date().toISOString()
+
     });
-  } catch (err) {
-    console.error(err);
+
+  } catch(err) {
+
+    console.error("BUSINESS SAVE ERROR:", err);
+
   }
 
-  toast('Akaunti imeundwa kikamilifu.');
+
+
+  // =================================================
+  // ===== ACCOUNT CREATED SUCCESS MESSAGE ===========
+  // =================================================
+
+  var authErr = document.getElementById('authErr');
+
+  if (authErr) {
+    authErr.style.display = 'none';
+    authErr.classList.remove('show');
+  }
+
+
+  var successEl = document.getElementById('authSuccess');
+  var successTxt = document.getElementById('authSuccessTxt');
+
+
+  if (successEl && successTxt) {
+
+    successTxt.textContent =
+      'Akaunti imesajiliwa kwa mafanikio! Karibu, ' 
+      + bizName + '.';
+
+
+    successEl.style.display = 'flex';
+
+    successEl.classList.add('show');
+
+  }
+
+
+
+  // ===== SUCCESS TOAST =====
+  if (typeof toast === 'function') {
+
+    toast(
+      'Akaunti imeundwa kwa mafanikio! Karibu.',
+      's'
+    );
+
+  }
+
+
+
+  // ===== RESET FORM =====
   document.getElementById('signupForm').reset();
-  authTab('login');
+
+
+
+  // ===== OPEN LOGIN AFTER DELAY =====
+  setTimeout(function(){
+
+    authTab('login');
+
+
+    if(successEl){
+
+      successEl.style.display = 'none';
+      successEl.classList.remove('show');
+
+    }
+
+  },3000);
+
+
 }
 /* ====== FIREBASE AUTH HELPERS ====== */
 const AuthDB = {
