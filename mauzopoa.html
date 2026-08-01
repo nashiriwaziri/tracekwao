@@ -713,8 +713,6 @@ button{
   .topbar-branding .biz-sel{min-width:120px}
   .user-business-logo{width:36px;height:36px}
 }
-
-
 /* ===== PRICE CALCULATOR ===== */
 .price-calc-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:9999}
 .price-calc-modal.show{display:flex}
@@ -1006,20 +1004,6 @@ button{
     </div>
   </div>
 </div>
-
-<!-- ===== OWNER AUTH SCREEN ===== -->
-<div class="auth-screen hidden" id="authScreen">
-  <div class="auth-left">
-    <svg class="auth-logo" viewBox="0 0 120 120" fill="none"><rect width="120" height="120" rx="24" fill="#059669"/><path d="M30 85V45l30-20 30 20v40H75V60H45v25H30z" fill="#fff"/><circle cx="60" cy="38" r="8" fill="#d1fae5"/></svg>
-    <div class="auth-brand">BizBook</div>
-    <p class="auth-tagline">Jisajili au ingia kuanza kusimamia biashara yako</p>
-    <div class="auth-feats">
-      <div class="auth-ft"><i class="fa-solid fa-check"></i> Simamia bidhaa na mauzo</div>
-      <div class="auth-ft"><i class="fa-solid fa-check"></i> Ongeza wafanyakazi wa kazi</div>
-      <div class="auth-ft"><i class="fa-solid fa-check"></i> Ripoti za kina za kila siku</div>
-      <div class="auth-ft"><i class="fa-solid fa-check"></i> Salio la POS la haraka</div>
-    </div>
-  </div>
   <div class="auth-right">
     <div class="auth-wrap">
       <div class="auth-tabs" id="authTabs">
@@ -1485,454 +1469,1066 @@ window.__fbReady=window.__fb.load().catch(err=>{console.error('Firebase initiali
 </script>
 
 <script>
-/* ====== CONSTANTS ====== */
-var LOGO_URL='';
-var ROLE_LBL={manager:'Meneja',storekeeper:'Mhifadhi',cashier:'Mhifadhi Fedha',seller:'Muuzaji'};
-var ROLE_PERMS={manager:['dashboard','finance','pos','products','sales','purchases','suppliers','customers','debtors','employees','expenses','notifications','profile','users'],storekeeper:['dashboard','products','purchases','suppliers','notifications','profile'],cashier:['dashboard','pos','sales','customers','debtors','notifications','profile'],seller:['dashboard','pos','sales','customers','notifications','profile']};
+// ==================== DATA LAYER ====================
+const DB = {
+  _get(key) { try { return JSON.parse(localStorage.getItem('bizbook_' + key)) || []; } catch(e) { return []; } },
+  _set(key, data) { localStorage.setItem('bizbook_' + key, JSON.stringify(data)); },
+  _getOne(key) { try { return JSON.parse(localStorage.getItem('bizbook_' + key)); } catch(e) { return null; } },
+  _setOne(key, data) { localStorage.setItem('bizbook_' + key, JSON.stringify(data)); },
 
-/* ====== STATE ====== */
-var S={user:null,bizId:null,staffId:null,role:'manager',cart:[],fp:'month',charts:{}};
-var curStaffRole='storekeeper';
+  // Users - all users including owners and staff
+  getUsers() { return this._get('users'); },
+  saveUsers(u) { this._set('users', u); },
+  findUser(email, password) { return this.getUsers().find(u => u.email === email && u.password === password); },
+  findUserByEmail(email) { return this.getUsers().find(u => u.email === email); },
+  findStaffForBusiness(bizId, role, email, password) {
+    return this.getUsers().find(u => u.businessId === bizId && u.role === role && u.email === email && u.password === password);
+  },
+  getStaffForBusiness(bizId) { return this.getUsers().filter(u => u.businessId === bizId && u.role !== 'owner'); },
+  getStaffByRole(bizId, role) { return this.getUsers().filter(u => u.businessId === bizId && u.role === role); },
+  addUser(user) { const u = this.getUsers(); u.push(user); this.saveUsers(u); return user; },
+  updateUser(id, data) { const u = this.getUsers(); const i = u.findIndex(x => x.id === id); if(i > -1) { Object.assign(u[i], data); this.saveUsers(u); } },
+  deleteUser(id) { this.saveUsers(this.getUsers().filter(u => u.id !== id)); },
 
-/* ====== HELPERS ====== */
-function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
-function fmt(n){return new Intl.NumberFormat('en-US').format(n||0)}
-function fmtD(d){return new Date(d).toLocaleDateString('sw',{day:'2-digit',month:'short',year:'numeric'})}
-function today(){return new Date().toISOString().slice(0,10)}
+  // Businesses
+  getBusinesses() { return this._get('businesses'); },
+  saveBusinesses(b) { this._set('businesses', b); },
+  getBusiness(id) { return this.getBusinesses().find(b => b.id === id); },
+  getBusinessByOwner(ownerId) { return this.getBusinesses().find(b => b.ownerId === ownerId); },
+  addBusiness(biz) { const b = this.getBusinesses(); b.push(biz); this.saveBusinesses(b); return biz; },
+  updateBusiness(id, data) { const b = this.getBusinesses(); const i = b.findIndex(x => x.id === id); if(i > -1) { Object.assign(b[i], data); this.saveBusinesses(b); } },
 
-/* ====== FIRESTORE DATA LAYER ====== */
-var DEFAULT_DATA={products:[],sales:[],purchases:[],suppliers:[],customers:[],expenses:[],employees:[],notifications:[]};
-function gU(){return window.__fb?window.__fb.cache.users:[]}
-function sU(u){if(!window.__fb)return;window.__fb.cache.users=u;window.__fb.writeArray('users',u).catch(console.error)}
-function gSt(){return window.__fb?window.__fb.cache.staff:[]}
-function sSt(s){if(!window.__fb)return;window.__fb.cache.staff=s;window.__fb.writeArray('staff',s).catch(console.error)}
-function gMC(){return window.__fb?window.__fb.cache.managers:[]}
-function sMC(c){if(!window.__fb)return;window.__fb.cache.managers=c;window.__fb.writeArray('managers',c).catch(console.error)}
-function gBiz(id){var u=gU().find(function(x){return x.businesses&&x.businesses.find(function(b){return b.id===id})});return u?u.businesses.find(function(b){return b.id===id}):null}
-function sBiz(id,biz){var users=gU();users.forEach(function(u){if(u.businesses){var i=u.businesses.findIndex(function(b){return b.id===id});if(i>=0)Object.assign(u.businesses[i],biz)}});sU(users)}
-function gD(id){var d=window.__fb&&window.__fb.cache.businessData[id];return d?JSON.parse(JSON.stringify(d)):JSON.parse(JSON.stringify(DEFAULT_DATA))}
-function sD(id,d){if(!window.__fb||!id)return;window.__fb.cache.businessData[id]=JSON.parse(JSON.stringify(d));window.__fb.writeBusiness(id,d).catch(console.error)}
-function D(){return gD(S.bizId)}
-function uD(upd){var d=D();Object.assign(d,upd);sD(S.bizId,d)}
+  // Products
+  getProducts(bizId) { return this._get('products').filter(p => p.businessId === bizId); },
+  getAllProducts() { return this._get('products'); },
+  addProduct(p) { const all = this._get('products'); all.push(p); this._set('products', all); },
+  updateProduct(id, data) { const all = this._get('products'); const i = all.findIndex(x => x.id === id); if(i > -1) { Object.assign(all[i], data); this._set('products', all); } },
+  deleteProduct(id) { this._set('products', this._get('products').filter(p => p.id !== id)); },
 
-/* ====== TOAST ====== */
-function toast(msg,type){
-  type=type||'s';
-  var c=document.getElementById('toastC');
-  var ic={s:'fa-check',e:'fa-xmark',w:'fa-triangle-exclamation',i:'fa-info'};
-  var t=document.createElement('div');t.className='toast '+type;
-  t.innerHTML='<div class="ti"><i class="fa-solid '+(ic[type]||'fa-info')+'"></i></div><div class="tb-body"><div class="tb-title">'+msg+'</div></div><button class="tb-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button><div class="t-bar" style="animation-duration:3s"></div>';
-  c.appendChild(t);setTimeout(function(){t.classList.add('rem');setTimeout(function(){t.remove()},300)},3000);
+  // Sales
+  getSales(bizId) { return this._get('sales').filter(s => s.businessId === bizId); },
+  addSale(s) { const all = this._get('sales'); all.push(s); this._set('sales', all); },
+
+  // Customers
+  getCustomers(bizId) { return this._get('customers').filter(c => c.businessId === bizId); },
+  addCustomer(c) { const all = this._get('customers'); all.push(c); this._set('customers', all); },
+  updateCustomer(id, data) { const all = this._get('customers'); const i = all.findIndex(x => x.id === id); if(i > -1) { Object.assign(all[i], data); this._set('customers', all); } },
+  deleteCustomer(id) { this._set('customers', this._get('customers').filter(c => c.id !== id)); },
+
+  // Expenses
+  getExpenses(bizId) { return this._get('expenses').filter(e => e.businessId === bizId); },
+  addExpense(e) { const all = this._get('expenses'); all.push(e); this._set('expenses', all); },
+  updateExpense(id, data) { const all = this._get('expenses'); const i = all.findIndex(x => x.id === id); if(i > -1) { Object.assign(all[i], data); this._set('expenses', all); } },
+  deleteExpense(id) { this._set('expenses', this._get('expenses').filter(e => e.id !== id)); },
+
+  // Session
+  getSession() { return this._getOne('session'); },
+  setSession(s) { this._setOne('session', s); },
+  clearSession() { localStorage.removeItem('bizbook_session'); },
+  getSuperSession() { return this._getOne('super_session'); },
+  setSuperSession(s) { this._setOne('super_session', s); },
+  clearSuperSession() { localStorage.removeItem('bizbook_super_session'); }
+};
+
+// ==================== UTILITIES ====================
+function uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 6); }
+function fmt(n) { return 'TZS ' + Number(n||0).toLocaleString('en-TZ'); }
+function fmtDate(d) { return new Date(d).toLocaleDateString('sw-TZ', {day:'2-digit',month:'short',year:'numeric'}); }
+function getInitials(name) { return (name||'').split(' ').map(w=>w[0]).join('').toUpperCase().substr(0,2)||'?'; }
+const ROLE_LABELS = {owner:'Mmiliki',manager:'Meneja',storekeeper:'Mhifadhi',cashier:'Makasisha',seller:'Muuzaji'};
+const ROLE_ICONS = {owner:'fa-crown',manager:'fa-user-tie',storekeeper:'fa-warehouse',cashier:'fa-cash-register',seller:'fa-store'};
+const BIZ_TYPES = {general:'Biashara ya Jumla',retail:'Biashara ya Rejareja',restaurant:'Restoran/Mlango',service:'Huduma',manufacturing:'Ufanyaji'};
+const CAT_LABELS = {general:'Jumla',food:'Chakula',drink:'Kinywaji',electronics:'Elektroniki',clothing:'Nguo',other:'Nyingine'};
+const EXP_LABELS = {rent:'Kodi',salary:'Mshahara',utilities:'Huduma',supplies:'Vifaa',transport:'Usafiri',other:'Nyingine'};
+
+// ==================== TOAST ====================
+function toast(type, msg) {
+  const c = document.getElementById('toastContainer');
+  const icons = {s:'fa-check',e:'fa-xmark',w:'fa-exclamation',i:'fa-info'};
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.innerHTML = `<div class="ti"><i class="fa-solid ${icons[type]}"></i></div><div class="tb-body"><div class="tb-title">${msg}</div></div><button class="tb-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button><div class="t-bar" style="animation-duration:3s"></div>`;
+  c.appendChild(t);
+  setTimeout(() => { t.classList.add('rem'); setTimeout(() => t.remove(), 300); }, 3000);
 }
 
-/* ====== SCREEN CONTROL ====== */
-function hideAll(){
+// ==================== MODAL ====================
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ==================== AUTH HELPERS ====================
+function togglePw(id, btn) {
+  const inp = document.getElementById(id);
+  const isP = inp.type === 'password';
+  inp.type = isP ? 'text' : 'password';
+  btn.innerHTML = `<i class="fa-solid fa-eye${isP?'-slash':''}"></i>`;
+}
+
+function showAuthErr(id, msg) {
+  const el = document.getElementById(id);
+  el.querySelector('span').textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 5000);
+}
+function hideAuthErr(id) { document.getElementById(id).classList.remove('show'); }
+
+function checkPwStr(pw) {
+  const bar = document.getElementById('pwBar');
+  let s = 0;
+  if(pw.length >= 6) s++;
+  if(pw.length >= 10) s++;
+  if(/[A-Z]/.test(pw)) s++;
+  if(/[0-9]/.test(pw)) s++;
+  const colors = ['#dc2626','#d97706','#059669','#059669'];
+  const widths = ['25%','50%','75%','100%'];
+  bar.style.width = widths[s-1] || '0%';
+  bar.style.background = colors[s-1] || '#e5e7eb';
+}
+
+// ==================== OWNER AUTH ====================
+function showAuth(tab) {
   document.getElementById('landingPage').classList.add('hidden');
-  var ss=document.getElementById('superScreen');if(ss)ss.classList.add('hidden');
+  document.getElementById('authScreen').classList.remove('hidden');
+  switchAuthTab(tab || 'login');
+}
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('#authTabs .auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('loginForm').classList.toggle('active', tab === 'login');
+  document.getElementById('signupForm').classList.toggle('active', tab === 'signup');
+  hideAuthErr('loginErr');
+  hideAuthErr('signupErr');
+}
+
+function authNextStep(from) {
+  hideAuthErr('signupErr');
+  if(from === 1) {
+    const name = document.getElementById('suName').value.trim();
+    const email = document.getElementById('suEmail').value.trim();
+    const pw = document.getElementById('suPassword').value;
+    if(!name || !email || !pw) return showAuthErr('signupErr', 'Tafadhali jaza sehemu zote zinazohitajika');
+    if(!/\S+@\S+\.\S+/.test(email)) return showAuthErr('signupErr', 'Barua pepe si sahihi');
+    if(pw.length < 6) return showAuthErr('signupErr', 'Nenosiri lazima iwe na angalau herufi 6');
+    if(DB.findUserByEmail(email)) return showAuthErr('signupErr', 'Barua pepe hii imesajiliwa tayari');
+    document.getElementById('authStep1').style.display = 'none';
+    document.getElementById('authStep2').style.display = 'block';
+    document.getElementById('sd1').className = 'sdot done';
+    document.getElementById('sl1').className = 'sline on';
+    document.getElementById('sd2').className = 'sdot on';
+  } else if(from === 2) {
+    const bizName = document.getElementById('suBizName').value.trim();
+    if(!bizName) return showAuthErr('signupErr', 'Tafadhali weka jina la biashara');
+    document.getElementById('cfName').textContent = document.getElementById('suName').value.trim();
+    document.getElementById('cfEmail').textContent = document.getElementById('suEmail').value.trim();
+    document.getElementById('cfBiz').textContent = bizName;
+    document.getElementById('cfType').textContent = BIZ_TYPES[document.getElementById('suBizType').value] || document.getElementById('suBizType').value;
+    document.getElementById('authStep2').style.display = 'none';
+    document.getElementById('authStep3').style.display = 'block';
+    document.getElementById('sd2').className = 'sdot done';
+    document.getElementById('sl2').className = 'sline on';
+    document.getElementById('sd3').className = 'sdot on';
+  }
+}
+
+function authPrevStep(from) {
+  hideAuthErr('signupErr');
+  if(from === 2) {
+    document.getElementById('authStep2').style.display = 'none';
+    document.getElementById('authStep1').style.display = 'block';
+    document.getElementById('sd1').className = 'sdot on';
+    document.getElementById('sl1').className = 'sline';
+    document.getElementById('sd2').className = 'sdot';
+  } else if(from === 3) {
+    document.getElementById('authStep3').style.display = 'none';
+    document.getElementById('authStep2').style.display = 'block';
+    document.getElementById('sd2').className = 'sdot on';
+    document.getElementById('sl2').className = 'sline';
+    document.getElementById('sd3').className = 'sdot';
+  }
+}
+
+function handleOwnerSignup() {
+  hideAuthErr('signupErr');
+  const name = document.getElementById('suName').value.trim();
+  const email = document.getElementById('suEmail').value.trim();
+  const pw = document.getElementById('suPassword').value;
+  const bizName = document.getElementById('suBizName').value.trim();
+  const bizType = document.getElementById('suBizType').value;
+  const bizPhone = document.getElementById('suBizPhone').value.trim();
+  const bizAddr = document.getElementById('suBizAddr').value.trim();
+
+  const bizId = uid();
+  const userId = uid();
+
+  // Create business
+  DB.addBusiness({ id: bizId, name: bizName, type: bizType, phone: bizPhone, address: bizAddr, ownerId: userId, logo: '', createdAt: Date.now() });
+
+  // Create owner user
+  DB.addUser({ id: userId, name, email, password: pw, role: 'owner', businessId: bizId, createdAt: Date.now() });
+
+  // Set session
+  const user = DB.findUser(email, pw);
+  DB.setSession(user);
+
+  toast('s', 'Akaunti imetengenezwa kwa mafanikio!');
+  enterDashboard();
+}
+
+function handleOwnerLogin() {
+  hideAuthErr('loginErr');
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw = document.getElementById('loginPassword').value;
+  if(!email || !pw) return showAuthErr('loginErr', 'Tafadhali weka barua pepe na nenosiri');
+
+  const user = DB.findUser(email, pw);
+  if(!user) return showAuthErr('loginErr', 'Barua pepe au nenosiri si sahihi');
+
+  DB.setSession(user);
+  toast('s', 'Karibu, ' + user.name + '!');
+
+  if(user.role === 'owner') {
+    // Check if business has staff setup, otherwise go to role screen
+    const staff = DB.getStaffForBusiness(user.businessId);
+    if(staff.length === 0) {
+      showRoleScreen();
+    } else {
+      enterDashboard();
+    }
+  } else {
+    enterDashboard();
+  }
+}
+
+// ==================== ROLE SELECTION SCREEN ====================
+function showRoleScreen() {
+  const session = DB.getSession();
+  if(!session) return;
+  const biz = DB.getBusiness(session.businessId);
+  if(!biz) return;
+
+  document.getElementById('landingPage').classList.add('hidden');
   document.getElementById('authScreen').classList.add('hidden');
-  document.getElementById('roleScreen').classList.remove('show');
-  document.getElementById('mgrAuth').classList.remove('show');
-  document.getElementById('staffAuth').classList.remove('show');
+  document.getElementById('roleScreen').classList.add('show');
+  document.getElementById('mainContent').classList.remove('vis');
   document.getElementById('sidebar').classList.remove('vis');
   document.getElementById('topbar').classList.remove('vis');
-  document.getElementById('mainArea').classList.remove('vis');
-  document.getElementById('sbBd').classList.remove('show');
+
+  document.getElementById('rsBizName').textContent = biz.name;
+  document.getElementById('rsBizType').textContent = BIZ_TYPES[biz.type] || biz.type;
+  updateRoleStatuses();
+  renderStaffList();
 }
-function showLanding(){hideAll();document.getElementById('landingPage').classList.remove('hidden')}
-function showAuth(tab){
-  hideAll();document.getElementById('authScreen').classList.remove('hidden');
-  authTab(tab||'login');
+
+function updateRoleStatuses() {
+  const session = DB.getSession();
+  if(!session) return;
+  const roles = ['manager','storekeeper','cashier','seller'];
+  const statusIds = ['mgrStatus','skStatus','cashStatus','sellStatus'];
+  roles.forEach((role, i) => {
+    const staff = DB.getStaffByRole(session.businessId, role);
+    const el = document.getElementById(statusIds[i]);
+    if(staff.length > 0) {
+      el.textContent = staff.length + ' wamesajiliwa';
+      el.className = 'rs-status on';
+    } else {
+      el.textContent = 'Hakuna ' + ROLE_LABELS[role].toLowerCase();
+      el.className = 'rs-status off';
+    }
+  });
 }
-function showRoles(){hideAll();document.getElementById('roleScreen').classList.add('show');updateRoleUI()}
-function showApp(){
-  hideAll();
+
+function renderStaffList() {
+  const session = DB.getSession();
+  if(!session) return;
+  const staff = DB.getStaffForBusiness(session.businessId);
+  const container = document.getElementById('staffListContainer');
+  if(staff.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  let html = '<h3 style="font-family:var(--font-hd);font-size:1.1rem;margin-bottom:14px"><i class="fa-solid fa-users" style="color:var(--primary);margin-right:6px"></i> Wafanyakazi Waliosajiliwa</h3>';
+  staff.forEach(s => {
+    const avClass = 'av-' + (s.role === 'manager' ? 'mgr' : s.role === 'storekeeper' ? 'sk' : s.role === 'cashier' ? 'cash' : 'sell');
+    html += `<div class="us-card">
+      <div class="us-av ${avClass}">${getInitials(s.name)}</div>
+      <div class="us-info"><h4>${s.name}</h4><p>${s.email}</p></div>
+      <span class="role-b ${s.role}">${ROLE_LABELS[s.role]}</span>
+      <div class="us-acts">
+        <button class="btn-icon dng" title="Futa" onclick="deleteStaff('${s.id}')"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function deleteStaff(id) {
+  document.getElementById('confirmTitle').textContent = 'Futa Mfanyakazi?';
+  document.getElementById('confirmMsg').textContent = 'Hatua hii haiwezi kurudishwa. Mfanyakazi atafutwa kabisa.';
+  document.getElementById('confirmBtn').onclick = function() {
+    DB.deleteUser(id);
+    closeModal('confirmModal');
+    toast('s', 'Mfanyakazi amefutwa');
+    updateRoleStatuses();
+    renderStaffList();
+  };
+  openModal('confirmModal');
+}
+
+// ==================== STAFF AUTH (KEY FIX AREA) ====================
+// This is the critical section that was silently failing
+let currentStaffRole = '';
+
+function openStaffAuth(role) {
+  currentStaffRole = role;
+  const overlay = document.getElementById('overlayAuth');
+  const iconContainer = document.getElementById('staffAuthIcon');
+  const badge = document.getElementById('staffRoleBadge');
+  const title = document.getElementById('staffAuthTitle');
+  const sub = document.getElementById('staffAuthSub');
+
+  // Set role-specific visuals
+  const roleConfig = {
+    manager: { badgeClass:'rb-mgr', icon:'mgr-ic', iconFA:'fa-user-tie', title:'Meneja', sub:'Ingia au jisajili kama meneja wa biashara hii' },
+    storekeeper: { badgeClass:'rb-sk', icon:'', iconFA:'fa-warehouse', title:'Mhifadhi', sub:'Ingia au jisajili kama mhifadhi wa biashara hii' },
+    cashier: { badgeClass:'rb-cash', icon:'', iconFA:'fa-cash-register', title:'Makasisha', sub:'Ingia au jisajili kama makasisha wa biashara hii' },
+    seller: { badgeClass:'rb-sell', icon:'', iconFA:'fa-store', title:'Muuzaji', sub:'Ingia au jisajili kama muuzaji wa biashara hii' }
+  };
+
+  const cfg = roleConfig[role];
+  if(!cfg) return;
+
+  // Icon
+  if(role === 'manager') {
+    iconContainer.innerHTML = '<div class="mgr-ic"><i class="fa-solid fa-user-tie"></i></div>';
+  } else {
+    iconContainer.innerHTML = '';
+  }
+
+  // Badge
+  badge.className = 'role-badge ' + cfg.badgeClass;
+  badge.innerHTML = '<i class="fa-solid ' + cfg.iconFA + '"></i> ' + cfg.title;
+
+  // Title & sub
+  title.textContent = cfg.title + ' - Auth';
+  sub.textContent = cfg.sub;
+
+  // Set role names in buttons
+  document.getElementById('staffLoginRoleName').textContent = cfg.title.toLowerCase();
+  document.getElementById('staffSignupRoleName').textContent = cfg.title.toLowerCase();
+
+  // Clear all fields and errors
+  document.getElementById('staffLoginEmail').value = '';
+  document.getElementById('staffLoginPassword').value = '';
+  document.getElementById('staffSignupName').value = '';
+  document.getElementById('staffSignupEmail').value = '';
+  document.getElementById('staffSignupPassword').value = '';
+  document.getElementById('staffSignupConfirm').value = '';
+  hideAuthErr('staffLoginErr');
+  hideAuthErr('staffSignupErr');
+
+  // Reset to login tab
+  switchStaffTab('slogin');
+
+  // Show overlay
+  overlay.classList.add('show');
+}
+
+function closeStaffAuth() {
+  document.getElementById('overlayAuth').classList.remove('show');
+  currentStaffRole = '';
+}
+
+function switchStaffTab(tab) {
+  document.querySelectorAll('#staffTabs .stab').forEach(t => t.classList.toggle('active', t.dataset.stab === tab));
+  document.getElementById('staffLoginForm').classList.toggle('active', tab === 'slogin');
+  document.getElementById('staffSignupForm').classList.toggle('active', tab === 'ssignup');
+  hideAuthErr('staffLoginErr');
+  hideAuthErr('staffSignupErr');
+}
+
+// *** CRITICAL FIX: Staff Signup Handler ***
+function handleStaffSignup() {
+  hideAuthErr('staffSignupErr');
+
+  const name = document.getElementById('staffSignupName').value.trim();
+  const email = document.getElementById('staffSignupEmail').value.trim();
+  const password = document.getElementById('staffSignupPassword').value;
+  const confirm = document.getElementById('staffSignupConfirm').value;
+
+  // Validation
+  if(!name) return showAuthErr('staffSignupErr', 'Tafadhali weka jina lako kamili');
+  if(!email) return showAuthErr('staffSignupErr', 'Tafadhali weka barua pepe');
+  if(!/\S+@\S+\.\S+/.test(email)) return showAuthErr('staffSignupErr', 'Barua pepe si sahihi');
+  if(!password) return showAuthErr('staffSignupErr', 'Tafadhali weka nenosiri');
+  if(password.length < 6) return showAuthErr('staffSignupErr', 'Nenosiri lazima iwe na angalau herufi 6');
+  if(password !== confirm) return showAuthErr('staffSignupErr', 'Nenosiri haiziani');
+
+  if(!currentStaffRole) return showAuthErr('staffSignupErr', 'Hitilafu: Jukumu halijatambuliwa. Jaribu tena.');
+
+  const session = DB.getSession();
+  if(!session) return showAuthErr('staffSignupErr', 'Hitilafu: Session imekosea. Jaribu kuingia tena.');
+
+  const bizId = session.businessId;
+
+  // Check if email already exists for THIS business and THIS role
+  const existingSameRole = DB.getUsers().find(u =>
+    u.businessId === bizId && u.role === currentStaffRole && u.email === email
+  );
+  if(existingSameRole) return showAuthErr('staffSignupErr', `${ROLE_LABELS[currentStaffRole]} mwenye barua pepe hii tayari yupo kwa biashara hii`);
+
+  // Check if email exists for a DIFFERENT role in same business
+  const existingDiffRole = DB.getUsers().find(u =>
+    u.businessId === bizId && u.role !== currentStaffRole && u.email === email
+  );
+  if(existingDiffRole) return showAuthErr('staffSignupErr', `Barua pepe hii imesajiliwa kama ${ROLE_LABELS[existingDiffRole]} kwa biashara hii. Tumia barua pepe tofauti.`);
+
+  // Create the staff user linked to this business
+  const staffUser = {
+    id: uid(),
+    name: name,
+    email: email,
+    password: password,
+    role: currentStaffRole,
+    businessId: bizId,
+    createdAt: Date.now()
+  };
+
+  DB.addUser(staffUser);
+
+  // Close overlay and show success
+  closeStaffAuth();
+  toast('s', `${ROLE_LABELS[currentStaffRole]} ${name} amesajiliwa kwa mafanikio!`);
+
+  // Refresh role screen
+  updateRoleStatuses();
+  renderStaffList();
+}
+
+// *** CRITICAL FIX: Staff Login Handler ***
+function handleStaffLogin() {
+  hideAuthErr('staffLoginErr');
+
+  const email = document.getElementById('staffLoginEmail').value.trim();
+  const password = document.getElementById('staffLoginPassword').value;
+
+  if(!email) return showAuthErr('staffLoginErr', 'Tafadhali weka barua pepe');
+  if(!password) return showAuthErr('staffLoginErr', 'Tafadhali weka nenosiri');
+  if(!currentStaffRole) return showAuthErr('staffLoginErr', 'Hitilafu: Jukumu halijatambuliwa');
+
+  const session = DB.getSession();
+  if(!session) return showAuthErr('staffLoginErr', 'Hitilafu: Session imekosea. Jaribu kuingia tena.');
+
+  const bizId = session.businessId;
+
+  // Find user by email + password + role + businessId
+  const user = DB.findStaffForBusiness(bizId, currentStaffRole, email, password);
+
+  if(!user) {
+    // Check if user exists but wrong role
+    const anyUser = DB.getUsers().find(u => u.businessId === bizId && u.email === email && u.password === password);
+    if(anyUser) {
+      return showAuthErr('staffLoginErr', `Barua pepe hii imesajiliwa kama ${ROLE_LABELS[anyUser.role]}, sio ${ROLE_LABELS[currentStaffRole]}`);
+    }
+    return showAuthErr('staffLoginErr', 'Barua pepe au nenosiri si sahihi kwa jukumu hili');
+  }
+
+  // Set session to this staff user
+  DB.setSession(user);
+  closeStaffAuth();
+  toast('s', `Karibu, ${user.name}!`);
+  enterDashboard();
+}
+
+// ==================== DASHBOARD ENTRY ====================
+function enterDashboard() {
+  const session = DB.getSession();
+  if(!session) return showAuth('login');
+
+  const biz = DB.getBusiness(session.businessId);
+  if(!biz) return handleLogout();
+
+  // Hide all screens
+  document.getElementById('landingPage').classList.add('hidden');
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('roleScreen').classList.remove('show');
+  document.getElementById('superScreen').classList.add('hidden');
+
+  // Show app
   document.getElementById('sidebar').classList.add('vis');
   document.getElementById('topbar').classList.add('vis');
-  document.getElementById('mainArea').classList.add('vis');
-  applyRole();updateChip();fillBizSel();updateBusinessBranding();nav('dashboard');renderAll();
-}
-function backToLanding(){S={user:null,bizId:null,staffId:null,role:'manager',cart:[],fp:'month',charts:{}};showLanding()}
+  document.getElementById('mainContent').classList.add('vis');
 
-/* ====== AUTH TABS ====== */
-function authTab(t){
-  document.querySelectorAll('.auth-tab').forEach(function(b,i){b.classList.toggle('active',(t==='login'?i===0:i===1))});
-  document.getElementById('loginForm').classList.toggle('active',t==='login');
-  document.getElementById('signupForm').classList.toggle('active',t==='signup');
-  document.getElementById('authErr').classList.remove('show');
-}
-function showAE(m){document.getElementById('authErr').classList.add('show');document.getElementById('authErrTxt').textContent=m}
-function togPw(id,btn){var inp=document.getElementById(id);var s=inp.type==='password';inp.type=s?'text':'password';btn.querySelector('i').className='fa-solid fa-eye'+(s?'-slash':'')}
-function pwStr(v){var b=document.getElementById('pwBar');var s=0;if(v.length>=6)s++;if(/[A-Z]/.test(v))s++;if(/[0-9]/.test(v))s++;if(/[^A-Za-z0-9]/.test(v))s++;b.style.width=(s*25)+'%';b.style.background=s<=1?'#dc2626':s<=2?'#d97706':s<=3?'#0284c7':'#059669'}
-function suNext(){
-  var n=document.getElementById('sName').value.trim(),e=document.getElementById('sEmail').value.trim(),p=document.getElementById('sPass').value,c=document.getElementById('sConf').value;
-  if(!n||!e||!p){showAE('Jaza sehemu zote');return}
-  if(p!==c){showAE('Nenosiri hazilingani');return}
-  if(p.length<6){showAE('Nenosiri lazima iwe herufi 6+');return}
-  document.getElementById('ss1').style.display='none';document.getElementById('ss2').style.display='block';
-  document.getElementById('sd1').className='sdot done';document.getElementById('sl1').className='sline on';document.getElementById('sd2').className='sdot on';
-}
-function suBack(){
-  document.getElementById('ss1').style.display='block';document.getElementById('ss2').style.display='none';
-  document.getElementById('sd1').className='sdot on';document.getElementById('sl1').className='sline';document.getElementById('sd2').className='sdot';
+  // Set user info
+  document.getElementById('userAv').textContent = getInitials(session.name);
+  document.getElementById('userName').textContent = session.name;
+  document.getElementById('userRole').textContent = ROLE_LABELS[session.role] || session.role;
+  document.getElementById('bizSelect').innerHTML = `<option>${biz.name}</option>`;
+
+  // Role-based nav visibility
+  applyRolePermissions(session.role);
+
+  // Navigate to dashboard
+  navTo('dashboard');
+  renderDashboard();
 }
 
-/* ====== USER SIGNUP ====== */
-function handleSignup(e){
-  e.preventDefault();
-  var bn=document.getElementById('sBizN').value.trim();
-  if(!bn){showAE('Jina la biashara linahitajika');return}
-  var users=gU(),email=document.getElementById('sEmail').value.trim();
-  if(users.find(function(u){return u.email===email})){showAE('Barua pepe tayari imesajiliwa');return}
-  var bizId=gid();
-  var user={id:gid(),name:document.getElementById('sName').value.trim(),email:email,phone:document.getElementById('sPhone').value.trim(),password:document.getElementById('sPass').value,createdAt:new Date().toISOString(),status:'active',systemRole:'user',lastSeen:new Date().toISOString(),businesses:[{id:bizId,name:bn,category:document.getElementById('sBizC').value,email:document.getElementById('sBizE').value.trim(),phone:document.getElementById('sBizP').value.trim(),address:document.getElementById('sBizA').value.trim(),logo:''}]};
-  users.push(user);sU(users);
-  sD(bizId,{products:[],sales:[],purchases:[],suppliers:[],customers:[],expenses:[],employees:[],notifications:[]});
-  toast('Akaunti imeundwa!');authTab('login');
-}
+function applyRolePermissions(role) {
+  const adminOnly = ['users'];
+  const noAccess = {
+    manager: [],
+    storekeeper: ['pos','customers','expenses','reports','users','settings'],
+    cashier: ['products','inventory','customers','expenses','reports','users','settings'],
+    seller: ['products','inventory','expenses','reports','users','settings']
+  };
 
-/* ====== USER LOGIN ====== */
-function handleLogin(e){
-  e.preventDefault();
+  const hidden = noAccess[role] || [];
+  const allNavItems = document.querySelectorAll('#sidebarNav .ni');
 
-  document.getElementById('authErr').classList.remove('show');
-
-  var email = document.getElementById('lEmail').value.trim().toLowerCase();
-  var pass  = document.getElementById('lPass').value;
-
-  if(!email || !pass){
-    showAE('Jaza barua pepe na nenosiri.');
-    return;
-  }
-
-  /* ==========================
-     1. BUSINESS OWNER LOGIN
-     ========================== */
-
-  var user = gU().find(function(u){
-    return (
-      String(u.email).toLowerCase() === email &&
-      u.password === pass
-    );
-  });
-
-  if(user){
-
-    if(!user.businesses || !user.businesses.length){
-      showAE('Hakuna biashara iliyosajiliwa.');
-      return;
+  allNavItems.forEach(item => {
+    const sec = item.dataset.sec;
+    if(!sec) return;
+    if(hidden.includes(sec)) {
+      item.style.display = 'none';
+    } else {
+      item.style.display = '';
     }
-
-    S.user = user;
-    S.role = "owner";
-    S.bizId = user.businesses[0].id;
-
-    toast('Karibu, ' + user.name + '!');
-    showRoles();
-    return;
-  }
-
-  /* ==========================
-     2. STAFF LOGIN
-     ========================== */
-
-  var staff = gSt().find(function(s){
-    return (
-      String(s.email).toLowerCase() === email &&
-      s.password === pass
-    );
   });
 
-  if(!staff){
-    showAE('Barua pepe au nenosiri sio sahihi.');
-    return;
+  // Admin label
+  const isAdmin = role === 'owner' || role === 'manager';
+  document.getElementById('adminLbl').style.display = isAdmin ? '' : 'none';
+  document.getElementById('navUsers').style.display = isAdmin ? '' : 'none';
+}
+
+// ==================== NAVIGATION ====================
+function navTo(sec) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('#sidebarNav .ni').forEach(n => n.classList.remove('active'));
+  const target = document.getElementById('sec-' + sec);
+  if(target) target.classList.add('active');
+  const navItem = document.querySelector(`#sidebarNav .ni[data-sec="${sec}"]`);
+  if(navItem) navItem.classList.add('active');
+
+  // Render section content
+  switch(sec) {
+    case 'dashboard': renderDashboard(); break;
+    case 'products': renderProducts(); break;
+    case 'pos': renderPOSProducts(); renderCart(); break;
+    case 'inventory': renderInventory(); break;
+    case 'customers': renderCustomers(); break;
+    case 'expenses': renderExpenses(); break;
+    case 'reports': renderReports(); break;
+    case 'users': renderUsersSection(); break;
+    case 'settings': renderSettings(); break;
   }
 
-  if(staff.active === false){
-    showAE('Account yako imefungwa.');
-    return;
+  // Close sidebar on mobile
+  if(window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarBackdrop').classList.remove('show');
+  }
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarBackdrop').classList.toggle('show');
+}
+document.getElementById('sidebarBackdrop').addEventListener('click', toggleSidebar);
+
+function toggleNotif() { document.getElementById('notifPanel').classList.toggle('open'); }
+function toggleUserDD() { document.getElementById('userDD').classList.toggle('show'); }
+document.addEventListener('click', e => {
+  if(!e.target.closest('.u-chip')) document.getElementById('userDD').classList.remove('show');
+  if(!e.target.closest('.np') && !e.target.closest('.tb-btn')) document.getElementById('notifPanel').classList.remove('open');
+});
+
+// ==================== DASHBOARD RENDERING ====================
+let salesChartInst = null, prodChartInst = null;
+
+function renderDashboard() {
+  const session = DB.getSession();
+  if(!session) return;
+  const bizId = session.businessId;
+  const products = DB.getProducts(bizId);
+  const sales = DB.getSales(bizId);
+  const expenses = DB.getExpenses(bizId);
+  const customers = DB.getCustomers(bizId);
+
+  const today = new Date().toDateString();
+  const todaySales = sales.filter(s => new Date(s.createdAt).toDateString() === today);
+  const todayRevenue = todaySales.reduce((a,s) => a + s.total, 0);
+  const totalRevenue = sales.reduce((a,s) => a + s.total, 0);
+  const totalExpenses = expenses.reduce((a,e) => a + e.amount, 0);
+
+  // Role dashboard for non-owners
+  const roleDashContainer = document.getElementById('roleDashContainer');
+  if(session.role !== 'owner') {
+    roleDashContainer.innerHTML = renderRoleDash(session, {todaySales:todaySales.length, todayRevenue, totalSales:sales.length, products:products.length});
+    roleDashContainer.style.display = '';
+  } else {
+    roleDashContainer.style.display = 'none';
   }
 
-  S.staff = staff;
-  S.user  = staff;
-  S.role  = staff.role;
-  S.bizId = staff.bizId;
+  // Metrics
+  const metricsHtml = `
+    <div class="mc g"><div class="mc-icon"><i class="fa-solid fa-coins"></i></div><h3>${fmt(todayRevenue)}</h3><p>Mauzo ya Leo</p></div>
+    <div class="mc a"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>${todaySales.length}</h3><p>Matengulizo ya Leo</p></div>
+    <div class="mc b"><div class="mc-icon"><i class="fa-solid fa-boxes-stacked"></i></div><h3>${products.length}</h3><p>Bidhaa</p></div>
+    <div class="mc r"><div class="mc-icon"><i class="fa-solid fa-arrow-trend-down"></i></div><h3>${fmt(totalExpenses)}</h3><p>Jumla Matumizi</p></div>
+    <div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-users"></i></div><h3>${customers.length}</h3><p>Wateja</p></div>
+  `;
+  document.getElementById('dashMetrics').innerHTML = metricsHtml;
 
-  toast('Karibu, ' + staff.name + '!');
-
-  // Fungua dashboard moja kwa moja kwa staff
-  hideAll();
-
-  document.getElementById('app').classList.remove('hidden');
-
-  renderAll();
-
-  nav('dashboard');
-}
-   /* ====== ROLE SELECT ====== */
-function updateRoleUI(){
-  var biz=gBiz(S.bizId);if(!biz)return;
-  document.getElementById('rsBizName').textContent=biz.name;
-  document.getElementById('rsBizCat').textContent=biz.category+' • '+biz.address;
-  var mc=gMC().find(function(c){return c.bizId===S.bizId});
-  var st=document.getElementById('mgrSt');
-  if(mc){st.className='rs-status on';st.textContent='Akaunti imewekwa'}else{st.className='rs-status off';st.textContent='Bado haijawekwa'}
+  // Charts
+  renderSalesChart(sales);
+  renderProdChart(products, sales);
 }
 
-/* ====== MANAGER AUTH ====== */
-function openMgrAuth(){
-  var mc=gMC().find(function(c){return c.bizId===S.bizId});
-  var area=document.getElementById('mgrFormArea');
-  if(mc){
-    area.innerHTML='<form onsubmit="doMgrLogin(event)" style="text-align:left"><div class="fg"><label>Jina la Mtumiaji <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-user"></i><input type="text" class="fi" id="mgrU" required/></div></div><div class="fg"><label>Nenosiri <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrP" required/></div></div><button type="submit" class="btn-auth btn-auth-p"><i class="fa-solid fa-right-to-bracket"></i> Ingia</button></form>';
-  }else{
-    area.innerHTML='<form onsubmit="doMgrSetup(event)" style="text-align:left"><div class="fg"><label>Jina la Mtumiaji <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-user"></i><input type="text" class="fi" id="mgrNU" required placeholder="mfano: admin"/></div></div><div class="fg"><label>Nenosiri <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrNP" required minlength="4"/></div></div><div class="fg"><label>Thibitisha <span class="req">*</span></label><div class="iw"><i class="fa-solid fa-lock"></i><input type="password" class="fi" id="mgrNC" required/></div></div><button type="submit" class="btn-auth btn-auth-p"><i class="fa-solid fa-check"></i> Weka Akaunti</button></form>';
+function renderRoleDash(session, stats) {
+  const roleConfig = {
+    manager: {
+      color: 'var(--primary)', icon: 'fa-user-tie',
+      actions: [
+        {icon:'fa-boxes-stacked',label:'Bidhaa',desc:'Ongeza na hariri bidhaa',nav:'products'},
+        {icon:'fa-cash-register',label:'POS',desc:'Fanya mauzo',nav:'pos'},
+        {icon:'fa-users',label:'Wateja',desc:'Simamia wateja',nav:'customers'},
+        {icon:'fa-chart-pie',label:'Ripoti',desc:'Tazama ripoti',nav:'reports'}
+      ],
+      insights: [
+        {label:'Mauzo ya Leo',value:fmt(stats.todayRevenue),cls:''},
+        {label:'Matengulizo',value:stats.todaySales,cls:'info'},
+        {label:'Jumla Mauzo',value:stats.totalSales,cls:''},
+        {label:'Bidhaa',value:stats.products,cls:'warn'}
+      ]
+    },
+    storekeeper: {
+      color: 'var(--info)', icon: 'fa-warehouse',
+      actions: [
+        {icon:'fa-boxes-stacked',label:'Bidhaa',desc:'Simamia bidhaa',nav:'products'},
+        {icon:'fa-warehouse',label:'Hifadhi',desc:'Tazama stock',nav:'inventory'}
+      ],
+      insights: [
+        {label:'Bidhaa',value:stats.products,cls:'info'},
+        {label:'Low Stock',value:'0',cls:'danger'}
+      ]
+    },
+    cashier: {
+      color: 'var(--accent)', icon: 'fa-cash-register',
+      actions: [
+        {icon:'fa-cash-register',label:'POS',desc:'Fanya mauzo',nav:'pos'}
+      ],
+      insights: [
+        {label:'Mauzo ya Leo',value:fmt(stats.todayRevenue),cls:''},
+        {label:'Matengulizo',value:stats.todaySales,cls:'info'}
+      ]
+    },
+    seller: {
+      color: '#7c3aed', icon: 'fa-store',
+      actions: [
+        {icon:'fa-cash-register',label:'POS',desc:'Fanya mauzo',nav:'pos'}
+      ],
+      insights: [
+        {label:'Mauzo ya Leo',value:fmt(stats.todayRevenue),cls:''},
+        {label:'Matengulizo',value:stats.todaySales,cls:'info'}
+      ]
+    }
+  };
+
+  const cfg = roleConfig[session.role];
+  if(!cfg) return '';
+
+  let actionsHtml = cfg.actions.map(a =>
+    `<div class="role-action" onclick="navTo('${a.nav}')"><i class="fa-solid ${a.icon}"></i><strong>${a.label}</strong><span>${a.desc}</span></div>`
+  ).join('');
+
+  let insightsHtml = cfg.insights.map(i =>
+    `<div class="ri ${i.cls}"><b>${i.value}</b><small>${i.label}</small></div>`
+  ).join('');
+
+  return `<div class="role-dash">
+    <div class="role-dash-head">
+      <div class="role-dash-title">
+        <div class="rd-icon" style="background:${cfg.color}20;color:${cfg.color}"><i class="fa-solid ${cfg.icon}"></i></div>
+        <div><h3>${ROLE_LABELS[session.role]} Dashboard</h3><p>Karibu, ${session.name}</p></div>
+      </div>
+    </div>
+    <div class="role-actions">${actionsHtml}</div>
+    <div class="role-insights">${insightsHtml}</div>
+  </div>`;
+}
+
+function renderSalesChart(sales) {
+  const ctx = document.getElementById('salesChart');
+  if(salesChartInst) salesChartInst.destroy();
+  const days = [];
+  const amounts = [];
+  for(let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const ds = d.toDateString();
+    days.push(d.toLocaleDateString('sw-TZ', {weekday:'short'}));
+    amounts.push(sales.filter(s => new Date(s.createdAt).toDateString() === ds).reduce((a,s) => a + s.total, 0));
   }
-  document.getElementById('mgrAuth').classList.add('show');
-}
-function doMgrSetup(e){
-  e.preventDefault();
-  var u=document.getElementById('mgrNU').value.trim(),p=document.getElementById('mgrNP').value,c=document.getElementById('mgrNC').value;
-  if(u.length<3){toast('Jina lazima liwe herufi 3+','w');return}
-  if(p!==c){toast('Nenosiri hazilingani','e');return}
-  if(p.length<4){toast('Nenosiri lazima iwe herufi 4+','w');return}
-  var mc=gMC();mc.push({bizId:S.bizId,userId:S.user.id,username:u,password:p});sMC(mc);
-  toast('Akaunti ya Meneja imewekwa!');updateRoleUI();openMgrAuth();
-}
-function doMgrLogin(e){
-  e.preventDefault();
-  var u=document.getElementById('mgrU').value.trim(),p=document.getElementById('mgrP').value;
-  var cr=gMC().find(function(c){return c.bizId===S.bizId&&c.username===u&&c.password===p});
-  if(!cr){toast('Jina au nenosiri sio sahihi','e');return}
-  S.role='manager';S.staffId=null;document.getElementById('mgrAuth').classList.remove('show');
-  toast('Karibu, Meneja!');showApp();
-}
-
-/* ====== STAFF AUTH ====== */
-function openStaffAuth(role){
-  curStaffRole=role;
-  var badge=document.getElementById('stBadge');
-  var cls={storekeeper:'rb-sk',cashier:'rb-cash',seller:'rb-sell'};
-  var ico={storekeeper:'warehouse',cashier:'cash-register',seller:'store'};
-  badge.className='role-badge '+(cls[role]||'');
-  badge.innerHTML='<i class="fa-solid fa-'+ico[role]+'"></i> '+ROLE_LBL[role];
-  document.getElementById('stTitle').textContent=ROLE_LBL[role]+' — Ingia au Jiunge';
-  document.getElementById('stBiz').textContent=gBiz(S.bizId)?gBiz(S.bizId).name:'';
-  document.getElementById('staffAuth').classList.add('show');
-  stab('login',document.querySelector('.stab'));
-  document.getElementById('stErr').classList.remove('show');
-}
-function stab(t,btn){
-  document.querySelectorAll('.stab').forEach(function(b){b.classList.remove('active')});
-  if(btn)btn.classList.add('active');
-  document.getElementById('stLoginF').classList.toggle('active',t==='login');
-  document.getElementById('stSignupF').classList.toggle('active',t==='signup');
-  document.getElementById('stErr').classList.remove('show');
-}
-function showSE(m){document.getElementById('stErr').classList.add('show');document.getElementById('stErrTxt').textContent=m}
-function doStaffSignup(e){
-  e.preventDefault();document.getElementById('stErr').classList.remove('show');
-  var n=document.getElementById('stsN').value.trim(),em=document.getElementById('stsE').value.trim(),p=document.getElementById('stsP').value,c=document.getElementById('stsC').value;
-  if(!n||!em||!p){showSE('Jaza sehemu zote');return}
-  if(p!==c){showSE('Nenosiri hazilingani');return}
-  if(p.length<6){showSE('Nenosiri lazima iwe 6+');return}
-  var staff=gSt();
-  if(staff.find(function(s){return s.email===em&&s.bizId===S.bizId})){showSE('Barua pepe tayari imesajiliwa');return}
-  staff.push({id:gid(),userId:S.user.id,bizId:S.bizId,name:n,email:em,phone:document.getElementById('stsPh').value.trim(),password:p,role:curStaffRole,createdAt:new Date().toISOString()});
-  sSt(staff);toast('Umefanikiwa kajiunge! Sasa ingia.');stab('login',document.querySelector('.stab'));
-  document.getElementById('stSignupF').reset();
-}
-function doStaffLogin(e){
-  e.preventDefault();document.getElementById('stErr').classList.remove('show');
-  var em=document.getElementById('stlE').value.trim(),p=document.getElementById('stlP').value;
-  var st=gSt().find(function(s){return s.email===em&&s.password===p&&s.bizId===S.bizId&&s.role===curStaffRole});
-  if(!st){showSE('Barua pepe, nenosiri, au jukumu sio sahihi');return}
-  S.role=st.role;S.staffId=st.id;document.getElementById('staffAuth').classList.remove('show');
-  toast('Karibu, '+st.name+'!');showApp();
-}
-
-/* ====== ROLE FILTER ====== */
-function applyRole(){
-  var perms=ROLE_PERMS[S.role]||[];
-  document.querySelectorAll('.ni[data-s]').forEach(function(ni){
-    var r=ni.getAttribute('data-r');if(!r){ni.classList.remove('rh');return}
-    ni.classList.toggle('rh',!r.split(',').some(function(x){return perms.indexOf(x)>=0}));
+  salesChartInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels: days, datasets: [{ label: 'Mauzo', data: amounts, borderColor: '#059669', backgroundColor: 'rgba(5,150,105,.1)', fill: true, tension: .4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
   });
 }
 
-/* ====== CHIP & BIZ ====== */
-function updateChip(){
-  var name='User',role='-',init='U';
-  if(S.role==='manager'){name=S.user?S.user.name:'Meneja';role='Meneja';init=name.charAt(0).toUpperCase()}
-  else{var st=gSt().find(function(s){return s.id===S.staffId});if(st){name=st.name;role=ROLE_LBL[st.role];init=name.charAt(0).toUpperCase()}}
-  document.getElementById('uName').textContent=name;document.getElementById('uRole').textContent=role;document.getElementById('uAv').textContent=init;
-}
-function fillBizSel(){
-  var sel=document.getElementById('bizSel');sel.innerHTML='';
-  if(!S.user||!S.user.businesses)return;
-  S.user.businesses.forEach(function(b){var o=document.createElement('option');o.value=b.id;o.textContent=b.name;sel.appendChild(o)});
-  sel.value=S.bizId;
-}
-function switchBiz(id){S.bizId=id;updateBusinessBranding();renderAll();nav('dashboard');toast('Umehamia: '+gBiz(id).name)}
-
-/* ====== NAVIGATION ====== */
-function nav(s){
-  var perms=ROLE_PERMS[S.role]||[];
-  if(perms.indexOf(s)<0){toast('Huna ruhusa','w');return}
-  document.querySelectorAll('.section').forEach(function(el){el.classList.remove('active')});
-  var sec=document.getElementById('sec-'+s);if(sec)sec.classList.add('active');
-  document.querySelectorAll('.ni').forEach(function(ni){ni.classList.toggle('active',ni.getAttribute('data-s')===s)});
-  if(S.bizId)renderSec(s);
-  closeNP();
-  if(window.innerWidth<768){document.getElementById('sidebar').classList.remove('open');document.getElementById('sbBd').classList.remove('show')}
-}
-function togSB(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sbBd').classList.toggle('show')}
-function togNP(){document.getElementById('nPanel').classList.toggle('open')}
-function closeNP(){document.getElementById('nPanel').classList.remove('open')}
-document.addEventListener('click',function(e){if(!e.target.closest('.u-chip'))document.getElementById('uDD').classList.remove('show')});
-
-/* ====== RENDER ALL ====== */
-function renderAll(){
-  if(!S.bizId)return;
-  renderDash();renderFin();renderPOS();renderProducts();renderSales();renderPurchases();renderSuppliers();renderCustomers();renderDebtors();renderExpenses();renderEmployees();renderNotifs();renderProfile();renderUsers();updateNotifBdg();
+function renderProdChart(products, sales) {
+  const ctx = document.getElementById('prodChart');
+  if(prodChartInst) prodChartInst.destroy();
+  const prodSales = {};
+  sales.forEach(s => { s.items.forEach(item => { prodSales[item.name] = (prodSales[item.name]||0) + item.qty; }); });
+  const sorted = Object.entries(prodSales).sort((a,b) => b[1]-a[1]).slice(0,5);
+  prodChartInst = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: sorted.map(s=>s[0]).concat(products.filter(p=>!prodSales[p.name]).slice(0,5-sorted.length).map(p=>p.name)), datasets: [{ label: 'Iliyouzwa', data: sorted.map(s=>s[1]).concat(products.filter(p=>!prodSales[p.name]).slice(0,5-sorted.length).map(()=>0)), backgroundColor: '#0284c7' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
 }
 
-/* ====== DASHBOARD ====== */
-function renderDash(){
-  var d=D(),perms=ROLE_PERMS[S.role],h='';
-  if(perms.indexOf('products')>=0)h+='<div class="mc g"><div class="mc-icon"><i class="fa-solid fa-box-open"></i></div><h3>'+d.products.length+'</h3><p>Bidhaa</p></div>';
-  if(perms.indexOf('sales')>=0||perms.indexOf('pos')>=0){
-    var ts=d.sales.filter(function(s){return s.date===today()});
-    var rev=ts.reduce(function(a,s){return a+s.total},0);
-    h+='<div class="mc a"><div class="mc-icon"><i class="fa-solid fa-cart-shopping"></i></div><h3>'+ts.length+'</h3><p>Mauzo ya Leo</p></div>';
-    h+='<div class="mc b"><div class="mc-icon"><i class="fa-solid fa-dollar-sign"></i></div><h3>'+fmt(rev)+'</h3><p>Mapato ya Leo</p></div>';
+// ==================== PRODUCTS ====================
+function renderProducts() {
+  const session = DB.getSession();
+  if(!session) return;
+  const search = (document.getElementById('prodSearch')?.value || '').toLowerCase();
+  let products = DB.getProducts(session.businessId);
+  if(search) products = products.filter(p => p.name.toLowerCase().includes(search) || (p.category||'').toLowerCase().includes(search));
+
+  const badge = document.getElementById('prodBadge');
+  const lowStock = products.filter(p => p.stock <= 5).length;
+  if(lowStock > 0) { badge.style.display = ''; badge.textContent = lowStock; } else { badge.style.display = 'none'; }
+
+  if(products.length === 0) {
+    document.getElementById('prodTableBody').innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa</p></td></tr>';
+    return;
   }
-  if(perms.indexOf('debtors')>=0){var debt=d.sales.filter(function(s){return s.method==='credit'}).reduce(function(a,s){return a+s.total},0);h+='<div class="mc r"><div class="mc-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div><h3>'+fmt(debt)+'</h3><p>Madeni</p></div>'}
-  if(perms.indexOf('purchases')>=0){var tp=d.purchases.reduce(function(a,p){return a+p.total},0);h+='<div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-truck"></i></div><h3>'+fmt(tp)+'</h3><p>Manunuzi</p></div>'}
-  if(perms.indexOf('expenses')>=0){var te=d.expenses.reduce(function(a,e){return a+e.amount},0);h+='<div class="mc r"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>'+fmt(te)+'</h3><p>Matumizi</p></div>'}
-  if(perms.indexOf('customers')>=0)h+='<div class="mc b"><div class="mc-icon"><i class="fa-solid fa-users"></i></div><h3>'+d.customers.length+'</h3><p>Wateja</p></div>';
-  document.getElementById('dMetrics').innerHTML=h||'<div class="empty-s"><p>Hakuna data</p></div>';
-  document.getElementById('dCharts').style.display=(perms.indexOf('sales')>=0||perms.indexOf('pos')>=0)?'grid':'none';
-  if(perms.indexOf('sales')>=0||perms.indexOf('pos')>=0)renderDashCharts();
-  renderRecentSales();
-}
-function renderDashCharts(){
-  destroyCharts();var d=D();
-  var days=[];for(var i=6;i>=0;i--){var dt=new Date();dt.setDate(dt.getDate()-i);days.push(dt.toISOString().slice(0,10))}
-  var labels=days.map(function(dd){return new Date(dd).toLocaleDateString('sw',{weekday:'short'})});
-  var data=days.map(function(day){return d.sales.filter(function(s){return s.date===day}).reduce(function(a,s){return a+s.total},0)});
-  S.charts.ws=new Chart(document.getElementById('chWSales').getContext('2d'),{type:'bar',data:{labels:labels,datasets:[{label:'Mauzo',data:data,backgroundColor:'rgba(5,150,105,.7)',borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:function(v){return fmt(v)}}},x:{grid:{display:false}}}}});
-  var ps={};d.sales.forEach(function(s){(s.items||[]).forEach(function(it){ps[it.name]=(ps[it.name]||0)+it.qty})});
-  var sorted=Object.entries(ps).sort(function(a,b){return b[1]-a[1]}).slice(0,5);
-  var cols=['#059669','#d97706','#0284c7','#dc2626','#7c3aed'];
-  S.charts.tp=new Chart(document.getElementById('chTopP').getContext('2d'),{type:'doughnut',data:{labels:sorted.map(function(s){return s[0]}),datasets:[{data:sorted.map(function(s){return s[1]}),backgroundColor:cols,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:12,padding:8,font:{size:11}}}}}});
-}
-function renderRecentSales(){
-  var d=D(),recent=d.sales.slice(-5).reverse();
-  var h=recent.length?recent.map(function(s){return '<tr><td>#'+s.id.slice(-5).toUpperCase()+'</td><td>'+(s.customer||'Walk-in')+'</td><td class="fw7">'+fmt(s.total)+'</td><td><span class="tl '+(s.method==='cash'?'tl-g':'tl-a')+'">'+(s.method==='cash'?'Cash':'Deni')+'</span></td><td>'+fmtD(s.date)+'</td><td><button class="btn-icon" onclick="viewRcpt(\''+s.id+'\')"><i class="fa-solid fa-eye"></i></button></td></tr>'}).join(''):'<tr><td colspan="6" class="empty-s"><p>Hakuna mauzo</p></td></tr>';
-  document.getElementById('dRecentTb').innerHTML=h;
-}
-function destroyCharts(){Object.keys(S.charts).forEach(function(k){if(S.charts[k]&&S.charts[k].destroy)S.charts[k].destroy()});S.charts={}}
 
-/* ====== FINANCE ====== */
-function setFP(p,btn){S.fp=p;document.querySelectorAll('.pf-btn').forEach(function(b){b.classList.remove('active')});btn.classList.add('active');renderFin()}
-function renderFin(){
-  var d=D(),sl=d.sales.slice(),pu=d.purchases.slice(),ex=d.expenses.slice();
-  if(S.fp==='month'){var m=today().slice(0,7);sl=sl.filter(function(s){return s.date.startsWith(m)});pu=pu.filter(function(p){return p.date.startsWith(m)});ex=ex.filter(function(e){return e.date.startsWith(m)})}
-  else if(S.fp==='year'){var y=today().slice(0,4);sl=sl.filter(function(s){return s.date.startsWith(y)});pu=pu.filter(function(p){return p.date.startsWith(y)});ex=ex.filter(function(e){return e.date.startsWith(y)})}
-  var rev=sl.reduce(function(a,s){return a+s.total},0),cost=pu.reduce(function(a,p){return a+p.total},0),exps=ex.reduce(function(a,e){return a+e.amount},0),profit=rev-cost-exps,margin=rev>0?((profit/rev)*100).toFixed(1):0;
-  document.getElementById('fRev').textContent=fmt(rev);document.getElementById('fCost').textContent=fmt(cost);document.getElementById('fExp').textContent=fmt(exps);document.getElementById('fProfit').textContent=fmt(profit);document.getElementById('fMargin').textContent=margin+'%';
-  if(S.charts.rc)S.charts.rc.destroy();if(S.charts.ec)S.charts.ec.destroy();
-  var months=[];for(var i=5;i>=0;i--){var dd=new Date();dd.setMonth(dd.getMonth()-i);months.push(dd.toISOString().slice(0,7))}
-  var mL=months.map(function(m){return new Date(m+'-01').toLocaleDateString('sw',{month:'short'})});
-  var mR=months.map(function(m){return d.sales.filter(function(s){return s.date.startsWith(m)}).reduce(function(a,s){return a+s.total},0)});
-  var mC=months.map(function(m){return d.purchases.filter(function(p){return p.date.startsWith(m)}).reduce(function(a,p){return a+p.total},0)});
-  S.charts.rc=new Chart(document.getElementById('chRevCost').getContext('2d'),{type:'bar',data:{labels:mL,datasets:[{label:'Mapato',data:mR,backgroundColor:'rgba(5,150,105,.7)',borderRadius:6},{label:'Gharama',data:mC,backgroundColor:'rgba(217,119,6,.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,ticks:{callback:function(v){return fmt(v)}}},x:{grid:{display:false}}}}});
-  var ec={};ex.forEach(function(e){ec[e.category]=(ec[e.category]||0)+e.amount});
-  var eCols=['#dc2626','#d97706','#0284c7','#7c3aed','#059669','#ec4899'];
-  S.charts.ec=new Chart(document.getElementById('chExpCat').getContext('2d'),{type:'doughnut',data:{labels:Object.keys(ec).length?Object.keys(ec):['Hakuna'],datasets:[{data:Object.values(ec).length?Object.values(ec):[1],backgroundColor:Object.keys(ec).length?eCols:['#e5e7eb'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}}}}});
+  document.getElementById('prodTableBody').innerHTML = products.map(p => `
+    <tr>
+      <td><strong>${p.name}</strong>${p.description ? '<br><small class="text-m">'+p.description.substring(0,40)+'</small>' : ''}</td>
+      <td><span class="tl tl-g">${CAT_LABELS[p.category]||p.category}</span></td>
+      <td class="fw7 text-g">${fmt(p.price)}</td>
+      <td>${fmt(p.costPrice||0)}</td>
+      <td><span class="${p.stock<=5?'text-r':'text-g'}">${p.stock}</span> ${p.unit||'pcs'}</td>
+      <td>${p.unit||'pcs'}</td>
+      <td>
+        <button class="btn-icon" onclick="editProduct('${p.id}')" title="Hariri"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn-icon dng" onclick="confirmDeleteProduct('${p.id}')" title="Futa"><i class="fa-solid fa-trash"></i></button>
+      </td>
+    </tr>
+  `).join('');
 }
 
-/* ====== POS ====== */
-function renderPOS(){
-  var d=D(),sr=(document.querySelector('#sec-pos .sb-bar input')||{}).value||'';
-  var ps=d.products.filter(function(p){return p.stock>0&&(p.name.toLowerCase().indexOf(sr.toLowerCase())>=0||(p.sku||'').toLowerCase().indexOf(sr.toLowerCase())>=0)});
-  document.getElementById('posGrid').innerHTML=ps.length?ps.map(function(p){return '<div class="pos-card" onclick="addCart(\''+p.id+'\')"><div class="pc-name">'+p.name+'</div><div class="pc-price">'+fmt(p.price)+'</div><div class="pc-stock">Stock: '+p.stock+'</div></div>'}).join(''):'<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa</p></div>';
-  var cs=document.getElementById('posCust');cs.innerHTML='<option value="">-- Walk-in --</option>';
-  d.customers.forEach(function(c){cs.innerHTML+='<option value="'+c.name+'">'+c.name+'</option>'});
+function openProductModal(id) {
+  document.getElementById('prodEditId').value = id || '';
+  document.getElementById('prodModalTitle').textContent = id ? 'Hariri Bidhaa' : 'Ongeza Bidhaa';
+  if(id) {
+    const p = DB.getAllProducts().find(x => x.id === id);
+    if(p) {
+      document.getElementById('prodName').value = p.name;
+      document.getElementById('prodCategory').value = p.category;
+      document.getElementById('prodPrice').value = p.price;
+      document.getElementById('prodCost').value = p.costPrice || 0;
+      document.getElementById('prodStock').value = p.stock;
+      document.getElementById('prodUnit').value = p.unit || 'pcs';
+      document.getElementById('prodDesc').value = p.description || '';
+    }
+  } else {
+    ['prodName','prodPrice','prodCost','prodStock','prodDesc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('prodCategory').value = 'general';
+    document.getElementById('prodUnit').value = 'pcs';
+  }
+  openModal('productModal');
+}
+
+function editProduct(id) { openProductModal(id); }
+
+function saveProduct() {
+  const session = DB.getSession();
+  if(!session) return;
+  const id = document.getElementById('prodEditId').value;
+  const name = document.getElementById('prodName').value.trim();
+  const category = document.getElementById('prodCategory').value;
+  const price = parseFloat(document.getElementById('prodPrice').value) || 0;
+  const costPrice = parseFloat(document.getElementById('prodCost').value) || 0;
+  const stock = parseInt(document.getElementById('prodStock').value) || 0;
+  const unit = document.getElementById('prodUnit').value;
+  const description = document.getElementById('prodDesc').value.trim();
+
+  if(!name) return toast('e', 'Tafadhali weka jina la bidhaa');
+  if(price <= 0) return toast('e', 'Bei lazima iwe kubwa ya 0');
+
+  if(id) {
+    DB.updateProduct(id, { name, category, price, costPrice, stock, unit, description });
+    toast('s', 'Bidhaa imesasishwa');
+  } else {
+    DB.addProduct({ id: uid(), businessId: session.businessId, name, category, price, costPrice, stock, unit, description, createdAt: Date.now() });
+    toast('s', 'Bidhaa imeongezwa');
+  }
+  closeModal('productModal');
+  renderProducts();
+}
+
+function confirmDeleteProduct(id) {
+  document.getElementById('confirmTitle').textContent = 'Futa Bidhaa?';
+  document.getElementById('confirmMsg').textContent = 'Bidhaa hii itafutwa kabisa.';
+  document.getElementById('confirmBtn').onclick = function() {
+    DB.deleteProduct(id);
+    closeModal('confirmModal');
+    toast('s', 'Bidhaa imefutwa');
+    renderProducts();
+  };
+  openModal('confirmModal');
+}
+
+// ==================== POS ====================
+let cart = [];
+
+function renderPOSProducts() {
+  const session = DB.getSession();
+  if(!session) return;
+  const search = (document.getElementById('posSearch')?.value || '').toLowerCase();
+  let products = DB.getProducts(session.businessId).filter(p => p.stock > 0);
+  if(search) products = products.filter(p => p.name.toLowerCase().includes(search));
+
+  if(products.length === 0) {
+    document.getElementById('posProductsGrid').innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa zinazopatikana</p></div>';
+    return;
+  }
+
+  document.getElementById('posProductsGrid').innerHTML = products.map(p => `
+    <div class="pos-card" onclick="addToCart('${p.id}')">
+      <div class="pc-name">${p.name}</div>
+      <div class="pc-price">${fmt(p.price)}</div>
+      <div class="pc-stock">Stock: ${p.stock} ${p.unit||'pcs'}</div>
+    </div>
+  `).join('');
+}
+
+function addToCart(productId) {
+  const session = DB.getSession();
+  if(!session) return;
+  const product = DB.getProducts(session.businessId).find(p => p.id === productId);
+  if(!product) return;
+
+  const existing = cart.find(c => c.productId === productId);
+  if(existing) {
+    if(existing.qty >= product.stock) return toast('w', 'Stock haitoshi');
+    existing.qty++;
+    existing.subtotal = existing.qty * existing.price;
+  } else {
+    cart.push({ productId: product.id, name: product.name, price: product.price, qty: 1, subtotal: product.price, unit: product.unit||'pcs' });
+  }
   renderCart();
 }
-function addCart(pid){
-  var d=D(),p=d.products.find(function(x){return x.id===pid});if(!p)return;
-  var ex=S.cart.find(function(c){return c.id===pid});
-  if(ex){if(ex.qty>=p.stock){toast('Stock haizidi','w');return}ex.qty++}else{S.cart.push({id:pid,name:p.name,price:p.price,qty:1})}
+
+function renderCart() {
+  const body = document.getElementById('posCartBody');
+  if(cart.length === 0) {
+    body.innerHTML = '<div class="empty-s" style="padding:30px"><i class="fa-solid fa-cart-shopping"></i><p>Gari ni tupu</p></div>';
+    document.getElementById('posTotal').textContent = 'TZS 0';
+    return;
+  }
+
+  body.innerHTML = cart.map((item, i) => `
+    <div class="pos-cart-item">
+      <span class="ci-name">${item.name}</span>
+      <div class="ci-qty">
+        <button onclick="changeQty(${i},-1)"><i class="fa-solid fa-minus"></i></button>
+        <span>${item.qty}</span>
+        <button onclick="changeQty(${i},1)"><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <span style="font-weight:700;min-width:70px;text-align:right">${fmt(item.subtotal)}</span>
+      <button class="btn-icon dng" style="width:24px;height:24px;font-size:.7rem" onclick="removeFromCart(${i})"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  `).join('');
+
+  const total = cart.reduce((a,c) => a + c.subtotal, 0);
+  document.getElementById('posTotal').textContent = fmt(total);
+}
+
+function changeQty(i, delta) {
+  const session = DB.getSession();
+  if(!session) return;
+  cart[i].qty += delta;
+  if(cart[i].qty <= 0) return removeFromCart(i);
+  const product = DB.getProducts(session.businessId).find(p => p.id === cart[i].productId);
+  if(product && cart[i].qty > product.stock) { cart[i].qty = product.stock; toast('w','Stock haitoshi'); }
+  cart[i].subtotal = cart[i].qty * cart[i].price;
   renderCart();
 }
-function renderCart(){
-  document.getElementById('cartBody').innerHTML=S.cart.length?S.cart.map(function(c,i){return '<div class="pos-cart-item"><div class="ci-name">'+c.name+'</div><div class="ci-qty"><button onclick="cq('+i+',-1)">-</button><span>'+c.qty+'</span><button onclick="cq('+i+',1)">+</button></div><div class="fw7">'+fmt(c.price*c.qty)+'</div><button class="btn-icon dng" style="width:22px;height:22px;font-size:.7rem" onclick="cr('+i+')"><i class="fa-solid fa-xmark"></i></button></div>'}).join(''):'<div class="empty-s" style="padding:30px"><i class="fa-solid fa-shopping-cart"></i><p>Gesi ni tupu</p></div>';
-  document.getElementById('cartCnt').textContent=S.cart.reduce(function(a,c){return a+c.qty},0);
-  document.getElementById('cartTotal').textContent=fmt(S.cart.reduce(function(a,c){return a+c.price*c.qty},0));
-}
-function cq(i,d){S.cart[i].qty=Math.max(1,S.cart[i].qty+d);renderCart()}
-function cr(i){S.cart.splice(i,1);renderCart()}
-function completeSale(){
-  if(!S.cart.length){toast('Gesi ni tupu','w');return}
-  var d=D(),total=S.cart.reduce(function(a,c){return a+c.price*c.qty},0),method=document.getElementById('posPay').value,cust=document.getElementById('posCust').value||'Walk-in';
-  var sale={id:gid(),customer:cust,items:S.cart.map(function(c){return{name:c.name,price:c.price,qty:c.qty}}),total:total,method:method,date:today(),time:new Date().toLocaleTimeString('sw')};
-  d.sales.push(sale);
-  S.cart.forEach(function(c){var p=d.products.find(function(x){return x.id===c.id});if(p)p.stock=Math.max(0,p.stock-c.qty)});
-  d.products.filter(function(p){return p.stock>0&&p.stock<=5}).forEach(function(p){d.notifications.unshift({id:gid(),msg:'Stock ya "'+p.name+'" ni chini ('+p.stock+')',type:'w',date:new Date().toISOString(),read:false})});
-  uD({sales:d.sales,products:d.products,notifications:d.notifications});
-  S.cart=[];renderCart();renderPOS();renderDash();toast('Mauzo yamekamilika!');viewRcpt(sale.id);
+
+function removeFromCart(i) { cart.splice(i, 1); renderCart(); }
+
+function clearCart() { cart = []; renderCart(); }
+
+function completeSale() {
+  if(cart.length === 0) return toast('w', 'Gari ni tupu');
+  const session = DB.getSession();
+  if(!session) return;
+
+  const total = cart.reduce((a,c) => a + c.subtotal, 0);
+  const payMethod = document.getElementById('posPayMethod').value;
+
+  // Check stock
+  for(const item of cart) {
+    const product = DB.getAllProducts().find(p => p.id === item.productId);
+    if(!product || product.stock < item.qty) return toast('e', `Stock haitoshi kwa: ${item.name}`);
+  }
+
+  // Deduct stock
+  cart.forEach(item => {
+    const product = DB.getAllProducts().find(p => p.id === item.productId);
+    if(product) DB.updateProduct(product.id, { stock: product.stock - item.qty });
+  });
+
+  // Create sale
+  const sale = {
+    id: uid(),
+    businessId: session.businessId,
+    items: cart.map(c => ({...c})),
+    total,
+    paymentMethod: payMethod,
+    createdBy: session.id,
+    createdByRole: session.role,
+    createdAt: Date.now()
+  };
+  DB.addSale(sale);
+
+  // Show receipt
+  showReceipt(sale);
+
+  // Clear cart
+  cart = [];
+  renderCart();
+  renderPOSProducts();
+  toast('s', 'Mauzo yamekamilishwa!');
 }
 
-/* ====== RECEIPT ====== */
-function viewRcpt(sid){
-  var d=D(),s=d.sales.find(function(x){return x.id===sid});if(!s)return;
-  var biz=gBiz(S.bizId);
-  document.getElementById('rcptBody').innerHTML='<div class="rcpt"><div class="rc-center"><strong>'+(biz?biz.name:'Biashara')+'</strong><br><small>'+(biz?biz.address:'')+'<br>'+(biz?biz.phone:'')+'</small></div><div class="rc-line"></div><p>Risiti #'+s.id.slice(-5).toUpperCase()+'<br>Tarehe: '+fmtD(s.date)+' '+(s.time||'')+'<br>Mteja: '+s.customer+'</p><div class="rc-line"></div><table><thead><tr><th>Bidhaa</th><th>Qty</th><th>Kiasi</th></tr></thead><tbody>'+(s.items||[]).map(function(i){return '<tr><td>'+i.name+'</td><td>'+i.qty+'</td><td>'+fmt(i.price*i.qty)+'</td></tr>'}).join('')+'</tbody></table><div class="rc-line"></div><p style="text-align:right"><strong>JUMLA: '+fmt(s.total)+'</strong><br><small>Njia: '+(s.method==='cash'?'Cash':'Deni')+'</small></p><div class="rc-line"></div><div class="rc-center"><small>Asante!</small></div></div>';
-  document.getElementById('rcptOv').classList.add('show');
+function showReceipt(sale) {
+  const biz = DB.getBusiness(sale.businessId);
+  const content = document.getElementById('receiptContent');
+  content.innerHTML = `<div class="rcpt">
+    <div class="rc-center"><strong style="font-size:1.2rem">${biz?biz.name:'BizBook'}</strong><br><small>${biz?biz.address:''}</small><br><small>${biz?biz.phone:''}</small></div>
+    <div class="rc-line"></div>
+    <p style="font-size:.75rem">Tarehe: ${fmtDate(sale.createdAt)} | #${sale.id.substr(-6).toUpperCase()}</p>
+    <div class="rc-line"></div>
+    <table><thead><tr><th>Bidhaa</th><th>Qty</th><th>Kiasi</th></tr></thead><tbody>
+    ${sale.items.map(i => `<tr><td>${i.name}</td><td>${i.qty} ${i.unit||''}</td><td>${fmt(i.subtotal)}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="rc-line"></div>
+    <table><tr><td style="font-weight:700">JUMLA</td><td></td><td style="font-weight:700">${fmt(sale.total)}</td></tr></table>
+    <div class="rc-line"></div>
+    <div class="rc-center" style="font-size:.75rem"><p>Asante kwa kununua!</p></div>
+  </div>`;
+  openModal('receiptModal');
 }
 
-/* ====== PRODUCTS ====== */
-function renderProducts(){
-  var d=D();
-  document.getElementById('prodTbBody').innerHTML=d.products.length?d.products.map(function(p){return '<tr><td class="fw7">'+p.name+'</td><td>'+(p.category||'-')+'</td><td class="fw7">'+fmt(p.price)+'</td><td>'+fmt(p.cost||0)+'</td><td><span class="tl '+(p.stock<=5?'tl-r':p.stock<=20?'tl-a':'tl-g')+'">'+p.stock+'</span></td><td class="text-m">'+(p.sku||'-')+'</td><td><div style="display:flex;gap:4px"><button class="btn-icon" onclick="openMod(\'products\',\''+p.id+'\')"><i class="fa-solid fa-pen"></i></button><button class="btn-icon dng" onclick="delItem(\'products\',\''+p.id+'\')"><i class="fa-solid fa-trash"></i></button></div></td></tr>'}).join(''):'<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa</p></td></tr>';
+function printReceipt() { window.print(); }
+
+// ==================== INVENTORY ====================
+function renderInventory() {
+  const session = DB.getSession();
+  if(!session) return;
+  const products = DB.getProducts(session.businessId);
+  const sales = DB.getSales(session.businessId);
+  const lowStock = products.filter(p => p.stock <= 5).length;
+  const totalStock = products.reduce((a,p) => a + p.stock, 0);
+  const outOfStock = products.filter(p => p.stock === 0).length;
+
+  document.getElementById('invMetrics').innerHTML = `
+    <div class="mc b"><div class="mc-icon"><i class="fa-solid fa-boxes-stacked"></i></div><h3>${products.length}</h3><p>Jumla Bidhaa</p></div>
+    <div class="mc g"><div class="mc-icon"><i class="fa-solid fa-cubes"></i></div><h3>${totalStock}</h3><p>Jumla Stock</p></div>
+    <div class="mc a"><div class="mc-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><h3>${lowStock}</h3><p>Stock Chini</p></div>
+    <div class="mc r"><div class="mc-icon"><i class="fa-solid fa-ban"></i></div><h3>${outOfStock}</h3><p>Hakuna Stock</p></div>
+  `;
+
+  if(products.length === 0) {
+    document.getElementById('invTableBody').innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-warehouse"></i><p>Hakuna bidhaa</p></td></tr>';
+    return;
+  }
+
+  // Calculate sold qty per product
+  const soldMap = {};
+  sales.forEach(s => s.items.forEach(item => { soldMap[item.productId] = (soldMap[item.productId]||0) + item.qty; }));
+
+  document.getElementById('invTableBody').innerHTML = products.map(p => {
+    const sold = soldMap[p.id] || 0;
+    let status = '<span class="tl tl-g">Nzuri</span>';
+    if(p.stock === 0) status = '<span class="tl tl-r">Hakuna</span>';
+    else if(p.stock <= 5) status = '<span class="tl tl-a">Chini</span>';
+    return `<tr><td><strong>${p.name}</strong></td><td>${p.stock} ${p.unit||'pcs'}</td><td>${sold}</td><td>${fmt(p.costPrice||0)}</td><td>${status}</td></tr>`;
+  }).join('');
 }
 
-/* ====== SALES ====== */
-function renderSales(){
-  var d=D();
-  document.getElementById('salTbBody').innerHTML=d.sales.length?d.sales.slice().reverse().map(function(s){return '<tr><td>#'+s.id.slice(-5).toUpperCase()+'</td><td>'+(s.customer||'Walk-in')+'</td><td class="fw7">'+fmt(s.total)+'</td><td><span class="tl '+(s.method==='cash'?'tl-g':'tl-a')+'">'+(s.method==='cash'?'Cash':'Deni')+'</span></td><td>'+(s.method==='credit'?fmt(s.total):'-')+'</td><td>'+fmtD(s.date)+'</td><td><button class="btn-icon" onclick="viewRcpt(\''+s.id+'\')"><i class="fa-solid fa-eye"></i></button></td></tr>'}).join(''):'<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-receipt"></i><p>Hakuna mauzo</p></td></tr>';
+// ==================== CUSTOMERS ====================
+function renderCustomers() {
+  const session = DB.getSession();
+  if(!session) return;
+  const search = (document.getElementById('custSearch')?.value || '').toLowerCase();
+  let customers = DB.getCustomers(session.businessId);
+  if(search) customers = customers.filter(c => c.name.toLowerCase().includes(search) || (c.phone||'').includes(search));
+
+  if(customers.length === 0) {
+    document.getElementById('custTableBody').innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna wateja</p></td></tr>';
+    return;
+  }
+
+  document.getElementById('custTableBody').innerHTML = customers.map(c => `
+    <tr>
+      <td><strong>${c.name}</strong></td>
+      <td>${c.phone||'-'}</td>
+      <td>${c.email||'-'}</td>
+      <td>${c.address||'-'}</td>
+      <td>
+        <button class="btn-icon" onclick="editCustomer('${c.id}')" title="Hariri"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn-icon dng" onclick="confirmDeleteCustomer('${c.id}')" title="Futa"><i class="fa-solid fa-trash"></i></button>
+      </td>
+    </tr>
+  `).join('');
 }
 
-/* ====== PURCHASES ====== */
-function renderPurchases(){
-  var d=D();
-  document.getElementById('purTbBody').innerHTML=d.purchases.length?d.purchases.slice().reverse().map(function(p){return '<tr><td>'+p.product+'</td><td>'+p.supplier+'</td><td>'+p.qty+'</td><td class="fw7">'+fmt(p.total)+'</td><td>'+fmtD(p.date)+'</td><td><button class="btn-icon dng" onclick="delItem(\'purchases\',\''+p.id+'\')"><i class="fa-solid fa-trash"></i></button></td></tr>'}).join(''):'<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-truck"></i><p>Hakuna manunuzi</p></td></tr>';
+function openCustomerModal(id) {
+  document.getElementById('custEditId').value = id || '';
+  document.getElementById('custModalTitle').textContent = id ? 'Hariri Mteja' : 'Ongeza Mteja';
+  if(id) {
+    const c = DB._get('customers').find(x => x.id === id);
+    if(c) {
+      document.getElementById('custName').value = c.name;
+      document.getElementById('custPhone').value = c.phone||'';
+      document.getElementById('custEmail').value = c.email||'';
+      document.getElementById('custAddr').value = c.address||'';
+    }
+  } else {
+    ['custName','custPhone','custEmail','custAddr'].forEach(id => document.getElementById(id).value = '');
+  }
+  openModal('customerModal');
 }
 
-/* ====== SUPPLIERS ====== */
-function renderSuppliers(){
-  var d=D();
-  document.getElementById('supTbBody').innerHTML=d.suppliers.length?d.suppliers.map(function(s){return '<tr><td class="fw7">'+s.name+'</td><td>'+(s.email||'-')+'</td><td>'+(s.company||'-')+'</td><td>'+(s.phone||'-')+'</td><td><div style="display:flex;gap:4px"><button class="btn-icon" onclick="openMod(\'suppliers\',\''+s.id+'\')"><i class="fa-solid fa-pen"></i></button><button class="btn-icon dng" onclick="delItem(\'suppliers\',\''+s.id+'\')"><i class="fa-solid fa-trash"></i></button></div></td></tr>'}).join(''):'<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-handshake"></i><p>Hakuna</p></td></tr>';
+function editCustomer(id) { openCustomerModal(id); }
+
+function saveCustomer() {
+  const session = DB.getSession();
+  if(!session) return;
+  const id = document.getElementById('custEditId').value;
+  const name = document.getElementById('custName').value.trim();
+  if(!name) return toast('e', 'Tafadhali weka jina la mteja');
+  const data = { name, phone: document.getElementById('custPhone').value.trim(), email: document.getElementById('custEmail').value.trim(), address: document.getElementById('custAddr').value.trim() };
+
+  if(id) { DB.updateCustomer(id, data); toast('s','Mteja amesasishwa'); }
+  else { DB.addCustomer({ id: uid(), businessId: session.businessId, ...data, createdAt: Date.now() }); toast('s','Mteja ameongezwa'); }
+  closeModal('customerModal');
+  renderCustomers();
 }
 
-/* ====== CUSTOMERS ====== */
-function renderCustomers(){
-  var d=D();
-  document.getElementById('custTbBody').innerHTML=d.customers.length?d.customers.map(function(c){return '<tr><td class="fw7">'+c.name+'</td><td>'+(c.phone||'-')+'</td><td>'+(c.email||'-')+'</td><td>'+(c.address||'-')+'</td><td><div style="display:flex;gap:4px"><button class="btn-icon" onclick="openMod(\'customers\',\''+c.id+'\')"><i class="fa-solid fa-pen"></i></button><button class="btn-icon dng" onclick="delItem(\'customers\',\''+c.id+'\')"><i class="fa-solid fa-trash"></i></button></div></td></tr>'}).join(''):'<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna</p></td></tr>';
+function confirmDeleteCustomer(id) {
+  document.getElementById('confirmTitle').textContent = 'Futa Mteja?';
+  document.getElementById('confirmMsg').textContent = 'Mteja hii atafutwa kabisa.';
+  document.getElementById('confirmBtn').onclick = function() { DB.deleteCustomer(id); closeModal('confirmModal'); toast('s','Mteja amefutwa'); renderCustomers(); };
+  openModal('confirmModal');
 }
-
-/* ====== DEBTORS ====== */
-function renderDebtors(){
-  var d=D(),debts=[];
-  d.sales.filter(function(s){return s.method==='credit'}).forEach(function(s){var ex=debts.find(function(x){return x.customer===s.customer});if(ex){ex.total+=s.total}else{debts.push({customer:s.customer,total:s.total,date:s.date})}});
-  document.getElementById('dbTot').textContent=debts.length;
-  document.getElementById('dbAmt').textContent=fmt(debts.reduce(function(a,x){return a+x.total},0));
-  document.getElementById('dbOver').textContent=debts.filter(function(x){return(new Date()-new Date(x.date))/(1000*60*60*24)>14}).length;
-  document.getElementById('dbTbBody').innerHTML=debts.length?debts.map(function(x){return '<tr><td class="fw7">'+x.customer+'</td><td>'+fmt(x.total)+'</td><td class="text-r fw7">'+fmt(x.total)+'</td><td>'+fmtD(x.date)+'</td><td></td></tr>'}).join(''):'<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-check-circle" style="color:var(--primary)"></i><p>Hakuna madeni</p></td></tr>';
-}
-
 /* ====== EXPENSES ====== */
 function renderExpenses(){
   var d=D();
@@ -2115,66 +2711,6 @@ function saveProd(editId){
   else{d.products.push({id:gid(),name:name,category:document.getElementById('mCat').value,sku:document.getElementById('mSku').value.trim(),price:price,cost:parseFloat(document.getElementById('mCost').value)||0,stock:stock,minStock:Number(document.getElementById('mMinStock')?document.getElementById('mMinStock').value:5)||5})}
   uD({products:d.products});closeMod();renderProducts();renderPOS();renderDash();toast(editId?'Imehaririwa':'Imeongezwa');
 }
-   /* ===== DELETE PRODUCT ===== */
-
-function delProd(id){
-
-  openMod('confirm');
-
-  document.getElementById('confirmBtn').onclick = function(){
-
-    try{
-
-      let d = D();
-
-
-      if(!Array.isArray(d.products)){
-        d.products = [];
-      }
-
-
-      d.products = d.products.filter(function(p){
-        return p.id !== id;
-      });
-
-
-      // Save local
-      uD({
-        products:d.products
-      });
-
-
-      closeMod();
-
-
-      renderProducts();
-      renderPOS();
-      renderDash();
-
-
-      toast(
-        'Bidhaa imefutwa kwa mafanikio.',
-        's'
-      );
-
-
-    }catch(err){
-
-      console.error(
-        "DELETE PRODUCT ERROR:",
-        err
-      );
-
-      toast(
-        'Hitilafu wakati wa kufuta bidhaa.',
-        'e'
-      );
-
-    }
-
-  };
-
-}
 function savePurch(){
   var pid=document.getElementById('mPP').value,qty=parseInt(document.getElementById('mPQ').value)||0,cost=parseFloat(document.getElementById('mPC').value)||0,sup=document.getElementById('mPS').value;
   if(!pid||!qty||!cost){toast('Jaza sehemu zote','e');return}
@@ -2205,231 +2741,19 @@ function saveExp(editId){
   else{d.expenses.push({id:gid(),description:desc,category:document.getElementById('mEC').value,amount:amt,date:today()})}
   uD({expenses:d.expenses});closeMod();renderExpenses();renderFin();renderDash();toast(editId?'Imehaririwa':'Imeongezwa');
 }
-/* ====== SAVE EMPLOYEE ====== */
-async function saveEmp() {
-
-  try {
-
-    // Hakikisha user ameingia
-    if(!S || !S.bizId){
-
-      toast(
-        'Hakuna biashara iliyochaguliwa.',
-        'e'
-      );
-
-      return;
-
-    }
-
-
-    // Chukua taarifa kutoka form
-
-    const name =
-      document.getElementById('mEN')
-      .value
-      .trim();
-
-
-    const position =
-      document.getElementById('mEP')
-      .value
-      .trim();
-
-
-    const phone =
-      document.getElementById('mEPH')
-      .value
-      .trim();
-
-
-    const salary =
-      Number(
-        document.getElementById('mES').value
-      ) || 0;
-
-
-    const hireDate =
-      document.getElementById('mEDT').value ||
-      today();
-
-
-
-    // Validation
-
-    if(!name){
-
-      toast(
-        'Jina la mfanyakazi linahitajika.',
-        'e'
-      );
-
-      return;
-
-    }
-
-
-
-    if(phone && phone.length < 9){
-
-      toast(
-        'Namba ya simu sio sahihi.',
-        'e'
-      );
-
-      return;
-
-    }
-
-
-
-    // Pata business data ya sasa
-
-    let d = D();
-
-
-
-    if(!Array.isArray(d.employees)){
-
-      d.employees=[];
-
-    }
-
-
-
-    // Zuia duplicate
-
-    const exists =
-      d.employees.find(function(emp){
-
-        return (
-          emp.name.toLowerCase()
-          === name.toLowerCase()
-          &&
-          emp.phone === phone
-        );
-
-      });
-
-
-
-    if(exists){
-
-      toast(
-        'Mfanyakazi huyu tayari yupo.',
-        'e'
-      );
-
-      return;
-
-    }
-
-
-
-
-    // Tengeneza employee mpya
-
-    const employee={
-
-      id: gid(),
-
-      name:name,
-
-      position:position,
-
-      phone:phone,
-
-      salary:salary,
-
-      hireDate:hireDate,
-
-
-      // SaaS security tracking
-
-      businessId:S.bizId,
-
-      createdBy:
-        S.user ? S.user.id : null,
-
-
-      createdAt:
-        new Date().toISOString()
-
-    };
-
-
-
-    // Ongeza kwenye list
-
-    d.employees.push(employee);
-
-
-
-    // Update local cache
-
-    uD({
-
-      employees:d.employees
-
-    });
-
-
-
-    // Sync Firebase Business Data
-
-    await sD(
-
-      S.bizId,
-
-      {
-
-        employees:d.employees
-
-      }
-
-    );
-
-
-
-    // Funga modal
-
-    closeMod();
-
-
-
-    // Refresh UI
-
-    renderEmployees();
-
-
-
-    toast(
-      'Mfanyakazi ameongezwa kwa mafanikio.',
-      's'
-    );
-
-
-  }
-
-
-
-  catch(err){
-
-    console.error(
-      "SAVE EMPLOYEE ERROR:",
-      err
-    );
-
-
-    toast(
-      'Imeshindikana kuhifadhi mfanyakazi.',
-      'e'
-    );
-
-  }
-
+function saveEmp(){
+  var name=document.getElementById('mEN').value.trim();if(!name){toast('Jina linahitajika','e');return}
+  var d=D();d.employees.push({id:gid(),name:name,position:document.getElementById('mEP').value,phone:document.getElementById('mEPH').value,salary:parseFloat(document.getElementById('mES').value)||0,hireDate:document.getElementById('mEDT').value||today()});
+  uD({employees:d.employees});closeMod();renderEmployees();toast('Mfanyakazi ameongezwa');
 }
-   /* ====== TABLE FILTER ====== */
+function delItem(collection,id){
+  openMod('confirm');
+  document.getElementById('confirmBtn').onclick=function(){
+    var d=D();d[collection]=d[collection].filter(function(x){return x.id!==id});uD(d);closeMod();renderAll();toast('Imefutwa');
+  };
+}
+
+/* ====== TABLE FILTER ====== */
 function filterTb(tableId,val){
   var rows=document.querySelectorAll('#'+tableId+' tbody tr');
   val=val.toLowerCase();
@@ -2514,7 +2838,6 @@ function renderDash(){
   if(canCharts)renderDashCharts();
   renderRecentSales();
 }
-
 
 /* ====== GLOBAL SUPER ADMIN SYSTEM ====== */
 var SUPER_ADMIN_EMAIL='nashiriwaziri29@gmail.com';
@@ -2799,6 +3122,4 @@ if(window.__fbReady){
 </script>
 </body>
 </html>
-
-
 
