@@ -6309,6 +6309,232 @@ async function handleLogout() {
   showLogin();
   toast('Umekombokea');
 }
+   // ==================== STAFF AUTH (KEY FIX AREA) ====================
+// This is the critical section that was silently failing
+let currentStaffRole = '';
+
+function openStaffAuth(role) {
+  currentStaffRole = role;
+  const overlay = document.getElementById('overlayAuth');
+  const iconContainer = document.getElementById('staffAuthIcon');
+  const badge = document.getElementById('staffRoleBadge');
+  const title = document.getElementById('staffAuthTitle');
+  const sub = document.getElementById('staffAuthSub');
+
+  // Set role-specific visuals
+  const roleConfig = {
+    manager: { badgeClass:'rb-mgr', icon:'mgr-ic', iconFA:'fa-user-tie', title:'Meneja', sub:'Ingia au jisajili kama meneja wa biashara hii' },
+    storekeeper: { badgeClass:'rb-sk', icon:'', iconFA:'fa-warehouse', title:'Mhifadhi', sub:'Ingia au jisajili kama mhifadhi wa biashara hii' },
+    cashier: { badgeClass:'rb-cash', icon:'', iconFA:'fa-cash-register', title:'Makasisha', sub:'Ingia au jisajili kama makasisha wa biashara hii' },
+    seller: { badgeClass:'rb-sell', icon:'', iconFA:'fa-store', title:'Muuzaji', sub:'Ingia au jisajili kama muuzaji wa biashara hii' }
+  };
+
+  const cfg = roleConfig[role];
+  if(!cfg) return;
+
+  // Icon
+  if(role === 'manager') {
+    iconContainer.innerHTML = '<div class="mgr-ic"><i class="fa-solid fa-user-tie"></i></div>';
+  } else {
+    iconContainer.innerHTML = '';
+  }
+
+  // Badge
+  badge.className = 'role-badge ' + cfg.badgeClass;
+  badge.innerHTML = '<i class="fa-solid ' + cfg.iconFA + '"></i> ' + cfg.title;
+
+  // Title & sub
+  title.textContent = cfg.title + ' - Auth';
+  sub.textContent = cfg.sub;
+
+  // Set role names in buttons
+  document.getElementById('staffLoginRoleName').textContent = cfg.title.toLowerCase();
+  document.getElementById('staffSignupRoleName').textContent = cfg.title.toLowerCase();
+
+  // Clear all fields and errors
+  document.getElementById('staffLoginEmail').value = '';
+  document.getElementById('staffLoginPassword').value = '';
+  document.getElementById('staffSignupName').value = '';
+  document.getElementById('staffSignupEmail').value = '';
+  document.getElementById('staffSignupPassword').value = '';
+  document.getElementById('staffSignupConfirm').value = '';
+  hideAuthErr('staffLoginErr');
+  hideAuthErr('staffSignupErr');
+
+  // Reset to login tab
+  switchStaffTab('slogin');
+
+  // Show overlay
+  overlay.classList.add('show');
+}
+
+function closeStaffAuth() {
+  document.getElementById('overlayAuth').classList.remove('show');
+  currentStaffRole = '';
+}
+
+function switchStaffTab(tab) {
+  document.querySelectorAll('#staffTabs .stab').forEach(t => t.classList.toggle('active', t.dataset.stab === tab));
+  document.getElementById('staffLoginForm').classList.toggle('active', tab === 'slogin');
+  document.getElementById('staffSignupForm').classList.toggle('active', tab === 'ssignup');
+  hideAuthErr('staffLoginErr');
+  hideAuthErr('staffSignupErr');
+}
+
+// *** CRITICAL FIX: Staff Signup Handler ***
+function handleStaffSignup() {
+  hideAuthErr('staffSignupErr');
+
+  const name = document.getElementById('staffSignupName').value.trim();
+  const email = document.getElementById('staffSignupEmail').value.trim();
+  const password = document.getElementById('staffSignupPassword').value;
+  const confirm = document.getElementById('staffSignupConfirm').value;
+
+  // Validation
+  if(!name) return showAuthErr('staffSignupErr', 'Tafadhali weka jina lako kamili');
+  if(!email) return showAuthErr('staffSignupErr', 'Tafadhali weka barua pepe');
+  if(!/\S+@\S+\.\S+/.test(email)) return showAuthErr('staffSignupErr', 'Barua pepe si sahihi');
+  if(!password) return showAuthErr('staffSignupErr', 'Tafadhali weka nenosiri');
+  if(password.length < 6) return showAuthErr('staffSignupErr', 'Nenosiri lazima iwe na angalau herufi 6');
+  if(password !== confirm) return showAuthErr('staffSignupErr', 'Nenosiri haiziani');
+
+  if(!currentStaffRole) return showAuthErr('staffSignupErr', 'Hitilafu: Jukumu halijatambuliwa. Jaribu tena.');
+
+  const session = DB.getSession();
+  if(!session) return showAuthErr('staffSignupErr', 'Hitilafu: Session imekosea. Jaribu kuingia tena.');
+
+  const bizId = session.businessId;
+
+  // Check if email already exists for THIS business and THIS role
+  const existingSameRole = DB.getUsers().find(u =>
+    u.businessId === bizId && u.role === currentStaffRole && u.email === email
+  );
+  if(existingSameRole) return showAuthErr('staffSignupErr', `${ROLE_LABELS[currentStaffRole]} mwenye barua pepe hii tayari yupo kwa biashara hii`);
+
+  // Check if email exists for a DIFFERENT role in same business
+  const existingDiffRole = DB.getUsers().find(u =>
+    u.businessId === bizId && u.role !== currentStaffRole && u.email === email
+  );
+  if(existingDiffRole) return showAuthErr('staffSignupErr', `Barua pepe hii imesajiliwa kama ${ROLE_LABELS[existingDiffRole]} kwa biashara hii. Tumia barua pepe tofauti.`);
+
+  // Create the staff user linked to this business
+  const staffUser = {
+    id: uid(),
+    name: name,
+    email: email,
+    password: password,
+    role: currentStaffRole,
+    businessId: bizId,
+    createdAt: Date.now()
+  };
+
+  DB.addUser(staffUser);
+
+  // Close overlay and show success
+  closeStaffAuth();
+  toast('s', `${ROLE_LABELS[currentStaffRole]} ${name} amesajiliwa kwa mafanikio!`);
+
+  // Refresh role screen
+  updateRoleStatuses();
+  renderStaffList();
+}
+
+// *** CRITICAL FIX: Staff Login Handler ***
+function handleStaffLogin() {
+  hideAuthErr('staffLoginErr');
+
+  const email = document.getElementById('staffLoginEmail').value.trim();
+  const password = document.getElementById('staffLoginPassword').value;
+
+  if(!email) return showAuthErr('staffLoginErr', 'Tafadhali weka barua pepe');
+  if(!password) return showAuthErr('staffLoginErr', 'Tafadhali weka nenosiri');
+  if(!currentStaffRole) return showAuthErr('staffLoginErr', 'Hitilafu: Jukumu halijatambuliwa');
+
+  const session = DB.getSession();
+  if(!session) return showAuthErr('staffLoginErr', 'Hitilafu: Session imekosea. Jaribu kuingia tena.');
+
+  const bizId = session.businessId;
+
+  // Find user by email + password + role + businessId
+  const user = DB.findStaffForBusiness(bizId, currentStaffRole, email, password);
+
+  if(!user) {
+    // Check if user exists but wrong role
+    const anyUser = DB.getUsers().find(u => u.businessId === bizId && u.email === email && u.password === password);
+    if(anyUser) {
+      return showAuthErr('staffLoginErr', `Barua pepe hii imesajiliwa kama ${ROLE_LABELS[anyUser.role]}, sio ${ROLE_LABELS[currentStaffRole]}`);
+    }
+    return showAuthErr('staffLoginErr', 'Barua pepe au nenosiri si sahihi kwa jukumu hili');
+  }
+
+  // Set session to this staff user
+  DB.setSession(user);
+  closeStaffAuth();
+  toast('s', `Karibu, ${user.name}!`);
+  enterDashboard();
+}
+
+// ==================== DASHBOARD ENTRY ====================
+function enterDashboard() {
+  const session = DB.getSession();
+  if(!session) return showAuth('login');
+
+  const biz = DB.getBusiness(session.businessId);
+  if(!biz) return handleLogout();
+
+  // Hide all screens
+  document.getElementById('landingPage').classList.add('hidden');
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('roleScreen').classList.remove('show');
+  document.getElementById('superScreen').classList.add('hidden');
+
+  // Show app
+  document.getElementById('sidebar').classList.add('vis');
+  document.getElementById('topbar').classList.add('vis');
+  document.getElementById('mainContent').classList.add('vis');
+
+  // Set user info
+  document.getElementById('userAv').textContent = getInitials(session.name);
+  document.getElementById('userName').textContent = session.name;
+  document.getElementById('userRole').textContent = ROLE_LABELS[session.role] || session.role;
+  document.getElementById('bizSelect').innerHTML = `<option>${biz.name}</option>`;
+
+  // Role-based nav visibility
+  applyRolePermissions(session.role);
+
+  // Navigate to dashboard
+  navTo('dashboard');
+  renderDashboard();
+}
+
+function applyRolePermissions(role) {
+  const adminOnly = ['users'];
+  const noAccess = {
+    manager: [],
+    storekeeper: ['pos','customers','expenses','reports','users','settings'],
+    cashier: ['products','inventory','customers','expenses','reports','users','settings'],
+    seller: ['products','inventory','expenses','reports','users','settings']
+  };
+
+  const hidden = noAccess[role] || [];
+  const allNavItems = document.querySelectorAll('#sidebarNav .ni');
+
+  allNavItems.forEach(item => {
+    const sec = item.dataset.sec;
+    if(!sec) return;
+    if(hidden.includes(sec)) {
+      item.style.display = 'none';
+    } else {
+      item.style.display = '';
+    }
+  });
+
+  // Admin label
+  const isAdmin = role === 'owner' || role === 'manager';
+  document.getElementById('adminLbl').style.display = isAdmin ? '' : 'none';
+  document.getElementById('navUsers').style.display = isAdmin ? '' : 'none';
+}
+
    /* ====== NAVIGATION ====== */
 function nav(s) {
   var perms = ROLE_PERMS[S.role] || [];
