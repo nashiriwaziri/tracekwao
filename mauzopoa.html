@@ -936,7 +936,69 @@ tr:hover td{background:rgba(212,160,60,.03)}
 </div>
 
 <script>
-/* ===== STATE ===== */
+/* =============================================
+   ===== FIREBASE FIRESTORE CLOUD DATABASE =====
+   ============================================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import {
+  getFirestore, collection, getDocs, doc, setDoc, deleteDoc,
+  getDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+  authDomain: "ncrs-aeb43.firebaseapp.com",
+  projectId: "ncrs-aeb43",
+  storageBucket: "ncrs-aeb43.firebasestorage.app",
+  messagingSenderId: "786434442929",
+  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+  measurementId: "G-ZYB71RY8J5"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const DEFAULT_DATA = {products:[],sales:[],purchases:[],suppliers:[],customers:[],expenses:[],employees:[],notifications:[]};
+
+window.__fb = {
+  app, db,
+  cache: {users:[], staff:[], managers:[], businessData:{}, settings:{}},
+  superSession: false,
+  ready: false,
+  async load(){
+    const c=this.cache;
+    const [users,staff,managers,businessData,settings]=await Promise.all([
+      getDocs(collection(db,'users')),
+      getDocs(collection(db,'staff')),
+      getDocs(collection(db,'managers')),
+      getDocs(collection(db,'businessData')),
+      getDocs(collection(db,'systemSettings'))
+    ]);
+    c.users=users.docs.map(x=>({id:x.id,...x.data()}));
+    c.staff=staff.docs.map(x=>({id:x.id,...x.data()}));
+    c.managers=managers.docs.map(x=>({id:x.id,...x.data()}));
+    c.businessData={}; businessData.docs.forEach(x=>c.businessData[x.id]=x.data());
+    c.settings={}; settings.docs.forEach(x=>c.settings[x.id]=x.data());
+    this.ready=true;
+    return this;
+  },
+  async writeArray(name, arr){
+    const col=collection(db,name), old=await getDocs(col), ids=new Set(arr.map(x=>String(x.id)));
+    await Promise.all(old.docs.filter(x=>!ids.has(x.id)).map(x=>deleteDoc(x.ref)));
+    await Promise.all(arr.map(x=>setDoc(doc(db,name,String(x.id)),x)));
+  },
+  async writeBusiness(id,data){ await setDoc(doc(db,'businessData',String(id)),data,{merge:true}); },
+  async writeSetting(key,value){ await setDoc(doc(db,'systemSettings','global'),{[key]:value,updatedAt:serverTimestamp()},{merge:true}); },
+  async deleteBusiness(id){
+    delete this.cache.businessData[id];
+    await deleteDoc(doc(db,'businessData',String(id)));
+  }
+};
+window.__fbReady=window.__fb.load().catch(err=>{console.error('Firebase initialization failed:',err);window.__fb.error=err;throw err;});
+</script>
+
+<script>
+
+  /* ===== STATE ===== */
 let S = {
   user: null,      // {id, name, email, phone, password}
   biz: null,       // {id, name, category, email, phone, address}
@@ -3529,7 +3591,7 @@ document.addEventListener('keydown', function(e) {
 applyBrandAssets();
 
 function bootBizBook() {
-  initPublicShowcase();
+  initPublicShowcase
   updateBusinessBranding();
   showLanding();
 }
