@@ -4353,146 +4353,825 @@ img{max-width:100%}
     </form>
   </div>
 </div>
+<script type="module">
 
-<!-- ================================================================== -->
-<!-- ===== JAVASCRIPT — COMPLETE SECURE MULTI-TENANT APPLICATION ===== -->
-<!-- ================================================================== -->
-<script>
-// ============================================================
-// 0. FIREBASE CONFIGURATION
-// Replace these values with your actual Firebase project config
-// ============================================================
+/* =============================================
+   ===== FIREBASE FIRESTORE CLOUD DATABASE =====
+   ============================================= */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+
+apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+authDomain: "ncrs-aeb43.firebaseapp.com",
+projectId: "ncrs-aeb43",
+storageBucket: "ncrs-aeb43.firebasestorage.app",
+messagingSenderId: "786434442929",
+appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+measurementId: "G-ZYB71RY8J5"
+
 };
 
-let db, auth;
-try {
-  firebase.initializeApp(firebaseConfig);
-  auth = firebase.auth();
-  db = firebase.firestore();
-  // Enable offline persistence
-  db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-    console.warn('Firestore persistence error:', err.code);
-  });
-} catch (e) {
-  console.error('Firebase initialization failed:', e);
+
+
+const app = initializeApp(firebaseConfig);
+
+const db = getFirestore(app);
+
+
+
+const DEFAULT_DATA = {
+
+products:[],
+sales:[],
+purchases:[],
+suppliers:[],
+customers:[],
+expenses:[],
+employees:[],
+notifications:[]
+
+};
+
+
+
+
+
+/* =============================================
+        FIREBASE DATABASE MANAGER
+   ============================================= */
+
+
+window.__fb = {
+
+
+app,
+db,
+
+
+cache:{
+
+users:[],
+staff:[],
+managers:[],
+businessData:{},
+settings:{}
+
+},
+
+
+superSession:false,
+
+ready:false,
+
+
+
+
+async load(){
+
+
+const c=this.cache;
+
+
+
+const [
+users,
+staff,
+managers,
+settings
+
+]=await Promise.all([
+
+
+getDocs(collection(db,"users")),
+
+getDocs(collection(db,"staff")),
+
+getDocs(collection(db,"managers")),
+
+getDoc(
+doc(db,"systemSettings","global")
+)
+
+
+]);
+
+
+
+c.users =
+users.docs.map(x=>({
+
+id:x.id,
+...x.data()
+
+}));
+
+
+
+c.staff =
+staff.docs.map(x=>({
+
+id:x.id,
+...x.data()
+
+}));
+
+
+
+c.managers =
+managers.docs.map(x=>({
+
+id:x.id,
+...x.data()
+
+}));
+
+
+
+/*
+ IMPORTANT:
+ Super Admin HAPATI businessData
+*/
+
+
+c.businessData={};
+
+
+
+c.settings =
+settings.exists()
+?
+settings.data()
+:
+{};
+
+
+
+this.ready=true;
+
+
+return this;
+
+
+},
+
+
+
+
+
+async writeArray(name,arr){
+
+
+for(const item of arr){
+
+
+await setDoc(
+
+doc(db,name,String(item.id)),
+
+{
+
+...item,
+
+updatedAt:serverTimestamp()
+
+},
+
+{
+merge:true
 }
 
+);
+
+
+}
+
+
+
+},
+
+
+
+
+
+
+async writeBusiness(id,data){
+
+
+await setDoc(
+
+doc(
+db,
+"businessData",
+String(id)
+),
+
+{
+
+...data,
+
+updatedAt:serverTimestamp()
+
+},
+
+{
+merge:true
+}
+
+);
+
+
+},
+
+
+
+
+
+
+async writeSetting(key,value){
+
+
+await setDoc(
+
+doc(
+db,
+"systemSettings",
+"global"
+),
+
+{
+
+[key]:value,
+
+updatedAt:serverTimestamp()
+
+},
+
+{
+merge:true
+}
+
+);
+
+
+},
+
+
+
+
+
+
+async deleteBusiness(id){
+
+
+delete this.cache.businessData[id];
+
+
+await deleteDoc(
+
+doc(
+db,
+"businessData",
+String(id)
+
+)
+
+);
+
+
+}
+
+
+
+};
+
+
+
+
+
+
+
 // ============================================================
-// 1. SESSION MANAGER — Single source of truth for auth state
-// NO localStorage leaks. Session lives in memory only.
+// 1. SESSION MANAGER
 // ============================================================
+
+
 const Session = {
-  _data: {},
 
-  set(data) {
-    this._data = { ...this._data, ...data };
-  },
 
-  get(key) {
-    return this._data[key] || null;
-  },
 
-  getAll() {
-    return { ...this._data };
-  },
+_data:{},
 
-  clear() {
-    this._data = {};
-  },
 
-  get uid() { return this._data.uid || null; },
-  get role() { return this._data.role || null; },
-  get businessId() { return this._data.businessId || null; },
-  get businessName() { return this._data.businessName || ''; },
-  get displayName() { return this._data.displayName || ''; },
-  get isSuperAdmin() { return this._data.role === 'superAdmin'; },
-  get isManager() { return this._data.role === 'manager'; },
-  get isLoggedIn() { return !!this._data.uid; }
+
+set(data){
+
+this._data={
+
+...this._data,
+
+...data
+
 };
 
+},
+
+
+
+get(key){
+
+return this._data[key] || null;
+
+},
+
+
+
+getAll(){
+
+return {
+
+...this._data
+
+};
+
+},
+
+
+
+clear(){
+
+this._data={};
+
+},
+
+
+
+get uid(){
+
+return this._data.uid || null;
+
+},
+
+
+
+get role(){
+
+return this._data.role || null;
+
+},
+
+
+
+get businessId(){
+
+return this._data.businessId || null;
+
+},
+
+
+
+get businessName(){
+
+return this._data.businessName || "";
+
+},
+
+
+
+get displayName(){
+
+return this._data.displayName || "";
+
+},
+
+
+
+get isLoggedIn(){
+
+return !!this._data.uid;
+
+},
+
+
+
+get isSuperAdmin(){
+
+return this._data.role==="superAdmin";
+
+},
+
+
+
+get isAdmin(){
+
+return this._data.role==="admin";
+
+},
+
+
+
+get isManager(){
+
+return this._data.role==="manager";
+
+}
+
+
+
+};
+
+
+
+window.Session = Session;
+
+
+
+
+
+
+
 // ============================================================
-// 2. AUTH MIDDLEWARE — RBAC Enforcement
+// 2. AUTH MIDDLEWARE — RBAC
 // ============================================================
+
+
 const AuthMiddleware = {
-  // Role hierarchy and permissions
-  ROLES: {
-    superAdmin: { level: 100, label: 'Super Admin' },
-    admin: { level: 90, label: 'Admin' },
-    manager: { level: 50, label: 'Meneja' },
-    storekeeper: { level: 30, label: 'Mhifadhi' },
-    cashier: { level: 20, label: 'Mhifadhi Fedha' },
-    seller: { level: 10, label: 'Muuzaji' },
-    user: { level: 5, label: 'Mtumiaji' }
-  },
 
-  // Map of section -> allowed roles
-  SECTION_ACCESS: {
-    dashboard:    ['manager', 'storekeeper', 'cashier', 'seller'],
-    finance:      ['manager'],
-    pos:          ['manager', 'cashier', 'seller'],
-    products:     ['manager', 'storekeeper'],
-    sales:        ['manager', 'cashier', 'seller'],
-    purchases:    ['manager', 'storekeeper'],
-    suppliers:    ['manager', 'storekeeper'],
-    customers:    ['manager', 'cashier', 'seller'],
-    debtors:      ['manager', 'cashier'],
-    expenses:     ['manager'],
-    employees:    ['manager'],
-    notifications:['manager', 'storekeeper', 'cashier', 'seller'],
-    profile:      ['manager', 'storekeeper', 'cashier', 'seller'],
-    priceCalculator:['manager', 'storekeeper', 'cashier', 'seller'],
-    users:        ['manager']
-  },
 
-  // Check if current user has permission for a section
-  checkPermission(section) {
-    const role = Session.role;
-    if (!role) return false;
-    const allowed = this.SECTION_ACCESS[section];
-    if (!allowed) return false;
-    return allowed.includes(role);
-  },
 
-  // Gate: throw/redirect if role not in allowed list
-  requireRole(allowedRoles) {
-    const role = Session.role;
-    if (!role) {
-      App.showLanding();
-      return false;
-    }
-    if (!allowedRoles.includes(role)) {
-      UI.toast('Huna ruhusa ya kufanya hili', 'e');
-      return false;
-    }
-    return true;
-  },
+ROLES:{
 
-  // Verify that the current user owns the resource
-  authorizeUser(resourceOwnerId) {
-    // Super Admin can NEVER access business data
-    if (Session.isSuperAdmin) {
-      console.error('SECURITY: Super Admin attempted to access business data');
-      return false;
-    }
-    if (!Session.uid) return false;
-    return Session.uid === resourceOwnerId;
-  },
 
-  // Verify business ownership
-  authorizeBusiness(businessOwnerId) {
-    if (Session.isSuperAdmin) return false;
-    if (!Session.uid) return false;
-    // Manager owns the business; staff are members
-    return Session.uid === businessOwnerId || Session.businessId !== null;
-  }
+superAdmin:{
+level:100,
+label:"Super Admin"
+},
+
+
+admin:{
+level:90,
+label:"Admin"
+},
+
+
+manager:{
+level:50,
+label:"Manager"
+},
+
+
+storekeeper:{
+level:30,
+label:"Store Keeper"
+},
+
+
+cashier:{
+level:20,
+label:"Cashier"
+},
+
+
+seller:{
+level:10,
+label:"Seller"
+},
+
+
+user:{
+level:5,
+label:"User"
+}
+
+
+},
+
+
+
+
+
+
+SECTION_ACCESS:{
+
+
+
+superPanel:[
+"superAdmin"
+],
+
+
+
+users:[
+
+"superAdmin",
+"admin",
+"manager"
+
+],
+
+
+
+dashboard:[
+
+"admin",
+"manager",
+"storekeeper",
+"cashier",
+"seller"
+
+],
+
+
+
+finance:[
+
+"admin",
+"manager"
+
+],
+
+
+
+pos:[
+
+"manager",
+"cashier",
+"seller"
+
+],
+
+
+
+products:[
+
+"manager",
+"storekeeper"
+
+],
+
+
+
+sales:[
+
+"manager",
+"cashier",
+"seller"
+
+],
+
+
+
+purchases:[
+
+"manager",
+"storekeeper"
+
+],
+
+
+
+suppliers:[
+
+"manager",
+"storekeeper"
+
+],
+
+
+
+customers:[
+
+"manager",
+"cashier",
+"seller"
+
+],
+
+
+
+debtors:[
+
+"manager",
+"cashier"
+
+],
+
+
+
+expenses:[
+
+"admin",
+"manager"
+
+],
+
+
+
+employees:[
+
+"admin",
+"manager"
+
+],
+
+
+
+notifications:[
+
+"admin",
+"manager",
+"seller"
+
+],
+
+
+
+profile:[
+
+"admin",
+"manager",
+"seller"
+
+],
+
+
+
+priceCalculator:[
+
+"manager",
+"storekeeper",
+"cashier",
+"seller"
+
+]
+
+
+
+},
+
+
+
+
+
+
+checkPermission(section){
+
+
+const role=Session.role;
+
+
+if(!role)return false;
+
+
+
+const allowed=this.SECTION_ACCESS[section];
+
+
+if(!allowed)return false;
+
+
+
+return allowed.includes(role);
+
+
+},
+
+
+
+
+
+
+requireRole(allowedRoles){
+
+
+const role=Session.role;
+
+
+
+if(!role){
+
+if(window.App && App.showLanding){
+
+App.showLanding();
+
+}
+
+return false;
+
+}
+
+
+
+if(!allowedRoles.includes(role)){
+
+
+if(window.UI && UI.toast){
+
+UI.toast(
+"Huna ruhusa ya kufanya hili",
+"e"
+);
+
+}
+
+
+return false;
+
+
+}
+
+
+
+return true;
+
+
+},
+
+
+
+
+
+
+authorizeUser(ownerId){
+
+
+if(Session.isSuperAdmin){
+
+console.error(
+"Super Admin cannot access business data"
+);
+
+return false;
+
+}
+
+
+
+return Session.uid===ownerId;
+
+
+},
+
+
+
+
+
+
+authorizeBusiness(ownerId){
+
+
+if(Session.isSuperAdmin)
+return false;
+
+
+
+if(!Session.uid)
+return false;
+
+
+
+return (
+
+Session.uid===ownerId ||
+
+!!Session.businessId
+
+);
+
+
+}
+
+
+
 };
+
+
+
+window.AuthMiddleware = AuthMiddleware;
+
+
+
+
+
+/* =============================================
+       FIREBASE READY
+   ============================================= */
+
+
+window.__fbReady = window.__fb.load();
 
 // ============================================================
 // 3. GENERIC TENANT CRUD SERVICE
