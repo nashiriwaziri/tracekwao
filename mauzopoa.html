@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Business Management System</title>
+
+<!-- Firebase SDKs (modular) -->
+<script type="module">
+  // Import Firebase SDKs
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, getDocs, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // Firebase configuration - replace with your actual project info
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "your-project.firebaseapp.com",
+    projectId: "your-project-id",
+    storageBucket: "your-project-id.appspot.com",
+    messagingSenderId: "your-messagingSenderId",
+    appId: "your-appId",
+    measurementId: "your-measurementId"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Expose to window for inline scripts
+  window.firebaseAuth = auth;
+  window.firebaseDB = db;
+</script>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  #app {
+    max-width: 600px;
+    margin: auto;
+  }
+  input {
+    display: block;
+    margin: 10px 0;
+    padding: 8px;
+    width: 100%;
+  }
+  button {
+    padding: 10px 20px;
+    margin: 10px 0;
+  }
+  .hidden {
+    display: none;
+  }
+  #errMsg {
+    color: red;
+  }
+</style>
+</head>
+<body>
+<h1>Business Management System</h1>
+<div id="app">
+
+  <!-- Login Form -->
+  <div id="loginForm">
+    <h2>Login</h2>
+    <input type="email" id="loginEmail" placeholder="Email" />
+    <input type="password" id="loginPassword" placeholder="Password" />
+    <button onclick="handleLogin()">Login</button>
+    <div id="errMsg"></div>
+    <p>Don't have an account? <a href="#" onclick="showSignup()">Sign Up</a></p>
+  </div>
+
+  <!-- Signup Form -->
+  <div id="signupForm" class="hidden">
+    <h2>Sign Up</h2>
+    <input type="email" id="signupEmail" placeholder="Email" />
+    <input type="password" id="signupPassword" placeholder="Password" />
+    <button onclick="handleSignup()">Create Account</button>
+    <div id="signupErrMsg"></div>
+    <p>Already have an account? <a href="#" onclick="showLogin()">Login</a></p>
+  </div>
+
+  <!-- Main App after login -->
+  <div id="mainApp" class="hidden">
+    <h2>Welcome, <span id="userEmail"></span></h2>
+    <button onclick="handleLogout()">Logout</button>
+    <hr />
+    <h3>Business List</h3>
+    <div id="businessList"></div>
+    <button onclick="showAddBusiness()">Add Business</button>
+
+    <!-- Add Business -->
+    <div id="addBusinessDiv" class="hidden">
+      <h4>Add New Business</h4>
+      <input type="text" id="businessName" placeholder="Business Name" />
+      <button onclick="addBusiness()">Save Business</button>
+      <button onclick="hideAddBusiness()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Helper functions to show/hide forms
+  function showSignup() {
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('signupForm').classList.remove('hidden');
+    document.getElementById('errMsg').innerText = '';
+  }
+
+  function showLogin() {
+    document.getElementById('loginForm').classList.remove('hidden');
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('signupErrMsg').innerText = '';
+  }
+
+  function showMainApp() {
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    document.getElementById('userEmail').innerText = currentUser.email;
+    loadBusinesses();
+  }
+
+  // Handle login
+async function handleLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  document.getElementById('errMsg').innerText = '';
+
+  if (!email || !password) {
+    document.getElementById('errMsg').innerText = 'Please enter email and password.';
+    return;
+  }
+
+  try {
+    const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
+    currentUser = cred.user;
+    showMainApp();
+  } catch (e) {
+    document.getElementById('errMsg').innerText = e.message;
+  }
+}
+
+// Handle signup
+async function handleSignup() {
+  const email = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  document.getElementById('signupErrMsg').innerText = '';
+
+  if (!email || !password) {
+    document.getElementById('signupErrMsg').innerText = 'Please enter email and password.';
+    return;
+  }
+
+  try {
+    const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+    // Save user profile to Firestore
+    await setDoc(doc(firebaseDB, 'bb_users', cred.user.uid), {
+      email: email,
+      role: 'owner',
+      businesses: [],
+      createdAt: serverTimestamp()
+    });
+    alert('Account created! Please login.');
+    showLogin();
+  } catch (e) {
+    document.getElementById('signupErrMsg').innerText = e.message;
+  }
+}
+
+// Logout
+async function handleLogout() {
+  await signOut(firebaseAuth);
+  currentUser = null;
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('loginForm').classList.remove('hidden');
+}
+
+// Load user's businesses from Firestore
+async function loadBusinesses() {
+  const userDocRef = doc(firebaseDB, 'bb_users', currentUser.uid);
+  const userSnap = await getDoc(userDocRef);
+  if (userSnap.exists()) {
+    const userData = userSnap.data();
+    const businesses = userData.businesses || [];
+    displayBusinesses(businesses);
+  }
+}
+
+function displayBusinesses(businesses) {
+  const container = document.getElementById('businessList');
+  container.innerHTML = '';
+  if (businesses.length === 0) {
+    container.innerHTML = '<p>No businesses added yet.</p>';
+    return;
+  }
+  businesses.forEach(biz => {
+    const div = document.createElement('div');
+    div.textContent = biz.name;
+    container.appendChild(div);
+  });
+}
+
+function showAddBusiness() {
+  document.getElementById('addBusinessDiv').classList.remove('hidden');
+}
+
+function hideAddBusiness() {
+  document.getElementById('addBusinessDiv').classList.add('hidden');
+  document.getElementById('businessName').value = '';
+}
+
+async function addBusiness() {
+  const name = document.getElementById('businessName').value.trim();
+  if (!name) return;
+  const userRef = doc(firebaseDB, 'bb_users', currentUser.uid);
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists()) {
+    const data = userSnap.data();
+    const businesses = data.businesses || [];
+    businesses.push({ id: Date.now().toString(), name: name });
+    await setDoc(userRef, { ...data, businesses: businesses });
+    hideAddBusiness();
+    loadBusinesses();
+  }
+}
+
+// Initialize currentUser
+let currentUser = null;
+</script>
+</body>
+</html>
