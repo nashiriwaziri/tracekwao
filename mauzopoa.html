@@ -5015,61 +5015,355 @@ tbody tr:last-child td {
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
-<script>
-/* ================================================================
-   BizBook — Complete Business Management System
-   ================================================================ */
+<script type="module">
+/* ============================================================
+   FIREBASE INITIALIZATION
+   Cloud Firestore Database
+============================================================ */
 
-// ── Firebase Configuration ──────────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+import {
+    getFirestore,
+    collection,
+    getDocs,
+    doc,
+    setDoc,
+    deleteDoc,
+    getDoc,
+    serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+
+/* ============================================================
+   FIREBASE CONFIGURATION
+============================================================ */
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "ncrs-aeb43.firebaseapp.com",
+    projectId: "ncrs-aeb43",
+    storageBucket: "ncrs-aeb43.firebasestorage.app",
+    messagingSenderId: "786434442929",
+    appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+    measurementId: "G-ZYB71RY8J5"
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-db.settings({ timestampsInSnapshots: true });
 
-// ── Global State ────────────────────────────────────────────────
-let currentUser = null;       // Firebase auth user
-let currentUserDoc = null;    // Firestore user document
-let currentBiz = null;        // Current business object {id, name, ...}
-let currentBizId = null;      // Current business ID
-let currentRole = 'owner';    // owner | manager | storekeeper | cashier | seller
-let allUserBiz = [];          // All businesses for current user
-let cart = [];                // POS cart items
-let currentPage = 'dashboard';
-let financePeriod = 'month';
+
+/* ============================================================
+   INITIALIZE FIREBASE
+============================================================ */
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+
+/* ============================================================
+   DEFAULT BUSINESS DATA
+============================================================ */
+
+const DEFAULT_DATA = {
+    products: [],
+    sales: [],
+    purchases: [],
+    suppliers: [],
+    customers: [],
+    expenses: [],
+    employees: [],
+    notifications: []
+};
+
+
+/* ============================================================
+   GLOBAL FIREBASE OBJECT
+============================================================ */
+
+window.__fb = {
+
+    app,
+    db,
+
+    cache: {
+        users: [],
+        staff: [],
+        managers: [],
+        businessData: {},
+        settings: {}
+    },
+
+    superSession: false,
+    ready: false,
+
+
+    /* ========================================================
+       LOAD ALL CLOUD DATA
+    ======================================================== */
+
+    async load() {
+
+        const cache = this.cache;
+
+        const [
+            users,
+            staff,
+            managers,
+            businessData,
+            settings
+        ] = await Promise.all([
+
+            getDocs(collection(db, "users")),
+            getDocs(collection(db, "staff")),
+            getDocs(collection(db, "managers")),
+            getDocs(collection(db, "businessData")),
+            getDocs(collection(db, "systemSettings"))
+
+        ]);
+
+        cache.users = users.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        cache.staff = staff.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        cache.managers = managers.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        cache.businessData = {};
+
+        businessData.docs.forEach(doc => {
+            cache.businessData[doc.id] = doc.data();
+        });
+
+        cache.settings = {};
+
+        settings.docs.forEach(doc => {
+            cache.settings[doc.id] = doc.data();
+        });
+
+        this.ready = true;
+
+        return this;
+    },
+
+
+    /* ========================================================
+       WRITE ARRAY COLLECTION
+    ======================================================== */
+
+    async writeArray(collectionName, arrayData) {
+
+        const colRef = collection(db, collectionName);
+
+        const existing = await getDocs(colRef);
+
+        const ids = new Set(
+            arrayData.map(item => String(item.id))
+        );
+
+        await Promise.all(
+
+            existing.docs
+                .filter(doc => !ids.has(doc.id))
+                .map(doc => deleteDoc(doc.ref))
+
+        );
+
+        await Promise.all(
+
+            arrayData.map(item =>
+                setDoc(
+                    doc(db, collectionName, String(item.id)),
+                    item
+                )
+            )
+
+        );
+    },
+
+
+    /* ========================================================
+       SAVE BUSINESS DATA
+    ======================================================== */
+
+    async writeBusiness(businessId, data) {
+
+        await setDoc(
+
+            doc(db, "businessData", String(businessId)),
+            data,
+            { merge: true }
+
+        );
+    },
+
+
+    /* ========================================================
+       SAVE SYSTEM SETTINGS
+    ======================================================== */
+
+    async writeSetting(key, value) {
+
+        await setDoc(
+
+            doc(db, "systemSettings", "global"),
+
+            {
+                [key]: value,
+                updatedAt: serverTimestamp()
+            },
+
+            {
+                merge: true
+            }
+
+        );
+    },
+
+
+    /* ========================================================
+       DELETE BUSINESS
+    ======================================================== */
+
+    async deleteBusiness(businessId) {
+
+        delete this.cache.businessData[businessId];
+
+        await deleteDoc(
+
+            doc(db, "businessData", String(businessId))
+
+        );
+    }
+
+};
+
+
+/* ============================================================
+   GLOBAL APPLICATION STATE
+============================================================ */
+
+let currentUser = null;          // Firebase Authentication User
+
+let currentUserDoc = null;       // Firestore User Document
+
+let currentBiz = null;           // Current Business Object
+
+let currentBizId = null;         // Current Business ID
+
+let currentRole = "owner";       // owner | manager | cashier | seller | storekeeper
+
+let allUserBiz = [];             // Businesses owned by current user
+
+let cart = [];                   // POS Shopping Cart
+
+let currentPage = "dashboard";
+
+let financePeriod = "month";
+
 let chartInstances = {};
+
 let notifUnread = 0;
-let tablePages = {};          // pagination state per table
+
+let tablePages = {};
+
 const PAGE_SIZE = 15;
 
-// ── RBAC Permissions Map ────────────────────────────────────────
+
+/* ============================================================
+   ROLE BASED ACCESS CONTROL (RBAC)
+============================================================ */
+
 const RBAC = {
-  owner:       ['dashboard','finance','products','pos','sales','purchases','suppliers','customers','debtors','expenses','employees','reports','catalogue','profile','settings'],
-  manager:     ['dashboard','finance','products','pos','sales','purchases','suppliers','customers','debtors','expenses','employees','reports','catalogue','profile'],
-  storekeeper: ['dashboard','products','pos','catalogue','profile'],
-  cashier:     ['pos','profile'],
-  seller:      ['products','pos','sales','customers','catalogue','profile']
+
+    owner: [
+        "dashboard",
+        "finance",
+        "products",
+        "pos",
+        "sales",
+        "purchases",
+        "suppliers",
+        "customers",
+        "debtors",
+        "expenses",
+        "employees",
+        "reports",
+        "catalogue",
+        "profile",
+        "settings"
+    ],
+
+    manager: [
+        "dashboard",
+        "finance",
+        "products",
+        "pos",
+        "sales",
+        "purchases",
+        "suppliers",
+        "customers",
+        "debtors",
+        "expenses",
+        "employees",
+        "reports",
+        "catalogue",
+        "profile"
+    ],
+
+    storekeeper: [
+        "dashboard",
+        "products",
+        "pos",
+        "catalogue",
+        "profile"
+    ],
+
+    cashier: [
+        "pos",
+        "profile"
+    ],
+
+    seller: [
+        "products",
+        "pos",
+        "sales",
+        "customers",
+        "catalogue",
+        "profile"
+    ]
+
 };
 
-// ── Modal Mapping ───────────────────────────────────────────────
+
+/* ============================================================
+   MODAL MAP
+============================================================ */
+
 const MODAL_MAP = {
-  products:  'productModal',
-  purchases: 'purchaseModal',
-  suppliers: 'supplierModal',
-  customers: 'customerModal',
-  expenses:  'expenseModal',
-  employees: 'employeeModal',
-  receipt:   'receiptModal',
-  debtPay:   'debtPayModal'
-};
 
+    products: "productModal",
+
+    purchases: "purchaseModal",
+
+    suppliers: "supplierModal",
+
+    customers: "customerModal",
+
+    expenses: "expenseModal",
+
+    employees: "employeeModal",
+
+    receipt: "receiptModal",
+
+    debtPay: "debtPayModal"
+
+};
 // ── Utility Functions ───────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
@@ -7493,10 +7787,37 @@ function init() {
   $$('.ch-box').forEach(box => observer.observe(box));
 }
 
-// Start the application
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+    /* ============================================================
+       APPLICATION STARTUP
+    ============================================================ */
+
+    async function startApplication() {
+        try {
+
+            // Initialize the entire application
+            await init();
+
+            console.log("✅ Application initialized successfully.");
+
+        } catch (error) {
+
+            console.error("❌ Application initialization failed:", error);
+
+            // Optional: Display a user-friendly message
+            if (typeof showToast === "function") {
+                showToast("e", "Application Error", error.message);
+            }
+        }
+    }
+
+    // Start the application when the page is ready
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", startApplication);
+    } else {
+        startApplication();
+    }
+
 </script>
+
+</body>
+</html>
