@@ -1042,7 +1042,7 @@ async function saveBizData(data){
 
 async function getSystemSettings(){
   try{
-    const s = window.__fb.cache.settings['global'];
+   window.__fb.cache.settings['global']=null;
     if(s) return s;
     const snap = await getDoc(doc(window.__fb.db,'systemSettings','global'));
     if(snap.exists()){ window.__fb.cache.settings['global']=snap.data(); return snap.data(); }
@@ -1404,36 +1404,113 @@ function calc(){
 /* ---- SUPER ADMIN ---- */
 async function superLogin(e){
   e.preventDefault();
-  const email=document.getElementById('superUser').value.trim();
-  const pass=document.getElementById('superPass').value;
+
+  const email = document.getElementById('superUser').value.trim();
+  const pass  = document.getElementById('superPass').value;
+
   try{
     const settings = await getSystemSettings();
-    const creds = settings.superCreds||{};
-    if(creds.email===email && creds.password===pass){
-      window.__fb.superSession=true;
+    const creds = settings.superCreds || {};
+
+    /* ---------- DEBUG LOGS ---------- */
+    console.log("========== SUPER LOGIN DEBUG ==========");
+    console.log("Firestore Settings:", settings);
+    console.log("Saved Credentials:", creds);
+    console.log("Saved Email:", creds.email);
+    console.log("Saved Password:", creds.password);
+    console.log("Entered Email:", email);
+    console.log("Entered Password:", pass);
+    console.log("Email Match:", creds.email === email);
+    console.log("Password Match:", creds.password === pass);
+    console.log("======================================");
+
+    if (creds.email === email && creds.password === pass) {
+
+      window.__fb.superSession = true;
+
       document.getElementById('superLoginBox').classList.add('hidden');
       document.getElementById('superPanel').classList.remove('hidden');
+
       await renderSuperDashboard();
-      toast('Karibu Super Admin!','s');
+
+      toast('Karibu Super Admin!', 's');
+
     } else {
-      document.getElementById('superErr').textContent='Taarifa sio sahihi.';
+
+      document.getElementById('superErr').textContent = 'Taarifa sio sahihi.';
     }
-  }catch(err){ console.error('superLogin error:',err); document.getElementById('superErr').textContent='Hitilafu ya kuingia.'; }
-}
 
-function superLogout(){
-  window.__fb.superSession=false;
-  document.getElementById('superPanel').classList.add('hidden');
-  document.getElementById('superLoginBox').classList.remove('hidden');
-  document.getElementById('superErr').textContent='';
-  document.getElementById('superUser').value='';
-  document.getElementById('superPass').value='';
-  Object.values(state.charts).forEach(c=>{if(c&&c.destroy)c.destroy();});
-  state.charts={};
-  showLanding();
-}
+  } catch(err) {
 
-async function renderSuperDashboard(){
+    console.error('superLogin error:', err);
+
+    document.getElementById('superErr').textContent = 'Hitilafu ya kuingia.';
+  }
+}
+/* ---- SUPER ADMIN LOGOUT ---- */
+function superLogout() {
+
+  try {
+
+    /* ---------- DEBUG LOG ---------- */
+    console.log("========== SUPER LOGOUT ==========");
+    console.log("Current Session:", window.__fb.superSession);
+
+    // End Super Admin Session
+    window.__fb.superSession = false;
+
+    console.log("Session Destroyed:", window.__fb.superSession);
+
+    // Hide Super Admin Panel
+    document.getElementById('superPanel').classList.add('hidden');
+
+    // Show Login Form
+    document.getElementById('superLoginBox').classList.remove('hidden');
+
+    // Clear Messages
+    document.getElementById('superErr').textContent = '';
+
+    // Clear Login Form
+    document.getElementById('superUser').value = '';
+    document.getElementById('superPass').value = '';
+
+    // Destroy Dashboard Charts
+    if (state?.charts) {
+
+      Object.values(state.charts).forEach(chart => {
+
+        if (chart && typeof chart.destroy === 'function') {
+          chart.destroy();
+        }
+
+      });
+
+      state.charts = {};
+    }
+
+    console.log("Charts Destroyed Successfully.");
+
+    // Return to Landing Page
+    showLanding();
+
+    console.log("Returned to Landing Page.");
+    console.log("Super Admin Logged Out Successfully.");
+    console.log("==================================");
+
+  } catch (err) {
+
+    console.error("superLogout error:", err);
+
+    toast(
+      'Error',
+      'Failed to logout Super Admin.',
+      'e'
+    );
+
+  }
+
+}
+  async function renderSuperDashboard(){
   try{
     const users=window.__fb.cache.users;
     const bizData=window.__fb.cache.businessData;
