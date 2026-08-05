@@ -1835,53 +1835,186 @@ function openAddProduct(){
   `,`<button class="btn btn-o" onclick="closeModal()">Cancel</button><button class="btn btn-p" onclick="saveProduct()"><i class="fa-solid fa-save"></i> Save Product</button>`,'lg');
 }
 
-function openEditProduct(id){
-  const p = DB.getAllProducts().find(x=>x.id===id);
-  if(!p) return;
-  openModal('Edit Product',`
-    <input type="hidden" id="pEditId" value="${p.id}"/>
-    <div class="fgrid">
-      <div class="fgf"><label>Product Name <span class="req">*</span></label><input type="text" id="pName" value="${escHtml(p.name)}"/></div>
-      <div class="fgf"><label>Category</label><input type="text" id="pCategory" value="${escHtml(p.category||'')}"/></div>
-      <div class="fgf"><label>Cost Price</label><input type="number" id="pCost" min="0" step="0.01" value="${p.costPrice||0}"/></div>
-      <div class="fgf"><label>Sell Price <span class="req">*</span></label><input type="number" id="pSell" min="0" step="0.01" value="${p.sellPrice||0}"/></div>
-      <div class="fgf"><label>Stock Quantity</label><input type="number" id="pStock" min="0" value="${p.stock||0}"/></div>
-      <div class="fgf"><label>Low Stock Alert</label><input type="number" id="pLowStock" min="0" value="${p.lowStock||5}"/></div>
-      <div class="fgf"><label>Barcode</label><input type="text" id="pBarcode" value="${escHtml(p.barcode||'')}"/></div>
-      <div class="fgf"><label>Unit</label><select id="pUnit"><option value="pcs" ${p.unit==='pcs'?'selected':''}>Pieces</option><option value="kg" ${p.unit==='kg'?'selected':''}>Kilograms</option><option value="ltr" ${p.unit==='ltr'?'selected':''}>Liters</option><option value="box" ${p.unit==='box'?'selected':''}>Box</option></select></div>
-      <div class="fgf full"><label>Description</label><textarea id="pDesc" rows="2" style="resize:vertical">${escHtml(p.description||'')}</textarea></div>
-    </div>
-  `,`<button class="btn btn-o" onclick="closeModal()">Cancel</button><button class="btn btn-p" onclick="saveProduct()"><i class="fa-solid fa-save"></i> Update Product</button>`,'lg');
+/* ============================================================
+   OPEN EDIT PRODUCT MODAL
+============================================================ */
+function openEditProduct(id) {
+    const p = DB.getAllProducts().find(item => item.id === id);
+
+    if (!p) {
+        toast('Error', 'Product not found.', 'e');
+        return;
+    }
+
+    openModal(
+        'Edit Product',
+        `
+        <input type="hidden" id="pEditId" value="${p.id}"/>
+
+        <div class="fgrid">
+
+            <div class="fgf">
+                <label>Product Name <span class="req">*</span></label>
+                <input type="text" id="pName" value="${escHtml(p.name || '')}">
+            </div>
+
+            <div class="fgf">
+                <label>Category</label>
+                <input type="text" id="pCategory" value="${escHtml(p.category || '')}">
+            </div>
+
+            <div class="fgf">
+                <label>Cost Price</label>
+                <input type="number" id="pCost" min="0" step="0.01" value="${Number(p.costPrice || 0)}">
+            </div>
+
+            <div class="fgf">
+                <label>Sell Price <span class="req">*</span></label>
+                <input type="number" id="pSell" min="0" step="0.01" value="${Number(p.sellPrice || 0)}">
+            </div>
+
+            <div class="fgf">
+                <label>Stock Quantity</label>
+                <input type="number" id="pStock" min="0" value="${parseInt(p.stock || 0)}">
+            </div>
+
+            <div class="fgf">
+                <label>Low Stock Alert</label>
+                <input type="number" id="pLowStock" min="0" value="${parseInt(p.lowStock || 5)}">
+            </div>
+
+            <div class="fgf">
+                <label>Barcode</label>
+                <input type="text" id="pBarcode" value="${escHtml(p.barcode || '')}">
+            </div>
+
+            <div class="fgf">
+                <label>Unit</label>
+                <select id="pUnit">
+                    <option value="pcs" ${p.unit === 'pcs' ? 'selected' : ''}>Pieces</option>
+                    <option value="kg" ${p.unit === 'kg' ? 'selected' : ''}>Kilograms</option>
+                    <option value="ltr" ${p.unit === 'ltr' ? 'selected' : ''}>Liters</option>
+                    <option value="box" ${p.unit === 'box' ? 'selected' : ''}>Box</option>
+                </select>
+            </div>
+
+            <div class="fgf full">
+                <label>Description</label>
+                <textarea id="pDesc" rows="2" style="resize:vertical;">${escHtml(p.description || '')}</textarea>
+            </div>
+
+        </div>
+        `,
+        `
+        <button class="btn btn-o" onclick="closeModal()">
+            Cancel
+        </button>
+
+        <button class="btn btn-p" onclick="saveProduct()">
+            <i class="fa-solid fa-save"></i>
+            Update Product
+        </button>
+        `,
+        'lg'
+    );
 }
 
-function saveProduct(){
-  const name = document.getElementById('pName').value.trim();
-  const sell = parseFloat(document.getElementById('pSell').value);
-  if(!name) return toast('Error','Product name is required','e');
-  if(isNaN(sell)||sell<0) return toast('Error','Valid sell price required','e');
-  const data = {
-    name, category:document.getElementById('pCategory').value.trim(),
-    costPrice:parseFloat(document.getElementById('pCost').value)||0,
-    sellPrice:sell, stock:parseInt(document.getElementById('pStock').value)||0, lowStock:parseInt(document.getElementById('pLowStock').value)||5,
-    barcode:document.getElementById('pBarcode').value.trim()||DB.genBarcode(),
-    unit:document.getElementById('pUnit').value,
-    description:document.getElementById('pDesc').value.trim()
-  };
-  const editId = document.getElementById('pEditId')?.value;
-  if(editId){
-    DB.updateProduct(editId, data);
-    DB.addActivity(currentUser.id,currentUser.firstName+' '+currentUser.lastName,'Product Updated',data.name);
-    toast('Updated',data.name+' has been updated','s');
-  } else {
-    data.businessId = currentUser.businessId;
-    DB.addProduct(data);
-    DB.addActivity(currentUser.id,currentUser.firstName+' '+currentUser.lastName,'Product Added',data.name);
-    toast('Added',data.name+' has been added','s');
-  }
-  closeModal();
-  renderProducts();
-}
 
+/* ============================================================
+   SAVE PRODUCT
+============================================================ */
+function saveProduct() {
+
+    const name = document.getElementById('pName').value.trim();
+    const sellPrice = parseFloat(document.getElementById('pSell').value);
+
+    if (!name) {
+        toast('Error', 'Product name is required.', 'e');
+        return;
+    }
+
+    if (isNaN(sellPrice) || sellPrice < 0) {
+        toast('Error', 'Please enter a valid sell price.', 'e');
+        return;
+    }
+
+    const data = {
+
+        name,
+
+        category: document.getElementById('pCategory').value.trim(),
+
+        costPrice: parseFloat(document.getElementById('pCost').value) || 0,
+
+        sellPrice,
+
+        stock: parseInt(document.getElementById('pStock').value) || 0,
+
+        lowStock: parseInt(document.getElementById('pLowStock').value) || 5,
+
+        barcode:
+            document.getElementById('pBarcode').value.trim() ||
+            DB.genBarcode(),
+
+        unit: document.getElementById('pUnit').value,
+
+        description: document.getElementById('pDesc').value.trim()
+    };
+
+    const editId = document.getElementById('pEditId')?.value;
+
+    try {
+
+        if (editId) {
+
+            DB.updateProduct(editId, data);
+
+            if (currentUser) {
+                DB.addActivity(
+                    currentUser.id,
+                    `${currentUser.firstName} ${currentUser.lastName}`,
+                    'Product Updated',
+                    data.name
+                );
+            }
+
+            toast('Updated', `${data.name} has been updated successfully.`, 's');
+
+        } else {
+
+            data.businessId = currentUser.businessId;
+
+            DB.addProduct(data);
+
+            if (currentUser) {
+                DB.addActivity(
+                    currentUser.id,
+                    `${currentUser.firstName} ${currentUser.lastName}`,
+                    'Product Added',
+                    data.name
+                );
+            }
+
+            toast('Added', `${data.name} has been added successfully.`, 's');
+        }
+
+        closeModal();
+
+        if (typeof renderProducts === 'function') {
+            renderProducts();
+        }
+
+    } catch (err) {
+
+        console.error(err);
+
+        toast(
+            'Error',
+            err.message || 'Failed to save product.',
+            'e'
+        );
+    }
+}
 function confirmDeleteProduct(id){
   const p = DB.getAllProducts().find(x=>x.id===id);
   if(!p) return;
