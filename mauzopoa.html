@@ -3247,453 +3247,286 @@ function closePriceCalculator() {
   document.getElementById('priceCalculatorModal').style.display = 'none';
 }
 
-// ============ SUPER ADMIN ============
-var SUPER_CRED = { email: 'admin@soboo.co.tz', password: 'SuperAdmin2025!' };
+/* ====== GLOBAL SUPER ADMIN SYSTEM ====== */
+var SUPER_ADMIN_EMAIL='nashiriwaziri29@gmail.com';
+var SUPER_ADMIN_PASSWORD='WAZIRI2015';
+var SUPER_CHARTS={};
+function superGet(key, fallback){var g=window.__fb&&window.__fb.cache.settings.global;return g&&Object.prototype.hasOwnProperty.call(g,key)?g[key]:fallback}
+function superSet(key,val){if(!window.__fb)return;window.__fb.cache.settings.global=Object.assign({},window.__fb.cache.settings.global||{}, {[key]:val});window.__fb.writeSetting(key,val).catch(console.error)}
+function normalizeUsers(){var users=gU();var changed=false;users.forEach(function(u){if(!u.createdAt){u.createdAt=new Date().toISOString();changed=true}if(!u.status){u.status='active';changed=true}if(!u.systemRole){u.systemRole='user';changed=true}});if(changed)sU(users);return users}
+function showSuperAdmin(){hideAll();document.getElementById('superScreen').classList.remove('hidden');document.getElementById('superLoginBox').style.display='flex';document.getElementById('superPanel').style.display='none';document.getElementById('superErr').classList.remove('show');document.getElementById('superUser').value='';document.getElementById('superPass').value=''}
+function superLogin(e){e.preventDefault();var u=document.getElementById('superUser').value.trim().toLowerCase(),p=document.getElementById('superPass').value;if(u!==SUPER_ADMIN_EMAIL||p!==SUPER_ADMIN_PASSWORD){var er=document.getElementById('superErr');er.textContent='Username au password ya Super Administrator si sahihi.';er.classList.add('show');return}window.__fb.superSession=true;document.getElementById('superLoginBox').style.display='none';document.getElementById('superPanel').style.display='block';renderSuperAdmin();toast('Super Admin ameingia kwenye Global Control Panel')}
+function superLogout(){if(window.__fb)window.__fb.superSession=false;showLanding()}
+function renderSuperAdmin(){normalizeUsers();renderSuperMetrics();renderSuperCharts();renderSuperUsers();renderSuperAds();renderSuperProducts();renderPublicShowcase()}
+function getAllBusinesses(){var users=normalizeUsers(),out=[];users.forEach(function(u){(u.businesses||[]).forEach(function(b){out.push({user:u,biz:b})})});return out}
+function getGlobalSales(){var all=getAllBusinesses(),rows=[];all.forEach(function(x){var d=gD(x.biz.id);(d.sales||[]).forEach(function(s){rows.push({user:x.user,biz:x.biz,sale:s})})});return rows}
+function renderSuperMetrics(){var users=normalizeUsers(),active=users.filter(function(u){return u.status!=='suspended'}).length,suspended=users.filter(function(u){return u.status==='suspended'}).length,biz=getAllBusinesses().length,sales=getGlobalSales(),revenue=sales.reduce(function(a,x){return a+(Number(x.sale.total)||0)},0),products=superGet('bb_public_products',[]).filter(function(x){return x.visible!==false}).length;document.getElementById('superMetrics').innerHTML='<div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-users"></i></div><h2>'+users.length+'</h2><p>Total Users</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-user-check"></i></div><h2>'+active+'</h2><p>Active Users</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-user-slash"></i></div><h2>'+suspended+'</h2><p>Suspended / Inactive</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-building"></i></div><h2>'+biz+'</h2><p>Registered Businesses</p></div><div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-chart-line"></i></div><h2>'+fmt(revenue)+'</h2><p>Global Sales Value</p></div>'}
+function destroySuperCharts(){Object.keys(SUPER_CHARTS).forEach(function(k){if(SUPER_CHARTS[k]&&SUPER_CHARTS[k].destroy)SUPER_CHARTS[k].destroy()});SUPER_CHARTS={}}
+function renderSuperCharts(){destroySuperCharts();var users=normalizeUsers(),months=[],now=new Date();for(var i=11;i>=0;i--){var d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({key:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),label:d.toLocaleDateString('en-US',{month:'short'})})}var trend=months.map(function(m){return users.filter(function(u){return String(u.createdAt||'').slice(0,7)===m.key}).length});SUPER_CHARTS.users=new Chart(document.getElementById('superUsersTrend'),{type:'line',data:{labels:months.map(function(m){return m.label}),datasets:[{label:'New Users',data:trend,tension:.35,fill:true,borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,.12)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,precision:0}}}});var cats={};getAllBusinesses().forEach(function(x){var c=x.biz.category||'Other';cats[c]=(cats[c]||0)+1});SUPER_CHARTS.cat=new Chart(document.getElementById('superCategoryChart'),{type:'doughnut',data:{labels:Object.keys(cats).length?Object.keys(cats):['No Data'],datasets:[{data:Object.keys(cats).length?Object.values(cats):[1],backgroundColor:['#7c3aed','#059669','#0284c7','#d97706','#dc2626','#64748b','#db2777'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right'}}}});var bizMap={};getGlobalSales().forEach(function(x){var id=x.biz.id;bizMap[id]=bizMap[id]||{name:x.biz.name,total:0};bizMap[id].total+=Number(x.sale.total)||0});var topB=Object.values(bizMap).sort(function(a,b){return b.total-a.total}).slice(0,7);SUPER_CHARTS.biz=new Chart(document.getElementById('superBusinessChart'),{type:'bar',data:{labels:topB.map(function(x){return x.name}),datasets:[{label:'Sales',data:topB.map(function(x){return x.total}),backgroundColor:'#059669',borderRadius:6}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});var prodMap={};getGlobalSales().forEach(function(x){(x.sale.items||[]).forEach(function(it){var key=it.name||'Unknown';prodMap[key]=(prodMap[key]||0)+Number(it.qty||0)})});var topP=Object.entries(prodMap).sort(function(a,b){return b[1]-a[1]}).slice(0,7);SUPER_CHARTS.prod=new Chart(document.getElementById('superProductChart'),{type:'bar',data:{labels:topP.map(function(x){return x[0]}),datasets:[{label:'Units Sold',data:topP.map(function(x){return x[1]}),backgroundColor:'#0284c7',borderRadius:6}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,precision:0}}}})}
+function renderSuperUsers(){var users=normalizeUsers(),q=(document.getElementById('superUserSearch').value||'').toLowerCase(),staff=gSt(),body=document.getElementById('superUsersBody');var filtered=users.filter(function(u){var bs=(u.businesses||[]).map(function(b){return b.name+' '+b.category}).join(' ');return (u.name+' '+u.email+' '+bs).toLowerCase().indexOf(q)>=0});body.innerHTML=filtered.length?filtered.map(function(u){var businesses=(u.businesses||[]);var role=u.systemRole||'user';var status=u.status==='suspended'?'suspended':'active';return '<tr><td><div class="super-user"><div class="super-user-av">'+(u.name||'U').charAt(0).toUpperCase()+'</div><div><strong>'+esc(u.name)+'</strong><small>'+esc(u.phone||'No phone')+'</small></div></div></td><td>'+esc(u.email)+'</td><td>'+businesses.map(function(b){return '<div><strong>'+esc(b.name)+'</strong><small>'+esc(b.category||'Other')+'</small></div>'}).join('')+'</td><td><span class="super-role">'+esc(role)+'</span></td><td><span class="super-status '+status+'">'+(status==='active'?'ACTIVE':'SUSPENDED')+'</span></td><td>'+fmtD(u.createdAt)+'</td><td><div class="super-actions">'+(status==='active'?'<button class="sa-yellow" onclick="superSetUserStatus(\''+u.id+'\',\'suspended\')">Suspend</button>':'<button class="sa-green" onclick="superSetUserStatus(\''+u.id+'\',\'active\')">Activate</button>')+'<button class="sa-blue" onclick="superMakeManager(\''+u.id+'\')">Make Manager</button><button class="sa-red" onclick="superDeleteUser(\''+u.id+'\')">Delete</button></div></td></tr>'}).join(''):'<tr><td colspan="7" class="empty-s">No users found</td></tr>'}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function superSetUserStatus(id,status){var users=normalizeUsers(),u=users.find(function(x){return x.id===id});if(!u)return;u.status=status;u.lastSeen=new Date().toISOString();sU(users);renderSuperAdmin();toast(status==='suspended'?'User suspended':'User activated',status==='suspended'?'w':'s')}
+function superMakeManager(id){var users=normalizeUsers(),u=users.find(function(x){return x.id===id});if(!u)return;u.systemRole='manager';sU(users);renderSuperAdmin();toast('User role changed to System Manager')}
+function superDeleteUser(id){var users=normalizeUsers(),u=users.find(function(x){return x.id===id});if(!u)return;if(!confirm('Delete this user and all registered business data?'))return;(u.businesses||[]).forEach(function(b){if(window.__fb)window.__fb.deleteBusiness(b.id).catch(console.error)});sU(users.filter(function(x){return x.id!==id}));sSt(gSt().filter(function(x){return x.userId!==id}));sMC(gMC().filter(function(x){return x.userId!==id}));renderSuperAdmin();toast('User and business records deleted','e')}
+function exportUsersPDF(){var users=normalizeUsers(),J=window.jspdf&&window.jspdf.jsPDF;if(!J){toast('PDF library haijapakiwa','e');return}var doc=new J({orientation:'landscape'});doc.setFontSize(18);doc.text('BizBook - Users & Registered Businesses',14,16);doc.setFontSize(9);doc.text('Generated: '+new Date().toLocaleString('en-US'),14,23);var rows=[];users.forEach(function(u){(u.businesses||[]).forEach(function(b){rows.push([u.name,u.email,u.systemRole||'user',u.status||'active',b.name,b.category||'Other',b.phone||'',b.address||''])})});doc.autoTable({head:[['User','Email','Role','Status','Business','Category','Phone','Address']],body:rows,startY:30,styles:{fontSize:7}});doc.save('BizBook_Users_and_Businesses.pdf');toast('PDF report imepakuliwa')}
+function openSuperAdModal(id){var ads=superGet('bb_super_ads',[]),a=id?ads.find(function(x){return x.id===id}):null;document.getElementById('superAdId').value=a?a.id:'';document.getElementById('superAdTitle').value=a?a.title:'';document.getElementById('superAdText').value=a?a.text:'';document.getElementById('superAdImage').value=a?a.image:'';document.getElementById('superAdLink').value=a?a.link:'';document.getElementById('superAdModal').classList.add('show')}
+function saveSuperAd(e){e.preventDefault();var ads=superGet('bb_super_ads',[]),id=document.getElementById('superAdId').value||gid(),a={id:id,title:document.getElementById('superAdTitle').value.trim(),text:document.getElementById('superAdText').value.trim(),image:document.getElementById('superAdImage').value.trim(),link:document.getElementById('superAdLink').value.trim(),visible:true,updatedAt:new Date().toISOString()};var i=ads.findIndex(function(x){return x.id===id});if(i>=0)ads[i]=a;else ads.unshift(a);superSet('bb_super_ads',ads);closeSuperModal('superAdModal');renderSuperAds();renderPublicShowcase();toast('Advertisement published')}
+function renderSuperAds(){var ads=superGet('bb_super_ads',[]),el=document.getElementById('superAdsList');el.innerHTML=ads.length?ads.map(function(a){return '<div class="super-ad-row"><img class="super-thumb" src="'+esc(a.image||'')+'" onerror="this.style.visibility=\'hidden\'"/><div class="super-row-main"><strong>'+esc(a.title)+'</strong><small>'+esc(a.text||'No description')+'</small><small>'+ (a.visible!==false?'Visible on landing page':'Hidden from landing page')+'</small></div><div class="super-row-actions"><button onclick="toggleSuperAd(\''+a.id+'\')">'+(a.visible!==false?'Hide':'Show')+'</button><button onclick="openSuperAdModal(\''+a.id+'\')"><i class="fa-solid fa-pen"></i></button><button onclick="deleteSuperAd(\''+a.id+'\')"><i class="fa-solid fa-trash"></i></button></div></div>'}).join(''):'<div class="public-empty">No advertisements yet.</div>'}
+function toggleSuperAd(id){var ads=superGet('bb_super_ads',[]),a=ads.find(function(x){return x.id===id});if(a)a.visible=a.visible===false;superSet('bb_super_ads',ads);renderSuperAds();renderPublicShowcase()}
+function deleteSuperAd(id){if(!confirm('Delete this advertisement?'))return;superSet('bb_super_ads',superGet('bb_super_ads',[]).filter(function(x){return x.id!==id}));renderSuperAds();renderPublicShowcase()}
+function openSuperProductModal(id){
+  var ps=superGet('bb_public_products',[]),
+      p=id?ps.find(function(x){return x.id===id}):null,
+      set=function(id,v){var el=document.getElementById(id);if(el)el.value=v||''};
 
-function superLogin(e) {
+  set('superProdId',p?p.id:'');
+  set('superProdName',p?p.name:'');
+  set('superProdCategory',p?p.category:'');
+  set('superProdSeller',p?p.seller:'');
+  set('superProdShop',p?p.shopName:'');
+  set('superProdPhone',p?p.phone:'');
+  set('superProdLocation',p?p.location:'');
+  set('superProdPrice',p?p.price:'');
+  set('superProdDesc',p?p.description:'');
+  set('superProdImageUrl',p&&p.image&&p.image.indexOf('data:')!==0?p.image:'');
+  set('superProdVideo',p?p.video||p.videoUrl:'');
+  var f=document.getElementById('superProdImage');if(f)f.value='';
+  document.getElementById('superProductModal').classList.add('show');
+}
+
+function saveSuperProduct(e){
   e.preventDefault();
-  var email = document.getElementById('superUser').value.trim();
-  var pass = document.getElementById('superPass').value;
-  if (email === SUPER_CRED.email && pass === SUPER_CRED.password) {
-    document.getElementById('superLoginBox').style.display = 'none';
-    document.getElementById('superPanel').style.display = '';
-    renderSuperPanel();
-  } else {
-    document.getElementById('superErr').textContent = 'Nenosiri au barua pepe sio sahihi';
-  }
-}
+  var val=function(id){var el=document.getElementById(id);return el?el.value.trim():''},
+      file=document.getElementById('superProdImage').files[0],
+      base={
+        id:val('superProdId')||gid(),
+        name:val('superProdName'),
+        category:val('superProdCategory'),
+        seller:val('superProdSeller'),
+        shopName:val('superProdShop'),
+        phone:val('superProdPhone'),
+        location:val('superProdLocation'),
+        price:Number(document.getElementById('superProdPrice').value)||0,
+        description:val('superProdDesc'),
+        video:val('superProdVideo'),
+        visible:true,
+        updatedAt:new Date().toISOString()
+      };
 
-function superLogout() {
-  document.getElementById('superLoginBox').style.display = '';
-  document.getElementById('superPanel').style.display = 'none';
-  document.getElementById('superUser').value = '';
-  document.getElementById('superPass').value = '';
-  document.getElementById('superErr').textContent = '';
-}
-
-function renderSuperPanel() {
-  renderSuperMetrics();
-  renderSuperUsers();
-  renderSuperAds();
-  renderSuperProducts();
-  renderSuperCharts();
-}
-
-function renderSuperMetrics() {
-  var users = getColl('users');
-  var businesses = getColl('businesses');
-  var products = getColl('products');
-  var sales = getColl('sales');
-  var totalRev = sales.reduce(function(s, sale) { return s + (sale.total || 0); }, 0);
-  var html = '' +
-    '<div class="sm-card"><h4>Watumiaji</h4><div class="sm-val">' + users.length + '</div><div class="sm-sub">Registered accounts</div></div>' +
-    '<div class="sm-card"><h4>Biashara</h4><div class="sm-val">' + businesses.length + '</div><div class="sm-sub">Active businesses</div></div>' +
-    '<div class="sm-card"><h4>Bidhaa</h4><div class="sm-val">' + products.length + '</div><div class="sm-sub">Total products</div></div>' +
-    '<div class="sm-card"><h4>Mauzo</h4><div class="sm-val">' + sales.length + '</div><div class="sm-sub">All transactions</div></div>' +
-    '<div class="sm-card"><h4>Mapato</h4><div class="sm-val" style="color:var(--success)">' + fmt(totalRev) + '</div><div class="sm-sub">Total revenue</div></div>';
-  document.getElementById('superMetrics').innerHTML = html;
-}
-
-function renderSuperUsers() {
-  var tbody = document.getElementById('superUsersBody');
-  if (!tbody) return;
-  var users = getColl('users');
-  var businesses = getColl('businesses');
-  var q = (document.getElementById('superUserSearch')?.value || '').toLowerCase();
-  if (q) {
-    users = users.filter(function(u) {
-      return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
-    });
-  }
-  var html = '';
-  users.forEach(function(u) {
-    var bizNames = businesses.filter(function(b) { return b.ownerId === u.userId; }).map(function(b) { return b.name; }).join(', ') || '-';
-    html += '<tr>' +
-      '<td>' + esc(u.name) + '</td>' +
-      '<td>' + esc(u.email) + '</td>' +
-      '<td>' + esc(bizNames) + '</td>' +
-      '<td>' + esc(u.role || 'owner') + '</td>' +
-      '<td><span style="color:var(--success)">' + (u.status || 'active') + '</span></td>' +
-      '<td>' + fmtDate(u.createdAt) + '</td>' +
-      '<td><button class="btn btn-d btn-xs" onclick="superDeleteUser(\'' + u.userId + '\')"><i class="fa-solid fa-trash"></i></button></td>' +
-    '</tr>';
-  });
-  if (!html) html = '<tr><td colspan="7" class="empty-s"><p>Hakuna watumiaji</p></td></tr>';
-  tbody.innerHTML = html;
-}
-
-function superDeleteUser(userId) {
-  if (!confirm('Futa mtumiaji huyu na data yake yote?')) return;
-  var bid = getColl('businesses').filter(function(b) { return b.ownerId === userId; }).map(function(b) { return b.businessId; });
-  // Remove all data for this user's businesses
-  var collections = ['products','sales','purchases','suppliers','customers','expenses','employees','notifications'];
-  collections.forEach(function(col) {
-    var items = getColl(col).filter(function(item) { return !bid.includes(item.businessId); });
-    setColl(col, items);
-  });
-  var businesses = getColl('businesses').filter(function(b) { return b.ownerId !== userId; });
-  setColl('businesses', businesses);
-  var users = getColl('users').filter(function(u) { return u.userId !== userId; });
-  setColl('users', users);
-  toast('Mtumiaji amefutwa', 'i');
-  renderSuperPanel();
-}
-
-function renderSuperCharts() {
-  // Users trend
-  var users = getColl('users');
-  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var yr = new Date().getFullYear();
-  var userCounts = new Array(12).fill(0);
-  users.forEach(function(u) {
-    if (u.createdAt) { var d = new Date(u.createdAt); if (d.getFullYear() === yr) userCounts[d.getMonth()]++; }
-  });
-  destroyChart('superUsersTrend');
-  var ctx1 = document.getElementById('superUsersTrend');
-  if (ctx1) {
-    charts['superUsersTrend'] = new Chart(ctx1, {
-      type: 'line', data: { labels: months, datasets: [{ label: 'Users', data: userCounts, borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,.1)', fill: true, tension: .4 }] },
-      options: chartOpts()
-    });
-  }
-  // Category chart
-  var businesses = getColl('businesses');
-  var catCounts = {};
-  businesses.forEach(function(b) { var c = b.category || 'Other'; catCounts[c] = (catCounts[c] || 0) + 1; });
-  destroyChart('superCategoryChart');
-  var ctx2 = document.getElementById('superCategoryChart');
-  if (ctx2) {
-    var cats = Object.entries(catCounts);
-    var cColors = ['#6c5ce7','#00b894','#0984e3','#f39c12','#e74c3c','#fd79a8'];
-    charts['superCategoryChart'] = new Chart(ctx2, {
-      type: 'pie', data: { labels: cats.map(function(c){ return c[0]; }), datasets: [{ data: cats.map(function(c){ return c[1]; }), backgroundColor: cColors }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#9a9ab0', boxWidth: 12, font: { size: 11 } } } } }
-    });
-  }
-  // Business chart - top by sales
-  var sales = getColl('sales');
-  var bizSales = {};
-  sales.forEach(function(s) {
-    var b = businesses.find(function(biz) { return biz.businessId === s.businessId; });
-    var name = b ? b.name : 'Unknown';
-    bizSales[name] = (bizSales[name] || 0) + (s.total || 0);
-  });
-  var topBiz = Object.entries(bizSales).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
-  destroyChart('superBusinessChart');
-  var ctx3 = document.getElementById('superBusinessChart');
-  if (ctx3 && topBiz.length > 0) {
-    charts['superBusinessChart'] = new Chart(ctx3, {
-      type: 'bar', data: { labels: topBiz.map(function(b){ return b[0]; }), datasets: [{ label: 'Sales', data: topBiz.map(function(b){ return b[1]; }), backgroundColor: 'rgba(0,184,148,.6)', borderRadius: 4 }] },
-      options: Object.assign({}, chartOpts(), { indexAxis: 'y' })
-    });
-  }
-  // Product chart
-  var prodSales = {};
-  sales.forEach(function(s) { (s.items || []).forEach(function(i) { prodSales[i.name] = (prodSales[i.name] || 0) + (i.total || 0); }); });
-  var topProd = Object.entries(prodSales).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
-  destroyChart('superProductChart');
-  var ctx4 = document.getElementById('superProductChart');
-  if (ctx4 && topProd.length > 0) {
-    charts['superProductChart'] = new Chart(ctx4, {
-      type: 'bar', data: { labels: topProd.map(function(p){ return p[0]; }), datasets: [{ label: 'Sales', data: topProd.map(function(p){ return p[1]; }), backgroundColor: 'rgba(108,92,231,.6)', borderRadius: 4 }] },
-      options: Object.assign({}, chartOpts(), { indexAxis: 'y' })
-    });
-  }
-}
-
-// ============ SUPER ADMIN ADS ============
-function openSuperAdModal() {
-  document.getElementById('superAdId').value = '';
-  document.getElementById('superAdTitle').value = '';
-  document.getElementById('superAdText').value = '';
-  document.getElementById('superAdImage').value = '';
-  document.getElementById('superAdLink').value = '';
-  document.getElementById('superAdModal').style.display = '';
-}
-
-function closeSuperModal(id) {
-  document.getElementById(id).style.display = 'none';
-}
-
-function saveSuperAd(e) {
-  e.preventDefault();
-  var ads = getColl('superAds');
-  var adId = document.getElementById('superAdId').value;
-  var ad = {
-    adId: adId || genId(),
-    title: document.getElementById('superAdTitle').value.trim(),
-    text: document.getElementById('superAdText').value.trim(),
-    image: document.getElementById('superAdImage').value.trim(),
-    link: document.getElementById('superAdLink').value.trim(),
-    createdAt: new Date().toISOString()
+  var save=function(image){
+    var ps=superGet('bb_public_products',[]),
+        old=ps.find(function(x){return x.id===base.id});
+    base.image=image||(old&&old.image)||val('superProdImageUrl');
+    var i=ps.findIndex(function(x){return x.id===base.id});
+    if(i>=0)ps[i]=base;else ps.unshift(base);
+    superSet('bb_public_products',ps);
+    closeSuperModal('superProductModal');
+    renderSuperProducts();
+    renderPublicShowcase();
+    toast('Product catalogue updated');
   };
-  if (adId) {
-    var idx = ads.findIndex(function(a) { return a.adId === adId; });
-    if (idx !== -1) ads[idx] = ad;
-  } else {
-    ads.push(ad);
-  }
-  setColl('superAds', ads);
-  closeSuperModal('superAdModal');
-  toast('Tangazo limehifadhiwa', 's');
-  renderSuperAds();
-  renderPublicShowcase();
+
+  if(file){
+    var r=new FileReader();
+    r.onload=function(){save(r.result)};
+    r.readAsDataURL(file);
+  }else save('');
 }
 
-function renderSuperAds() {
-  var container = document.getElementById('superAdsList');
-  if (!container) return;
-  var ads = getColl('superAds');
-  if (ads.length === 0) { container.innerHTML = '<div class="empty-s"><p>Hakuna matangazo</p></div>'; return; }
-  var html = '';
-  ads.forEach(function(ad) {
-    html += '<div class="super-ad-item">' +
-      (ad.image ? '<img class="super-ad-thumb" src="' + esc(ad.image) + '" />' : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-image" style="color:var(--text3)"></i></div>') +
-      '<div class="super-ad-info"><h5>' + esc(ad.title) + '</h5><p>' + esc(ad.text || '').substr(0, 60) + '</p></div>' +
-      '<div class="super-ad-actions">' +
-        '<button class="btn btn-o btn-xs" onclick="editSuperAd(\'' + ad.adId + '\')"><i class="fa-solid fa-pen"></i></button>' +
-        '<button class="btn btn-d btn-xs" onclick="deleteSuperAd(\'' + ad.adId + '\')"><i class="fa-solid fa-trash"></i></button>' +
+function renderSuperProducts(){
+  var ps=superGet('bb_public_products',[]),
+      el=document.getElementById('superProductsList');
+  el.innerHTML=ps.length?ps.map(function(p){
+    return '<div class="super-product-row">'+
+      '<img class="super-thumb" src="'+esc(p.image||'')+'" onerror="this.style.visibility=\'hidden\'"/>'+
+      '<div class="super-row-main">'+
+      '<strong>'+esc(p.name)+' — '+fmt(p.price)+'</strong>'+
+      '<small>'+esc(p.category)+' • Seller: '+esc(p.seller)+'</small>'+
+      '<small><i class="fa-solid fa-store"></i> '+esc(p.shopName||'Duka halijawekwa')+' • <i class="fa-solid fa-location-dot"></i> '+esc(p.location||'Eneo halijawekwa')+'</small>'+
+      '<small><i class="fa-solid fa-phone"></i> '+esc(p.phone||'Simu haijawekwa')+'</small>'+
+      '<small>'+(p.visible!==false?'Visible':'Hidden')+'</small>'+
+      '</div>'+
+      '<div class="super-row-actions">'+
+      '<button onclick="toggleSuperProduct(\''+p.id+'\')">'+(p.visible!==false?'Hide':'Show')+'</button>'+
+      '<button onclick="openSuperProductModal(\''+p.id+'\')"><i class="fa-solid fa-pen"></i></button>'+
+      '<button onclick="deleteSuperProduct(\''+p.id+'\')"><i class="fa-solid fa-trash"></i></button>'+
       '</div></div>';
+  }).join(''):'<div class="public-empty">No public products yet.</div>';
+}
+
+function renderPublicShowcase(){
+  var ads=superGet('bb_super_ads',[]).filter(function(a){return a.visible!==false}),
+      ag=document.getElementById('publicAdsGrid'),
+      pg=document.getElementById('publicProductsGrid');
+  if(!ag||!pg)return;
+
+  ag.innerHTML=ads.length?ads.map(function(a){
+    return '<article class="public-ad">'+
+      (a.image?'<img src="'+esc(a.image)+'" onerror="this.style.display=\'none\'"/>':'')+
+      '<div class="public-ad-body"><h4>'+esc(a.title)+'</h4><p>'+esc(a.text||'')+'</p>'+
+      '<div class="public-actions"><button class="btn btn-p btn-sm" onclick="shareText(\''+encodeURIComponent(a.title+' - '+(a.text||''))+'\')"><i class="fa-solid fa-share-nodes"></i> Share</button>'+
+      (a.link?'<a class="btn btn-o btn-sm" href="'+esc(a.link)+'" target="_blank" rel="noopener">Open</a>':'')+
+      '</div></div></article>';
+  }).join(''):'<div class="public-empty">Hakuna matangazo yaliyowekwa kwa sasa.</div>';
+
+  createPublicProductSearch();
+  showPublicSearchMessage();
+}
+
+function createPublicProductSearch(){
+  var grid=document.getElementById('publicProductsGrid');
+  if(!grid||document.getElementById('publicProductSearchBox'))return;
+
+  var box=document.createElement('div');
+  box.id='publicProductSearchBox';
+  box.innerHTML='<div id="publicProductSearchWrap"><i class="fa-solid fa-magnifying-glass"></i><input type="search" id="publicProductSearch" placeholder="Tafuta bidhaa, category, duka, muuzaji au eneo..." autocomplete="off"/></div><button type="button" id="publicProductSearchBtn"><i class="fa-solid fa-magnifying-glass"></i> Tafuta</button>';
+  grid.parentNode.insertBefore(box,grid);
+
+  var input=document.getElementById('publicProductSearch'),
+      btn=document.getElementById('publicProductSearchBtn');
+
+  if(input){
+    input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();searchPublicProducts()}});
+    input.addEventListener('input',function(){if(!this.value.trim())showPublicSearchMessage()});
+  }
+  if(btn)btn.addEventListener('click',searchPublicProducts);
+}
+
+function showPublicSearchMessage(){
+  var grid=document.getElementById('publicProductsGrid');
+  if(!grid)return;
+  grid.innerHTML='<div class="public-no-results"><i class="fa-solid fa-magnifying-glass"></i><strong>Tafuta bidhaa ili kuiona</strong><div style="margin-top:7px;font-size:.75rem">Bidhaa zote zimefichwa mpaka Customer au Mtumiaji wa Mfumo atafute bidhaa.</div></div>';
+}
+
+function togglePublicProductMedia(button){
+  var media=button.closest('.public-product-media');
+  if(!media)return;
+  var video=media.querySelector('video');
+  if(!video)return;
+
+  if(media.classList.contains('is-playing')){
+    video.pause();
+    media.classList.remove('is-playing');
+    button.innerHTML='<i class="fa-solid fa-play"></i>';
+  }else{
+    media.classList.add('is-playing');
+    video.play().catch(function(){});
+    button.innerHTML='<i class="fa-solid fa-pause"></i>';
+  }
+}
+
+function searchPublicProducts(){
+  var input=document.getElementById('publicProductSearch'),
+      grid=document.getElementById('publicProductsGrid');
+  if(!input||!grid)return;
+
+  var keyword=input.value.trim().toLowerCase();
+  if(!keyword){showPublicSearchMessage();return}
+
+  var products=superGet('bb_public_products',[]).filter(function(p){return p.visible!==false});
+  var results=products.filter(function(p){
+    return [p.name,p.category,p.seller,p.shopName,p.phone,p.location,p.description]
+      .filter(Boolean).join(' ').toLowerCase().includes(keyword);
   });
-  container.innerHTML = html;
-}
 
-function editSuperAd(adId) {
-  var ad = getColl('superAds').find(function(a) { return a.adId === adId; });
-  if (!ad) return;
-  document.getElementById('superAdId').value = ad.adId;
-  document.getElementById('superAdTitle').value = ad.title || '';
-  document.getElementById('superAdText').value = ad.text || '';
-  document.getElementById('superAdImage').value = ad.image || '';
-  document.getElementById('superAdLink').value = ad.link || '';
-  document.getElementById('superAdModal').style.display = '';
-}
-
-function deleteSuperAd(adId) {
-  if (!confirm('Futa tangazo hili?')) return;
-  setColl('superAds', getColl('superAds').filter(function(a) { return a.adId !== adId; }));
-  toast('Tangazo limefutwa', 'i');
-  renderSuperAds();
-  renderPublicShowcase();
-}
-
-// ============ SUPER ADMIN PRODUCTS ============
-function openSuperProductModal() {
-  document.getElementById('superProdId').value = '';
-  document.getElementById('superProdName').value = '';
-  document.getElementById('superProdCategory').value = '';
-  document.getElementById('superProdSeller').value = '';
-  document.getElementById('superProdShop').value = '';
-  document.getElementById('superProdPhone').value = '';
-  document.getElementById('superProdLocation').value = '';
-  document.getElementById('superProdPrice').value = '';
-  document.getElementById('superProdDesc').value = '';
-  document.getElementById('superProdImageUrl').value = '';
-  document.getElementById('superProductModal').style.display = '';
-}
-
-function saveSuperProduct(e) {
-  e.preventDefault();
-  var products = getColl('superProducts');
-  var prodId = document.getElementById('superProdId').value;
-  var prod = {
-    prodId: prodId || genId(),
-    name: document.getElementById('superProdName').value.trim(),
-    category: document.getElementById('superProdCategory').value.trim(),
-    seller: document.getElementById('superProdSeller').value.trim(),
-    shop: document.getElementById('superProdShop').value.trim(),
-    phone: document.getElementById('superProdPhone').value.trim(),
-    location: document.getElementById('superProdLocation').value.trim(),
-    price: parseFloat(document.getElementById('superProdPrice').value) || 0,
-    description: document.getElementById('superProdDesc').value.trim(),
-    imageUrl: document.getElementById('superProdImageUrl').value.trim(),
-    createdAt: new Date().toISOString()
-  };
-  if (prodId) {
-    var idx = products.findIndex(function(p) { return p.prodId === prodId; });
-    if (idx !== -1) products[idx] = prod;
-  } else {
-    products.push(prod);
+  if(!results.length){
+    grid.innerHTML='<div class="public-no-results"><i class="fa-solid fa-box-open"></i><strong>Hakuna bidhaa iliyopatikana</strong><div style="margin-top:7px;font-size:.8rem">Jaribu jina jingine la bidhaa, duka, muuzaji au eneo.</div></div>';
+    return;
   }
-  setColl('superProducts', products);
-  closeSuperModal('superProductModal');
-  toast('Bidhaa imehifadhiwa', 's');
-  renderSuperProducts();
-  renderPublicShowcase();
+
+  grid.innerHTML=results.map(function(p){
+    var image=p.image||'';
+    var video=p.video||p.videoUrl||'';
+    var media=video
+      ? '<div class="public-product-media"><span class="public-media-badge"><i class="fa-solid fa-video"></i> Video</span><img src="'+esc(image)+'" alt="'+esc(p.name||'Product')+'" onerror="this.style.display=\'none\'"/><video src="'+esc(video)+'" muted loop playsinline preload="metadata"></video><button class="public-media-play" type="button" onclick="togglePublicProductMedia(this)" aria-label="Play product video"><i class="fa-solid fa-play"></i></button></div>'
+      : image
+        ? '<div class="public-product-media"><img src="'+esc(image)+'" alt="'+esc(p.name||'Product')+'" loading="lazy" onerror="this.style.display=\'none\'"/></div>'
+        : '<div class="public-product-no-image"><i class="fa-solid fa-box-open"></i></div>';
+
+    return '<article class="public-product">'+media+
+      '<div class="public-product-body">'+
+      '<h4>'+esc(p.name)+'</h4>'+
+      '<div class="public-product-category"><i class="fa-solid fa-layer-group"></i> '+esc(p.category||'General')+'</div>'+
+      '<div class="public-product-price">'+fmt(p.price)+'</div>'+
+      '<div class="public-product-description">'+esc(p.description||'Hakuna maelezo ya ziada ya bidhaa.')+'</div>'+
+      '<div class="public-seller-box">'+
+      '<div class="public-seller-title"><i class="fa-solid fa-store"></i> Taarifa za Muuzaji</div>'+
+      '<div class="public-seller-row"><i class="fa-solid fa-user"></i><span><strong>Muuzaji:</strong> '+esc(p.seller||'Haijawekwa')+'</span></div>'+
+      '<div class="public-seller-row"><i class="fa-solid fa-store"></i><span><strong>Duka:</strong> '+esc(p.shopName||'Haijawekwa')+'</span></div>'+
+      '<div class="public-seller-row"><i class="fa-solid fa-location-dot"></i><span><strong>Eneo:</strong> '+esc(p.location||'Haijawekwa')+'</span></div>'+
+      '<div class="public-seller-row"><i class="fa-solid fa-phone"></i><span><strong>Simu:</strong> '+(p.phone?'<a class="public-seller-phone" href="tel:'+esc(p.phone)+'">'+esc(p.phone)+'</a>':'Haijawekwa')+'</span></div>'+
+      '</div>'+
+      '<div class="public-product-actions">'+
+      (p.phone?'<a class="btn btn-p btn-sm" href="tel:'+esc(p.phone)+'"><i class="fa-solid fa-phone"></i> Piga Simu</a>':'')+
+      '<button class="btn btn-i btn-sm" onclick="shareProduct(\''+p.id+'\')"><i class="fa-solid fa-share-nodes"></i> Share Product</button>'+
+      '</div></div></article>';
+  }).join('');
 }
 
-function renderSuperProducts() {
-  var container = document.getElementById('superProductsList');
-  if (!container) return;
-  var products = getColl('superProducts');
-  if (products.length === 0) { container.innerHTML = '<div class="empty-s"><p>Hakuna bidhaa</p></div>'; return; }
-  var html = '';
-  products.forEach(function(p) {
-    html += '<div class="super-ad-item">' +
-      '<div class="super-ad-info" style="flex:1"><h5>' + esc(p.name) + '</h5><p>' + esc(p.seller || '') + ' — ' + fmt(p.price) + ' TZS</p></div>' +
-      '<div class="super-ad-actions">' +
-        '<button class="btn btn-o btn-xs" onclick="editSuperProduct(\'' + p.prodId + '\')"><i class="fa-solid fa-pen"></i></button>' +
-        '<button class="btn btn-d btn-xs" onclick="deleteSuperProduct(\'' + p.prodId + '\')"><i class="fa-solid fa-trash"></i></button>' +
-      '</div></div>';
+function shareProduct(id){
+  var p=superGet('bb_public_products',[]).find(function(x){return x.id===id});
+  if(!p)return;
+  shareText(encodeURIComponent(
+    'BizBook Product\n'+
+    'Product: '+(p.name||'')+'\n'+
+    'Category: '+(p.category||'')+'\n'+
+    'Price: '+fmt(p.price||0)+'\n'+
+    'Seller: '+(p.seller||'')+'\n'+
+    'Shop: '+(p.shopName||'')+'\n'+
+    'Location: '+(p.location||'')+'\n'+
+    'Phone: '+(p.phone||'')+'\n'+
+    'Description: '+(p.description||'')+'\n'+
+    location.href
+  ));
+}
+
+function toggleSuperProduct(id){var ps=superGet('bb_public_products',[]),p=ps.find(function(x){return x.id===id});if(p)p.visible=p.visible===false;superSet('bb_public_products',ps);renderSuperProducts();renderPublicShowcase()}
+function deleteSuperProduct(id){if(!confirm('Delete this product from public catalogue?'))return;superSet('bb_public_products',superGet('bb_public_products',[]).filter(function(x){return x.id!==id}));renderSuperProducts();renderPublicShowcase()}
+function closeSuperModal(id){document.getElementById(id).classList.remove('show')}
+function renderPublicShowcase(){var ads=superGet('bb_super_ads',[]).filter(function(a){return a.visible!==false}),ps=superGet('bb_public_products',[]).filter(function(p){return p.visible!==false}),ag=document.getElementById('publicAdsGrid'),pg=document.getElementById('publicProductsGrid');if(!ag||!pg)return;ag.innerHTML=ads.length?ads.map(function(a){return '<article class="public-ad">'+(a.image?'<img src="'+esc(a.image)+'" onerror="this.style.display=\'none\'"/>':'')+'<div class="public-ad-body"><h4>'+esc(a.title)+'</h4><p>'+esc(a.text||'')+'</p><div class="public-actions"><button class="btn btn-p btn-sm" onclick="shareText(\''+encodeURIComponent(a.title+' - '+(a.text||''))+'\')"><i class="fa-solid fa-share-nodes"></i> Share</button>'+(a.link?'<a class="btn btn-o btn-sm" href="'+esc(a.link)+'" target="_blank" rel="noopener">Open</a>':'')+'</div></div></article>'}).join(''):'<div class="public-empty">Hakuna matangazo yaliyowekwa kwa sasa.</div>';pg.innerHTML=ps.length?ps.map(function(p){return '<article class="public-product">'+(p.image?'<img src="'+esc(p.image)+'" onerror="this.style.display=\'none\'"/>':'')+'<div class="public-product-body"><h4>'+esc(p.name)+'</h4><p>'+esc(p.category)+' • '+esc(p.seller)+'</p><div class="public-product-price">'+fmt(p.price)+'</div><p>'+esc(p.description||'')+'</p><button class="btn btn-i btn-sm" onclick="shareProduct(\''+p.id+'\')"><i class="fa-solid fa-share-nodes"></i> Share Product</button></div></article>'}).join(''):'<div class="public-empty">Hakuna bidhaa za catalogue kwa sasa.</div>'}
+function shareText(encoded){var text=decodeURIComponent(encoded),url=location.href;if(navigator.share){navigator.share({title:'BizBook',text:text,url:url}).catch(function(){})}else{window.open('https://wa.me/?text='+encodeURIComponent(text+' '+url),'_blank') }}
+function shareProduct(id){var p=superGet('bb_public_products',[]).find(function(x){return x.id===id});if(!p)return;shareText(encodeURIComponent(p.name+' | '+p.seller+' | '+fmt(p.price)+' | '+location.href))}
+function sharePublicCatalogue(){var text='BizBook Public Product Catalogue - '+location.href;if(navigator.share)navigator.share({title:'BizBook Product Catalogue',text:text,url:location.href}).catch(function(){});else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank')}
+function initPublicShowcase(){renderPublicShowcase()}
+
+/* ====== AUTOMATIC PRICE CALCULATOR ====== */
+function calc(){
+  var c=parseFloat(document.getElementById('cost')?.value)||0;
+  var o=parseFloat(document.getElementById('overhead')?.value)||0;
+  var m=parseFloat(document.getElementById('margin')?.value)||0;
+  var p=Math.round(c*(1+o/100+m/100));
+  var price=document.getElementById('price');
+  if(price)price.textContent=p.toLocaleString('en-US');
+}
+function openPriceCalculator(){
+  var modal=document.getElementById('priceCalculatorModal');
+  if(!modal)return;
+  modal.classList.add('show');
+  calc();
+}
+function closePriceCalculator(){
+  var modal=document.getElementById('priceCalculatorModal');
+  if(modal)modal.classList.remove('show');
+}
+
+/* ====== SAFE ERROR HANDLING ====== */
+window.addEventListener('error',function(e){console.error('BizBook Error:',e.error||e.message);});
+window.addEventListener('unhandledrejection',function(e){console.error('BizBook Promise Error:',e.reason);});
+
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closePriceCalculator()});
+
+/* ====== INIT ====== */
+applyBrandAssets();
+function bootBizBook(){
+  initPublicShowcase();
+  updateBusinessBranding();
+  showLanding();
+}
+if(window.__fbReady){
+  window.__fbReady.then(bootBizBook).catch(function(){
+    toast('Firebase haijaunganishwa. Hakikisha Firebase config na Firestore rules ziko sahihi.','e');
   });
-  container.innerHTML = html;
-}
-
-function editSuperProduct(prodId) {
-  var p = getColl('superProducts').find(function(pr) { return pr.prodId === prodId; });
-  if (!p) return;
-  document.getElementById('superProdId').value = p.prodId;
-  document.getElementById('superProdName').value = p.name || '';
-  document.getElementById('superProdCategory').value = p.category || '';
-  document.getElementById('superProdSeller').value = p.seller || '';
-  document.getElementById('superProdShop').value = p.shop || '';
-  document.getElementById('superProdPhone').value = p.phone || '';
-  document.getElementById('superProdLocation').value = p.location || '';
-  document.getElementById('superProdPrice').value = p.price || '';
-  document.getElementById('superProdDesc').value = p.description || '';
-  document.getElementById('superProdImageUrl').value = p.imageUrl || '';
-  document.getElementById('superProductModal').style.display = '';
-}
-
-function deleteSuperProduct(prodId) {
-  if (!confirm('Futa bidhaa hii?')) return;
-  setColl('superProducts', getColl('superProducts').filter(function(p) { return p.prodId !== prodId; }));
-  toast('Bidhaa imefutwa', 'i');
-  renderSuperProducts();
-  renderPublicShowcase();
-}
-
-// ============ PUBLIC SHOWCASE ============
-function renderPublicShowcase() {
-  // Ads
-  var adsGrid = document.getElementById('publicAdsGrid');
-  if (adsGrid) {
-    var ads = getColl('superAds');
-    if (ads.length === 0) {
-      adsGrid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><p>Hakuna matangazo</p></div>';
-    } else {
-      var html = '';
-      ads.forEach(function(ad) {
-        html += '<div class="pub-ad-card">' +
-          (ad.image ? '<img class="pub-ad-img" src="' + esc(ad.image) + '" />' : '<div class="pub-ad-img-placeholder"><i class="fa-solid fa-image"></i></div>') +
-          '<div class="pub-ad-body"><h4>' + esc(ad.title) + '</h4><p>' + esc(ad.text || '') + '</p>' +
-          (ad.link ? '<a class="pub-ad-link" href="' + esc(ad.link) + '" target="_blank">Pata zaidi <i class="fa-solid fa-arrow-right"></i></a>' : '') +
-          '</div></div>';
-      });
-      adsGrid.innerHTML = html;
-    }
-  }
-  // Products
-  var prodGrid = document.getElementById('publicProductsGrid');
-  if (prodGrid) {
-    var products = getColl('superProducts');
-    if (products.length === 0) {
-      prodGrid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><p>Hakuna bidhaa</p></div>';
-    } else {
-      var html = '';
-      products.forEach(function(p) {
-        html += '<div class="pub-prod-card">' +
-          (p.imageUrl ? '<img class="pub-prod-img" src="' + esc(p.imageUrl) + '" />' : '<div class="pub-prod-img-placeholder"><i class="fa-solid fa-box"></i></div>') +
-          '<div class="pub-prod-body"><h4>' + esc(p.name) + '</h4>' +
-          '<div class="pub-prod-price">' + fmt(p.price) + ' TZS</div>' +
-          (p.seller ? '<div class="pub-prod-seller"><i class="fa-solid fa-store" style="margin-right:4px"></i>' + esc(p.seller) + (p.shop ? ' — ' + esc(p.shop) : '') + '</div>' : '') +
-          (p.phone ? '<div class="pub-prod-seller"><i class="fa-solid fa-phone" style="margin-right:4px"></i>' + esc(p.phone) + '</div>' : '') +
-          (p.location ? '<div class="pub-prod-seller"><i class="fa-solid fa-location-dot" style="margin-right:4px"></i>' + esc(p.location) + '</div>' : '') +
-          '</div></div>';
-      });
-      prodGrid.innerHTML = html;
-    }
-  }
-}
-
-function sharePublicCatalogue() {
-  var url = window.location.href;
-  if (navigator.share) {
-    navigator.share({ title: 'BizBook Product Catalogue', text: 'Tazama bidhaa zilizowekwa hadharani kwenye BizBook', url: url });
-  } else {
-    navigator.clipboard.writeText(url).then(function() {
-      toast('Link imekopiwa', 's');
-    }).catch(function() {
-      toast('Shindikano limekataliwa', 'e');
-    });
-  }
-}
-
-function exportUsersPDF() {
-  toast('PDF ya watumiaji na biashara inatayarishwa...', 'i');
-  var users = getColl('users');
-  var businesses = getColl('businesses');
-  var text = 'BIZBOOK - USERS & BUSINESSES REPORT\n';
-  text += 'Generated: ' + new Date().toLocaleString() + '\n';
-  text += '='.repeat(60) + '\n\n';
-  users.forEach(function(u) {
-    text += 'USER: ' + u.name + '\n';
-    text += '  Email: ' + u.email + '\n';
-    text += '  Phone: ' + (u.phone || '-') + '\n';
-    text += '  Role: ' + (u.role || 'owner') + '\n';
-    text += '  Joined: ' + fmtDate(u.createdAt) + '\n';
-    var biz = businesses.filter(function(b) { return b.ownerId === u.userId; });
-    biz.forEach(function(b) {
-      text += '  BUSINESS: ' + b.name + ' (' + (b.category || '-') + ')\n';
-      text += '    Phone: ' + (b.phone || '-') + ' | Address: ' + (b.address || '-') + '\n';
-    });
-    text += '\n';
-  });
-  // Create downloadable text file as PDF alternative
-  var blob = new Blob([text], { type: 'text/plain' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'BizBook_Users_Report_' + new Date().toISOString().split('T')[0] + '.txt';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast('Ripoti imepakuliwa', 's');
-}
-
-// ============ CLOSE DROPDOWN ON OUTSIDE CLICK ============
-document.addEventListener('click', function(e) {
-  var dd = document.getElementById('uDD');
-  if (dd && dd.classList.contains('show') && !e.target.closest('.u-chip')) {
-    dd.classList.remove('show');
-  }
-});
-
-// ============ CLOSE MODAL ON BACKDROP CLICK ============
-document.addEventListener('click', function(e) {
-  if (e.target.classList.contains('modal-ov') && e.target.classList.contains('show')) {
-    closeMod();
-  }
-});
-
-// ============ INIT / BOOT ============
-function init() {
-  var session = getSession();
-  if (session && session.user && session.business) {
-    currentUser = session.user;
-    currentBusiness = session.business;
-    // Validate business still exists
-    var biz = getColl('businesses').find(function(b) { return b.businessId === currentUser.businessId; });
-    if (!biz) {
-      clearSession();
-      showLanding();
-      return;
-    }
-    currentBusiness = biz;
-    // For non-owner roles, validate employee still exists and is active
-    if (currentUser.role !== 'owner') {
-      var emp = getColl('employees').find(function(e) { return e.employeeId === currentUser.userId && e.businessId === currentUser.businessId; });
-      if (!emp || emp.status === 'inactive') {
-        clearSession();
-        showLanding();
-        toast('Akaunti yako imezimwa au haipatikani', 'w');
-        return;
-      }
-    }
-    showDashboard();
-  } else {
-    showLanding();
-  }
-}
-
+}else bootBizBook();
 // Start the app
 init();
 </script>
