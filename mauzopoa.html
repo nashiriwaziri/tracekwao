@@ -1308,15 +1308,15 @@ tr:hover td{background:var(--bg3)}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script>
-// ===== FIREBASE CONFIG =====
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+ const firebaseConfig = {
+        apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+        authDomain: "ncrs-aeb43.firebaseapp.com",
+        projectId: "ncrs-aeb43",
+        storageBucket: "ncrs-aeb43.firebasestorage.app",
+        messagingSenderId: "786434442929",
+        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+        measurementId: "G-ZYB71RY8J5",
+      };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -1509,6 +1509,208 @@ async function authLogin(e){
     renderRoleSelection();
   }catch(e){showAuthErr(e.message);}
   finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-right-to-bracket"></i> Ingia';}
+}
+  /* ============================================================
+   SUPER ADMIN LOGIN
+============================================================ */
+
+const SA_CREDENTIALS = {
+  email: "superadmin@bizbook.app",
+  password: "SA_Admin_2025!"
+};
+
+async function saLogin() {
+  const email = document.getElementById("saEmail")?.value.trim();
+  const password = document.getElementById("saPassword")?.value;
+  const btn = document.getElementById("saLoginBtn");
+  const errEl = document.getElementById("saLoginErr");
+
+  if (errEl) errEl.textContent = "";
+
+  if (!email || !password) {
+    if (errEl) errEl.textContent = "Jaza barua pepe na nenosiri.";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inaingia...';
+
+  try {
+
+    let firebaseUser = null;
+    let superData = null;
+
+    try {
+
+      const cred = await auth.signInWithEmailAndPassword(email, password);
+
+      firebaseUser = cred.user;
+
+      const docSnap = await db
+        .collection("superAdmins")
+        .doc(firebaseUser.uid)
+        .get();
+
+      if (docSnap.exists) {
+
+        const data = docSnap.data() || {};
+
+        const role = (data.role || "").toLowerCase();
+
+        const allowed = [
+          "super_admin",
+          "super administrator",
+          "superadmin",
+          "super",
+          "super-user"
+        ];
+
+        if (allowed.includes(role)) {
+          superData = data;
+        }
+
+      }
+
+    } catch (e) {
+      console.warn("Firebase login failed:", e);
+    }
+
+    if (!superData) {
+
+      if (
+        email.toLowerCase() === SA_CREDENTIALS.email.toLowerCase() &&
+        password === SA_CREDENTIALS.password
+      ) {
+
+        superData = {
+          name: "Super Administrator",
+          email: email,
+          role: "super_admin"
+        };
+
+        firebaseUser = firebaseUser || {
+          uid: "LOCAL_SUPER_ADMIN",
+          email: email
+        };
+
+      }
+
+    }
+
+    if (!superData) {
+
+      if (errEl)
+        errEl.textContent = "Barua pepe au nenosiri sio sahihi.";
+
+      try {
+        await auth.signOut();
+      } catch (e) {}
+
+      await logLoginAttempt(email, "super_admin", "", false);
+
+      return;
+
+    }
+
+    APP.isSuperAdmin = true;
+    APP.currentRole = "super_admin";
+    APP.saData = superData;
+    APP.userProfile = superData;
+    APP.currentUser = firebaseUser;
+
+    await logLoginAttempt(email, "super_admin", "", true);
+
+    if (typeof loadSADashboard === "function") {
+      await loadSADashboard();
+    }
+
+    showScreen("superAdmin");
+
+    if (errEl) errEl.textContent = "";
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (errEl)
+      errEl.textContent = error.message || "Imeshindikana kuingia.";
+
+  } finally {
+
+    btn.disabled = false;
+    btn.innerHTML =
+      '<i class="fas fa-sign-in-alt"></i> Ingia';
+
+  }
+}
+
+/* ============================================================
+   SUPER ADMIN LOGOUT
+============================================================ */
+
+async function saLogout() {
+
+  APP.isSuperAdmin = false;
+  APP.currentRole = "";
+  APP.saData = {};
+  APP.userProfile = null;
+  APP.currentUser = null;
+
+  try {
+    await auth.signOut();
+  } catch (e) {}
+
+  showScreen("landing");
+
+  toast("Umetoka kama Super Admin", "i");
+
+}
+
+/* ============================================================
+   SUPER ADMIN SECTION NAVIGATION
+============================================================ */
+
+function showSASec(section, navItem) {
+
+  document.querySelectorAll(".sa-sec").forEach(sec => {
+    sec.style.display = "none";
+  });
+
+  document.querySelectorAll(".sa-nav-item").forEach(item => {
+    item.classList.remove("active");
+  });
+
+  const sectionId =
+    "saSec" +
+    section.charAt(0).toUpperCase() +
+    section.slice(1);
+
+  const page = document.getElementById(sectionId);
+
+  if (page) page.style.display = "block";
+
+  if (navItem) navItem.classList.add("active");
+
+  const loaders = {
+    dashboard: loadSADashboard,
+    businesses: loadSABusinesses,
+    users: loadSAUsers,
+    staff: loadSAStaff,
+    customers: loadSACustomers,
+    globalProducts: loadSAGlobalProducts,
+    categories: loadSACategories,
+    brands: loadSABrands,
+    announcements: loadSAAnnouncements,
+    loginHistory: loadSALoginHistory,
+    activityLogs: loadSAActivityLogs,
+    auditLogs: loadSAAuditLogs,
+    subscriptions: loadSASubscriptions
+  };
+
+  if (typeof loaders[section] === "function") {
+    loaders[section]();
+  }
+
 }
 function renderRoleSelection(){
   document.getElementById('rsBizName').textContent=currentBiz?currentBiz.name:'Biashara';
