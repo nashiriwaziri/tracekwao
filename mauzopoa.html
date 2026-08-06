@@ -969,19 +969,29 @@ window.__fb = {
     this.ready=true;
     return this;
   },
-  async writeArray(name, arr){
-    const col=collection(db,name), old=await getDocs(col), ids=new Set(arr.map(x=>String(x.id)));
-    await Promise.all(old.docs.filter(x=>!ids.has(x.id)).map(x=>deleteDoc(x.ref)));
-    await Promise.all(arr.map(x=>setDoc(doc(db,name,String(x.id)),x)));
+ async writeArray(name, arr){
+    const col=collection(db,name);
+    const old=await getDocs(col);
+    const ids=new Set(arr.map(x=>String(x.id)));
 
-  async writeBusiness(id,data){ await setDoc(doc(db,'businessData',String(id)),data,{merge:true}); },
-  async writeSetting(key,value){ await setDoc(doc(db,'systemSettings','global'),{[key]:value,updatedAt:serverTimestamp()},{merge:true}); },
-  async deleteBusiness(id){
-    delete this.cache.businessData[id];
-    await deleteDoc(doc(db,'businessData',String(id)));
-  }
-};
-window.__fbReady=window.__fb.load().catch(err=>{console.error('Firebase initialization failed:',err);window.__fb.error=err;throw err;});
+    await Promise.all(
+      old.docs
+      .filter(x=>!ids.has(x.id))
+      .map(x=>deleteDoc(x.ref))
+    );
+
+    await Promise.all(
+      arr.map(x=>setDoc(doc(db,name,String(x.id)),x))
+    );
+},
+
+async writeBusiness(id,data){
+    await setDoc(
+      doc(db,'businessData',String(id)),
+      data,
+      {merge:true}
+    );
+},
 </script>
 
 <!-- =============================================
@@ -1459,7 +1469,6 @@ function calc(){
   const price=c*(1+o/100)*(1+m/100);
   document.getElementById('price').textContent=fmt(Math.round(price));
 }
-
 async function superLogin(e){
     e.preventDefault();
 
@@ -1478,45 +1487,90 @@ async function superLogin(e){
             return;
         }
 
+
+        // CHECK SUPER ADMIN CREDENTIALS
         if(!settings.superCreds){
+
             err.textContent="Super Administrator bado hajasajiliwa.";
-            console.error("superCreds missing",settings);
+
+            console.error(
+                "Hakuna superCreds ndani ya systemSettings/global"
+            );
+
             return;
         }
+
 
         const creds=settings.superCreds;
 
-        const savedEmail=(creds.email||"").trim().toLowerCase();
-        const savedPassword=(creds.password||"").trim();
 
-        console.log("Saved:",savedEmail,savedPassword);
-        console.log("Entered:",email,pass);
+        const savedEmail=(creds.email || "")
+            .trim()
+            .toLowerCase();
 
-        if(savedEmail!==email){
+        const savedPassword=(creds.password || "")
+            .trim();
+
+
+
+        if(savedEmail !== email){
+
             err.textContent="Email sio sahihi.";
             return;
+
         }
 
-        if(savedPassword!==pass){
+
+        if(savedPassword !== pass){
+
             err.textContent="Password sio sahihi.";
             return;
+
         }
+
+
+
+        // LOGIN SUCCESS
 
         window.__fb.superSession=true;
 
-        document.getElementById("superLoginBox").classList.add("hidden");
-        document.getElementById("superPanel").classList.remove("hidden");
+
+        localStorage.setItem(
+            "superSession",
+            "true"
+        );
+
+
+        document
+        .getElementById("superLoginBox")
+        .classList.add("hidden");
+
+
+        document
+        .getElementById("superPanel")
+        .classList.remove("hidden");
+
 
         await renderSuperDashboard();
 
-        toast("Karibu Super Administrator","s");
+
+        toast(
+            "Karibu Super Administrator",
+            "s"
+        );
+
 
     }
     catch(ex){
 
-        console.error(ex);
+        console.error(
+            "Super Login Error:",
+            ex
+        );
 
-        err.textContent="Hitilafu ya kuingia.";
+
+        err.textContent=
+        "Hitilafu ya kuingia.";
 
     }
 
