@@ -1996,7 +1996,1964 @@ function selectRole(role) {
 
 async function enterDashboard() {
   showScreen('dashboard');
+const tbBizName = document.getElementById('tbBizName');
+const tbUserName = document.getElementById('tbUserName');
+const tbUserRole = document.getElementById('tbUserRole');
+const tbUserAv = document.getElementById('tbUserAv');
 
-  /* Update topbar */
-  document.getElementById('tbBizName').textContent = APP.currentBusiness?.name || 'BizBook';
-  document.getElementById('tbUserName').textContent = APP
+if (tbBizName) tbBizName.textContent = APP.currentBusiness?.name || 'BizBook';
+if (tbUserName) tbUserName.textContent = APP.userProfile?.name || 'Mtumiaji';
+if (tbUserRole) tbUserRole.textContent = getRoleLabel(APP.currentRole);
+if (tbUserAv) tbUserAv.textContent = getInitials(APP.userProfile?.name || 'Mtumiaji');
+  /* Update sidebar visibility based on RBAC */
+  document.querySelectorAll('.ni[data-sec]').forEach(ni => {
+    const sec = ni.dataset.sec;
+    ni.style.display = hasPermission(sec) ? '' : 'none';
+  });
+
+  /* Load all business data filtered by businessId */
+  await loadBusinessData();
+  showSection('dashboard', document.querySelector('.ni[data-sec="dashboard"]'));
+  toast('Karibu, ' + (APP.userProfile?.name || ''), 's');
+}
+
+function getRoleLabel(role) {
+  const labels = { business_owner:'Mmiliki', manager:'Meneja', cashier:'Mkaguzi', seller:'Muuzaji', storekeeper:'Mhifadhi', employee:'Mfanyakazi', customer:'Mteja', super_admin:'Super Admin' };
+  return labels[role] || role;
+}
+
+/* ============================================================
+   LOAD BUSINESS DATA — All queries filtered by businessId
+   Business A can NEVER see Business B data
+============================================================ */
+async function loadBusinessData() {
+  const bid = APP.currentBusinessId;
+  if (!bid) return;
+
+  try {
+    /* Products — filtered by businessId */
+    const prodSnap = await db.collection('products').where('businessId','==',bid).get();
+    APP.products = prodSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+    document.getElementById('prodCount').textContent = APP.products.length;
+    document.getElementById('prodCount').style.display = APP.products.length ? '' : 'none';
+
+    /* Customers — filtered by businessId */
+    const custSnap = await db.collection('customers').where('businessId','==',bid).get();
+    APP.customers = custSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Suppliers — filtered by businessId */
+    const supSnap = await db.collection('suppliers').where('businessId','==',bid).get();
+    APP.suppliers = supSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Employees — filtered by businessId */
+    const empSnap = await db.collection('employees').where('businessId','==',bid).get();
+    APP.employees = empSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Sales — filtered by businessId */
+    const salesSnap = await db.collection('sales').where('businessId','==',bid).get();
+    APP.sales = salesSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Expenses — filtered by businessId */
+    const expSnap = await db.collection('expenses').where('businessId','==',bid).get();
+    APP.expenses = expSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Purchases — filtered by businessId */
+    const purSnap = await db.collection('purchases').where('businessId','==',bid).get();
+    APP.purchases = purSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Invoices — filtered by businessId */
+    const invSnap = await db.collection('invoices').where('businessId','==',bid).get();
+    APP.invoices = invSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Payments — filtered by businessId */
+    const paySnap = await db.collection('payments').where('businessId','==',bid).get();
+    APP.payments = paySnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Messages — filtered by businessId */
+    const msgSnap = await db.collection('messages').where('businessId','==',bid).get();
+    APP.messages = msgSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Notifications — filtered by businessId */
+    const notSnap = await db.collection('notifications').where('businessId','==',bid).get();
+    APP.notifications = notSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Update UI */
+    updateDashboard();
+    renderProducts();
+    renderPOSCards();
+    renderSales();
+    renderCustomers();
+    renderSuppliers();
+    renderEmployees();
+    renderExpenses();
+    renderPurchases();
+    renderInvoices();
+    renderPayments();
+    renderMessages();
+    renderNotifications();
+    loadProfile();
+    loadSettings();
+  } catch(e) {
+    console.warn('loadBusinessData:', e.message);
+  }
+}
+
+/* ============================================================
+   DASHBOARD
+============================================================ */
+function updateDashboard() {
+  document.getElementById('mProducts').textContent = APP.products.length;
+  document.getElementById('mSales').textContent = APP.sales.length;
+  const rev = APP.sales.reduce((s,x) => s + (Number(x.total)||0), 0);
+  document.getElementById('mRevenue').textContent = fmt(rev);
+  document.getElementById('mCustomers').textContent = APP.customers.length;
+  const debts = APP.customers.reduce((s,x) => s + (Number(x.debt)||0), 0);
+  document.getElementById('mDebts').textContent = fmt(debts);
+  const exp = APP.expenses.reduce((s,x) => s + (Number(x.amount)||0), 0);
+  document.getElementById('mExpenses').textContent = fmt(exp);
+
+  /* Debt alert */
+  if (debts > 0) {
+    document.getElementById('debtAlertDash').style.display = 'flex';
+    document.getElementById('debtAlertText').textContent = `Una madeni ya jumla ${fmt(debts)} kutoka kwa wateja ${APP.customers.filter(c=>c.debt>0).length}`;
+  } else {
+    document.getElementById('debtAlertDash').style.display = 'none';
+  }
+
+  /* Recent sales */
+  const recent = [...APP.sales].sort((a,b) => new Date(b.createdAt||b.date) - new Date(a.createdAt||a.date)).slice(0,5);
+  const tbody = document.getElementById('recentSalesBody');
+  if (recent.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo bado</p></td></tr>';
+  } else {
+    tbody.innerHTML = recent.map(s => `<tr><td>${fmtDate(s.date||s.createdAt)}</td><td>${s.customerName||'Mteja wa kutembea'}</td><td>${s.productName||'-'}</td><td>${s.quantity||1}</td><td>${fmt(s.total)}</td><td><span class="badge ${s.paid?'badge-success':'badge-warning'}">${s.paid?'Imelipwa':'Deni'}</span></td></tr>`).join('');
+  }
+
+  /* Charts */
+  renderDashCharts();
+}
+
+function renderDashCharts() {
+  /* Sales by day of week */
+  const days = ['Jumapili','Jumatatu','Jumanne','Jumatano','Alhamisi','Ijumaa','Jumamosi'];
+  const daySales = new Array(7).fill(0);
+  APP.sales.forEach(s => {
+    const d = new Date(s.date||s.createdAt);
+    daySales[d.getDay()] += Number(s.total)||0;
+  });
+
+  if (APP.charts.salesWeek) APP.charts.salesWeek.destroy();
+  APP.charts.salesWeek = new Chart(document.getElementById('chartSalesWeek'), {
+    type:'bar', data:{ labels:days, datasets:[{ label:'Mauzo', data:daySales, backgroundColor:'rgba(108,92,231,.6)', borderRadius:6 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ y:{ beginAtZero:true, ticks:{ color:'#9a9ab0' }, grid:{ color:'rgba(255,255,255,.05)' } }, x:{ ticks:{ color:'#9a9ab0' }, grid:{ display:false } } } }
+  });
+
+  /* Category distribution */
+  const catMap = {};
+  APP.products.forEach(p => { catMap[p.category||'Bila'] = (catMap[p.category||'Bila']||0) + 1; });
+  const catLabels = Object.keys(catMap);
+  const catData = Object.values(catMap);
+  const catColors = ['#6c5ce7','#00b894','#e74c3c','#f39c12','#0984e3','#a29bfe','#fd79a8','#00cec9'];
+
+  if (APP.charts.catDist) APP.charts.catDist.destroy();
+  APP.charts.catDist = new Chart(document.getElementById('chartCatDist'), {
+    type:'doughnut', data:{ labels:catLabels, datasets:[{ data:catData, backgroundColor:catColors.slice(0,catLabels.length), borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ color:'#9a9ab0', padding:12, font:{size:11} } } } }
+  });
+}
+
+async function refreshDashboard() {
+  toast('Inafresh...', 'i');
+  await loadBusinessData();
+  toast('Dashboard imefresh', 's');
+}
+
+/* ============================================================
+   SECTION NAVIGATION with RBAC
+============================================================ */
+function showSection(sec, ni) {
+  /* RBAC check */
+  if (!hasPermission(sec)) {
+    toast('Huna ruhusa ya kufikia sehemu hii', 'e');
+    return;
+  }
+
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
+  const secEl = document.getElementById('sec' + sec.charAt(0).toUpperCase() + sec.slice(1));
+  if (secEl) secEl.classList.add('active');
+  if (ni) ni.classList.add('active');
+  closeSidebar();
+
+  /* Render reports charts when shown */
+  if (sec === 'reports') renderReportCharts();
+}
+
+/* ============================================================
+   PRODUCTS CRUD — All operations use businessId
+============================================================ */
+function renderProducts() {
+  const search = (document.getElementById('prodSearch')?.value || '').toLowerCase();
+  const filtered = APP.products.filter(p => !search || p.name?.toLowerCase().includes(search) || p.category?.toLowerCase().includes(search) || p.barcode?.toLowerCase().includes(search));
+  const tbody = document.getElementById('productsBody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-boxes-stacked"></i><p>Hakuna bidhaa bado</p></td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(p => `<tr>
+    <td><strong>${p.name}</strong></td>
+    <td>${p.category||'-'}</td>
+    <td>${fmt(p.price)}</td>
+    <td>${p.stock||0}</td>
+    <td><code style="font-size:11px">${p.barcode||'-'}</code></td>
+    <td><span class="badge ${(p.stock||0)>0?'badge-success':'badge-danger'}">${(p.stock||0)>0?'Stock':'Hakuna'}</span></td>
+    <td>
+      <button class="btn btn-ghost btn-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button>
+      <button class="btn btn-d btn-xs" onclick="deleteProduct('${p.id}')"><i class="fas fa-trash"></i></button>
+    </td>
+  </tr>`).join('');
+}
+
+function filterProducts() { renderProducts(); }
+
+function openProductModal(prod) {
+  const isEdit = !!prod;
+  document.getElementById('modalTitle').textContent = isEdit ? 'Hariri Bidhaa' : 'Ongeza Bidhaa';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-group"><label>Jina <span class="req">*</span></label><input class="form-input" id="mProdName" value="${prod?.name||''}"/></div>
+    <div class="form-row">
+      <div class="form-group"><label>Category</label><input class="form-input" id="mProdCat" value="${prod?.category||''}"/></div>
+      <div class="form-group"><label>Brand</label><input class="form-input" id="mProdBrand" value="${prod?.brand||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Bei ya Kununua</label><input class="form-input" type="number" id="mProdCost" value="${prod?.costPrice||0}"/></div>
+      <div class="form-group"><label>Bei ya Mauzo <span class="req">*</span></label><input class="form-input" type="number" id="mProdPrice" value="${prod?.price||0}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Stock <span class="req">*</span></label><input class="form-input" type="number" id="mProdStock" value="${prod?.stock||0}"/></div>
+      <div class="form-group"><label>Unit</label><select class="form-select" id="mProdUnit"><option ${prod?.unit==='pc'?'selected':''} value="pc">Kipande</option><option ${prod?.unit==='kg'?'selected':''} value="kg">Kg</option><option ${prod?.unit==='l'?'selected':''} value="l">Lita</option><option ${prod?.unit==='box'?'selected':''} value="box">Sanduku</option></select></div>
+    </div>
+    <div class="form-group"><label>Barcode</label><input class="form-input" id="mProdBarcode" value="${prod?.barcode||''}"/></div>
+    <div class="form-group"><label>Maelezo</label><textarea class="form-input" id="mProdDesc" rows="3">${prod?.description||''}</textarea></div>
+  `;
+  document.getElementById('modalActions').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal()">Futa</button>
+    <button class="btn btn-p" onclick="saveProduct('${prod?.id||''}')"><i class="fas fa-save"></i> Hifadhi</button>
+  `;
+  openModal();
+}
+
+async function saveProduct(id) {
+  const name = document.getElementById('mProdName').value.trim();
+  const price = Number(document.getElementById('mProdPrice').value) || 0;
+  if (!name) { toast('Jina la bidhaa linahitajika', 'e'); return; }
+
+  const data = {
+    name,
+    category: document.getElementById('mProdCat').value.trim(),
+    brand: document.getElementById('mProdBrand').value.trim(),
+    costPrice: Number(document.getElementById('mProdCost').value) || 0,
+    price,
+    stock: Number(document.getElementById('mProdStock').value) || 0,
+    unit: document.getElementById('mProdUnit').value,
+    barcode: document.getElementById('mProdBarcode').value.trim(),
+    description: document.getElementById('mProdDesc').value.trim(),
+    businessId: APP.currentBusinessId,  /* ISOLATION: always set businessId */
+    updatedAt: new Date().toISOString()
+  };
+
+  try {
+    if (id) {
+      await db.collection('products').doc(id).update(data);
+      logActivity('UPDATE_PRODUCT', name, 'products', id);
+      toast('Bidhaa imesasishwa', 's');
+    } else {
+      data.createdAt = new Date().toISOString();
+      await db.collection('products').add(data);
+      logActivity('CREATE_PRODUCT', name, 'products');
+      toast('Bidhaa imeongezwa', 's');
+    }
+    closeModal();
+    await loadBusinessData();
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+function editProduct(id) {
+  const p = APP.products.find(x => x.id === id);
+  if (p) openProductModal(p);
+}
+
+async function deleteProduct(id) {
+  const p = APP.products.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('modalTitle').textContent = 'Futa Bidhaa';
+  document.getElementById('modalBody').innerHTML = `<p>Una uhakika unataka kufuta <strong>${p.name}</strong>?</p><p style="color:var(--danger);font-size:12px;margin-top:8px">Kitendo hiki hakiwezi kurudishwa.</p>`;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Ghairi</button><button class="btn btn-d" onclick="confirmDeleteProduct('${id}')"><i class="fas fa-trash"></i> Futa</button>`;
+  openModal();
+}
+
+async function confirmDeleteProduct(id) {
+  try {
+    await db.collection('products').doc(id).delete();
+    logActivity('DELETE_PRODUCT', id, 'products', id);
+    toast('Bidhaa imefutwa', 's');
+    closeModal();
+    await loadBusinessData();
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+/* ============================================================
+   POS
+============================================================ */
+function renderPOSCards() {
+  const grid = document.getElementById('posProductGrid');
+  const available = APP.products.filter(p => (p.stock||0) > 0);
+  if (available.length === 0) {
+    grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>Hakuna bidhaa za kuuzwa</p></div>';
+    return;
+  }
+  grid.innerHTML = available.map(p => `
+    <div class="pos-p-card" onclick="addToCart('${p.id}')">
+      <div style="width:100%;height:80px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:24px;margin-bottom:6px"><i class="fas fa-box"></i></div>
+      <h5>${p.name}</h5>
+      <div class="pos-p-price">${fmt(p.price)}</div>
+      <div class="pos-p-stock">Stock: ${p.stock}</div>
+    </div>
+  `).join('');
+}
+
+function addToCart(prodId) {
+  const p = APP.products.find(x => x.id === prodId);
+  if (!p) return;
+  const existing = APP.cart.find(c => c.productId === prodId);
+  if (existing) {
+    if (existing.qty >= p.stock) { toast('Stock haizitoshi', 'w'); return; }
+    existing.qty++;
+    existing.total = existing.qty * existing.price;
+  } else {
+    APP.cart.push({ productId:prodId, name:p.name, price:p.price, qty:1, total:p.price });
+  }
+  renderCart();
+}
+
+function renderCart() {
+  const body = document.getElementById('posCartBody');
+  if (APP.cart.length === 0) {
+    body.innerHTML = '<div class="empty-s" style="padding:30px"><i class="fas fa-shopping-cart"></i><p>Gari la manunuzi ni tupu</p></div>';
+    document.getElementById('posTotal').textContent = fmt(0);
+    return;
+  }
+  body.innerHTML = APP.cart.map((c,i) => `
+    <div class="cart-item">
+      <div class="cart-item-info"><h6>${c.name}</h6><span>${fmt(c.price)} x ${c.qty}</span></div>
+      <div class="cart-qty"><button onclick="changeCartQty(${i},-1)">-</button><span>${c.qty}</span><button onclick="changeCartQty(${i},1)">+</button></div>
+      <div class="cart-item-price">${fmt(c.total)}</div>
+      <button class="cart-item-rm" onclick="removeCartItem(${i})"><i class="fas fa-times"></i></button>
+    </div>
+  `).join('');
+  const total = APP.cart.reduce((s,c) => s + c.total, 0);
+  document.getElementById('posTotal').textContent = fmt(total);
+}
+
+function changeCartQty(idx, delta) {
+  const item = APP.cart[idx];
+  if (!item) return;
+  const p = APP.products.find(x => x.id === item.productId);
+  const newQty = item.qty + delta;
+  if (newQty <= 0) { removeCartItem(idx); return; }
+  if (p && newQty > p.stock) { toast('Stock haizitoshi', 'w'); return; }
+  item.qty = newQty;
+  item.total = item.qty * item.price;
+  renderCart();
+}
+
+function removeCartItem(idx) { APP.cart.splice(idx, 1); renderCart(); }
+
+function clearCart() { APP.cart = []; renderCart(); }
+
+async function completeSale() {
+  if (APP.cart.length === 0) { toast('Gari la manunuzi ni tupu', 'w'); return; }
+  const total = APP.cart.reduce((s,c) => s + c.total, 0);
+  const saleData = {
+    businessId: APP.currentBusinessId,  /* ISOLATION */
+    date: new Date().toISOString(),
+    items: APP.cart.map(c => ({ productId:c.productId, name:c.name, price:c.price, qty:c.qty, total:c.total })),
+    total,
+    customerName: 'Mteja wa kutembea',
+    customerId: '',
+    paid: true,
+    paymentMethod: 'cash',
+    createdBy: APP.currentUser.uid,
+    createdByRole: APP.currentRole,
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    await db.collection('sales').add(saleData);
+    /* Reduce stock */
+    for (const item of APP.cart) {
+      const p = APP.products.find(x => x.id === item.productId);
+      if (p) {
+        const newStock = Math.max(0, (p.stock||0) - item.qty);
+        await db.collection('products').doc(item.productId).update({ stock: newStock });
+      }
+    }
+    logActivity('COMPLETE_SALE', `Mauzo ${fmt(total)}`, 'sales');
+    /* Generate receipt */
+    showReceipt(saleData);
+    APP.cart = [];
+    renderCart();
+    await loadBusinessData();
+    toast('Mauzo yamekamilika!', 's');
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+function showReceipt(sale) {
+  document.getElementById('modalTitle').textContent = 'Resiti';
+  let itemsHtml = sale.items.map(i => `<div class="rc-line"><span>${i.name} x${i.qty}</span><span>${fmt(i.total)}</span></div>`).join('');
+  document.getElementById('modalBody').innerHTML = `
+    <div class="receipt-content">
+      <h3>${APP.currentBusiness?.name||'BizBook'}</h3>
+      <p style="text-align:center;font-size:11px">${APP.currentBusiness?.phone||''} ${APP.currentBusiness?.location||''}</p>
+      <div class="rc-divider"></div>
+      <div class="rc-line"><span>Tarehe</span><span>${fmtDate(sale.date)}</span></div>
+      <div class="rc-line"><span>Mteja</span><span>${sale.customerName}</span></div>
+      <div class="rc-divider"></div>
+      ${itemsHtml}
+      <div class="rc-divider"></div>
+      <div class="rc-line rc-total"><span>JUMLA</span><span>${fmt(sale.total)}</span></div>
+      <div class="rc-divider"></div>
+      <p style="text-align:center;font-size:10px">Asante kwa kununua!</p>
+    </div>
+  `;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Funga</button><button class="btn btn-p" onclick="window.print()"><i class="fas fa-print"></i> Chapisha</button>`;
+  openModal();
+}
+
+/* ============================================================
+   SALES CRUD
+============================================================ */
+let salesPeriod = 'all';
+function setSalesPeriod(p, btn) {
+  salesPeriod = p;
+  document.querySelectorAll('#salesPeriodFilter .pf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderSales();
+}
+
+function renderSales() {
+  let filtered = [...APP.sales];
+  if (salesPeriod !== 'all') {
+    const now = new Date();
+    filtered = filtered.filter(s => {
+      const d = new Date(s.date || s.createdAt);
+      if (salesPeriod === 'today') return d.toDateString() === now.toDateString();
+      if (salesPeriod === 'week') { const weekAgo = new Date(now - 7*86400000); return d >= weekAgo; }
+      if (salesPeriod === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return true;
+    });
+  }
+  filtered.sort((a,b) => new Date(b.date||b.createdAt) - new Date(a.date||a.createdAt));
+  const tbody = document.getElementById('salesBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo</p></td></tr>'; return; }
+  tbody.innerHTML = filtered.map(s => `<tr>
+    <td>${fmtDate(s.date||s.createdAt)}</td><td>${s.customerName||'-'}</td><td>${s.productName||(s.items?.[0]?.name||'-')}</td><td>${s.quantity||s.items?.reduce((a,x)=>a+x.qty,0)||'-'}</td><td>${fmt(s.total)}</td>
+    <td>${s.paymentMethod||'cash'}</td><td><span class="badge ${s.paid?'badge-success':'badge-warning'}">${s.paid?'Imelipwa':'Deni'}</span></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="viewSaleReceipt('${s.id}')"><i class="fas fa-eye"></i></button></td>
+  </tr>`).join('');
+}
+
+function openSaleModal() {
+  const custOpts = APP.customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  const prodOpts = APP.products.map(p => `<option value="${p.id}">${p.name} (${fmt(p.price)})</option>`).join('');
+  document.getElementById('modalTitle').textContent = 'Ongeza Maozo';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-group"><label>Mteja</label><select class="form-select" id="mSaleCust"><option value="">Mteja wa kutembea</option>${custOpts}</select></div>
+    <div class="form-group"><label>Bidhaa</label><select class="form-select" id="mSaleProd">${prodOpts}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label>Kiasi</label><input class="form-input" type="number" id="mSaleQty" value="1" min="1"/></div>
+      <div class="form-group"><label>Njia ya Malipo</label><select class="form-select" id="mSalePay"><option value="cash">Cash</option><option value="mobile">Mobile Money</option><option value="card">Card</option></select></div>
+    </div>
+    <div class="form-group"><label>Imelipwa?</label><select class="form-select" id="mSalePaid"><option value="true">Ndio</option><option value="false">Hapana (Deni)</option></select></div>
+  `;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Ghairi</button><button class="btn btn-p" onclick="saveManualSale()"><i class="fas fa-save"></i> Hifadhi</button>`;
+  openModal();
+}
+
+async function saveManualSale() {
+  const prodId = document.getElementById('mSaleProd').value;
+  const qty = Number(document.getElementById('mSaleQty').value) || 1;
+  const p = APP.products.find(x => x.id === prodId);
+  if (!p) { toast('Chagua bidhaa', 'e'); return; }
+  const custId = document.getElementById('mSaleCust').value;
+  const cust = APP.customers.find(x => x.id === custId);
+  const total = p.price * qty;
+  const paid = document.getElementById('mSalePaid').value === 'true';
+
+  try {
+    await db.collection('sales').add({
+      businessId: APP.currentBusinessId,
+      date: new Date().toISOString(), customerName: cust?.name||'Mteja wa kutembea', customerId: custId||'',
+      productName: p.name, productId: prodId, quantity: qty, total, paid,
+      paymentMethod: document.getElementById('mSalePay').value,
+      createdBy: APP.currentUser.uid, createdByRole: APP.currentRole, createdAt: new Date().toISOString()
+    });
+    if (!paid && custId) {
+      await db.collection('customers').doc(custId).update({ debt: (Number(cust.debt)||0) + total });
+    }
+    const newStock = Math.max(0, (p.stock||0) - qty);
+    await db.collection('products').doc(prodId).update({ stock: newStock });
+    logActivity('CREATE_SALE', `${p.name} x${qty} = ${fmt(total)}`, 'sales');
+    toast('Mauzo yamehifadhiwa', 's');
+    closeModal();
+    await loadBusinessData();
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+function viewSaleReceipt(id) {
+  const s = APP.sales.find(x => x.id === id);
+  if (s) showReceipt(s);
+}
+
+/* ============================================================
+   CUSTOMERS CRUD
+============================================================ */
+function renderCustomers() {
+  const search = (document.getElementById('custSearch')?.value || '').toLowerCase();
+  const filtered = APP.customers.filter(c => !search || c.name?.toLowerCase().includes(search) || c.phone?.toLowerCase().includes(search));
+  const tbody = document.getElementById('customersBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-users"></i><p>Hakuna wateja</p></td></tr>'; return; }
+  tbody.innerHTML = filtered.map(c => `<tr>
+    <td><strong>${c.name}</strong></td><td>${c.phone||'-'}</td><td>${fmt(c.debt||0)}</td>
+    <td>${APP.sales.filter(s=>s.customerId===c.id).length}</td>
+    <td><span class="badge ${c.debt>0?'badge-danger':'badge-success'}">${c.debt>0?'Ana deni':'Hakuna deni'}</span></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editCustomer('${c.id}')"><i class="fas fa-edit"></i></button> <button class="btn btn-d btn-xs" onclick="deleteCustomer('${c.id}')"><i class="fas fa-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+function filterCustomers() { renderCustomers(); }
+
+function openCustomerModal(cust) {
+  const isEdit = !!cust;
+  document.getElementById('modalTitle').textContent = isEdit ? 'Hariri Mteja' : 'Ongeza Mteja';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-group"><label>Jina <span class="req">*</span></label><input class="form-input" id="mCustName" value="${cust?.name||''}"/></div>
+    <div class="form-group"><label>Simu</label><input class="form-input" id="mCustPhone" value="${cust?.phone||''}"/></div>
+    <div class="form-group"><label>Barua pepe</label><input class="form-input" id="mCustEmail" value="${cust?.email||''}"/></div>
+    <div class="form-group"><label>Anwani</label><input class="form-input" id="mCustAddr" value="${cust?.address||''}"/></div>
+  `;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Ghairi</button><button class="btn btn-p" onclick="saveCustomer('${cust?.id||''}')"><i class="fas fa-save"></i> Hifadhi</button>`;
+  openModal();
+}
+
+async function saveCustomer(id) {
+  const name = document.getElementById('mCustName').value.trim();
+  if (!name) { toast('Jina linahitajika', 'e'); return; }
+  const data = { name, phone: document.getElementById('mCustPhone').value.trim(), email: document.getElementById('mCustEmail').value.trim(), address: document.getElementById('mCustAddr').value.trim(), businessId: APP.currentBusinessId, updatedAt: new Date().toISOString() };
+  try {
+    if (id) { await db.collection('customers').doc(id).update(data); toast('Mteja amesasishwa', 's'); }
+    else { data.debt = 0; data.createdAt = new Date().toISOString(); await db.collection('customers').add(data); toast('Mteja ameongezwa', 's'); logActivity('CREATE_CUSTOMER', name, 'customers'); }
+    closeModal(); await loadBusinessData();
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+function editCustomer(id) { const c = APP.customers.find(x=>x.id===id); if(c) openCustomerModal(c); }
+async function deleteCustomer(id) { if(!confirm('Futa mteja huyu?')) return; try { await db.collection('customers').doc(id).delete(); toast('Mteja amefutwa','s'); await loadBusinessData(); } catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   SUPPLIERS CRUD
+============================================================ */
+function renderSuppliers() {
+  const tbody = document.getElementById('suppliersBody');
+  if (APP.suppliers.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-truck"></i><p>Hakuna wauzaji</p></td></tr>'; return; }
+  tbody.innerHTML = APP.suppliers.map(s => `<tr>
+    <td><strong>${s.name}</strong></td><td>${s.phone||'-'}</td><td>${s.products||'-'}</td>
+    <td><span class="badge badge-success">Amilifu</span></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editSupplier('${s.id}')"><i class="fas fa-edit"></i></button> <button class="btn btn-d btn-xs" onclick="deleteSupplier('${s.id}')"><i class="fas fa-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+function openSupplierModal(sup) {
+  const isEdit = !!sup;
+  document.getElementById('modalTitle').textContent = isEdit ? 'Hariri Muuzaji' : 'Ongeza Muuzaji';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-group"><label>Jina <span class="req">*</span></label><input class="form-input" id="mSupName" value="${sup?.name||''}"/></div>
+    <div class="form-group"><label>Simu</label><input class="form-input" id="mSupPhone" value="${sup?.phone||''}"/></div>
+    <div class="form-group"><label>Barua pepe</label><input class="form-input" id="mSupEmail" value="${sup?.email||''}"/></div>
+    <div class="form-group"><label>Anwani</label><input class="form-input" id="mSupAddr" value="${sup?.address||''}"/></div>
+  `;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Ghairi</button><button class="btn btn-p" onclick="saveSupplier('${sup?.id||''}')"><i class="fas fa-save"></i> Hifadhi</button>`;
+  openModal();
+}
+
+async function saveSupplier(id) {
+  const name = document.getElementById('mSupName').value.trim();
+  if (!name) { toast('Jina linahitajika', 'e'); return; }
+  const data = { name, phone: document.getElementById('mSupPhone').value.trim(), email: document.getElementById('mSupEmail').value.trim(), address: document.getElementById('mSupAddr').value.trim(), businessId: APP.currentBusinessId, updatedAt: new Date().toISOString() };
+  try {
+    if (id) { await db.collection('suppliers').doc(id).update(data); toast('Muuzaji amesasishwa', 's'); }
+    else { data.createdAt = new Date().toISOString(); await db.collection('suppliers').add(data); toast('Muuzaji ameongezwa', 's'); }
+    closeModal(); await loadBusinessData();
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+function editSupplier(id) { const s = APP.suppliers.find(x=>x.id===id); if(s) openSupplierModal(s); }
+async function deleteSupplier(id) { if(!confirm('Futa muuzaji huyu?')) return; try { await db.collection('suppliers').doc(id).delete(); toast('Muuzaji amefutwa','s'); await loadBusinessData(); } catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   EMPLOYEES CRUD
+============================================================ */
+function renderEmployees() {
+  const grid = document.getElementById('employeesGrid');
+  if (APP.employees.length === 0) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-id-badge"></i><p>Hakuna wafanyakazi</p></div>'; return; }
+  const roleColors = { manager:'var(--warning)', cashier:'var(--success)', seller:'var(--primary2)', storekeeper:'var(--info)', employee:'var(--text3)' };
+  grid.innerHTML = APP.employees.map(e => `
+    <div class="emp-card">
+      <div class="emp-card-head"><div class="emp-av" style="background:${roleColors[e.role]||'var(--primary)'}">${getInitials(e.name)}</div><div><h4>${e.name}</h4><p>${e.phone||'-'}</p></div></div>
+      <div class="emp-card-body"><span class="emp-tag role">${getRoleLabel(e.role)}</span><span class="emp-tag status ${e.status==='active'?'':'inactive'}">${e.status==='active'?'Amilifu':'Haitumiki'}</span></div>
+      <div class="emp-card-foot"><button class="btn btn-ghost btn-xs" onclick="editEmployee('${e.id}')"><i class="fas fa-edit"></i></button><button class="btn btn-d btn-xs" onclick="deleteEmployee('${e.id}')"><i class="fas fa-trash"></i></button></div>
+    </div>
+  `).join('');
+}
+
+function openEmployeeModal(emp) {
+  const isEdit = !!emp;
+  document.getElementById('modalTitle').textContent = isEdit ? 'Hariri Mfanyakazi' : 'Ongeza Mfanyakazi';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-group"><label>Jina <span class="req">*</span></label><input class="form-input" id="mEmpName" value="${emp?.name||''}"/></div>
+    <div class="form-row">
+      <div class="form-group"><label>Simu</label><input class="form-input" id="mEmpPhone" value="${emp?.phone||''}"/></div>
+      <div class="form-group"><label>Barua pepe</label><input class="form-input" id="mEmpEmail" value="${emp?.email||''}"/></div>
+    </div>
+    <div class="form-group"><label>Jukumu <span class="req">*</span></label><select class="form-select" id="mEmpRole"><option value="manager" ${emp?.role==='manager'?'selected':''}>Meneja</option><option value="cashier" ${emp?.role==='cashier'?'selected':''}>Mkaguzi</option><option value="seller" ${emp?.role==='seller'?'selected':''}>Muuzaji</option><option value="storekeeper" ${emp?.role==='storekeeper'?'selected':''}>Mhifadhi</option><option value="employee" ${emp?.role==='employee'?'selected':''}>Mfanyakazi</option></select></div>
+    <div class="form-group"><label>Nenosiri</label><input class="form-input" type="password" id="mEmpPw" placeholder="${isEdit?'Acha tupu kusasaisha':'Nenosiri'"/></div>
+    <div class="form-group"><label>PIN (4 tarakimu)</label><input class="form-input" type="password" id="mEmpPin" placeholder="${isEdit?'Acha tupu kusasaisha':'PIN'}" maxlength="4"/></div>
+  `;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Ghairi</button><button class="btn btn-p" onclick="saveEmployee('${emp?.id||''}')"><i class="fas fa-save"></i> Hifadhi</button>`;
+  openModal();
+}
+
+async function saveEmployee(id) {
+  const name = document.getElementById('mEmpName').value.trim();
+  const role = document.getElementById('mEmpRole').value;
+  if (!name) { toast('Jina linahitajika', 'e'); return; }
+  const data = { name, role, phone: document.getElementById('mEmpPhone').value.trim(), email: document.getElementById('mEmpEmail').value.trim(), businessId: APP.currentBusinessId, status:'active', updatedAt: new Date().toISOString() };
+  const pw = document.getElementById('mEmpPw').value;
+  const pin = document.getElementById('mEmpPin').value;
+  if (pw) data.password = pw;
+  if (pin) data.pin = pin;
+  try {
+    if (id) { await db.collection('employees').doc(id).update(data); toast('Mfanyakazi amesasishwa', 's'); }
+    else { if(!pw&&!pin){toast='Weka nenosiri au PIN','e';return;} data.createdAt=new Date().toISOString(); await db.collection('employees').add(data); toast('Mfanyakazi ameongezwa','s'); logActivity('CREATE_EMPLOYEE',name,'employees'); }
+    closeModal(); await loadBusinessData();
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+function editEmployee(id) { const e = APP.employees.find(x=>x.id===id); if(e) openEmployeeModal(e); }
+async function deleteEmployee(id) { if(!confirm('Futa mfanyakazi huyu?')) return; try { await db.collection('employees').doc(id).delete(); toast('Mfanyakazi amefutwa','s'); await loadBusinessData(); } catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   EXPENSES CRUD
+============================================================ */
+function renderExpenses() {
+  const tbody = document.getElementById('expensesBody');
+  if (APP.expenses.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-money-bill-trend-up"></i><p>Hakuna matumizi</p></td></tr>'; return; }
+  tbody.innerHTML = [...APP.expenses].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt)).map(e => `<tr>
+    <td>${fmtDate(e.date||e.createdAt)}</td><td>${e.description||'-'}</td><td>${e.category||'-'}</td><td>${fmt(e.amount)}</td>
+    <td><button class="btn btn-d btn-xs" onclick="deleteExpense('${e.id}')"><i class="fas fa-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+function openExpenseModal() {
+  document.getElementById('modalTitle').textContent = 'Ongeza Matumizi';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-group"><label>Maelezo <span class="req">*</span></label><input class="form-input" id="mExpDesc"/></div>
+    <div class="form-row">
+      <div class="form-group"><label>Kiasi <span class="req">*</span></label><input class="form-input" type="number" id="mExpAmt"/></div>
+      <div class="form-group"><label>Category</label><select class="form-select" id="mExpCat"><option value="rent">Kodi</option><option value="salary">Mshahara</option><option value="utilities">Utiliti</option><option value="transport">Usafiri</option><option value="supplies">Vifaa</option><option value="other">Nyingine</option></select></div>
+    </div>
+  `;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Ghairi</button><button class="btn btn-p" onclick="saveExpense()"><i class="fas fa-save"></i> Hifadhi</button>`;
+  openModal();
+}
+
+async function saveExpense() {
+  const desc = document.getElementById('mExpDesc').value.trim();
+  const amt = Number(document.getElementById('mExpAmt').value);
+  if (!desc || !amt) { toast('Jaza sehemu zote', 'e'); return; }
+  try {
+    await db.collection('expenses').add({ businessId:APP.currentBusinessId, description:desc, amount:amt, category:document.getElementById('mExpCat').value, date:new Date().toISOString(), createdBy:APP.currentUser.uid, createdAt:new Date().toISOString() });
+    logActivity('CREATE_EXPENSE', `${desc} ${fmt(amt)}`, 'expenses'); toast('Matumizi yamehifadhiwa','s'); closeModal(); await loadBusinessData();
+  } catch(e){toast('Hitilafu','e');}
+}
+
+async function deleteExpense(id) { if(!confirm('Futa?')) return; try{await db.collection('expenses').doc(id).delete();toast('Imefutwa','s');await loadBusinessData();}catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   PURCHASES CRUD
+============================================================ */
+function renderPurchases() {
+  const tbody = document.getElementById('purchasesBody');
+  if (APP.purchases.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-cart-shopping"></i><p>Hakuna manunuzi</p></td></tr>'; return; }
+  tbody.innerHTML = [...APP.purchases].sort((a,b)=>new Date(b.date||b.createdAt)-new Date(a.date||a.createdAt)).map(p => `<tr>
+    <td>${fmtDate(p.date||p.createdAt)}</td><td>${p.supplierName||'-'}</td><td>${p.productName||'-'}</td><td>${p.quantity||0}</td><td>${fmt(p.total)}</td>
+    <td><button class="btn btn-d btn-xs" onclick="deletePurchase('${p.id}')"><i class="fas fa-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+function openPurchaseModal() {
+  const supOpts = APP.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  const prodOpts = APP.products.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('modalTitle').textContent = 'Ongeza Manunuzi';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="form-group"><label>Muuzaji</label><select class="form-select" id="mPurSup"><option value="">Chagua</option>${supOpts}</select></div>
+    <div class="form-group"><label>Bidhaa</label><select class="form-select" id="mPurProd">${prodOpts}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label>Kiasi</label><input class="form-input" type="number" id="mPurQty" value="1"/></div>
+      <div class="form-group"><label>Jumla</label><input class="form-input" type="number" id="mPurTotal"/></div>
+    </div>
+  `;
+  document.getElementById('modalActions').innerHTML = `<button class="btn btn-ghost" onclick="closeModal()">Ghairi</button><button class="btn btn-p" onclick="savePurchase()"><i class="fas fa-save"></i> Hifadhi</button>`;
+  openModal();
+}
+
+async function savePurchase() {
+  const prodId = document.getElementById('mPurProd').value;
+  const qty = Number(document.getElementById('mPurQty').value)||1;
+  const total = Number(document.getElementById('mPurTotal').value)||0;
+  const p = APP.products.find(x=>x.id===prodId);
+  const supId = document.getElementById('mPurSup').value;
+  const sup = APP.suppliers.find(x=>x.id===supId);
+  try {
+    await db.collection('purchases').add({ businessId:APP.currentBusinessId, supplierName:sup?.name||'-', supplierId:supId||'', productName:p?.name||'-', productId:prodId, quantity:qty, total, date:new Date().toISOString(), createdBy:APP.currentUser.uid, createdAt:new Date().toISOString() });
+    if(p) await db.collection('products').doc(prodId).update({ stock:(p.stock||0)+qty });
+    logActivity('CREATE_PURCHASE',`${p?.name||'-'} x${qty}`,'purchases'); toast('Manunuzi yamehifadhiwa','s'); closeModal(); await loadBusinessData();
+  } catch(e){toast('Hitilafu','e');}
+}
+
+async function deletePurchase(id) { if(!confirm('Futa?')) return; try{await db.collection('purchases').doc(id).delete();toast('Imefutwa','s');await loadBusinessData();}catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   INVOICES & PAYMENTS (display only from sales data)
+============================================================ */
+function renderInvoices() {
+  const tbody = document.getElementById('invoicesBody');
+  const invs = APP.sales.filter(s=>!s.paid).map((s,i) => ({ ...s, invoiceNo: 'INV-' + String(i+1).padStart(4,'0') }));
+  if (invs.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-file-invoice"></i><p>Hakuna anuani</p></td></tr>'; return; }
+  tbody.innerHTML = invs.map(inv => `<tr>
+    <td><strong>${inv.invoiceNo}</strong></td><td>${inv.customerName||'-'}</td><td>${fmt(inv.total)}</td>
+    <td><span class="badge badge-warning">Inasubiri</span></td><td>${fmtDate(inv.date||inv.createdAt)}</td>
+    <td><button class="btn btn-success btn-xs" onclick="markInvoicePaid('${inv.id}')"><i class="fas fa-check"></i> Lipa</button></td>
+  </tr>`).join('');
+}
+
+async function markInvoicePaid(saleId) {
+  try {
+    await db.collection('sales').doc(saleId).update({ paid: true });
+    const s = APP.sales.find(x=>x.id===saleId);
+    if(s && s.customerId) {
+      const c = APP.customers.find(x=>x.id===s.customerId);
+      if(c) await db.collection('customers').doc(s.customerId).update({ debt: Math.max(0,(c.debt||0)-s.total) });
+    }
+    await db.collection('payments').add({ businessId:APP.currentBusinessId, date:new Date().toISOString(), customerName:s?.customerName||'-', customerId:s?.customerId||'', amount:s?.total||0, method:'cash', status:'completed', saleId, createdBy:APP.currentUser.uid, createdAt:new Date().toISOString() });
+    logActivity('MARK_PAID', saleId, 'sales'); toast('Imelipwa','s'); await loadBusinessData();
+  } catch(e){toast('Hitilafu','e');}
+}
+
+function renderPayments() {
+  const tbody = document.getElementById('paymentsBody');
+  if (APP.payments.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-credit-card"></i><p>Hakuna malipo</p></td></tr>'; return; }
+  tbody.innerHTML = [...APP.payments].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(p => `<tr>
+    <td>${fmtDate(p.date)}</td><td>${p.customerName||'-'}</td><td>${fmt(p.amount)}</td><td>${p.method||'-'}</td>
+    <td><span class="badge badge-success">${p.status||'completed'}</span></td><td>-</td>
+  </tr>`).join('');
+}
+
+/* ============================================================
+   REPORTS
+============================================================ */
+function renderReportCharts() {
+  /* Revenue vs Expenses by month */
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const revByMonth = new Array(12).fill(0);
+  const expByMonth = new Array(12).fill(0);
+  APP.sales.forEach(s => { const m = new Date(s.date||s.createdAt).getMonth(); revByMonth[m] += Number(s.total)||0; });
+  APP.expenses.forEach(e => { const m = new Date(e.date||e.createdAt).getMonth(); expByMonth[m] += Number(e.amount)||0; });
+
+  if (APP.charts.revExp) APP.charts.revExp.destroy();
+  APP.charts.revExp = new Chart(document.getElementById('chartRevExp'), {
+    type:'bar', data:{ labels:months, datasets:[{ label:'Mapato', data:revByMonth, backgroundColor:'rgba(0,184,148,.6)', borderRadius:6 },{ label:'Matumizi', data:expByMonth, backgroundColor:'rgba(231,76,60,.6)', borderRadius:6 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{color:'#9a9ab0'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#9a9ab0'}, grid:{color:'rgba(255,255,255,.05)'} }, x:{ ticks:{color:'#9a9ab0'}, grid:{display:false} } } }
+  });
+
+  /* Expense categories */
+  const expCatMap = {};
+  APP.expenses.forEach(e => { expCatMap[e.category||'Other'] = (expCatMap[e.category||'Other']||0) + Number(e.amount||0); });
+  if (APP.charts.expCat) APP.charts.expCat.destroy();
+  APP.charts.expCat = new Chart(document.getElementById('chartExpCat'), {
+    type:'pie', data:{ labels:Object.keys(expCatMap), datasets:[{ data:Object.values(expCatMap), backgroundColor:['#6c5ce7','#00b894','#e74c3c','#f39c12','#0984e3','#a29bfe'], borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{color:'#9a9ab0',padding:12,font:{size:11}} } } }
+  });
+}
+
+/* ============================================================
+   MESSAGES / CHAT
+============================================================ */
+function renderMessages() {
+  const body = document.getElementById('msgListBody');
+  const uniqueContacts = [...new Map(APP.messages.map(m => [m.withId||m.customerId||'walkin', m])).values()];
+  if (uniqueContacts.length === 0) { body.innerHTML = '<div class="empty-s"><i class="fas fa-comment-slash"></i><p>Hakuna mazungumzo</p></div>'; return; }
+  body.innerHTML = uniqueContacts.map(m => `
+    <div class="msg-list-item" onclick="openChat('${m.withId||m.customerId||'walkin'}')">
+      <div class="u-av" style="width:36px;height:36px;font-size:13px">${getInitials(m.withName||m.customerName||'Mteja')}</div>
+      <div style="flex:1"><h5 style="font-size:13px">${m.withName||m.customerName||'Mteja wa kutembea'}</h5><p style="font-size:11px;color:var(--text3)">${m.lastMessage||''}</p></div>
+      ${m.unread?'<div class="msg-unread-dot"></div>':''}
+    </div>
+  `).join('');
+}
+
+let currentChatId = null;
+function openChat(contactId) {
+  currentChatId = contactId;
+  const msgs = APP.messages.filter(m => (m.withId||m.customerId) === contactId);
+  const contact = msgs[0];
+  document.getElementById('msgChatHeader').innerHTML = `<div class="u-av" style="width:32px;height:32px;font-size:12px">${getInitials(contact?.withName||contact?.customerName||'M')}</div><div><h4 style="font-size:14px">${contact?.withName||contact?.customerName||'Mteja'}</h4><p style="font-size:11px;color:var(--text3)">Mtandaoni</p></div>`;
+  const body = document.getElementById('msgChatBody');
+  body.innerHTML = msgs.map(m => `<div class="msg-bubble ${m.sent?'msg-sent':'msg-received'}">${m.text}<div class="msg-time">${fmtDateTime(m.timestamp||m.createdAt)}</div></div>`).join('');
+  body.scrollTop = body.scrollHeight;
+  document.getElementById('msgChatFooter').style.display = 'flex';
+}
+
+function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text || !currentChatId) return;
+  const contact = APP.messages.find(m => (m.withId||m.customerId) === currentChatId);
+  db.collection('messages').add({
+    businessId: APP.currentBusinessId, withId: currentChatId, withName: contact?.withName||contact?.customerName||'Mteja',
+    text, sent: true, timestamp: new Date().toISOString(), createdAt: new Date().toISOString(), lastMessage: text, unread: false
+  });
+  input.value = '';
+  openChat(currentChatId);
+}
+
+/* ============================================================
+   NOTIFICATIONS
+============================================================ */
+function renderNotifications() {
+  const list = document.getElementById('nList');
+  /* Merge system announcements with business notifications */
+  const all = [...APP.notifications, ...APP.saAnnouncements.filter(a => a.target === 'all' || a.target === 'businesses')];
+  if (all.length === 0) { list.innerHTML = '<div class="empty-s" style="padding:40px"><i class="fas fa-bell-slash"></i><p>Hakuna arifa</p></div>'; return; }
+  const unread = all.filter(n => !n.read).length;
+  const cnt = document.getElementById('notifCnt');
+  if (unread > 0) { cnt.textContent = unread; cnt.style.display = ''; } else { cnt.style.display = 'none'; }
+  list.innerHTML = all.slice(0,20).map(n => `
+    <div class="notif-item" style="${n.urgent?'border-left:3px solid var(--danger)':''}">
+      <i class="fas ${n.urgent?'fa-exclamation-triangle':'fa-bell'}" style="color:${n.urgent?'var(--danger)':'var(--primary2)'}"></i>
+      <div><h5>${n.title||n.subject||'Arifa'}</h5><p>${n.message||n.body||''}</p></div>
+    </div>
+  `).join('');
+}
+
+/* ============================================================
+   PROFILE & SETTINGS
+============================================================ */
+function loadProfile() {
+  if (!APP.currentBusiness) return;
+  document.getElementById('profBizName').value = APP.currentBusiness.name || '';
+  document.getElementById('profBizType').value = APP.currentBusiness.type || '';
+  document.getElementById('profBizPhone').value = APP.currentBusiness.phone || '';
+  document.getElementById('profBizLocation').value = APP.currentBusiness.location || '';
+  if (APP.currentBusiness.logoUrl) {
+    document.getElementById('logoPreview').innerHTML = `<img src="${APP.currentBusiness.logoUrl}" alt="Logo"/>`;
+  }
+}
+
+async function saveProfile() {
+  try {
+    await db.collection('businesses').doc(APP.currentBusinessId).update({
+      name: document.getElementById('profBizName').value.trim(),
+      type: document.getElementById('profBizType').value,
+      phone: document.getElementById('profBizPhone').value.trim(),
+      location: document.getElementById('profBizLocation').value.trim()
+    });
+    APP.currentBusiness.name = document.getElementById('profBizName').value.trim();
+    document.getElementById('tbBizName').textContent = APP.currentBusiness.name;
+    logActivity('UPDATE_PROFILE', 'Wasifu wa biashara', 'businesses');
+    toast('Wasifu umehifadhiwa', 's');
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+function handleLogoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(ev) {
+    document.getElementById('logoPreview').innerHTML = `<img src="${ev.target.result}" alt="Logo"/>`;
+    try {
+      await db.collection('businesses').doc(APP.currentBusinessId).update({ logoUrl: ev.target.result });
+      APP.currentBusiness.logoUrl = ev.target.result;
+      toast('Logo imehifadhiwa', 's');
+    } catch(e) { toast('Hitilafu', 'e'); }
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadSettings() {
+  if (!APP.currentBusiness) return;
+  document.getElementById('setCurrency').value = APP.currentBusiness.currency || 'TZS';
+  document.getElementById('setTax').value = APP.currentBusiness.tax || 0;
+  document.getElementById('setPayMethods').value = APP.currentBusiness.payMethods || 'Cash,Mobile Money,Card';
+}
+
+async function saveSettings() {
+  try {
+    await db.collection('businesses').doc(APP.currentBusinessId).update({
+      currency: document.getElementById('setCurrency').value,
+      tax: Number(document.getElementById('setTax').value),
+      payMethods: document.getElementById('setPayMethods').value
+    });
+    APP.currentBusiness.currency = document.getElementById('setCurrency').value;
+    toast('Mipangilio imehifadhiwa', 's');
+  } catch(e) { toast('Hitilafu', 'e'); }
+}
+
+/* ============================================================
+   SIDEBAR / TOPBAR / MODALS / UI HELPERS
+============================================================ */
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sbBackdrop').classList.toggle('show'); }
+function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbBackdrop').classList.remove('show'); }
+function toggleNotifPanel() { document.getElementById('notifPanel').classList.toggle('show'); }
+function toggleUserDD() { document.getElementById('userDD').classList.toggle('show'); }
+function closeUserDD() { document.getElementById('userDD').classList.remove('show'); }
+function openModal() { document.getElementById('genericModal').classList.add('show'); }
+function closeModal() { document.getElementById('genericModal').classList.remove('show'); }
+
+/* Close dropdowns on outside click */
+document.addEventListener('click', e => {
+  if (!e.target.closest('.u-chip')) closeUserDD();
+  if (!e.target.closest('.np') && !e.target.closest('.tb-btn')) document.getElementById('notifPanel').classList.remove('show');
+});
+
+/* Price Calculator */
+function openPriceCalc() { document.getElementById('priceCalcModal').classList.remove('hidden'); }
+function closePriceCalc() { document.getElementById('priceCalcModal').classList.add('hidden'); }
+function calcPrice() {
+  const cost = Number(document.getElementById('pcCost').value) || 0;
+  const margin = Number(document.getElementById('pcMargin').value) || 0;
+  const tax = Number(document.getElementById('pcTax').value) || 0;
+  const extra = Number(document.getElementById('pcExtra').value) || 0;
+  const base = cost * (1 + margin / 100);
+  const withTax = base * (1 + tax / 100);
+  const result = withTax + extra;
+  document.getElementById('pcResult').textContent = fmt(Math.round(result));
+}
+
+/* Overlay Auth (Staff Login) */
+let overlayRole = null;
+function openOverlayAuth(role) {
+  overlayRole = role;
+  const icons = { manager:'fa-user-tie', cashier:'fa-cash-register', seller:'fa-store', storekeeper:'fa-warehouse' };
+  const colors = { manager:'var(--warning)', cashier:'var(--success)', seller:'var(--primary2)', storekeeper:'var(--info)' };
+  document.getElementById('overlayAuthIcon').innerHTML = `<i class="fas ${icons[role]||'fa-user'}"></i>`;
+  document.getElementById('overlayAuthIcon').style.color = colors[role] || 'var(--primary2)';
+  document.getElementById('overlayAuthBadge').textContent = getRoleLabel(role);
+  document.getElementById('overlayAuthBadge').style.background = colors[role]?.replace(')',',0.15)').replace('var(','rgba(') || 'var(--primary-bg)';
+  document.getElementById('overlayAuthTitle').textContent = 'Ingia kama ' + getRoleLabel(role);
+  document.getElementById('overlayAuthSub').textContent = 'Thibitisha utambulisho wako';
+  document.getElementById('overlayAuth').classList.add('show');
+  hideOverlayErr();
+}
+
+function closeOverlayAuth() { document.getElementById('overlayAuth').classList.remove('show'); }
+function switchOverlayTab(tab, btn) {
+  document.querySelectorAll('#overlayAuthTabs .stab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sform').forEach(f => f.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(tab==='credentials'?'overlayCredForm':'overlayPinForm').classList.add('active');
+  hideOverlayErr();
+}
+
+function showOverlayErr(msg) { const el=document.getElementById('overlayAuthErr'); el.querySelector('span').textContent=msg; el.classList.add('show'); }
+function hideOverlayErr() { document.getElementById('overlayAuthErr').classList.remove('show'); }
+
+async function verifyOverlayCred() {
+  const pw = document.getElementById('overlayPassword').value;
+  if (!pw) { showOverlayErr('Weka nenosiri'); return; }
+  const emp = APP.employees.find(e => e.role === overlayRole && e.password === pw);
+  if (!emp) { showOverlayErr('Nenosiri sio sahihi'); await logLoginAttempt('','employee','','false'); return; }
+  APP.currentRole = emp.role;
+  await logLoginAttempt('', emp.role, APP.currentBusinessId, true);
+  closeOverlayAuth();
+  enterDashboard();
+}
+
+async function verifyOverlayPin() {
+  const pin = document.getElementById('overlayPin').value;
+  if (!pin || pin.length !== 4) { showOverlayErr('Weka PIN ya 4 tarakimu'); return; }
+  const emp = APP.employees.find(e => e.role === overlayRole && e.pin === pin);
+  if (!emp) { showOverlayErr('PIN sio sahihi'); return; }
+  APP.currentRole = emp.role;
+  await logLoginAttempt('', emp.role, APP.currentBusinessId, true);
+  closeOverlayAuth();
+  enterDashboard();
+}
+
+/* Logout */
+async function logoutUser() {
+  try { await auth.signOut(); } catch(e) {}
+  APP.currentUser = null; APP.userProfile = null; APP.currentBusiness = null; APP.currentBusinessId = null; APP.currentRole = null;
+  APP.products=[]; APP.customers=[]; APP.suppliers=[]; APP.employees=[]; APP.sales=[]; APP.expenses=[]; APP.purchases=[]; APP.invoices=[]; APP.payments=[]; APP.messages=[]; APP.notifications=[];
+  APP.cart = []; currentChatId = null;
+  showScreen('landing');
+  toast('Umetoka', 'i');
+}
+
+/* ============================================================
+   PUBLIC LANDING — Load ads and business products
+============================================================ */
+async function loadPublicAds() {
+  try {
+    const snap = await db.collection('advertisements').where('status','==','active').orderBy('createdAt','desc').limit(6).get();
+    const ads = snap.docs.map(d => d.data());
+    const grid = document.getElementById('publicAdsGrid');
+    if (ads.length === 0) { grid.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna matangazo bado</p></div>'; return; }
+    grid.innerHTML = ads.map(a => `
+      <div class="pub-ad-card">
+        ${a.imageUrl ? `<img class="pub-ad-img" src="${a.imageUrl}" alt=""/>` : '<div class="pub-ad-img-placeholder"><i class="fas fa-image"></i></div>'}
+        <div class="pub-ad-body"><h4>${a.title||'Tangazo'}</h4><p>${a.description||''}</p>${a.link?`<a class="pub-ad-link" href="${a.link}" target="_blank">Soma zaidi <i class="fas fa-external-link-alt"></i></a>`:''}</div>
+      </div>
+    `).join('');
+  } catch(e) { console.warn('loadPublicAds:', e.message); }
+}
+
+async function loadPublicProducts() {
+  try {
+    const snap = await db.collection('products').orderBy('createdAt','desc').limit(8).get();
+    const prods = snap.docs.map(d => d.data());
+    const grid = document.getElementById('publicProductsGrid');
+    if (prods.length === 0) { grid.innerHTML = '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p></div>'; return; }
+    grid.innerHTML = prods.map(p => `
+      <div class="pub-prod-card">
+        <div class="pub-prod-img-placeholder"><i class="fas fa-box"></i></div>
+        <div class="pub-prod-body"><h4>${p.name}</h4><p>${p.description||p.category||''}</p><div class="pub-prod-price">${fmt(p.price)}</div><div class="pub-prod-seller">${p.businessName||''}</div></div>
+      </div>
+    `).join('');
+  } catch(e) { console.warn('loadPublicProducts:', e.message); }
+}
+
+/* ============================================================
+   GLOBAL PRODUCT CATALOG — Landing page (SA managed, public read)
+============================================================ */
+async function loadGlobalCatalog() {
+  try {
+    /* Load categories for filter buttons */
+    const catSnap = await db.collection('globalCategories').get();
+    APP.globalCategories = catSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderCatalogCategoryFilters();
+
+    /* Load all global products (public read, SA managed) */
+    const prodSnap = await db.collection('globalProducts').where('status','!=','hidden').get();
+    APP.globalProducts = prodSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderGlobalCatalog();
+  } catch(e) { console.warn('loadGlobalCatalog:', e.message); }
+}
+
+function renderCatalogCategoryFilters() {
+  const container = document.getElementById('catalogCategoryFilters');
+  if (APP.globalCategories.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = `<button class="catalog-filter-btn ${APP.catalogCategoryFilter==='all'?'active':''}" onclick="setCatalogCategoryFilter('all',this)">Zote</button>` +
+    APP.globalCategories.map(c => `<button class="catalog-filter-btn ${APP.catalogCategoryFilter===c.id?'active':''}" onclick="setCatalogCategoryFilter('${c.id}',this)">${c.name}</button>`).join('');
+}
+
+function setCatalogFilter(filter, btn) {
+  APP.catalogFilter = filter;
+  document.querySelectorAll('#catalogFilters .catalog-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderGlobalCatalog();
+}
+
+function setCatalogCategoryFilter(catId, btn) {
+  APP.catalogCategoryFilter = catId;
+  renderCatalogCategoryFilters();
+  renderGlobalCatalog();
+}
+
+function filterCatalogProducts() {
+  APP.catalogSearchTerm = document.getElementById('catalogSearch').value.toLowerCase();
+  renderGlobalCatalog();
+}
+
+function renderGlobalCatalog() {
+  let prods = [...APP.globalProducts];
+
+  /* Apply status filter (only show approved by default) */
+  prods = prods.filter(p => p.status === 'approved');
+
+  /* Apply search */
+  if (APP.catalogSearchTerm) {
+    prods = prods.filter(p => p.name?.toLowerCase().includes(APP.catalogSearchTerm) || p.description?.toLowerCase().includes(APP.catalogSearchTerm) || p.brand?.toLowerCase().includes(APP.catalogSearchTerm));
+  }
+
+  /* Apply category filter */
+  if (APP.catalogCategoryFilter !== 'all') {
+    prods = prods.filter(p => p.categoryId === APP.catalogCategoryFilter || p.category === APP.catalogCategoryFilter);
+  }
+
+  /* Featured section */
+  const featured = prods.filter(p => p.featured);
+  const featGrid = document.getElementById('catalogFeaturedGrid');
+  const featSection = document.getElementById('catalogFeaturedSection');
+  if (APP.catalogFilter === 'featured') {
+    /* Show only featured in both sections */
+    featSection.style.display = '';
+    if (featured.length === 0) { featGrid.innerHTML = '<div class="empty-s"><i class="fas fa-star"></i><p>Hakuna bidhaa zilizochaguliwa</p></div>'; }
+    else { featGrid.innerHTML = featured.map(renderCatalogCard).join(''); }
+    document.getElementById('catalogAllGrid').innerHTML = featured.length === 0 ? '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa</p></div>' : featured.map(renderCatalogCard).join('');
+  } else if (APP.catalogFilter === 'newest') {
+    featSection.style.display = 'none';
+    const newest = [...prods].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0,20);
+    document.getElementById('catalogAllGrid').innerHTML = newest.length === 0 ? '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa</p></div>' : newest.map(renderCatalogCard).join('');
+  } else if (APP.catalogFilter === 'promo') {
+    featSection.style.display = 'none';
+    const promo = prods.filter(p => p.onSale || p.salePrice);
+    document.getElementById('catalogAllGrid').innerHTML = promo.length === 0 ? '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa za punguzo</p></div>' : promo.map(renderCatalogCard).join('');
+  } else {
+    /* All */
+    featSection.style.display = featured.length > 0 ? '' : 'none';
+    if (featured.length > 0) featGrid.innerHTML = featured.slice(0,4).map(renderCatalogCard).join('');
+    document.getElementById('catalogAllGrid').innerHTML = prods.length === 0 ? '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa</p></div>' : prods.map(renderCatalogCard).join('');
+  }
+}
+
+function renderCatalogCard(p) {
+  const badges = [];
+  if (p.featured) badges.push('<span class="catalog-card-badge featured">Featured</span>');
+  if (p.isNew) badges.push('<span class="catalog-card-badge new">New</span>');
+  if (p.onSale || p.salePrice) badges.push('<span class="catalog-card-badge promo">Sale</span>');
+
+  return `
+    <div class="catalog-card">
+      <div class="catalog-card-img">${badges.join('')}<i class="fas fa-box"></i></div>
+      <div class="catalog-card-body">
+        <h4>${p.name}</h4>
+        ${p.brand ? `<div class="cat-brand">${p.brand}</div>` : ''}
+        ${p.description ? `<div class="cat-desc">${p.description}</div>` : ''}
+        <div class="catalog-card-footer">
+          <div class="catalog-price">${fmt(p.salePrice || p.price)}${p.salePrice && p.price ? `<span class="catalog-price-old">${fmt(p.price)}</span>` : ''}</div>
+          ${p.categoryName || p.category ? `<span class="catalog-category-tag">${p.categoryName || p.category}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   SUPER ADMIN LOGIN
+============================================================ */
+/* Default SA credentials — in production use Firebase Auth with custom claims */
+const SA_CREDENTIALS = { email: 'superadmin@bizbook.app', password: 'SA_Admin_2025!' };
+
+async function saLogin() {
+  const email = document.getElementById('saEmail').value.trim();
+  const pw = document.getElementById('saPassword').value;
+  const errEl = document.getElementById('saLoginErr');
+
+  if (!email || !pw) { errEl.textContent = 'Jaza barua pepe na nenosiri'; return; }
+
+  document.getElementById('saLoginBtn').disabled = true;
+  document.getElementById('saLoginBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inaingia...';
+
+  try {
+    /* Try Firebase auth first */
+    const cred = await auth.signInWithEmailAndPassword(email, pw);
+    /* Check if this user has SA role in Firestore */
+    const saDoc = await db.collection('superAdmins').doc(cred.user.uid).get();
+    if (saDoc.exists && saDoc.data().role === 'super_admin') {
+      APP.isSuperAdmin = true;
+      APP.saData = saDoc.data();
+      APP.currentUser = cred.user;
+      await logLoginAttempt(email, 'super_admin', '', true);
+      showScreen('superAdmin');
+      errEl.textContent = '';
+    } else {
+      /* Fallback: check hardcoded credentials for demo */
+      if (email === SA_CREDENTIALS.email && pw === SA_CREDENTIALS.password) {
+        APP.isSuperAdmin = true;
+        APP.saData = { name: 'Super Administrator', email };
+        APP.currentUser = cred.user;
+        await logLoginAttempt(email, 'super_admin', '', true);
+        showScreen('superAdmin');
+        errEl.textContent = '';
+      } else {
+        errEl.textContent = 'Hakuna ruhusa ya Super Admin';
+        await auth.signOut();
+      }
+    }
+  } catch(e) {
+    /* Fallback for demo without real Firebase: check credentials directly */
+    if (email === SA_CREDENTIALS.email && pw === SA_CREDENTIALS.password) {
+      APP.isSuperAdmin = true;
+      APP.saData = { name: 'Super Administrator', email };
+      APP.currentUser = { uid: 'sa_demo', email };
+      await logLoginAttempt(email, 'super_admin', '', true);
+      showScreen('superAdmin');
+      errEl.textContent = '';
+    } else {
+      errEl.textContent = 'Barua pepe au nenosiri sio sahihi';
+      await logLoginAttempt(email, 'super_admin', '', false);
+    }
+  } finally {
+    document.getElementById('saLoginBtn').disabled = false;
+    document.getElementById('saLoginBtn').innerHTML = '<i class="fas fa-sign-in-alt"></i> Ingia';
+  }
+}
+
+async function saLogout() {
+  APP.isSuperAdmin = false;
+  APP.saData = {};
+  try { await auth.signOut(); } catch(e) {}
+  showScreen('landing');
+  toast('Umetoka kama Super Admin', 'i');
+}
+
+/* ============================================================
+   SUPER ADMIN — Section Navigation
+============================================================ */
+function showSASec(sec, ni) {
+  document.querySelectorAll('.sa-sec').forEach(s => s.style.display = 'none');
+  document.querySelectorAll('.sa-nav-item').forEach(n => n.classList.remove('active'));
+  const el = document.getElementById('saSec' + sec.charAt(0).toUpperCase() + sec.slice(1));
+  if (el) el.style.display = '';
+  if (ni) ni.classList.add('active');
+
+  /* Load data for section */
+  const loaders = {
+    dashboard: loadSADashboard,
+    businesses: loadSABusinesses,
+    users: loadSAUsers,
+    staff: loadSAStaff,
+    customers: loadSACustomers,
+    globalProducts: loadSAGlobalProducts,
+    categories: loadSACategories,
+    brands: loadSABrands,
+    announcements: loadSAAnnouncements,
+    loginHistory: loadSALoginHistory,
+    activityLogs: loadSAActivityLogs,
+    auditLogs: loadSAAuditLogs,
+    subscriptions: loadSASubscriptions
+  };
+  if (loaders[sec]) loaders[sec]();
+}
+
+/* ============================================================
+   SA DASHBOARD — Stats + Charts
+============================================================ */
+async function loadSADashboard() {
+  try {
+    /* Load all businesses */
+    const bizSnap = await db.collection('businesses').get();
+    APP.saBusinesses = bizSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Load all users */
+    const userSnap = await db.collection('users').get();
+    APP.saUsers = userSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Load all staff */
+    const staffSnap = await db.collection('employees').get();
+    APP.saStaff = staffSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Load all customers */
+    const custSnap = await db.collection('customers').get();
+    APP.saAllCustomers = custSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    /* Load all products */
+    const prodSnap = await db.collection('products').get();
+    const allProds = prodSnap.docs.map(d => d.data());
+
+    /* Load all sales */
+    const salesSnap = await db.collection('sales').get();
+    const allSales = salesSnap.docs.map(d => d.data());
+
+    /* Calculate stats */
+    const totalRevenue = allSales.reduce((s,x) => s + (Number(x.total)||0), 0);
+    const activeBiz = APP.saBusinesses.filter(b => b.status === 'active').length;
+    const suspendedBiz = APP.saBusinesses.filter(b => b.status === 'suspended').length;
+    const pendingBiz = APP.saBusinesses.filter(b => b.status === 'pending').length;
+    const managers = APP.saStaff.filter(s => s.role === 'manager').length;
+    const cashiers = APP.saStaff.filter(s => s.role === 'cashier').length;
+    const sellers = APP.saStaff.filter(s => s.role === 'seller').length;
+    const storekeepers = APP.saStaff.filter(s => s.role === 'storekeeper').length;
+    const employees = APP.saStaff.filter(s => s.role === 'employee').length;
+
+    /* Render stat cards */
+    const stats = [
+      { icon:'fa-building', color:'var(--primary)', label:'Biashara Zote', val:APP.saBusinesses.length },
+      { icon:'fa-users', color:'var(--info)', label:'Watumiaji', val:APP.saUsers.length },
+      { icon:'fa-user-tie', color:'var(--warning)', label:'Maneneja', val:managers },
+      { icon:'fa-cash-register', color:'var(--success)', label:'Makaguzi', val:cashiers },
+      { icon:'fa-store', color:'var(--primary2)', label:'Wauzaji', val:sellers },
+      { icon:'fa-warehouse', color:'var(--info)', label:'Wahifadhi', val:storekeepers },
+      { icon:'fa-id-badge', color:'var(--muted)', label:'Wafanyakazi', val:employees },
+      { icon:'fa-user-group', color:'var(--success)', label:'Wateja', val:APP.saAllCustomers.length },
+      { icon:'fa-boxes-stacked', color:'var(--primary)', label:'Bidhaa', val:allProds.length },
+      { icon:'fa-receipt', color:'var(--info)', label:'Mauzo', val:allSales.length },
+      { icon:'fa-money-bill-wave', color:'var(--success)', label:'Mapato', val:fmt(totalRevenue) },
+      { icon:'fa-check-circle', color:'var(--success)', label:'Amilifu', val:activeBiz },
+      { icon:'fa-pause-circle', color:'var(--warning)', label:'Imesitishwa', val:suspendedBiz },
+      { icon:'fa-clock', color:'var(--accent)', label:'Inasubiri', val:pendingBiz }
+    ];
+
+    document.getElementById('saStatGrid').innerHTML = stats.map(s => `
+      <div class="sa-stat-card">
+        <div class="sa-sc-icon" style="background:${s.color}22;color:${s.color}"><i class="fas ${s.icon}"></i></div>
+        <h4>${s.label}</h4>
+        <div class="sa-sc-val">${s.val}</div>
+      </div>
+    `).join('');
+
+    /* Business badge */
+    const pendingCount = APP.saBusinesses.filter(b => b.status === 'pending').length;
+    const badge = document.getElementById('saBizBadge');
+    if (pendingCount > 0) { badge.textContent = pendingCount; badge.style.display = ''; } else { badge.style.display = 'none'; }
+
+    /* Render charts */
+    renderSACharts();
+
+    /* Load recent activity */
+    loadSARecentActivity();
+
+  } catch(e) { console.warn('loadSADashboard:', e.message); }
+}
+
+function renderSACharts() {
+  /* Business Growth */
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const bizByMonth = new Array(12).fill(0);
+  APP.saBusinesses.forEach(b => { const m = new Date(b.createdAt).getMonth(); bizByMonth[m]++; });
+
+  if (APP.saCharts.bizGrowth) APP.saCharts.bizGrowth.destroy();
+  APP.saCharts.bizGrowth = new Chart(document.getElementById('saChartBizGrowth'), {
+    type:'line', data:{ labels:months, datasets:[{ label:'Biashara Mpya', data:bizByMonth, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,.1)', fill:true, tension:.4 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{color:'#9a9ab0'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#9a9ab0'}, grid:{color:'rgba(255,255,255,.05)'} }, x:{ ticks:{color:'#9a9ab0'}, grid:{display:false} } } }
+  });
+
+  /* Daily registrations (last 7 days) */
+  const days = [];
+  const dayCounts = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push(d.toLocaleDateString('sw-SZ', { weekday:'short' }));
+    const dateStr = d.toISOString().split('T')[0];
+    dayCounts.push(APP.saBusinesses.filter(b => (b.createdAt||'').split('T')[0] === dateStr).length);
+  }
+
+  if (APP.saCharts.dailyReg) APP.saCharts.dailyReg.destroy();
+  APP.saCharts.dailyReg = new Chart(document.getElementById('saChartDailyReg'), {
+    type:'bar', data:{ labels:days, datasets:[{ label:'Usajili', data:dayCounts, backgroundColor:'rgba(0,184,148,.6)', borderRadius:6 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ y:{ beginAtZero:true, ticks:{color:'#9a9ab0',stepSize:1}, grid:{color:'rgba(255,255,255,.05)'} }, x:{ ticks:{color:'#9a9ab0'}, grid:{display:false} } } }
+  });
+
+  /* Role distribution */
+  const roles = ['business_owner','manager','cashier','seller','storekeeper','employee','customer'];
+  const roleLabels = roles.map(r => getRoleLabel(r));
+  const roleCounts = roles.map(r => APP.saUsers.filter(u => u.role === r).length);
+
+  if (APP.saCharts.roles) APP.saCharts.roles.destroy();
+  APP.saCharts.roles = new Chart(document.getElementById('saChartRoles'), {
+    type:'doughnut', data:{ labels:roleLabels, datasets:[{ data:roleCounts, backgroundColor:['#6c5ce7','#f39c12','#00b894','#a29bfe','#0984e3','#78716c','#e74c3c'], borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{color:'#9a9ab0',padding:10,font:{size:11}} } } }
+  });
+
+  /* Revenue trend */
+  const revByMonth = new Array(12).fill(0);
+  /* We'd need sales data loaded — simplified for now */
+  if (APP.saCharts.revenue) APP.saCharts.revenue.destroy();
+  APP.saCharts.revenue = new Chart(document.getElementById('saChartRevenue'), {
+    type:'line', data:{ labels:months, datasets:[{ label:'Mapato', data:revByMonth, borderColor:'#00b894', backgroundColor:'rgba(0,184,148,.1)', fill:true, tension:.4 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{color:'#9a9ab0'} } }, scales:{ y:{ beginAtZero:true, ticks:{color:'#9a9ab0'}, grid:{color:'rgba(255,255,255,.05)'} }, x:{ ticks:{color:'#9a9ab0'}, grid:{display:false} } } }
+  });
+}
+
+async function loadSARecentActivity() {
+  try {
+    const snap = await db.collection('activityLogs').orderBy('timestamp','desc').limit(10).get();
+    const logs = snap.docs.map(d => d.data());
+    const container = document.getElementById('saRecentActivity');
+    if (logs.length === 0) { container.innerHTML = '<div class="empty-s"><i class="fas fa-list"></i><p>Hakuna shughuli</p></div>'; return; }
+    const actionIcons = { CREATE:'fa-plus-circle', UPDATE:'fa-edit', DELETE:'fa-trash', COMPLETE_SALE:'fa-receipt', LOGIN:'fa-sign-in-alt' };
+    const actionColors = { CREATE:'var(--success)', UPDATE:'var(--info)', DELETE:'var(--danger)', COMPLETE_SALE:'var(--success)', LOGIN:'var(--primary)' };
+    container.innerHTML = logs.map(l => `
+      <div class="sa-log-item">
+        <div class="sa-log-icon" style="background:${actionColors[l.action.split('_')[0]]||'var(--primary)'}22;color:${actionColors[l.action.split('_')[0]]||'var(--primary)'}"><i class="fas ${actionIcons[l.action.split('_')[0]]||'fa-circle'}"></i></div>
+        <div class="sa-log-info"><h5>${l.details||l.action}</h5><p>${l.userName} — ${l.businessName||'System'}</p></div>
+        <div class="sa-log-time">${fmtDateTime(l.timestamp)}</div>
+      </div>
+    `).join('');
+  } catch(e) { console.warn('loadSARecentActivity:', e.message); }
+}
+
+/* ============================================================
+   SA BUSINESSES — Full CRUD + Status Management
+============================================================ */
+async function loadSABusinesses() {
+  try {
+    const snap = await db.collection('businesses').get();
+    APP.saBusinesses = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    /* Populate business filter dropdowns */
+    populateSABizFilter();
+    saFilterBusinesses();
+  } catch(e) { console.warn('loadSABusinesses:', e.message); }
+}
+
+function populateSABizFilter() {
+  const opts = APP.saBusinesses.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+  ['saUserBizFilter','saStaffBizFilter','saCustBizFilter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = `<option value="all">Biashara Zote</option>${opts}`;
+  });
+}
+
+function saFilterBusinesses() {
+  const search = (document.getElementById('saBizSearch')?.value || '').toLowerCase();
+  const status = document.getElementById('saBizStatusFilter')?.value || 'all';
+  const sub = document.getElementById('saBizSubFilter')?.value || 'all';
+
+  let filtered = [...APP.saBusinesses];
+  if (search) filtered = filtered.filter(b => b.name?.toLowerCase().includes(search) || b.ownerName?.toLowerCase().includes(search) || b.ownerEmail?.toLowerCase().includes(search));
+  if (status !== 'all') filtered = filtered.filter(b => b.status === status);
+  if (sub !== 'all') filtered = filtered.filter(b => b.subscription === sub);
+
+  document.getElementById('saBizCount').textContent = filtered.length + ' biashara';
+  const tbody = document.getElementById('saBizBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fas fa-building"></i><p>Hakuna biashara</p></td></tr>'; return; }
+
+  const statusBadge = s => {
+    const map = { active:'sa-badge-active', suspended:'sa-badge-suspended', pending:'sa-badge-pending', locked:'sa-badge-locked', disabled:'sa-badge-disabled', deleted:'sa-badge-deleted' };
+    const labelMap = { active:'Amilifu', suspended:'Imesitishwa', pending:'Inasubiri', locked:'Imefungwa', disabled:'Imezimwa', deleted:'Imefutwa' };
+    return `<span class="sa-badge ${map[s]||'sa-badge-pending'}">${labelMap[s]||s}</span>`;
+  };
+
+  tbody.innerHTML = filtered.map(b => {
+    const staffCount = APP.saStaff.filter(s => s.businessId === b.id).length;
+    return `<tr>
+      <td><strong>${b.name}</strong>${b.verified?' <i class="fas fa-check-circle" style="color:var(--success);font-size:11px" title="Imethibitishwa"></i>':''}</td>
+      <td>${b.ownerName||'-'}<br><span style="font-size:11px;color:var(--text3)">${b.ownerEmail||'-'}</span></td>
+      <td>${b.type||'-'}</td>
+      <td><span class="badge badge-accent">${b.subscription||'free'}</span></td>
+      <td>${staffCount}</td>
+      <td>${statusBadge(b.status)}</td>
+      <td>${fmtDate(b.createdAt)}</td>
+      <td style="white-space:normal">
+        ${b.status==='pending'?`<button class="sa-btn sa-btn-approve" onclick="saApproveBiz('${b.id}')"><i class="fas fa-check"></i></button> <button class="sa-btn sa-btn-reject" onclick="saRejectBiz('${b.id}')"><i class="fas fa-times"></i></button>`:''}
+        ${b.status==='active'?`<button class="sa-btn sa-btn-suspend" onclick="saSuspendBiz('${b.id}')"><i class="fas fa-pause"></i></button> <button class="sa-btn sa-btn-lock" onclick="saLockBiz('${b.id}')"><i class="fas fa-lock"></i></button>`:''}
+        ${b.status==='suspended'?`<button class="sa-btn sa-btn-activate" onclick="saActivateBiz('${b.id}')"><i class="fas fa-play"></i></button>`:''}
+        ${b.status==='locked'?`<button class="sa-btn sa-btn-activate" onclick="saUnlockBiz('${b.id}')"><i class="fas fa-unlock"></i></button>`:''}
+        ${b.status==='deleted'?`<button class="sa-btn sa-btn-restore" onclick="saRestoreBiz('${b.id}')"><i class="fas fa-undo"></i></button>`:''}
+        ${b.status!=='deleted'?`<button class="sa-btn sa-btn-delete" onclick="saDeleteBiz('${b.id}')"><i class="fas fa-trash"></i></button>`:''}
+        ${!b.verified&&b.status==='active'?`<button class="sa-btn sa-btn-approve" onclick="saVerifyBiz('${b.id}')" title="Thibitisha"><i class="fas fa-certificate"></i></button>`:''}
+        <button class="sa-btn sa-btn-msg" onclick="saMsgBiz('${b.id}')"><i class="fas fa-envelope"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function saUpdateBizStatus(id, status) {
+  try {
+    await db.collection('businesses').doc(id).update({ status, updatedAt: new Date().toISOString() });
+    await logAudit('UPDATE_BUSINESS_STATUS', id, {}, { status });
+    const b = APP.saBusinesses.find(x => x.id === id);
+    logActivity('SA_UPDATE_BIZ_STATUS', `${b?.name} -> ${status}`, 'businesses', id);
+    toast(`Hali imebadilishwa: ${status}`, 's');
+    await loadSADashboard();
+    saFilterBusinesses();
+  } catch(e) { toast('Hitilafu: ' + e.message, 'e'); }
+}
+
+async function saApproveBiz(id) { await saUpdateBizStatus(id, 'active'); }
+async function saRejectBiz(id) { await saUpdateBizStatus(id, 'suspended'); }
+async function saActivateBiz(id) { await saUpdateBizStatus(id, 'active'); }
+async function saSuspendBiz(id) { await saUpdateBizStatus(id, 'suspended'); }
+async function saLockBiz(id) { await saUpdateBizStatus(id, 'locked'); }
+async function saUnlockBiz(id) { await saUpdateBizStatus(id, 'active'); }
+async function saDisableBiz(id) { await saUpdateBizStatus(id, 'disabled'); }
+async function saDeleteBiz(id) { await saUpdateBizStatus(id, 'deleted'); }
+async function saRestoreBiz(id) { await saUpdateBizStatus(id, 'active'); }
+
+async function saVerifyBiz(id) {
+  try {
+    await db.collection('businesses').doc(id).update({ verified: true });
+    logActivity('SA_VERIFY_BIZ', id, 'businesses', id);
+    toast('Biashara imehifadhiwa', 's');
+    await loadSABusinesses();
+  } catch(e) { toast('Hitilafu', 'e'); }
+}
+
+function saMsgBiz(id) {
+  const b = APP.saBusinesses.find(x => x.id === id);
+  document.getElementById('saModalTitle').textContent = 'Tuma Ujumbe kwa ' + (b?.name || '');
+  document.getElementById('saModalBody').innerHTML = `
+    <div class="sa-form-group"><label>Kichwa</label><input class="form-input" id="saMsgSubject"/></div>
+    <div class="sa-form-group"><label>Ujumbe</label><textarea class="form-input" id="saMsgBody" rows="4"></textarea></div>
+  `;
+  document.getElementById('saModal').querySelector('.super-modal-head button').onclick = closeSAModal;
+  document.getElementById('saModal').style.display = 'flex';
+  /* Store callback for send button */
+  window._saMsgBizId = id;
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'btn btn-p';
+  sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Tuma';
+  sendBtn.onclick = async function() {
+    const subject = document.getElementById('saMsgSubject').value;
+    const body = document.getElementById('saMsgBody').value;
+    if (!body) { toast('Andika ujumbe', 'e'); return; }
+    try {
+      await db.collection('notifications').add({ businessId: id, title: subject || 'Ujumbe kutoka SA', message: body, fromSA: true, timestamp: new Date().toISOString(), createdAt: new Date().toISOString(), read: false });
+      logActivity('SA_SEND_MSG', `Kwa ${b?.name}`, 'notifications');
+      toast('Ujumbe umetumwa', 's');
+      closeSAModal();
+    } catch(e) { toast('Hitilafu', 'e'); }
+  };
+  const actionsDiv = document.getElementById('saModal').querySelector('.super-modal-card');
+  /* Remove old send buttons */
+  actionsDiv.querySelectorAll('.btn-p').forEach(b => { if(b !== sendBtn) b.remove(); });
+  actionsDiv.appendChild(sendBtn);
+}
+
+/* ============================================================
+   SA USERS — Full management
+============================================================ */
+async function loadSAUsers() {
+  try {
+    const snap = await db.collection('users').get();
+    APP.saUsers = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    populateSABizFilter();
+    saFilterUsers();
+  } catch(e) { console.warn('loadSAUsers:', e.message); }
+}
+
+function saFilterUsers() {
+  const search = (document.getElementById('saUserSearch')?.value || '').toLowerCase();
+  const role = document.getElementById('saUserRoleFilter')?.value || 'all';
+  const biz = document.getElementById('saUserBizFilter')?.value || 'all';
+  const status = document.getElementById('saUserStatusFilter')?.value || 'all';
+
+  let filtered = [...APP.saUsers];
+  if (search) filtered = filtered.filter(u => u.name?.toLowerCase().includes(search) || u.email?.toLowerCase().includes(search));
+  if (role !== 'all') filtered = filtered.filter(u => u.role === role);
+  if (biz !== 'all') filtered = filtered.filter(u => u.businessId === biz);
+  if (status !== 'all') filtered = filtered.filter(u => u.status === status);
+
+  document.getElementById('saUserCount').textContent = filtered.length + ' watumiaji';
+  const tbody = document.getElementById('saUserBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-users"></i><p>Hakuna watumiaji</p></td></tr>'; return; }
+
+  const statusBadge = s => {
+    const map = { active:'sa-badge-active', suspended:'sa-badge-suspended', locked:'sa-badge-locked', disabled:'sa-badge-disabled', deleted:'sa-badge-deleted' };
+    const labelMap = { active:'Amilifu', suspended:'Imesitishwa', locked:'Imefungwa', disabled:'Imezimwa', deleted:'Imefutwa' };
+    return `<span class="sa-badge ${map[s]||'sa-badge-active'}">${labelMap[s]||s||'Amilifu'}</span>`;
+  };
+
+  tbody.innerHTML = filtered.map(u => {
+    const bizName = APP.saBusinesses.find(b => b.id === u.businessId)?.name || '-';
+    return `<tr>
+      <td><strong>${u.name||'-'}</strong></td>
+      <td>${u.email||'-'}</td>
+      <td><span class="badge badge-info">${getRoleLabel(u.role)}</span></td>
+      <td>${bizName}</td>
+      <td>${statusBadge(u.status)}</td>
+      <td>${fmtDateTime(u.lastLogin)}</td>
+      <td style="white-space:normal">
+        ${u.status==='active'?`<button class="sa-btn sa-btn-suspend" onclick="saSuspendUser('${u.id}')" title="Sitisha"><i class="fas fa-pause"></i></button> <button class="sa-btn sa-btn-lock" onclick="saLockUser('${u.id}')" title="Funga"><i class="fas fa-lock"></i></button>`:''}
+        ${u.status!=='active'&&u.status!=='deleted'?`<button class="sa-btn sa-btn-activate" onclick="saActivateUser('${u.id}')" title="Amilisha"><i class="fas fa-play"></i></button>`:''}
+        ${u.status==='deleted'?`<button class="sa-btn sa-btn-restore" onclick="saRestoreUser('${u.id}')" title="Rudisha"><i class="fas fa-undo"></i></button>`:''}
+        ${u.status!=='deleted'?`<button class="sa-btn sa-btn-delete" onclick="saDeleteUser('${u.id}')" title="Futa"><i class="fas fa-trash"></i></button>`:''}
+        <button class="sa-btn sa-btn-reset" onclick="saResetPw('${u.id}')" title="Reset nenosiri"><i class="fas fa-key"></i></button>
+        <button class="sa-btn sa-btn-force" onclick="saForcePw('${u.id}')" title="Lazimisha badilisho"><i class="fas fa-exclamation"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function saUpdateUserStatus(id, status) {
+  try {
+    await db.collection('users').doc(id).update({ status, updatedAt: new Date().toISOString() });
+    logActivity('SA_UPDATE_USER_STATUS', `${id} -> ${status}`, 'users', id);
+    toast(`Hali ya mtumiaji: ${status}`, 's');
+    saFilterUsers();
+  } catch(e) { toast('Hitilafu', 'e'); }
+}
+
+async function saActivateUser(id) { await saUpdateUserStatus(id, 'active'); }
+async function saSuspendUser(id) { await saUpdateUserStatus(id, 'suspended'); }
+async function saLockUser(id) { await saUpdateUserStatus(id, 'locked'); }
+async function saDisableUser(id) { await saUpdateUserStatus(id, 'disabled'); }
+async function saDeleteUser(id) { await saUpdateUserStatus(id, 'deleted'); }
+async function saRestoreUser(id) { await saUpdateUserStatus(id, 'active'); }
+
+async function saResetPw(id) {
+  const u = APP.saUsers.find(x => x.id === id);
+  document.getElementById('saModalTitle').textContent = 'Reset Nenosiri — ' + (u?.email || '');
+  document.getElementById('saModalBody').innerHTML = `<p style="color:var(--text2);margin-bottom:16px">Uthibitisho utatumwa kwa barua pepe ya mtumiaji.</p><button class="btn btn-p" onclick="confirmResetPw('${id}')"><i class="fas fa-paper-plane"></i> Tuma Uthibitisho</button>`;
+  openSAModal();
+}
+
+async function confirmResetPw(id) {
+  try {
+    await logActivity('SA_RESET_PASSWORD', id, 'users', id);
+    toast('Uthibitisho wa reset nenosiri umetumwa', 's');
+    closeSAModal();
+  } catch(e) { toast('Hitilafu', 'e'); }
+}
+
+async function saForcePw(id) {
+  try {
+    await db.collection('users').doc(id).update({ forcePasswordChange: true });
+    logActivity('SA_FORCE_PW_CHANGE', id, 'users', id);
+    toast('Mtumiaji atashtakiwa kubadilisha nenosiri wakati wa kuingia next', 's');
+  } catch(e) { toast('Hitilafu', 'e'); }
+}
+
+/* ============================================================
+   SA STAFF
+============================================================ */
+async function loadSAStaff() {
+  try {
+    const snap = await db.collection('employees').get();
+    APP.saStaff = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    populateSABizFilter();
+    saFilterStaff();
+  } catch(e) { console.warn('loadSAStaff:', e.message); }
+}
+
+function saFilterStaff() {
+  const search = (document.getElementById('saStaffSearch')?.value || '').toLowerCase();
+  const role = document.getElementById('saStaffRoleFilter')?.value || 'all';
+  const biz = document.getElementById('saStaffBizFilter')?.value || 'all';
+
+  let filtered = [...APP.saStaff];
+  if (search) filtered = filtered.filter(s => s.name?.toLowerCase().includes(search));
+  if (role !== 'all') filtered = filtered.filter(s => s.role === role);
+  if (biz !== 'all') filtered = filtered.filter(s => s.businessId === biz);
+
+  document.getElementById('saStaffCount').textContent = filtered.length + ' wafanyakazi';
+  const tbody = document.getElementById('saStaffBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-id-badge"></i><p>Hakuna wafanyakazi</p></td></tr>'; return; }
+
+  tbody.innerHTML = filtered.map(s => {
+    const bizName = APP.saBusinesses.find(b => b.id === s.businessId)?.name || '-';
+    return `<tr>
+      <td><strong>${s.name}</strong></td>
+      <td><span class="badge badge-info">${getRoleLabel(s.role)}</span></td>
+      <td>${bizName}</td>
+      <td>${s.phone||'-'}</td>
+      <td><span class="sa-badge ${s.status==='active'?'sa-badge-active':'sa-badge-suspended'}">${s.status==='active'?'Amilifu':'Haitumiki'}</span></td>
+      <td>
+        <button class="sa-btn sa-btn-view" onclick="toast('Maelezo ya mfanyakazi','i')"><i class="fas fa-eye"></i></button>
+        <button class="sa-btn sa-btn-suspend" onclick="saToggleStaffStatus('${s.id}','${s.status}')"><i class="fas fa-${s.status==='active'?'pause':'play'}"></i></button>
+        <button class="sa-btn sa-btn-delete" onclick="saDeleteStaff('${s.id}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function saToggleStaffStatus(id, current) {
+  const newStatus = current === 'active' ? 'inactive' : 'active';
+  try {
+    await db.collection('employees').doc(id).update({ status: newStatus });
+    logActivity('SA_TOGGLE_STAFF', `${id} -> ${newStatus}`, 'employees', id);
+    toast('Hali imebadilishwa', 's');
+    saFilterStaff();
+  } catch(e) { toast('Hitilafu', 'e'); }
+}
+
+async function saDeleteStaff(id) {
+  try {
+    await db.collection('employees').doc(id).delete();
+    logActivity('SA_DELETE_STAFF', id, 'employees', id);
+    toast('Mfanyakazi amefutwa', 's');
+    saFilterStaff();
+  } catch(e) { toast('Hitilafu', 'e'); }
+}
+
+/* ============================================================
+   SA CUSTOMERS
+============================================================ */
+async function loadSACustomers() {
+  try {
+    const snap = await db.collection('customers').get();
+    APP.saAllCustomers = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    populateSABizFilter();
+    saFilterCustomers();
+  } catch(e) { console.warn('loadSACustomers:', e.message); }
+}
+
+function saFilterCustomers() {
+  const search = (document.getElementById('saCustSearch')?.value || '').toLowerCase();
+  const biz = document.getElementById('saCustBizFilter')?.value || 'all';
+  let filtered = [...APP.saAllCustomers];
+  if (search) filtered = filtered.filter(c => c.name?.toLowerCase().includes(search) || c.phone?.toLowerCase().includes(search));
+  if (biz !== 'all') filtered = filtered.filter(c => c.businessId === biz);
+
+  document.getElementById('saCustCount').textContent = filtered.length + ' wateja';
+  const tbody = document.getElementById('saCustBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-user-group"></i><p>Hakuna wateja</p></td></tr>'; return; }
+  tbody.innerHTML = filtered.map(c => {
+    const bizName = APP.saBusinesses.find(b => b.id === c.businessId)?.name || '-';
+    return `<tr><td><strong>${c.name}</strong></td><td>${c.phone||'-'}</td><td>${bizName}</td><td>${fmt(c.debt||0)}</td><td><button class="sa-btn sa-btn-view" onclick="toast('Maelezo ya mteja','i')"><i class="fas fa-eye"></i></button></td></tr>`;
+  }).join('');
+}
+
+/* ============================================================
+   SA GLOBAL PRODUCTS — Full catalog management
+============================================================ */
+async function loadSAGlobalProducts() {
+  try {
+    const snap = await db.collection('globalProducts').get();
+    APP.globalProducts = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    /* Populate category filter */
+    const catSnap = await db.collection('globalCategories').get();
+    APP.globalCategories = catSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const catSelect = document.getElementById('saGPCatFilter');
+    if (catSelect) catSelect.innerHTML = `<option value="all">Category Zote</option>${APP.globalCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}`;
+    saFilterGlobalProducts();
+  } catch(e) { console.warn('loadSAGlobalProducts:', e.message); }
+}
+
+function saFilterGlobalProducts() {
+  const search = (document.getElementById('saGPSearch')?.value || '').toLowerCase();
+  const cat = document.getElementById('saGPCatFilter')?.value || 'all';
+  const status = document.getElementById('saGPStatusFilter')?.value || 'all';
+
+  let filtered = [...APP.globalProducts];
+  if (search) filtered = filtered.filter(p => p.name?.toLowerCase().includes(search) || p.brand?.toLowerCase().includes(search) || p.barcode?.toLowerCase().includes(search));
+  if (cat !== 'all') filtered = filtered.filter(p => p.categoryId === cat || p.category === cat);
+  if (status !== 'all') filtered = filtered.filter(p => p.status === status);
+
+  document.getElementById('saGPCount').textContent = filtered.length + ' bidhaa';
+  const tbody = document.getElementById('saGPBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-globe"></i><p>Hakuna bidhaa</p></td></tr>'; return; }
+
+  const statusBadge = s => {
+    const map = { approved:'sa-badge-active', pending:'sa-badge-pending', rejected:'sa-badge-suspended', hidden:'sa-badge-disabled' };
+    const labelMap = { approved:'Kubaliwa', pending:'Inasubiri', rejected:'Kukataliwa', hidden:'Fichwa' };
+    return `<span class="sa-badge ${map[s]||'sa-badge-pending'}">${labelMap[s]||s}</span>`;
+  };
+
+  tbody.innerHTML = filtered.map(p => `<tr>
+    <td><div style="width:40px;height:40px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-box"></i></div></td>
+    <td><strong>${p.name}</strong>${p.featured?' <i class="fas fa-star" style="color:var(--warning);font-size:10px" title="Featured"></i>':''}</td>
+    <td>${p.categoryName||p.category||'-'}</td>
+    <td>${p.brand||'-'}</td>
+    <td>${fmt(p.price)}${p.salePrice?` <span style="text-decoration:line-through;color:var(--text3);font-size:11px">${fmt(p.price)}</span> ${fmt(p.salePrice)}`:''}</td>
+    <td>${statusBadge(p.status)}</td>
+    <td style="white-space:normal">
+      <button class="sa-btn sa-btn-view" onclick="editGlobalProduct('${p.id}')"><i class="fas fa-edit"></i></button>
+      ${p.status==='pending'?`<button class="sa-btn sa-btn-approve" onclick="saApproveGP('${p.id}')"><i class="fas fa-check"></i></button> <button class="sa-btn sa-btn-reject" onclick="saRejectGP('${p.id}')"><i class="fas fa-times"></i></button>`:''}
+      <button class="sa-btn ${p.featured?'sa-btn-suspend':'sa-btn-activate'}" onclick="saToggleFeatured('${p.id}',${!p.featured})" title="Featured"><i class="fas fa-star"></i></button>
+      <button class="sa-btn ${p.status==='hidden'?'sa-btn-activate':'sa-btn-suspend'}" onclick="saToggleHideGP('${p.id}')" title="Ficha/Tenha"><i class="fas fa-${p.status==='hidden'?'eye':'eye-slash'}"></i></button>
+      <button class="sa-btn sa-btn-delete" onclick="saDeleteGP('${p.id}')"><i class="fas fa-trash"></i></button>
+    </td>
+  </tr>`).join('');
+}
+
+function openSAGlobalProdModal(prod) {
+  const isEdit = !!prod;
+  const catOpts = APP.globalCategories.map(c => `<option value="${c.id}" ${prod?.categoryId===c.id?'selected':''}>${c.name}</option>`).join('');
+  document.getElementById('saModalTitle').textContent = isEdit ? 'Hariri Bidhaa' : 'Ongeza Bidhaa';
+  document.getElementById('saModalBody').innerHTML = `
+    <div class="sa-form-grid">
+      <div class="sa-form-group"><label>Jina *</label><input class="form-input" id="saGPName" value="${prod?.name||''}"/></div>
+      <div class="sa-form-group"><label>Brand</label><input class="form-input" id="saGPBrand" value="${prod?.brand||''}"/></div>
+      <div class="sa-form-group"><label>Category</label><select class="form-select" id="saGPCat"><option value="">Chagua</option>${catOpts}</select></div>
+      <div class="sa-form-group"><label>Bei *</label><input class="form-input" type="number" id="saGPPrice" value="${prod?.price||0}"/></div>
+      <div class="sa-form-group"><label>Bei ya Punguzo</label><input class="form-input" type="number" id="saGPSalePrice" value="${prod?.salePrice||''}"/></div>
+      <div class="sa-form-group"><label>Barcode</label><input class="form-input" id="saGPBarcode" value="${prod?.barcode||''}"/></div>
+      <div class="sa-form-group"><label>QR Code</label><input class="form-input" id="saGPQr" value="${prod?.qrCode||''}"/></div>
+      <div class="sa-form-group"><label>Picha URL</label><input class="form-input" id="saGPImage" value="${prod?.imageUrl||''}"/></div>
+      <div class="sa-form-group full"><label>Maelezo</label><textarea class="form-input" id="saGPDesc" rows="3">${prod?.description||''}</textarea></div>
+      <div class="sa-form-group"><label>Hali</label><select class="form-select" id="saGPStatus"><option value="approved" ${prod?.status==='approved'?'selected':''}>Kubaliwa</option><option value="pending" ${prod?.status==='pending'?'selected':''}>Inasubiri</option><option value="rejected" ${prod?.status==='rejected'?'selected':''}>Kukataliwa</option><option value="hidden" ${prod?.status==='hidden'?'selected':''}>Fichwa</option></select></div>
+      <div class="sa-form-group"><label>Featured</label><select class="form-select" id="saGPFeatured"><option value="false" ${!prod?.featured?'selected':''}>Hapana</option><option value="true" ${prod?.featured?'selected':''}>Ndio</option></select></div>
+      <div class="sa-form-group"><label>Mpya</label><select class="form-select" id="saGPNew"><option value="false" ${!prod?.isNew?'selected':''}>Hapana</option><option value="true" ${prod?.isNew?'selected':''}>Ndio</option></select></div>
+      <div class="sa-form-group"><label>On Sale</label><select class="form-select" id="saGPOnSale"><option value="false" ${!prod?.onSale?'selected':''}>Hapana</option><option value="true" ${prod?.onSale?'selected':''}>Ndio</option></select></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn btn-p" onclick="saveGlobalProduct('${prod?.id||''}')"><i class="fas fa-save"></i> Hifadhi</button></div>
+  `;
+  openSAModal();
+}
+
+function editGlobalProduct(id) {
+  const p = APP.globalProducts.find(x => x.id === id);
+  if (p) openSAGlobalProdModal(p);
+}
+
+async function saveGlobalProduct(id) {
+  const name = document.getElementById('saGPName').value.trim();
+  const price = Number(document.getElementById('saGPPrice').value) || 0;
+  if (!name) { toast('Jina linahitajika', 'e'); return; }
+  const catId = document.getElementById('saGPCat').value;
+  const catObj = APP.globalCategories.find(c => c.id === catId);
+  const data = {
+    name, brand: document.getElementById('saGPBrand').value.trim(),
+    categoryId: catId, category: catObj?.name || '', categoryName: catObj?.name || '',
+    price, salePrice: Number(document.getElementById('saGPSalePrice').value) || null,
+    barcode: document.getElementById('saGPBarcode').value.trim(),
+    qrCode: document.getElementById('saGPQr').value.trim(),
+    imageUrl: document.getElementById('saGPImage').value.trim(),
+    description: document.getElementById('saGPDesc').value.trim(),
+    status: document.getElementById('saGPStatus').value,
+    featured: document.getElementById('saGPFeatured').value === 'true',
+    isNew: document.getElementById('saGPNew').value === 'true',
+    onSale: document.getElementById('saGPOnSale').value === 'true',
+    updatedAt: new Date().toISOString()
+  };
+  try {
+    if (id) { await db.collection('globalProducts').doc(id).update(data); toast('Bidhaa imesasishwa','s'); }
+    else { data.createdAt = new Date().toISOString(); await db.collection('globalProducts').add(data); toast('Bidhaa imeongezwa','s'); }
+    logActivity(id?'SA_UPDATE_GLOBAL_PRODUCT':'SA_CREATE_GLOBAL_PRODUCT', name, 'globalProducts', id);
+    closeSAModal(); await loadSAGlobalProducts();
+  } catch(e) { toast('Hitilafu','e'); }
+}
+
+async function saApproveGP(id) { try { await db.collection('globalProducts').doc(id).update({status:'approved'}); logActivity('SA_APPROVE_PRODUCT',id,'globalProducts',id); toast('Imekubaliwa','s'); await loadSAGlobalProducts(); } catch(e){toast('Hitilafu','e');} }
+async function saRejectGP(id) { try { await db.collection('globalProducts').doc(id).update({status:'rejected'}); logActivity('SA_REJECT_PRODUCT',id,'globalProducts',id); toast('Imekataliwa','w'); await loadSAGlobalProducts(); } catch(e){toast('Hitilafu','e');} }
+async function saToggleFeatured(id, val) { try { await db.collection('globalProducts').doc(id).update({featured:val}); toast(val?'Imewekwa Featured':'Imeondwa Featured','s'); await loadSAGlobalProducts(); } catch(e){toast('Hitilafu','e');} }
+async function saToggleHideGP(id) { const p=APP.globalProducts.find(x=>x.id===id); const newStatus=p.status==='hidden'?'approved':'hidden'; try { await db.collection('globalProducts').doc(id).update({status:newStatus}); toast(newStatus==='hidden'?'Imefichwa':'Imeonekana','s'); await loadSAGlobalProducts(); } catch(e){toast('Hitilafu','e');} }
+async function saDeleteGP(id) { if(!confirm('Futa bidhaa hii?')) return; try { await db.collection('globalProducts').doc(id).delete(); logActivity('SA_DELETE_GLOBAL_PRODUCT',id,'globalProducts',id); toast('Imefutwa','s'); await loadSAGlobalProducts(); } catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   SA CATEGORIES
+============================================================ */
+async function loadSACategories() {
+  try {
+    const snap = await db.collection('globalCategories').get();
+    APP.globalCategories = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const tbody = document.getElementById('saCatBody');
+    if (APP.globalCategories.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="empty-s"><i class="fas fa-tags"></i><p>Hakuna categories</p></td></tr>'; return; }
+    tbody.innerHTML = APP.globalCategories.map(c => `<tr>
+      <td><strong>${c.name}</strong></td>
+      <td>${c.productCount||0}</td>
+      <td><button class="sa-btn sa-btn-view" onclick="editSACategory('${c.id}')"><i class="fas fa-edit"></i></button> <button class="sa-btn sa-btn-delete" onclick="saDeleteCategory('${c.id}')"><i class="fas fa-trash"></i></button></td>
+    </tr>`).join('');
+  } catch(e) { console.warn('loadSACategories:', e.message); }
+}
+
+function openSACategoryModal(cat) {
+  document.getElementById('saModalTitle').textContent = cat ? 'Hariri Category' : 'Ongeza Category';
+  document.getElementById('saModalBody').innerHTML = `<div class="sa-form-group"><label>Jina *</label><input class="form-input" id="saCatName" value="${cat?.name||''}"/></div><div style="margin-top:12px"><button class="btn btn-p" onclick="saveSACategory('${cat?.id||''}')"><i class="fas fa-save"></i> Hifadhi</button></div>`;
+  openSAModal();
+}
+
+async function saveSACategory(id) {
+  const name = document.getElementById('saCatName').value.trim();
+  if (!name) { toast('Jina linahitajika','e'); return; }
+  try {
+    if (id) { await db.collection('globalCategories').doc(id).update({name}); toast('Imesasishwa','s'); }
+    else { await db.collection('globalCategories').add({name,productCount:0,createdAt:new Date().toISOString()}); toast('Imeongezwa','s'); }
+    closeSAModal(); await loadSACategories();
+  } catch(e) { toast('Hitilafu','e'); }
+}
+
+function editSACategory(id) { const c = APP.globalCategories.find(x=>x.id===id); if(c) openSACategoryModal(c); }
+async function saDeleteCategory(id) { if(!confirm('Futa?')) return; try{await db.collection('globalCategories').doc(id).delete();toast('Imefutwa','s');await loadSACategories();}catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   SA BRANDS
+============================================================ */
+async function loadSABrands() {
+  try {
+    const snap = await db.collection('globalBrands').get();
+    const brands = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const tbody = document.getElementById('saBrandBody');
+    if (brands.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="empty-s"><i class="fas fa-award"></i><p>Hakuna brands</p></td></tr>'; return; }
+    tbody.innerHTML = brands.map(b => `<tr>
+      <td><strong>${b.name}</strong></td>
+      <td>${b.productCount||0}</td>
+      <td><button class="sa-btn sa-btn-view" onclick="editSABrand('${b.id}')"><i class="fas fa-edit"></i></button> <button class="sa-btn sa-btn-delete" onclick="saDeleteBrand('${b.id}')"><i class="fas fa-trash"></i></button></td>
+    </tr>`).join('');
+  } catch(e) { console.warn('loadSABrands:', e.message); }
+}
+
+function openSABrandModal(brand) {
+  document.getElementById('saModalTitle').textContent = brand ? 'Hariri Brand' : 'Ongeza Brand';
+  document.getElementById('saModalBody').innerHTML = `<div class="sa-form-group"><label>Jina *</label><input class="form-input" id="saBrandName" value="${brand?.name||''}"/></div><div style="margin-top:12px"><button class="btn btn-p" onclick="saveSABrand('${brand?.id||''}')"><i class="fas fa-save"></i> Hifadhi</button></div>`;
+  openSAModal();
+}
+
+async function saveSABrand(id) {
+  const name = document.getElementById('saBrandName').value.trim();
+  if (!name) { toast('Jina linahitajika','e'); return; }
+  try {
+    if (id) { await db.collection('globalBrands').doc(id).update({name}); toast('Imesasishwa','s'); }
+    else { await db.collection('globalBrands').add({name,productCount:0,createdAt:new Date().toISOString()}); toast('Imeongezwa','s'); }
+    closeSAModal(); await loadSABrands();
+  } catch(e) { toast('Hitilafu','e'); }
+}
+
+function editSABrand(id) { /* Re-fetch and open */ db.collection('globalBrands').doc(id).get().then(d => { if(d.exists) openSABrandModal({id:d.id,...d.data()}); }); }
+async function saDeleteBrand(id) { if(!confirm('Futa?')) return; try{await db.collection('globalBrands').doc(id).delete();toast('Imefutwa','s');await loadSABrands();}catch(e){toast('Hitilafu','e');} }
+
+/* ============================================================
+   SA ANNOUNCEMENTS
+============================================================ */
+async function loadSAAnnouncements() {
+  try {
+    const snap = await db.collection('announcements').orderBy('createdAt','desc').get();
+    APP.saAnnouncements = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const container = document.getElementById('saAnnList');
+    if (APP.saAnnouncements.length === 0) { container.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna matangazo</p></div>'; return; }
+    container.innerHTML = APP.saAnnouncements.map(a => `
+      <div class="sa-announcement-item ${a.priority==='urgent'?'urgent':''}">
+        <h5>${a.subject||'Tangazo'}</h5>
+        <p>${a.message||''}</p>
+        <div class="sa-ann-meta"><span><i class="fas fa-clock"></i> ${fmtDateTime(a.createdAt)}</span><span><i class="fas fa-bullseye"></i> ${a.target||'all'}</span><span><i class="fas fa-flag"></i> ${a.priority||'normal'}</span></div>
+      </div>
+    `).join('');
+  } catch(e) { console.warn('loadSAAnnouncements:', e.message); }
+}
+
+function openSAAnnouncementModal() {
+  document.getElementById('saModalTitle').textContent = 'Tangazo Jipya';
+  document.getElementById('saModalBody').innerHTML = `
+    <div class="sa-form-grid">
+      <div class="sa-form-group"><label>Kichwa *</label><input class="form-input" id="saAnnSubject"/></div>
+      <div class="sa-form-group"><label>Kipaumbele</label><select class="form-select" id="saAnnPriority"><option value="normal">Kawaida</option><option value="important">Muhimu</option><option value="urgent">Haraka</option></select></div>
+      <div class="sa-form-group"><label>Lengo</label><select class="form-select" id="saAnnTarget"><option value="all">Wote</option><option value="businesses">Biashara</option><option value="owners">Wamiliki</option><option value="staff">Wafanyakazi</option><option value="customers">Wateja</option></select></div>
+    </div>
+    <div class="sa-form-group"><label>Ujumbe *</label><textarea class="form-input" id="saAnnMessage" rows="4"></textarea></div>
+    <div style="margin-top:12px"><button class="btn btn-p" onclick="saveSAAnnouncement()"><i class="fas fa-bullhorn"></i> Tuma Tangazo</button></div>
+  `;
+  openSAModal();
+}
+
+async function saveSAAnnouncement() {
+  const subject = document.getElementById('saAnnSubject').value.trim();
+  const message = document.getElementById('saAnnMessage').value.trim();
+  if (!subject || !message) { toast('Jaza kichwa na ujumbe','e'); return; }
+  try {
+    await db.collection('announcements').add({
+      subject, message, priority: document.getElementById('saAnnPriority').value,
+      target: document.getElementById('saAnnTarget').value,
+      fromSA: true, timestamp: new Date().toISOString(), createdAt: new Date().toISOString()
+    });
+    logActivity('SA_ANNOUNCEMENT', subject, 'announcements');
+    toast('Tangazo limetumwa','s');
+    closeSAModal(); await loadSAAnnouncements();
+  } catch(e) { toast('Hitilafu','e'); }
+}
+
+/* ============================================================
+   SA BROADCAST
+============================================================ */
+async function sendBroadcast() {
+  const subject = document.getElementById('bcSubject').value.trim();
+  const message = document.getElementById('bcMessage').value.trim();
+  const type = document.getElementById('bcType').value;
+  const priority = document.getElementById('bcPriority').value;
+  if (!message) { toast('Andika ujumbe','e'); return; }
+
+  document.getElementById('bcSendBtn').disabled = true;
+  try {
+    /* Save as announcement */
+    await db.collection('announcements
