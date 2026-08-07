@@ -926,13 +926,16 @@ import {
     getFirestore,
     collection,
     getDocs,
+    getDoc,
     doc,
     setDoc,
     deleteDoc,
-    getDoc,
+    query,
+    where,
+    limit,
+    onSnapshot,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
 /* ============================================================
    FIREBASE CONFIGURATION
    ============================================================ */
@@ -1357,7 +1360,13 @@ async function signupStep2(event){
       phone:bizPhone,location:bizLocation,logo:'',bizCode,
       createdAt:firebase.firestore.FieldValue.serverTimestamp(),status:'active'
     });
-    await db.collection('users').doc(uid).set({
+   await setDoc(
+    doc(window.__fb.db, "users", uid),
+    {
+        ...
+    },
+    { merge: true } // ikiwa unataka ku-update bila kufuta fields zilizopo
+);
       uid,name:signupTempData.name,email:signupTempData.email,
       role:'owner',businessId,businessName:bizName,businessCategory:bizCategory,
       status:'active',createdAt:firebase.firestore.FieldValue.serverTimestamp()
@@ -1384,7 +1393,9 @@ async function enterApp(){
 
 async function loadBusinessData(){
   try{
-    const bizDoc=await db.collection('businessData').doc(APP.businessId).get();
+const bizDoc = await getDoc(
+    doc(window.__fb.db, "businessData", APP.businessId)
+);
     if(bizDoc.exists)APP.business=bizDoc.data();
   }catch(e){console.warn('loadBusinessData:',e)}
   updateTopbar();
@@ -1443,7 +1454,9 @@ async function staffLogin(event){
   try{
     const cred=await auth.signInWithEmailAndPassword(email,pass);
     const uid=cred.user.uid;
-    const userDoc=await db.collection('users').doc(uid).get();
+    const userDoc = await getDoc(
+    doc(window.__fb.db, "users", uid)
+);
     if(!userDoc.exists){toast('Akaunti haipo.','e');await auth.signOut();return}
     const ud=userDoc.data();
     if(ud.businessCode!==code){toast('Namba ya biashara sio sahihi.','e');await auth.signOut();return}
@@ -1463,19 +1476,37 @@ async function staffRegister(event){
   const code=document.getElementById('staffRegBizCode').value.trim().toUpperCase();
   if(pass.length<6){toast('Nenosiri lazima uwe na herufi 6+.','e');return}
   try{
-    const bizSnap=await db.collection('businessData').where('bizCode','==',code).limit(1).get();
+    const bizSnap = await getDocs(
+    query(
+        collection(window.__fb.db, "businessData"),
+        where("bizCode", "==", code),
+        limit(1)
+    )
+);
     if(bizSnap.empty){toast('Namba ya biashara haipo.','e');return}
     const bizDoc=bizSnap.docs[0];
     const bizId=bizDoc.id;const bizData=bizDoc.data();
     const cred=await auth.createUserWithEmailAndPassword(email,pass);
     const uid=cred.user.uid;
-    await db.collection('staff').doc(uid).set({
+  await setDoc(
+    doc(window.__fb.db, "staff", uid),
+    {
+        // data zako hapa
+    },
+    { merge: true }
+);
       staffId:uid,businessId:bizId,name,email,role:'staff',status:'active',
       businessCode:code,businessName:bizData.businessName,businessCategory:bizData.category,
       createdAt:firebase.firestore.FieldValue.serverTimestamp()
     });
-    await db.collection('users').doc(uid).set({
-      uid,name,email,role:'staff',businessId:bizId,businessCode:code,
+await setDoc(
+    doc(window.__fb.db, "users", uid),
+    {
+        // data zako hapa
+    },
+    { merge: true }
+);
+  uid,name,email,role:'staff',businessId:bizId,businessCode:code,
       businessName:bizData.businessName,businessCategory:bizData.category,
       status:'active',createdAt:firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -1542,10 +1573,20 @@ function renderSection(sec){
    REAL-TIME FIRESTORE LISTENERS
 ============================================================ */
 function setupRealtimeListeners(){
-  const bid=APP.businessId;
+  const bid=APP.businessIdaddListener(
+  onSnapshot(
+    query(
+      collection(window.__fb.db, "products"),
+      where("businessId", "==", bid)
+    ),
+    snap => {
+      // code yako ya ndani ibaki hapa
+    }
+  )
+);;
   if(!bid)return;
   // Products
-  addListener(db.collection('products').where('businessId','==',bid).onSnapshot(snap=>{
+ 
     APP.productsCache=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(document.getElementById('sec-products').classList.contains('active'))renderProducts();
     if(document.getElementById('sec-pos').classList.contains('active'))renderPOSProducts();
