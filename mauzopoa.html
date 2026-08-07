@@ -914,21 +914,217 @@ tr:hover td{background:var(--bg3)}
 <!-- TOAST CONTAINER -->
 <div class="tc" id="toastContainer"></div>
 
-<script>
+
+<script type="module">
 /* ============================================================
-   FIREBASE CONFIGURATION — REPLACE WITH YOUR VALUES
-============================================================ */
+   FIREBASE INITIALIZATION & FIRESTORE CLOUD DATABASE
+   ============================================================ */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+import {
+    getFirestore,
+    collection,
+    getDocs,
+    doc,
+    setDoc,
+    deleteDoc,
+    getDoc,
+    serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+/* ============================================================
+   FIREBASE CONFIGURATION
+   ============================================================ */
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+    authDomain: "ncrs-aeb43.firebaseapp.com",
+    projectId: "ncrs-aeb43",
+    storageBucket: "ncrs-aeb43.firebasestorage.app",
+    messagingSenderId: "786434442929",
+    appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+    measurementId: "G-ZYB71RY8J5"
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+
+/* ============================================================
+   INITIALIZE FIREBASE
+   ============================================================ */
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+/* ============================================================
+   DEFAULT BUSINESS DATA
+   ============================================================ */
+
+const DEFAULT_DATA = {
+    products: [],
+    sales: [],
+    purchases: [],
+    suppliers: [],
+    customers: [],
+    expenses: [],
+    employees: [],
+    notifications: []
+};
+
+/* ============================================================
+   GLOBAL FIREBASE HELPER
+   ============================================================ */
+
+window.__fb = {
+
+    app,
+    db,
+
+    cache: {
+        users: [],
+        staff: [],
+        managers: [],
+        businessData: {},
+        settings: {}
+    },
+
+    superSession: false,
+    ready: false,
+
+    async load() {
+
+        const c = this.cache;
+
+        try {
+
+            const [
+                users,
+                staff,
+                managers,
+                businessData,
+                settings
+            ] = await Promise.all([
+                getDocs(collection(db, "users")),
+                getDocs(collection(db, "staff")),
+                getDocs(collection(db, "managers")),
+                getDocs(collection(db, "businessData")),
+                getDocs(collection(db, "systemSettings"))
+            ]);
+
+            c.users = users.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
+
+            c.staff = staff.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
+
+            c.managers = managers.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
+
+            c.businessData = {};
+
+            businessData.docs.forEach(d => {
+                c.businessData[d.id] = d.data();
+            });
+
+            c.settings = {};
+
+            settings.docs.forEach(d => {
+                c.settings[d.id] = d.data();
+            });
+
+            this.ready = true;
+
+            return this;
+
+        } catch (err) {
+
+            console.error("Firebase load failed:", err);
+            throw err;
+
+        }
+
+    },
+
+    async writeArray(name, arr) {
+
+        const col = collection(db, name);
+
+        const old = await getDocs(col);
+
+        const ids = new Set(arr.map(x => String(x.id)));
+
+        await Promise.all(
+            old.docs
+                .filter(x => !ids.has(x.id))
+                .map(x => deleteDoc(x.ref))
+        );
+
+        await Promise.all(
+            arr.map(x =>
+                setDoc(
+                    doc(db, name, String(x.id)),
+                    x
+                )
+            )
+        );
+
+    },
+
+    async writeBusiness(id, data) {
+
+        await setDoc(
+            doc(db, "businessData", String(id)),
+            data,
+            { merge: true }
+        );
+
+    },
+
+    async writeSetting(key, value) {
+
+        await setDoc(
+            doc(db, "systemSettings", "global"),
+            {
+                [key]: value,
+                updatedAt: serverTimestamp()
+            },
+            { merge: true }
+        );
+
+    },
+
+    async deleteBusiness(id) {
+
+        delete this.cache.businessData[id];
+
+        await deleteDoc(
+            doc(db, "businessData", String(id))
+        );
+
+    }
+
+};
+
+/* ============================================================
+   FIREBASE READY
+   ============================================================ */
+
+window.__fbReady = window.__fb.load();
+
+window.__fbReady.catch(err => {
+
+    console.error("Firebase initialization failed:", err);
+
+    window.__fb.error = err;
+
+});
+</script>
+
+<script>
 
 /* ============================================================
    APPLICATION STATE
