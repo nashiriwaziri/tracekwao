@@ -1231,8 +1231,7 @@ tr:hover td{background:var(--bg3)}
    FIREBASE INITIALIZATION & FIRESTORE CLOUD DATABASE
    ============================================================ */
 
-import { initializeApp }
-from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 
 import {
     getFirestore,
@@ -1243,9 +1242,7 @@ import {
     deleteDoc,
     getDoc,
     serverTimestamp
-}
-from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 /* ============================================================
    FIREBASE CONFIGURATION
@@ -1261,14 +1258,12 @@ const firebaseConfig = {
     measurementId: "G-ZYB71RY8J5"
 };
 
-
 /* ============================================================
    INITIALIZE FIREBASE
    ============================================================ */
 
 const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
-
+const db = getFirestore(app);
 
 /* ============================================================
    DEFAULT BUSINESS DATA
@@ -1284,7 +1279,6 @@ const DEFAULT_DATA = {
     employees: [],
     notifications: []
 };
-
 
 /* ============================================================
    GLOBAL FIREBASE HELPER
@@ -1306,66 +1300,65 @@ window.__fb = {
     superSession: false,
     ready: false,
 
-    /* --------------------------------------------------------
-       LOAD ALL DATA
-    -------------------------------------------------------- */
-
     async load() {
 
         const c = this.cache;
 
-        const [
-            users,
-            staff,
-            managers,
-            businessData,
-            settings
-        ] = await Promise.all([
+        try {
 
-            getDocs(collection(db, "users")),
-            getDocs(collection(db, "staff")),
-            getDocs(collection(db, "managers")),
-            getDocs(collection(db, "businessData")),
-            getDocs(collection(db, "systemSettings"))
+            const [
+                users,
+                staff,
+                managers,
+                businessData,
+                settings
+            ] = await Promise.all([
+                getDocs(collection(db, "users")),
+                getDocs(collection(db, "staff")),
+                getDocs(collection(db, "managers")),
+                getDocs(collection(db, "businessData")),
+                getDocs(collection(db, "systemSettings"))
+            ]);
 
-        ]);
+            c.users = users.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
 
-        c.users = users.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+            c.staff = staff.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
 
-        c.staff = staff.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+            c.managers = managers.docs.map(d => ({
+                id: d.id,
+                ...d.data()
+            }));
 
-        c.managers = managers.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+            c.businessData = {};
 
-        c.businessData = {};
+            businessData.docs.forEach(d => {
+                c.businessData[d.id] = d.data();
+            });
 
-        businessData.docs.forEach(doc => {
-            c.businessData[doc.id] = doc.data();
-        });
+            c.settings = {};
 
-        c.settings = {};
+            settings.docs.forEach(d => {
+                c.settings[d.id] = d.data();
+            });
 
-        settings.docs.forEach(doc => {
-            c.settings[doc.id] = doc.data();
-        });
+            this.ready = true;
 
-        this.ready = true;
+            return this;
 
-        return this;
+        } catch (err) {
+
+            console.error("Firebase load failed:", err);
+            throw err;
+
+        }
+
     },
-
-
-    /* --------------------------------------------------------
-       SAVE ARRAY COLLECTION
-    -------------------------------------------------------- */
 
     async writeArray(name, arr) {
 
@@ -1373,35 +1366,24 @@ window.__fb = {
 
         const old = await getDocs(col);
 
-        const ids = new Set(
-            arr.map(item => String(item.id))
-        );
+        const ids = new Set(arr.map(x => String(x.id)));
 
         await Promise.all(
-
             old.docs
-                .filter(doc => !ids.has(doc.id))
-                .map(doc => deleteDoc(doc.ref))
-
+                .filter(x => !ids.has(x.id))
+                .map(x => deleteDoc(x.ref))
         );
 
         await Promise.all(
-
-            arr.map(item =>
+            arr.map(x =>
                 setDoc(
-                    doc(db, name, String(item.id)),
-                    item
+                    doc(db, name, String(x.id)),
+                    x
                 )
             )
-
         );
 
     },
-
-
-    /* --------------------------------------------------------
-       SAVE BUSINESS DATA
-    -------------------------------------------------------- */
 
     async writeBusiness(id, data) {
 
@@ -1413,32 +1395,18 @@ window.__fb = {
 
     },
 
-
-    /* --------------------------------------------------------
-       SAVE SYSTEM SETTINGS
-    -------------------------------------------------------- */
-
     async writeSetting(key, value) {
 
         await setDoc(
-
             doc(db, "systemSettings", "global"),
-
             {
                 [key]: value,
                 updatedAt: serverTimestamp()
             },
-
             { merge: true }
-
         );
 
     },
-
-
-    /* --------------------------------------------------------
-       DELETE BUSINESS
-    -------------------------------------------------------- */
 
     async deleteBusiness(id) {
 
@@ -1452,30 +1420,22 @@ window.__fb = {
 
 };
 
-
 /* ============================================================
-   FIREBASE READY PROMISE
+   FIREBASE READY
    ============================================================ */
 
-window.__fbReady = window.__fb
-    .load()
-    .catch(err => {
+window.__fbReady = window.__fb.load();
 
-        console.error(
-            "Firebase initialization failed:",
-            err
-        );
+window.__fbReady.catch(err => {
 
-        window.__fb.error = err;
+    console.error("Firebase initialization failed:", err);
 
-        throw err;
+    window.__fb.error = err;
 
-    });
-
+});
 </script>
 
 <script>
-
 /* ============================================================
    GLOBAL APPLICATION STATE
    ============================================================ */
@@ -1821,8 +1781,6 @@ function getBizColl(name) {
     );
 
 }
-
-</script>
 // ============ SCREEN MANAGEMENT ============
 function hideAll() {
   document.getElementById('landingPage').style.display = 'none';
