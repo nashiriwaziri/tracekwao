@@ -1226,126 +1226,603 @@ tr:hover td{background:var(--bg3)}
   </div>
 </div>
 
-<script>
+<script type="module">
 /* ============================================================
-   BizBook - Complete Business Management System
-   All functions, CRUD operations, multi-tenant security,
-   role permissions, and employee management
+   FIREBASE INITIALIZATION & FIRESTORE CLOUD DATABASE
    ============================================================ */
 
-// ============ STATE ============
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+import {
+    getFirestore,
+    collection,
+    getDocs,
+    doc,
+    setDoc,
+    deleteDoc,
+    getDoc,
+    serverTimestamp
+}
+from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+
+/* ============================================================
+   FIREBASE CONFIGURATION
+   ============================================================ */
+
+const firebaseConfig = {
+    apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+    authDomain: "ncrs-aeb43.firebaseapp.com",
+    projectId: "ncrs-aeb43",
+    storageBucket: "ncrs-aeb43.firebasestorage.app",
+    messagingSenderId: "786434442929",
+    appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+    measurementId: "G-ZYB71RY8J5"
+};
+
+
+/* ============================================================
+   INITIALIZE FIREBASE
+   ============================================================ */
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+
+/* ============================================================
+   DEFAULT BUSINESS DATA
+   ============================================================ */
+
+const DEFAULT_DATA = {
+    products: [],
+    sales: [],
+    purchases: [],
+    suppliers: [],
+    customers: [],
+    expenses: [],
+    employees: [],
+    notifications: []
+};
+
+
+/* ============================================================
+   GLOBAL FIREBASE HELPER
+   ============================================================ */
+
+window.__fb = {
+
+    app,
+    db,
+
+    cache: {
+        users: [],
+        staff: [],
+        managers: [],
+        businessData: {},
+        settings: {}
+    },
+
+    superSession: false,
+    ready: false,
+
+    /* --------------------------------------------------------
+       LOAD ALL DATA
+    -------------------------------------------------------- */
+
+    async load() {
+
+        const c = this.cache;
+
+        const [
+            users,
+            staff,
+            managers,
+            businessData,
+            settings
+        ] = await Promise.all([
+
+            getDocs(collection(db, "users")),
+            getDocs(collection(db, "staff")),
+            getDocs(collection(db, "managers")),
+            getDocs(collection(db, "businessData")),
+            getDocs(collection(db, "systemSettings"))
+
+        ]);
+
+        c.users = users.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        c.staff = staff.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        c.managers = managers.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        c.businessData = {};
+
+        businessData.docs.forEach(doc => {
+            c.businessData[doc.id] = doc.data();
+        });
+
+        c.settings = {};
+
+        settings.docs.forEach(doc => {
+            c.settings[doc.id] = doc.data();
+        });
+
+        this.ready = true;
+
+        return this;
+    },
+
+
+    /* --------------------------------------------------------
+       SAVE ARRAY COLLECTION
+    -------------------------------------------------------- */
+
+    async writeArray(name, arr) {
+
+        const col = collection(db, name);
+
+        const old = await getDocs(col);
+
+        const ids = new Set(
+            arr.map(item => String(item.id))
+        );
+
+        await Promise.all(
+
+            old.docs
+                .filter(doc => !ids.has(doc.id))
+                .map(doc => deleteDoc(doc.ref))
+
+        );
+
+        await Promise.all(
+
+            arr.map(item =>
+                setDoc(
+                    doc(db, name, String(item.id)),
+                    item
+                )
+            )
+
+        );
+
+    },
+
+
+    /* --------------------------------------------------------
+       SAVE BUSINESS DATA
+    -------------------------------------------------------- */
+
+    async writeBusiness(id, data) {
+
+        await setDoc(
+            doc(db, "businessData", String(id)),
+            data,
+            { merge: true }
+        );
+
+    },
+
+
+    /* --------------------------------------------------------
+       SAVE SYSTEM SETTINGS
+    -------------------------------------------------------- */
+
+    async writeSetting(key, value) {
+
+        await setDoc(
+
+            doc(db, "systemSettings", "global"),
+
+            {
+                [key]: value,
+                updatedAt: serverTimestamp()
+            },
+
+            { merge: true }
+
+        );
+
+    },
+
+
+    /* --------------------------------------------------------
+       DELETE BUSINESS
+    -------------------------------------------------------- */
+
+    async deleteBusiness(id) {
+
+        delete this.cache.businessData[id];
+
+        await deleteDoc(
+            doc(db, "businessData", String(id))
+        );
+
+    }
+
+};
+
+
+/* ============================================================
+   FIREBASE READY PROMISE
+   ============================================================ */
+
+window.__fbReady = window.__fb
+    .load()
+    .catch(err => {
+
+        console.error(
+            "Firebase initialization failed:",
+            err
+        );
+
+        window.__fb.error = err;
+
+        throw err;
+
+    });
+
+</script>
+
+<script>
+
+/* ============================================================
+   GLOBAL APPLICATION STATE
+   ============================================================ */
+
 let currentUser = null;
 let currentBusiness = null;
 let cart = [];
 let charts = {};
-let financePeriod = 'month';
+let financePeriod = "month";
 let pendingStaffRole = null;
 let pendingBizId = null;
 
-// ============ ROLE PERMISSIONS MAP ============
+
+/* ============================================================
+   ROLE PERMISSIONS
+   ============================================================ */
+
 const ROLE_PERMS = {
-  manager: ['dashboard','finance','pos','products','sales','purchases','suppliers','customers','debtors','employees','expenses','notifications','profile','priceCalculator','users'],
-  storekeeper: ['dashboard','products','purchases','suppliers','notifications','profile','priceCalculator'],
-  cashier: ['dashboard','pos','sales','customers','debtors','notifications','profile','priceCalculator'],
-  seller: ['dashboard','pos','sales','customers','notifications','profile','priceCalculator']
+
+    manager: [
+        "dashboard",
+        "finance",
+        "pos",
+        "products",
+        "sales",
+        "purchases",
+        "suppliers",
+        "customers",
+        "debtors",
+        "employees",
+        "expenses",
+        "notifications",
+        "profile",
+        "priceCalculator",
+        "users"
+    ],
+
+    storekeeper: [
+        "dashboard",
+        "products",
+        "purchases",
+        "suppliers",
+        "notifications",
+        "profile",
+        "priceCalculator"
+    ],
+
+    cashier: [
+        "dashboard",
+        "pos",
+        "sales",
+        "customers",
+        "debtors",
+        "notifications",
+        "profile",
+        "priceCalculator"
+    ],
+
+    seller: [
+        "dashboard",
+        "pos",
+        "sales",
+        "customers",
+        "notifications",
+        "profile",
+        "priceCalculator"
+    ]
+
 };
 
-// ============ UTILITIES ============
+
+/* ============================================================
+   GENERAL UTILITIES
+   ============================================================ */
+
 function genId() {
-  return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 6);
+
+    return (
+        "id_" +
+        Date.now().toString(36) +
+        "_" +
+        Math.random().toString(36).substr(2, 6)
+    );
+
 }
 
 function fmt(n) {
-  if (n === null || n === undefined || isNaN(n)) return '0';
-  return Number(n).toLocaleString('en-US');
+
+    if (n === null || n === undefined || isNaN(n)) {
+        return "0";
+    }
+
+    return Number(n).toLocaleString("en-US");
+
 }
 
-function fmtDate(d) {
-  if (!d) return '-';
-  try { return new Date(d).toLocaleDateString('sw-KE', {day:'2-digit',month:'short',year:'numeric'}); }
-  catch(e) { return d; }
+function fmtDate(date) {
+
+    if (!date) return "-";
+
+    try {
+
+        return new Date(date).toLocaleDateString("sw-KE", {
+
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+
+        });
+
+    } catch {
+
+        return date;
+
+    }
+
 }
 
-function fmtDateTime(d) {
-  if (!d) return '-';
-  try { return new Date(d).toLocaleString('sw-KE', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
-  catch(e) { return d; }
+function fmtDateTime(date) {
+
+    if (!date) return "-";
+
+    try {
+
+        return new Date(date).toLocaleString("sw-KE", {
+
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+
+        });
+
+    } catch {
+
+        return date;
+
+    }
+
 }
 
-function toast(msg, type) {
-  type = type || 'i';
-  const c = document.getElementById('toastC');
-  const t = document.createElement('div');
-  t.className = 'toast ' + type;
-  const icons = {s:'fa-check-circle',e:'fa-circle-exclamation',i:'fa-circle-info',w:'fa-triangle-exclamation'};
-  t.innerHTML = '<i class="fa-solid ' + (icons[type]||icons.i) + '"></i>' + msg;
-  c.appendChild(t);
-  setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 3500);
+
+/* ============================================================
+   TOAST NOTIFICATION
+   ============================================================ */
+
+function toast(message, type = "i") {
+
+    const container = document.getElementById("toastC");
+
+    const toast = document.createElement("div");
+
+    toast.className = "toast " + type;
+
+    const icons = {
+
+        s: "fa-check-circle",
+        e: "fa-circle-exclamation",
+        i: "fa-circle-info",
+        w: "fa-triangle-exclamation"
+
+    };
+
+    toast.innerHTML =
+        `<i class="fa-solid ${icons[type] || icons.i}"></i>${message}`;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+
+        toast.remove();
+
+    }, 3500);
+
 }
+
+
+/* ============================================================
+   PASSWORD TOGGLE
+   ============================================================ */
 
 function togPw(id, btn) {
-  const inp = document.getElementById(id);
-  if (!inp) return;
-  if (inp.type === 'password') { inp.type = 'text'; btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>'; }
-  else { inp.type = 'password'; btn.innerHTML = '<i class="fa-solid fa-eye"></i>'; }
+
+    const input = document.getElementById(id);
+
+    if (!input) return;
+
+    if (input.type === "password") {
+
+        input.type = "text";
+
+        btn.innerHTML =
+            '<i class="fa-solid fa-eye-slash"></i>';
+
+    } else {
+
+        input.type = "password";
+
+        btn.innerHTML =
+            '<i class="fa-solid fa-eye"></i>';
+
+    }
+
 }
 
-function pwStr(pw) {
-  const bar = document.getElementById('pwBar');
-  if (!bar) return;
-  let s = 0;
-  if (pw.length >= 6) s++;
-  if (pw.length >= 10) s++;
-  if (/[A-Z]/.test(pw)) s++;
-  if (/[0-9]/.test(pw)) s++;
-  if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const colors = ['','#e74c3c','#e74c3c','#f39c12','#00b894','#00b894'];
-  bar.style.width = (s * 20) + '%';
-  bar.style.background = colors[s] || '#e74c3c';
+
+/* ============================================================
+   PASSWORD STRENGTH
+   ============================================================ */
+
+function pwStr(password) {
+
+    const bar = document.getElementById("pwBar");
+
+    if (!bar) return;
+
+    let score = 0;
+
+    if (password.length >= 6) score++;
+    if (password.length >= 10) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    const colors = [
+
+        "",
+        "#e74c3c",
+        "#e74c3c",
+        "#f39c12",
+        "#00b894",
+        "#00b894"
+
+    ];
+
+    bar.style.width = (score * 20) + "%";
+    bar.style.background = colors[score] || "#e74c3c";
+
 }
 
-function filterTb(tableId, q) {
-  q = q.toLowerCase();
-  const tb = document.getElementById(tableId);
-  if (!tb) return;
-  const rows = tb.querySelectorAll('tbody tr');
-  rows.forEach(function(r) {
-    const txt = r.textContent.toLowerCase();
-    r.style.display = txt.includes(q) ? '' : 'none';
-  });
+
+/* ============================================================
+   TABLE FILTER
+   ============================================================ */
+
+function filterTb(tableId, query) {
+
+    query = query.toLowerCase();
+
+    const table = document.getElementById(tableId);
+
+    if (!table) return;
+
+    table.querySelectorAll("tbody tr")
+        .forEach(row => {
+
+            row.style.display =
+                row.textContent
+                    .toLowerCase()
+                    .includes(query)
+                    ? ""
+                    : "none";
+
+        });
+
 }
+
+
+/* ============================================================
+   BUSINESS HELPERS
+   ============================================================ */
 
 function getBizId() {
-  if (currentUser && currentUser.businessId) return currentUser.businessId;
-  return null;
+
+    return currentUser?.businessId || null;
+
 }
 
 function getOwnerId() {
-  if (currentUser) return currentUser.userId || currentUser.id || null;
-  return null;
-}
 
-// ============ LOCAL STORAGE HELPERS ============
-function getColl(name) {
-  try { return JSON.parse(localStorage.getItem('bb_' + name) || '[]'); }
-  catch(e) { return []; }
-}
+    return currentUser?.userId ||
+           currentUser?.id ||
+           null;
 
-function setColl(name, data) {
-  try { localStorage.setItem('bb_' + name, JSON.stringify(data)); }
-  catch(e) { console.error('Storage error:', e); }
-}
-
-function getBizColl(name) {
-  const bid = getBizId();
-  if (!bid) return [];
-  return getColl(name).filter(function(item) { return item.businessId === bid; });
 }
 
 function getRolePermissions(role) {
-  return ROLE_PERMS[role] || [];
+
+    return ROLE_PERMS[role] || [];
+
 }
 
+
+/* ============================================================
+   LOCAL STORAGE HELPERS
+   ============================================================ */
+
+function getColl(name) {
+
+    try {
+
+        return JSON.parse(
+            localStorage.getItem("bb_" + name) || "[]"
+        );
+
+    } catch {
+
+        return [];
+
+    }
+
+}
+
+function setColl(name, data) {
+
+    try {
+
+        localStorage.setItem(
+            "bb_" + name,
+            JSON.stringify(data)
+        );
+
+    } catch (err) {
+
+        console.error(
+            "Storage Error:",
+            err
+        );
+
+    }
+
+}
+
+function getBizColl(name) {
+
+    const businessId = getBizId();
+
+    if (!businessId) return [];
+
+    return getColl(name).filter(item =>
+        item.businessId === businessId
+    );
+
+}
+
+</script>
 // ============ SCREEN MANAGEMENT ============
 function hideAll() {
   document.getElementById('landingPage').style.display = 'none';
