@@ -1877,16 +1877,1026 @@ async function renderDashboard() {
       <div class="mc b"><div class="mc-icon"><i class="fa-solid fa-calendar-day"></i></div><h3>${fmt(todayTotal)}</h3><p>Mauzo ya Leo (TZS)</p></div>
     </div>`;
 
-    /* Charts */
-    const chartOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' } } } };
-    main.innerHTML = roleCard + '<div class="sh"><div><h2>Dashboard</h2><p>Muhtasari wa biashara yako</p></div></div>' + metricsHtml + '<div class="ch-g"><div class="ch-c"><h4><i class="fa-solid fa-chart-line"></i> Mauzo ya Majuma 7</h4><div class="ch-box"><canvas id="dashSalesChart"></canvas></div></div><div class="ch-c"><h4><i class="fa-solid fa-chart-pie"></i> Bidhaa kwa Category</h4><div class="ch-box"><canvas id="dashCatChart"></canvas></div></div></div><div class="sys-ft">&copy; 2025 SoBoo Software Corporation</div>';
+  /* =========================================================
+   CHARTS CONFIGURATION
+   ========================================================= */
 
-    /* Render charts */
-    const days = [];
-    const daySales = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate
+const chartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
 
+    plugins: {
+        legend: {
+            labels: {
+                color: '#9a9ab0',
+                font: {
+                    size: 11
+                }
+            }
+        }
+    },
+
+    scales: {
+        x: {
+            ticks: {
+                color: '#5a5a72'
+            },
+            grid: {
+                color: '#2a2a3a'
+            }
+        },
+
+        y: {
+            ticks: {
+                color: '#5a5a72'
+            },
+            grid: {
+                color: '#2a2a3a'
+            }
+        }
+    }
+};
+
+
+/* =========================================================
+   MAIN DASHBOARD CONTENT
+   ========================================================= */
+
+main.innerHTML =
+    roleCard +
+    'Dashboard Muhtasari wa biashara yako' +
+    metricsHtml +
+    ' Mauzo ya Majuma 7 Bidhaa kwa Category © 2025 SoBoo Software Corporation';
+
+
+/* =========================================================
+   RENDER CHARTS
+   ========================================================= */
+
+const days = [];
+const daySales = [];
+
+
+/* ---------------------------------------------------------
+   CALCULATE SALES FOR THE LAST 7 DAYS
+   --------------------------------------------------------- */
+
+for (let i = 6; i >= 0; i--) {
+
+    const d = new Date();
+
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+
+    const nextD = new Date(d);
+
+    nextD.setDate(nextD.getDate() + 1);
+
+    /* Day label */
+    days.push(
+        d.toLocaleDateString('sw-TZ', {
+            weekday: 'short'
+        })
+    );
+
+    /* Calculate total sales for this day */
+    let dayTotal = 0;
+
+    salesSnap.docs.forEach(doc => {
+
+        const data = doc.data();
+
+        const t = data.createdAt;
+
+        if (!t) return;
+
+        const td = t.toDate
+            ? t.toDate()
+            : new Date(t);
+
+        if (td >= d && td < nextD) {
+
+            dayTotal += Number(data.total || 0);
+
+        }
+
+    });
+
+    daySales.push(dayTotal);
+}
+      daySales.push(dayTotal);
+    }
+    const ctx1 = $('dashSalesChart');
+    if (ctx1) { chartInstances.sales = new Chart(ctx1, { type: 'line', data: { labels: days, datasets: [{ label: 'Mauzo (TZS)', data: daySales, borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,0.1)', fill: true, tension: 0.4 }] }, options: chartOpts }); }
+
+    /* Category chart */
+    const catMap = {};
+    productsSnap.docs.forEach(d => { const c = d.data().category || 'Other'; catMap[c] = (catMap[c] || 0) + 1; });
+    const catLabels = Object.keys(catMap);
+    const catData = Object.values(catMap);
+    const catColors = ['#6c5ce7', '#00b894', '#0984e3', '#f39c12', '#e74c3c', '#a29bfe', '#5a5a72'];
+    const ctx2 = $('dashCatChart');
+    if (ctx2) { chartInstances.cat = new Chart(ctx2, { type: 'doughnut', data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors.slice(0, catLabels.length) }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9a9ab0', font: { size: 11 } } } } } }); }
+
+  } catch (err) {
+    main.innerHTML = roleCard + '<div class="sh"><div><h2>Dashboard</h2></div></div>' + '<div class="empty-s"><i class="fa-solid fa-circle-exclamation"></i><p>' + err.message + '</p></div>';
+  }
+}
+
+/* ============================================================
+   OWNER: MANAGE MANAGERS
+   ============================================================ */
+async function renderManagers() {
+  if (!checkAuth() || !checkRole('owner')) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Manage Managers</h2><p>Ongeza, hariri, na simamia watumiaji wako wa Meneja.</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openAddManagerModal()"><i class="fa-solid fa-user-plus"></i> Ongeza Meneja</button></div></div><div id="managersList"></div>';
+
+  try {
+    const snap = await db.collection('users').where('bizId', '==', currentBizId).where('role', '==', 'manager').get();
+    const container = $('managersList');
+    if (snap.empty) { container.innerHTML = '<div class="empty-s"><i class="fa-solid fa-user-tie"></i><p>Hakuna watumiaji wa Meneja bado.</p></div>'; return; }
+    let html = '<div class="mgr-grid">';
+    snap.docs.forEach(doc => {
+      const m = doc.data();
+      const isActive = m.status !== 'suspended';
+      html += '<div class="mgr-card"><div class="emp-card-head"><div class="emp-av" style="background:var(--warning)">' + getInitials(m.name) + '</div><div><h4>' + (m.name || '-') + '</h4><p>' + (m.email || '-') + '</p></div></div><div class="emp-card-body"><span class="emp-tag role">Meneja</span><span class="emp-tag status ' + (isActive ? '' : 'inactive') + '">' + (isActive ? 'Active' : 'Suspended') + '</span></div><div class="emp-card-foot"><button class="btn btn-xs btn-o" onclick="editManager(\'' + doc.id + '\')"><i class="fa-solid fa-pen"></i> Edit</button><button class="btn btn-xs btn-w" onclick="toggleManagerStatus(\'' + doc.id + '\',' + isActive + ')"><i class="fa-solid fa-' + (isActive ? 'pause' : 'play') + '"></i> ' + (isActive ? 'Suspend' : 'Activate') + '</button></div></div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (err) {
+    $('managersList').innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>';
+  }
+}
+function openAddManagerModal(editId) {
+  const isEdit = !!editId;
+  $('genModalTitle').textContent = isEdit ? 'Edit Manager' : 'Ongeza Meneja Mpya';
+  $('genModalBody').innerHTML = '<form id="managerForm"><input type="hidden" id="mgrEditId" value="' + (editId || '') + '"/><div class="fg"><label>Full Name <span class="req">*</span></label><input class="fi" id="mgrName" required placeholder="Jina la Meneja"/></div><div class="fg"><label>Email <span class="req">*</span></label><input class="fi" id="mgrEmail" type="email" required placeholder="manager@email.com"/></div><div class="fg"><label>Phone</label><input class="fi" id="mgrPhone" placeholder="0712345678"/></div><div class="fg" id="mgrPassField"><label>Password <span class="req">*</span></label><input class="fi" id="mgrPass" type="password" placeholder="Password"/></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">' + (isEdit ? 'Save Changes' : 'Add Manager') + '</button></div></form>';
+  $('genModal').classList.add('show');
+  $('managerForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const editId2 = $('mgrEditId').value;
+    const name = $('mgrName').value.trim();
+    const email = $('mgrEmail').value.trim();
+    const phone = $('mgrPhone').value.trim();
+    const pass = $('mgrPass').value;
+    if (!name || !email) { toast('Jaza sehemu zinazohitajika.', 'e'); return; }
+    try {
+      if (editId2) {
+        const updates = { name, email, phone };
+        if (pass) updates.password = pass; /* Note: password change would need Firebase Admin SDK */
+        await db.collection('users').doc(editId2).update(updates);
+        logActivity('Edit Manager', 'Edited manager: ' + name);
+        toast('Manager updated.', 's');
+      } else {
+        if (!pass || pass.length < 6) { toast('Password lazima iwe na angalau herufi 6.', 'e'); return; }
+        const cred = await auth.createUserWithEmailAndPassword(email, pass);
+        await db.collection('users').doc(cred.user.uid).set({
+          uid: cred.user.uid, name, email, phone, role: 'manager',
+          bizId: currentBizId, ownerId: currentUser.uid, managerId: cred.user.uid,
+          status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        logActivity('Add Manager', 'Added manager: ' + name);
+        toast('Manager ameongezwa.', 's');
+        /* Sign back in as owner (createUserWithEmailAndPassword changes the current user) */
+        await auth.signInWithEmailAndPassword(currentUser.email, '/* stored elsewhere */');
+      }
+      closeGenModal();
+      renderManagers();
+    } catch (err) { toast(err.message, 'e'); }
+  };
+  if (isEdit) {
+    $('mgrPassField').style.display = 'none';
+    db.collection('users').doc(editId).get().then(doc => {
+      if (doc.exists) { const d = doc.data(); $('mgrName').value = d.name || ''; $('mgrEmail').value = d.email || ''; $('mgrPhone').value = d.phone || ''; }
+    });
+  }
+}
+async function editManager(id) { openAddManagerModal(id); }
+async function toggleManagerStatus(id, isActive) {
+  try {
+    await db.collection('users').doc(id).update({ status: isActive ? 'suspended' : 'active' });
+    logActivity('Toggle Manager', (isActive ? 'Suspended' : 'Activated') + ' manager: ' + id);
+    toast('Manager status updated.', 's');
+    renderManagers();
+  } catch (err) { toast(err.message, 'e'); }
+}
+
+/* ============================================================
+   MANAGER: ONGEZA WAFANYAKAZI
+   ============================================================ */
+function renderOngezaWafanyakazi() {
+  if (!checkAuth() || !checkRole('manager')) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="ongeza-header"><i class="fa-solid fa-user-plus"></i><h3>Ongeza Wafanyakazi</h3><p>Ongeza wafanyakazi wapya chini ya usimamizi wako.</p></div><div style="max-width:500px;margin:0 auto"><form id="ongezaForm"><div class="fg"><label>Jina Kamili <span class="req">*</span></label><input class="fi" id="empName" required placeholder="Jina la Mfanyakazi"/></div><div class="fg"><label>Email <span class="req">*</span></label><input class="fi" id="empEmail" type="email" required placeholder="email@example.com"/></div><div class="fg"><label>Simu</label><input class="fi" id="empPhone" placeholder="0712345678"/></div><div class="fg"><label>Jukumu <span class="req">*</span></label><select class="fi" id="empRole" required><option value="cashier">Cashier</option><option value="seller">Muuzaji</option><option value="storekeeper">Mfanyakazi wa Hifadhi</option></select></div><div class="fg"><label>Password <span class="req">*</span></label><input class="fi" id="empPass" type="password" required placeholder="Password"/></div><button class="btn-auth btn-auth-p" type="submit"><i class="fa-solid fa-user-plus"></i> Ongeza Mfanyakazi</button></form></div>';
+
+  $('ongezaForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $('empName').value.trim();
+    const email = $('empEmail').value.trim();
+    const phone = $('empPhone').value.trim();
+    const role = $('empRole').value;
+    const pass = $('empPass').value;
+    if (!name || !email || !pass) { toast('Jaza sehemu zote.', 'e'); return; }
+    if (pass.length < 6) { toast('Password lazima iwe na angalau herufi 6.', 'e'); return; }
+    try {
+      /* Verify this manager owns the bizId */
+      if (!currentBizId) { toast('Hakuna biashara iliyoidhinishwa.', 'e'); return; }
+      const cred = await auth.createUserWithEmailAndPassword(email, pass);
+      await db.collection('users').doc(cred.user.uid).set({
+        uid: cred.user.uid, name, email, phone, role,
+        bizId: currentBizId,
+        ownerId: currentUserDoc ? currentUserDoc.ownerId : currentUser.uid,
+        managerId: currentUser.uid,
+        status: 'active',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      logActivity('Add Employee', 'Added ' + role + ': ' + name);
+      toast('Mfanyakazi ameongezwa: ' + name, 's');
+      /* Re-sign in as manager */
+      try { await auth.signInWithEmailAndPassword(currentUser.email, pass); } catch(e2) { /* May need re-auth */ }
+      /* Navigate to employees list */
+      navTo('employees');
+    } catch (err) {
+      toast('Hitilafu: ' + err.message, 'e');
+      /* Try to re-authenticate manager if context was lost */
+      if (err.code === 'auth/email-already-in-use') {
+        toast('Email hii tayari inatumika.', 'e');
+      }
+    }
+  };
+}
+
+/* ============================================================
+   EMPLOYEES LIST — OWNER & MANAGER
+   ============================================================ */
+async function renderEmployees() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  let filterRole = '';
+
+  if (currentRole === 'owner') {
+    main.innerHTML = '<div class="sh"><div><h2>Wafanyakazi Wote</h2><p>Wafanyakazi wote wa biashara yako.</p></div></div><div id="employeesContainer"></div>';
+  } else if (currentRole === 'manager') {
+    main.innerHTML = '<div class="sh"><div><h2>Wafanyakazi Wangu</h2><p>Wafanyakazi walioko chini ya usimamizi wako.</p></div></div><div id="employeesContainer"></div>';
+  } else {
+    main.innerHTML = '<div class="empty-s"><i class="fa-solid fa-lock"></i><p>Huna ruhusa ya kuona sehemu hii.</p></div>';
+    return;
+  }
+
+  try {
+    let query = db.collection('users').where('bizId', '==', currentBizId).where('role', 'in', ['cashier', 'seller', 'storekeeper']);
+    const snap = await query.get();
+    const container = $('employeesContainer');
+
+    if (snap.empty) { container.innerHTML = '<div class="empty-s"><i class="fa-solid fa-id-badge"></i><p>Hakuna wafanyakazi.</p></div>'; return; }
+
+    let html = '<div class="emp-grid">';
+    snap.docs.forEach(doc => {
+      const emp = doc.data();
+      /* Manager can only see their own employees */
+      if (currentRole === 'manager' && emp.managerId !== currentUser.uid) return;
+      const isActive = emp.status !== 'suspended';
+      html += '<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:' + roleColor(emp.role) + '">' + getInitials(emp.name) + '</div><div><h4>' + (emp.name || '-') + '</h4><p>' + (emp.email || '-') + '</p></div></div><div class="emp-card-body"><span class="emp-tag role">' + roleLabel(emp.role) + '</span><span class="emp-tag status ' + (isActive ? '' : 'inactive') + '">' + (isActive ? 'Active' : 'Suspended') + '</span></div><div class="emp-card-foot">';
+      if (currentRole === 'manager') {
+        html += '<button class="btn btn-xs btn-o" onclick="editEmployee(\'' + doc.id + '\')"><i class="fa-solid fa-pen"></i></button>';
+        html += '<button class="btn btn-xs btn-w" onclick="toggleEmployeeStatus(\'' + doc.id + '\',' + isActive + ')"><i class="fa-solid fa-' + (isActive ? 'pause' : 'play') + '"></i></button>';
+        html += '<button class="btn btn-xs btn-d" onclick="deleteEmployee(\'' + doc.id + '\')"><i class="fa-solid fa-trash"></i></button>';
+      } else {
+        html += '<button class="btn btn-xs btn-o" onclick="viewEmployeeActivities(\'' + doc.id + '\')"><i class="fa-solid fa-clock-rotate-left"></i> Shughuli</button>';
+      }
+      html += '</div></div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (err) {
+    $('employeesContainer').innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>';
+  }
+}
+
+async function editEmployee(id) {
+  if (!checkAuth()) return;
+  try {
+    const doc = await db.collection('users').doc(id).get();
+    if (!doc.exists) { toast('Mfanyakazi haipo.', 'e'); return; }
+    const emp = doc.data();
+    /* Verify manager relationship */
+    if (currentRole === 'manager' && emp.managerId !== currentUser.uid) { toast('Huruhsa.', 'e'); return; }
+
+    $('genModalTitle').textContent = 'Edit Mfanyakazi';
+    $('genModalBody').innerHTML = '<form id="editEmpForm"><div class="fg"><label>Jina</label><input class="fi" id="editEmpName" value="' + (emp.name || '') + '"/></div><div class="fg"><label>Simu</label><input class="fi" id="editEmpPhone" value="' + (emp.phone || '') + '"/></div><div class="fg"><label>Jukumu</label><select class="fi" id="editEmpRole"><option value="cashier"' + (emp.role === 'cashier' ? ' selected' : '') + '>Cashier</option><option value="seller"' + (emp.role === 'seller' ? ' selected' : '') + '>Muuzaji</option><option value="storekeeper"' + (emp.role === 'storekeeper' ? ' selected' : '') + '>Mfanyakazi wa Hifadhi</option></select></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Save</button></div></form>';
+    $('genModal').classList.add('show');
+
+    $('editEmpForm').onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await db.collection('users').doc(id).update({
+          name: $('editEmpName').value.trim(),
+          phone: $('editEmpPhone').value.trim(),
+          role: $('editEmpRole').value
+        });
+        logActivity('Edit Employee', 'Edited: ' + $('editEmpName').value.trim());
+        toast('Updated.', 's');
+        closeGenModal();
+        renderEmployees();
+      } catch (err) { toast(err.message, 'e'); }
+    };
+  } catch (err) { toast(err.message, 'e'); }
+}
+
+async function toggleEmployeeStatus(id, isActive) {
+  if (!checkAuth()) return;
+  try {
+    if (currentRole === 'manager') {
+      const doc = await db.collection('users').doc(id).get();
+      if (!doc.exists || doc.data().managerId !== currentUser.uid) { toast('Huruhsa.', 'e'); return; }
+    }
+    await db.collection('users').doc(id).update({ status: isActive ? 'suspended' : 'active' });
+    logActivity('Toggle Employee', (isActive ? 'Suspended' : 'Activated') + ': ' + id);
+    toast('Status updated.', 's');
+    renderEmployees();
+  } catch (err) { toast(err.message, 'e'); }
+}
+
+async function deleteEmployee(id) {
+  if (!checkAuth()) return;
+  if (currentRole === 'manager') {
+    const doc = await db.collection('users').doc(id).get();
+    if (!doc.exists || doc.data().managerId !== currentUser.uid) { toast('Huruhsa.', 'e'); return; }
+  }
+  if (!confirm('Futa mfanyakazi huyu?')) return;
+  try {
+    await db.collection('users').doc(id).delete();
+    logActivity('Delete Employee', 'Deleted: ' + id);
+    toast('Mfanyakazi amefutwa.', 's');
+    renderEmployees();
+  } catch (err) { toast(err.message, 'e'); }
+}
+
+async function viewEmployeeActivities(uid) {
+  if (!checkAuth()) return;
+  try {
+    const snap = await db.collection('activityLogs').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(50).get();
+    const userDoc = await db.collection('users').doc(uid).get();
+    const userName = userDoc.exists ? userDoc.data().name : uid;
+    $('genModalTitle').textContent = 'Shughuli: ' + userName;
+    if (snap.empty) { $('genModalBody').innerHTML = '<div class="empty-s"><p>Hakuna shughuli.</p></div>'; }
+    else {
+      let html = '';
+      snap.docs.forEach(d => {
+        const a = d.data();
+        html += '<div class="notif-item"><i class="fa-solid fa-circle-dot" style="color:var(--primary2)"></i><div><h5>' + (a.action || '') + '</h5><p>' + (a.details || '') + ' — ' + fmtDateTime(a.createdAt) + '</p></div></div>';
+      });
+      $('genModalBody').innerHTML = html;
+    }
+    $('genModal').classList.add('show');
+  } catch (err) { toast(err.message, 'e'); }
+}
+
+/* ============================================================
+   PRODUCTS — WITH IMAGE UPLOAD
+   ============================================================ */
+let productImageInputId = 'prodImageFile_' + Date.now();
+async function renderProducts() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  const inputId = 'prodImageFile_' + Date.now();
+  productImageInputId = inputId;
+
+  main.innerHTML = '<div class="sh"><div><h2>Bidhaa</h2><p>Simamia bidhaa zako.</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openAddProductModal(\'' + inputId + '\')"><i class="fa-solid fa-plus"></i> Ongeza Bidhaa</button></div></div><div class="sb-bar"><i class="fa-solid fa-search"></i><input placeholder="Tafuta bidhaa..." oninput="filterProducts(this.value)"/></div><div id="productsGrid" class="emp-grid"></div><input type="file" id="' + inputId + '" accept="image/*" style="display:none" onchange="handleProductImageSelect(event,\'' + inputId + '\')"/>';
+
+  await loadProducts();
+}
+async function loadProducts(filter) {
+  if (!currentBizId) return;
+  try {
+    let query = db.collection('products').where('bizId', '==', currentBizId);
+    const snap = await query.get();
+    const container = $('productsGrid');
+    if (!container) return;
+    if (snap.empty) { container.innerHTML = '<div class="empty-s"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa.</p></div>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const p = doc.data();
+      if (filter && !p.name.toLowerCase().includes(filter.toLowerCase()) && !(p.category || '').toLowerCase().includes(filter.toLowerCase())) return;
+      const img = p.image ? '<img src="' + p.image + '" style="width:100%;height:80px;object-fit:cover;border-radius:6px;background:var(--bg3);margin-bottom:8px"/>' : '<div style="width:100%;height:80px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;margin-bottom:8px"><i class="fa-solid fa-image" style="color:var(--text3)"></i></div>';
+      html += '<div class="emp-card"><div class="text-center">' + img + '</div><h4 style="font-size:14px;margin-bottom:4px">' + (p.name || '-') + '</h4><p style="color:var(--success);font-weight:700;font-size:15px">' + fmt(p.price) + ' TZS</p><p style="font-size:11px;color:var(--text3);margin-top:4px">Stock: ' + (p.stock || 0) + ' | ' + (p.category || '-') + '</p><div class="emp-card-foot" style="margin-top:10px"><button class="btn btn-xs btn-o" onclick="editProduct(\'' + doc.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-xs btn-d" onclick="deleteProduct(\'' + doc.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+    });
+    container.innerHTML = html || '<div class="empty-s"><p>Hakuna matokeo.</p></div>';
+  } catch (err) {
+    const container = $('productsGrid');
+    if (container) container.innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>';
+  }
+}
+function filterProducts(val) { loadProducts(val); }
+
+function handleProductImageSelect(e, inputId) {
+  const file = e.target.files[0];
+  if (!file) return;
+  handleImageSelection(file, 'product', (url) => {
+    /* Store URL in a hidden field or temp var */
+    if ($('prodTempImage')) $('prodTempImage').value = url;
+    else {
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.id = 'prodTempImage';
+      hidden.value = url;
+      document.body.appendChild(hidden);
+    }
+    const nameEl = $('prodImageName');
+    if (nameEl) nameEl.textContent = file.name + ' (optimized)';
+  }, inputId);
+}
+
+function openAddProductModal(inputId) {
+  /* Remove old temp image */
+  const old = $('prodTempImage');
+  if (old) old.remove();
+
+  $('genModalTitle').textContent = 'Ongeza Bidhaa';
+  $('genModalBody').innerHTML = '<form id="addProdForm"><div class="fg"><label>Jina la Bidhaa <span class="req">*</span></label><input class="fi" id="prodName" required/></div><div class="fg"><label>Category</label><input class="fi" id="prodCategory" placeholder="Electronics, Food, etc."/></div><div class="fg"><label>Bei (TZS) <span class="req">*</span></label><input class="fi" id="prodPrice" type="number" min="0" step="0.01" required/></div><div class="fg"><label>Stock</label><input class="fi" id="prodStock" type="number" min="0" value="0"/></div><div class="fg"><label>Bei ya Gharama (TZS)</label><input class="fi" id="prodCost" type="number" min="0" step="0.01" oninput="calcProdSellingPrice()"/></div><div class="fg"><label>Description</label><textarea class="fi" id="prodDesc" rows="2"></textarea></div><div class="fg"><label>Picha ya Bidhaa</label><button type="button" class="btn btn-o btn-sm" onclick="$(\'' + inputId + '\').click()"><i class="fa-solid fa-cloud-upload-alt"></i> Choose Image</button><span id="prodImageName" style="font-size:12px;color:var(--text3);margin-left:8px"></span></div><div class="fg" style="margin-top:8px"><button type="button" class="btn btn-i btn-xs" onclick="openPriceCalc()"><i class="fa-solid fa-calculator"></i> Kokotoa Bei</button></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Save Bidhaa</button></div></form>';
+  $('genModal').classList.add('show');
+
+  $('addProdForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const imageUrl = ($('prodTempImage') ? $('prodTempImage').value : '') || '';
+    const data = {
+      name: $('prodName').value.trim(),
+      category: $('prodCategory').value.trim(),
+      price: parseFloat($('prodPrice').value) || 0,
+      stock: parseInt($('prodStock').value) || 0,
+      cost: parseFloat($('prodCost').value) || 0,
+      description: $('prodDesc').value.trim(),
+      image: imageUrl,
+      bizId: currentBizId,
+      ownerId: currentUserDoc ? currentUserDoc.ownerId : currentUser.uid,
+      managerId: currentUserDoc ? currentUserDoc.managerId : null,
+      status: 'active',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    try {
+      await db.collection('products').add(data);
+      logActivity('Add Product', 'Added: ' + data.name);
+      toast('Bidhaa imeongezwa.', 's');
+      closeGenModal();
+      loadProducts();
+    } catch (err) { toast(err.message, 'e'); }
+  };
+}
+function calcProdSellingPrice() {
+  const cost = parseFloat($('prodCost').value) || 0;
+  if (cost > 0) { const selling = Math.round(cost * 1.3); $('prodPrice').value = selling; }
+}
+async function editProduct(id) {
+  if (!checkAuth()) return;
+  try {
+    const doc = await db.collection('products').doc(id).get();
+    if (!doc.exists) return;
+    const p = doc.data();
+    /* Verify biz ownership */
+    if (p.bizId !== currentBizId) { toast('Huruhsa.', 'e'); return; }
+
+    const old = $('prodTempImage');
+    if (old) old.remove();
+    /* Set existing image as temp */
+    if (p.image) {
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden'; hidden.id = 'prodTempImage'; hidden.value = p.image;
+      document.body.appendChild(hidden);
+    }
+
+    const inputId = productImageInputId;
+    $('genModalTitle').textContent = 'Edit Bidhaa';
+    $('genModalBody').innerHTML = '<form id="editProdForm"><div class="fg"><label>Jina</label><input class="fi" id="editProdName" value="' + (p.name || '') + '" required/></div><div class="fg"><label>Category</label><input class="fi" id="editProdCategory" value="' + (p.category || '') + '"/></div><div class="fg"><label>Bei (TZS)</label><input class="fi" id="editProdPrice" type="number" value="' + (p.price || 0) + '" required/></div><div class="fg"><label>Stock</label><input class="fi" id="editProdStock" type="number" value="' + (p.stock || 0) + '"/></div><div class="fg"><label>Bei ya Gharama</label><input class="fi" id="editProdCost" type="number" value="' + (p.cost || 0) + '"/></div><div class="fg"><label>Description</label><textarea class="fi" id="editProdDesc" rows="2">' + (p.description || '') + '</textarea></div><div class="fg"><label>Picha</label>' + (p.image ? '<img src="' + p.image + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;margin-bottom:6px;display:block"/>' : '') + '<button type="button" class="btn btn-o btn-sm" onclick="$(\'' + inputId + '\').click()"><i class="fa-solid fa-cloud-upload-alt"></i> Replace Image</button><span id="prodImageName" style="font-size:12px;color:var(--text3);margin-left:8px">' + (p.image ? 'Existing' : '') + '</span></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Save</button></div></form>';
+    $('genModal').classList.add('show');
+
+    $('editProdForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const imageUrl = ($('prodTempImage') ? $('prodTempImage').value : '') || p.image || '';
+      try {
+        await db.collection('products').doc(id).update({
+          name: $('editProdName').value.trim(),
+          category: $('editProdCategory').value.trim(),
+          price: parseFloat($('editProdPrice').value) || 0,
+          stock: parseInt($('editProdStock').value) || 0,
+          cost: parseFloat($('editProdCost').value) || 0,
+          description: $('editProdDesc').value.trim(),
+          image: imageUrl
+        });
+        logActivity('Edit Product', 'Edited: ' + $('editProdName').value.trim());
+        toast('Updated.', 's');
+        closeGenModal();
+        loadProducts();
+      } catch (err) { toast(err.message, 'e'); }
+    };
+  } catch (err) { toast(err.message, 'e'); }
+}
+async function deleteProduct(id) {
+  if (!checkAuth()) return;
+  try {
+    const doc = await db.collection('products').doc(id).get();
+    if (!doc.exists || doc.data().bizId !== currentBizId) { toast('Huruhsa.', 'e'); return; }
+  } catch (err) { toast(err.message, 'e'); return; }
+  if (!confirm('Futa bidhaa hii?')) return;
+  try { await db.collection('products').doc(id).delete(); logActivity('Delete Product', 'Deleted: ' + id); toast('Imefutwa.', 's'); loadProducts(); } catch (err) { toast(err.message, 'e'); }
+}
+
+/* ============================================================
+   POINT OF SALE
+   ============================================================ */
+async function renderPOS() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="pos-layout"><div><div class="sh" style="margin-bottom:12px"><h2>Point of Sale</h2></div><div class="sb-bar"><i class="fa-solid fa-search"></i><input placeholder="Tafuta bidhaa..." oninput="searchPOSProducts(this.value)"/></div><div class="pos-products" id="posProducts"></div></div><div class="pos-cart"><div class="pos-cart-head">Cart (<span id="cartCount">0</span>)</div><div class="pos-cart-body" id="cartBody"><div class="empty-s" style="padding:20px"><p>Cart ni tupu.</p></div></div><div class="pos-cart-foot"><div class="pos-total"><span>Jumla:</span><span id="cartTotal">0 TZS</span></div><button class="btn btn-p" style="width:100%" onclick="completeSale()"><i class="fa-solid fa-check"></i> Maliza Mauzo</button></div></div></div>';
+  cart = [];
+  updateCartUI();
+  await loadPOSProducts();
+}
+async function loadPOSProducts(filter) {
+  if (!currentBizId) return;
+  try {
+    const snap = await db.collection('products').where('bizId', '==', currentBizId).where('status', '==', 'active').get();
+    const container = $('posProducts');
+    if (!container) return;
+    if (snap.empty) { container.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa.</p></div>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const p = doc.data();
+      if (filter && !p.name.toLowerCase().includes(filter.toLowerCase())) return;
+      if ((p.stock || 0) <= 0) return; /* Skip out of stock */
+      const img = p.image ? '<img src="' + p.image + '" alt=""/>' : '<div style="width:100%;height:80px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-image" style="color:var(--text3)"></i></div>';
+      html += '<div class="pos-p-card" onclick="addToCart(\'' + doc.id + '\',\'' + (p.name || '').replace(/'/g, "\\'") + '\',' + (p.price || 0) + ',' + (p.stock || 0) + ')">' + img + '<h5>' + (p.name || '-') + '</h5><div class="pos-p-price">' + fmt(p.price) + '</div><div class="pos-p-stock">Stock: ' + (p.stock || 0) + '</div></div>';
+    });
+    container.innerHTML = html || '<div class="empty-s" style="grid-column:1/-1"><p>Hakuna matokeo.</p></div>';
+  } catch (err) {
+    const container = $('posProducts');
+    if (container) container.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><p>' + err.message + '</p></div>';
+  }
+}
+function searchPOSProducts(val) { loadPOSProducts(val); }
+function addToCart(prodId, name, price, maxStock) {
+  const existing = cart.find(c => c.prodId === prodId);
+  if (existing) {
+    if (existing.qty >= maxStock) { toast('Stock haiwezi kupita ' + maxStock, 'w'); return; }
+    existing.qty++;
+  } else {
+    cart.push({ prodId, name, price, qty: 1, maxStock });
+  }
+  updateCartUI();
+}
+function updateCartQty(prodId, delta) {
+  const item = cart.find(c => c.prodId === prodId);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) cart = cart.filter(c => c.prodId !== prodId);
+  else if (item.qty > item.maxStock) { item.qty = item.maxStock; toast('Stock limit.', 'w'); }
+  updateCartUI();
+}
+function removeFromCart(prodId) { cart = cart.filter(c => c.prodId !== prodId); updateCartUI(); }
+function updateCartUI() {
+  const body = $('cartBody');
+  const countEl = $('cartCount');
+  const totalEl = $('cartTotal');
+  if (!body) return;
+  if (cart.length === 0) { body.innerHTML = '<div class="empty-s" style="padding:20px"><p>Cart ni tupu.</p></div>'; if (countEl) countEl.textContent = '0'; if (totalEl) totalEl.textContent = '0 TZS'; return; }
+  let total = 0;
+  let html = '';
+  cart.forEach(c => {
+    const sub = c.price * c.qty;
+    total += sub;
+    html += '<div class="cart-item"><div class="cart-item-info"><h6>' + c.name + '</h6><span>' + fmt(c.price) + ' x ' + c.qty + '</span></div><div class="cart-qty"><button onclick="updateCartQty(\'' + c.prodId + '\',-1)">-</button><span>' + c.qty + '</span><button onclick="updateCartQty(\'' + c.prodId + '\',1)">+</button></div><div class="cart-item-price">' + fmt(sub) + '</div><button class="cart-item-rm" onclick="removeFromCart(\'' + c.prodId + '\')"><i class="fa-solid fa-xmark"></i></button></div>';
+  });
+  body.innerHTML = html;
+  if (countEl) countEl.textContent = cart.length;
+  if (totalEl) totalEl.textContent = fmt(total) + ' TZS';
+}
+async function completeSale() {
+  if (!checkAuth() || cart.length === 0) { toast('Cart ni tupu.', 'w'); return; }
+  let total = 0;
+  const items = cart.map(c => { const sub = c.price * c.qty; total += sub; return { prodId: c.prodId, name: c.name, price: c.price, qty: c.qty, subtotal: sub }; });
+  try {
+    /* Use batch for atomicity */
+    const batch = db.batch();
+    const saleRef = db.collection('sales').doc();
+    batch.set(saleRef, {
+      bizId: currentBizId,
+      ownerId: currentUserDoc ? currentUserDoc.ownerId : currentUser.uid,
+      managerId: currentUserDoc ? currentUserDoc.managerId : null,
+      sellerId: currentUser.uid,
+      sellerName: currentUserDoc ? currentUserDoc.name : '',
+      items: items,
+      total: total,
+      paymentMethod: 'cash',
+      status: 'completed',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    /* Update stock */
+    for (const item of items) {
+      const prodRef = db.collection('products').doc(item.prodId);
+      const prodDoc = await prodRef.get();
+      if (prodDoc.exists) {
+        const newStock = Math.max(0, (prodDoc.data().stock || 0) - item.qty);
+        batch.update(prodRef, { stock: newStock });
+      }
+    }
+    await batch.commit();
+    logActivity('Sale', 'Completed sale: ' + fmt(total) + ' TZS (' + items.length + ' items)');
+    toast('Mauzo yamekamilika: ' + fmt(total) + ' TZS', 's');
+    cart = [];
+    updateCartUI();
+    loadPOSProducts();
+    showReceipt(saleRef.id, items, total);
+  } catch (err) { toast('Hitilafu: ' + err.message, 'e'); }
+}
+function showReceipt(saleId, items, total) {
+  let itemsHtml = items.map(i => '<div class="rc-line"><span>' + i.name + ' x' + i.qty + '</span><span>' + fmt(i.subtotal) + '</span></div>').join('');
+  $('genModalTitle').textContent = 'Receipt';
+  $('genModalBody').innerHTML = '<div class="receipt-content"><h3>BizBook Receipt</h3><div class="rc-line"><span>ID:</span><span>' + saleId.substring(0, 8) + '</span></div><div class="rc-line"><span>Date:</span><span>' + new Date().toLocaleString('sw-TZ') + '</span></div><div class="rc-line"><span>Seller:</span><span>' + (currentUserDoc ? currentUserDoc.name : '') + '</span></div><div class="rc-divider"></div>' + itemsHtml + '<div class="rc-divider"></div><div class="rc-line rc-total"><span>TOTAL</span><span>' + fmt(total) + ' TZS</span></div><div class="rc-divider"></div><p style="text-align:center;font-size:10px">Asante!</p></div><div class="modal-actions"><button class="btn btn-o" onclick="closeGenModal()">Close</button></div>';
+  $('genModal').classList.add('show');
+}
+
+/* ============================================================
+   SALES LIST
+   ============================================================ */
+async function renderSales() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Mauzo</h2><p>Rekodi za mauzo.</p></div></div><div class="tw"><div class="ts"><table><thead><tr><th>ID</th><th>Date</th><th>Items</th><th>Total</th><th>Seller</th><th>Status</th></tr></thead><tbody id="salesBody"></tbody></table></div></div>';
+  try {
+    let query = db.collection('sales').where('bizId', '==', currentBizId).orderBy('createdAt', 'desc').limit(100);
+    /* Manager/Staff see only their own */
+    if (currentRole !== 'owner') query = db.collection('sales').where('bizId', '==', currentBizId).where('sellerId', '==', currentUser.uid).orderBy('createdAt', 'desc').limit(100);
+    const snap = await query.get();
+    if (snap.empty) { $('salesBody').innerHTML = '<tr><td colspan="6" class="empty-s"><p>Hakuna mauzo.</p></td></tr>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const s = doc.data();
+      html += '<tr><td>' + doc.id.substring(0, 8) + '</td><td>' + fmtDateTime(s.createdAt) + '</td><td>' + (s.items ? s.items.length : 0) + '</td><td style="color:var(--success);font-weight:600">' + fmt(s.total) + '</td><td>' + (s.sellerName || '-') + '</td><td><span class="status-badge ' + (s.status || 'completed') + '">' + (s.status || 'completed') + '</span></td></tr>';
+    });
+    $('salesBody').innerHTML = html;
+  } catch (err) { $('salesBody').innerHTML = '<tr><td colspan="6" class="empty-s"><p>' + err.message + '</p></td></tr>'; }
+}
+
+/* ============================================================
+   STOCK
+   ============================================================ */
+async function renderStock() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Stock</h2><p>Hali ya stock ya bidhaa.</p></div></div><div class="tw"><div class="ts"><table><thead><tr><th>Bidhaa</th><th>Category</th><th>Stock</th><th>Bei</th><th>Status</th></tr></thead><tbody id="stockBody"></tbody></table></div></div>';
+  try {
+    const snap = await db.collection('products').where('bizId', '==', currentBizId).get();
+    if (snap.empty) { $('stockBody').innerHTML = '<tr><td colspan="5" class="empty-s"><p>Hakuna bidhaa.</p></td></tr>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const p = doc.data();
+      const stockLevel = (p.stock || 0) <= 5 ? 'low' : (p.stock || 0) <= 20 ? 'medium' : 'good';
+      const statusColor = stockLevel === 'low' ? 'var(--danger)' : stockLevel === 'medium' ? 'var(--warning)' : 'var(--success)';
+      html += '<tr><td>' + (p.name || '-') + '</td><td>' + (p.category || '-') + '</td><td style="font-weight:700;color:' + statusColor + '">' + (p.stock || 0) + '</td><td>' + fmt(p.price) + '</td><td><span style="color:' + statusColor + ';font-size:11px;font-weight:600;text-transform:uppercase">' + stockLevel + '</span></td></tr>';
+    });
+    $('stockBody').innerHTML = html;
+  } catch (err) { $('stockBody').innerHTML = '<tr><td colspan="5" class="empty-s"><p>' + err.message + '</p></td></tr>'; }
+}
+
+/* ============================================================
+   PURCHASES
+   ============================================================ */
+async function renderPurchases() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Manunuzi</h2><p>Rekodi za manunuzi ya bidhaa.</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openAddPurchaseModal()"><i class="fa-solid fa-plus"></i> Ongeza Manunuzi</button></div></div><div class="tw"><div class="ts"><table><thead><tr><th>Date</th><th>Supplier</th><th>Items</th><th>Total</th></tr></thead><tbody id="purchasesBody"></tbody></table></div></div>';
+  try {
+    const snap = await db.collection('purchases').where('bizId', '==', currentBizId).orderBy('createdAt', 'desc').limit(50).get();
+    if (snap.empty) { $('purchasesBody').innerHTML = '<tr><td colspan="4" class="empty-s"><p>Hakuna manunuzi.</p></td></tr>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const p = doc.data();
+      html += '<tr><td>' + fmtDateTime(p.createdAt) + '</td><td>' + (p.supplier || '-') + '</td><td>' + (p.items ? p.items.length : 0) + '</td><td style="color:var(--danger);font-weight:600">' + fmt(p.total) + '</td></tr>';
+    });
+    $('purchasesBody').innerHTML = html;
+  } catch (err) { $('purchasesBody').innerHTML = '<tr><td colspan="4" class="empty-s"><p>' + err.message + '</p></td></tr>'; }
+}
+function openAddPurchaseModal() {
+  $('genModalTitle').textContent = 'Ongeza Manunuzi';
+  $('genModalBody').innerHTML = '<form id="addPurchaseForm"><div class="fg"><label>Supplier</label><input class="fi" id="purchSupplier" required/></div><div class="fg"><label>Total (TZS)</label><input class="fi" id="purchTotal" type="number" min="0" required/></div><div class="fg"><label>Notes</label><textarea class="fi" id="purchNotes" rows="2"></textarea></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Save</button></div></form>';
+  $('genModal').classList.add('show');
+  $('addPurchaseForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await db.collection('purchases').add({
+        bizId: currentBizId, ownerId: currentUserDoc ? currentUserDoc.ownerId : currentUser.uid,
+        supplier: $('purchSupplier').value.trim(), total: parseFloat($('purchTotal').value) || 0,
+        notes: $('purchNotes').value.trim(), createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      logActivity('Purchase', 'Purchase from ' + $('purchSupplier').value.trim());
+      toast('Manunuzi yamesajiliwa.', 's');
+      closeGenModal();
+      renderPurchases();
+    } catch (err) { toast(err.message, 'e'); }
+  };
+}
+
+/* ============================================================
+   SUPPLIERS
+   ============================================================ */
+async function renderSuppliers() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Wauzaji</h2><p>Wauzaji wako wa bidhaa.</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openAddSupplierModal()"><i class="fa-solid fa-plus"></i> Ongeza Muuzaji</button></div></div><div id="suppliersGrid" class="emp-grid"></div>';
+  try {
+    const snap = await db.collection('suppliers').where('bizId', '==', currentBizId).get();
+    const container = $('suppliersGrid');
+    if (snap.empty) { container.innerHTML = '<div class="empty-s"><i class="fa-solid fa-handshake"></i><p>Hakuna wauzaji.</p></div>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const s = doc.data();
+      html += '<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:var(--info)">' + getInitials(s.name) + '</div><div><h4>' + (s.name || '-') + '</h4><p>' + (s.phone || '-') + '</p></div></div><div class="emp-card-body"><span class="emp-tag role">' + (s.category || 'General') + '</span></div><div class="emp-card-foot"><button class="btn btn-xs btn-d" onclick="deleteSupplier(\'' + doc.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+    });
+    container.innerHTML = html;
+  } catch (err) { $('suppliersGrid').innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>'; }
+}
+function openAddSupplierModal() {
+  $('genModalTitle').textContent = 'Ongeza Muuzaji';
+  $('genModalBody').innerHTML = '<form id="addSupplierForm"><div class="fg"><label>Jina <span class="req">*</span></label><input class="fi" id="supName" required/></div><div class="fg"><label>Simu</label><input class="fi" id="supPhone"/></div><div class="fg"><label>Category</label><input class="fi" id="supCat" placeholder="General"/></div><div class="fg"><label>Eneo</label><input class="fi" id="supLocation"/></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Save</button></div></form>';
+  $('genModal').classList.add('show');
+  $('addSupplierForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await db.collection('suppliers').add({ bizId: currentBizId, name: $('supName').value.trim(), phone: $('supPhone').value.trim(), category: $('supCat').value.trim(), location: $('supLocation').value.trim(), createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      toast('Muuzaji ameongezwa.', 's'); closeGenModal(); renderSuppliers();
+    } catch (err) { toast(err.message, 'e'); }
+  };
+}
+async function deleteSupplier(id) {
+  if (!confirm('Futa?')) return;
+  try { await db.collection('suppliers').doc(id).delete(); toast('Imefutwa.', 's'); renderSuppliers(); } catch (err) { toast(err.message, 'e'); }
+}
+
+/* ============================================================
+   CUSTOMERS
+   ============================================================ */
+async function renderCustomers() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Wateja</h2><p>Wateja wako.</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openAddCustomerModal()"><i class="fa-solid fa-plus"></i> Ongeza Mteja</button></div></div><div class="tw"><div class="ts"><table><thead><tr><th>Name</th><th>Phone</th><th>Total Purchases</th><th>Debt</th></tr></thead><tbody id="customersBody"></tbody></table></div></div>';
+  try {
+    const snap = await db.collection('customers').where('bizId', '==', currentBizId).get();
+    if (snap.empty) { $('customersBody').innerHTML = '<tr><td colspan="4" class="empty-s"><p>Hakuna wateja.</p></td></tr>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const c = doc.data();
+      html += '<tr><td>' + (c.name || '-') + '</td><td>' + (c.phone || '-') + '</td><td>' + fmt(c.totalPurchases || 0) + '</td><td style="color:' + ((c.debt || 0) > 0 ? 'var(--danger)' : 'var(--success)') + ';font-weight:600">' + fmt(c.debt || 0) + '</td></tr>';
+    });
+    $('customersBody').innerHTML = html;
+  } catch (err) { $('customersBody').innerHTML = '<tr><td colspan="4" class="empty-s"><p>' + err.message + '</p></td></tr>'; }
+}
+function openAddCustomerModal() {
+  $('genModalTitle').textContent = 'Ongeza Mteja';
+  $('genModalBody').innerHTML = '<form id="addCustForm"><div class="fg"><label>Jina <span class="req">*</span></label><input class="fi" id="custName" required/></div><div class="fg"><label>Simu</label><input class="fi" id="custPhone"/></div><div class="fg"><label>Eneo</label><input class="fi" id="custLocation"/></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Save</button></div></form>';
+  $('genModal').classList.add('show');
+  $('addCustForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await db.collection('customers').add({ bizId: currentBizId, name: $('custName').value.trim(), phone: $('custPhone').value.trim(), location: $('custLocation').value.trim(), totalPurchases: 0, debt: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      toast('Mteja ameongezwa.', 's'); closeGenModal(); renderCustomers();
+    } catch (err) { toast(err.message, 'e'); }
+  };
+}
+
+/* ============================================================
+   DEBTS
+   ============================================================ */
+async function renderDebts() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Madeni</h2><p>Fuatilia madeni ya wateja.</p></div></div><div id="debtsList"></div>';
+  try {
+    const snap = await db.collection('customers').where('bizId', '==', currentBizId).where('debt', '>', 0).get();
+    const container = $('debtsList');
+    if (snap.empty) { container.innerHTML = '<div class="empty-s"><i class="fa-solid fa-hand-holding-dollar"></i><p>Hakuna madeni.</p></div>'; return; }
+    let html = '<div class="debt-alert"><i class="fa-solid fa-triangle-exclamation"></i> Wateja wenye madeni: ' + snap.size + '</div>';
+    html += '<div class="tw"><div class="ts"><table><thead><tr><th>Mteja</th><th>Simu</th><th>Madeni</th><th>Actions</th></tr></thead><tbody>';
+    snap.docs.forEach(doc => {
+      const c = doc.data();
+      html += '<tr><td>' + (c.name || '-') + '</td><td>' + (c.phone || '-') + '</td><td style="color:var(--danger);font-weight:700">' + fmt(c.debt) + '</td><td><button class="btn btn-xs btn-s" onclick="recordDebtPayment(\'' + doc.id + '\',' + (c.debt || 0) + ')"><i class="fa-solid fa-money-bill"></i> Lipa</button></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+    container.innerHTML = html;
+  } catch (err) { $('debtsList').innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>'; }
+}
+function recordDebtPayment(custId, currentDebt) {
+  $('genModalTitle').textContent = 'Lipa Deni';
+  $('genModalBody').innerHTML = '<p style="color:var(--text2);margin-bottom:12px">Madeni ya sasa: <strong style="color:var(--danger)">' + fmt(currentDebt) + ' TZS</strong></p><form id="debtPayForm"><div class="fg"><label>Kiasi cha Malipo (TZS)</label><input class="fi" id="debtPayAmount" type="number" min="0" max="' + currentDebt + '" required/></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-s" type="submit">Lipa</button></div></form>';
+  $('genModal').classList.add('show');
+  $('debtPayForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const amount = parseFloat($('debtPayAmount').value) || 0;
+    if (amount <= 0 || amount > currentDebt) { toast('Kiasi sio sahihi.', 'e'); return; }
+    try {
+      await db.collection('customers').doc(custId).update({ debt: firebase.firestore.FieldValue.increment(-amount) });
+      logActivity('Debt Payment', 'Paid ' + fmt(amount) + ' for customer ' + custId);
+      toast('Malipo yamesajiliwa.', 's'); closeGenModal(); renderDebts();
+    } catch (err) { toast(err.message, 'e'); }
+  };
+}
+
+/* ============================================================
+   EXPENSES
+   ============================================================ */
+async function renderExpenses() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Matumizi</h2><p>Gharama za biashara.</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openAddExpenseModal()"><i class="fa-solid fa-plus"></i> Ongeza Matumizi</button></div></div><div class="tw"><div class="ts"><table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr></thead><tbody id="expensesBody"></tbody></table></div></div>';
+  try {
+    const snap = await db.collection('expenses').where('bizId', '==', currentBizId).orderBy('createdAt', 'desc').limit(50).get();
+    if (snap.empty) { $('expensesBody').innerHTML = '<tr><td colspan="4" class="empty-s"><p>Hakuna matumizi.</p></td></tr>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const e = doc.data();
+      html += '<tr><td>' + fmtDateTime(e.createdAt) + '</td><td>' + (e.description || '-') + '</td><td>' + (e.category || '-') + '</td><td style="color:var(--danger);font-weight:600">' + fmt(e.amount) + '</td></tr>';
+    });
+    $('expensesBody').innerHTML = html;
+  } catch (err) { $('expensesBody').innerHTML = '<tr><td colspan="4" class="empty-s"><p>' + err.message + '</p></td></tr>'; }
+}
+function openAddExpenseModal() {
+  $('genModalTitle').textContent = 'Ongeza Matumizi';
+  $('genModalBody').innerHTML = '<form id="addExpForm"><div class="fg"><label>Description <span class="req">*</span></label><input class="fi" id="expDesc" required/></div><div class="fg"><label>Category</label><select class="fi" id="expCat"><option>Rent</option><option>Utilities</option><option>Salaries</option><option>Transport</option><option>Supplies</option><option>Other</option></select></div><div class="fg"><label>Amount (TZS) <span class="req">*</span></label><input class="fi" id="expAmount" type="number" min="0" required/></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Save</button></div></form>';
+  $('genModal').classList.add('show');
+  $('addExpForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await db.collection('expenses').add({ bizId: currentBizId, description: $('expDesc').value.trim(), category: $('expCat').value, amount: parseFloat($('expAmount').value) || 0, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      logActivity('Expense', $('expDesc').value.trim() + ': ' + fmt($('expAmount').value));
+      toast('Matumizi yamesajiliwa.', 's'); closeGenModal(); renderExpenses();
+    } catch (err) { toast(err.message, 'e'); }
+  };
+}
+
+/* ============================================================
+   REPORTS
+   ============================================================ */
+async function renderReports() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Ripoti</h2><p>Maelezo ya kifedha na biashara.</p></div></div><div class="metrics" id="reportMetrics"></div><div class="ch-g"><div class="ch-c"><h4><i class="fa-solid fa-chart-bar"></i> Mauzo vs Matumizi</h4><div class="ch-box"><canvas id="reportChart1"></canvas></div></div><div class="ch-c"><h4><i class="fa-solid fa-chart-pie"></i> Matumizi kwa Category</h4><div class="ch-box"><canvas id="reportChart2"></canvas></div></div></div>';
+  try {
+    const salesSnap = await db.collection('sales').where('bizId', '==', currentBizId).get();
+    const expSnap = await db.collection('expenses').where('bizId', '==', currentBizId).get();
+    let totalSales = 0, totalExpenses = 0;
+    salesSnap.docs.forEach(d => { totalSales += (d.data().total || 0); });
+    expSnap.docs.forEach(d => { totalExpenses += (d.data().amount || 0); });
+    const profit = totalSales - totalExpenses;
+    $('reportMetrics').innerHTML = '<div class="mc g"><div class="mc-icon"><i class="fa-solid fa-arrow-up"></i></div><h3>' + fmt(totalSales) + '</h3><p>Jumla ya Mauzo</p></div><div class="mc r"><div class="mc-icon"><i class="fa-solid fa-arrow-down"></i></div><h3>' + fmt(totalExpenses) + '</h3><p>Jumla ya Matumizi</p></div><div class="mc ' + (profit >= 0 ? 'g' : 'r') + '"><div class="mc-icon"><i class="fa-solid fa-' + (profit >= 0 ? 'trophy' : 'triangle-exclamation') + '"></i></div><h3>' + fmt(profit) + '</h3><p>Faida / Hasara</p></div><div class="mc a"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>' + salesSnap.size + '</h3><p>Maalum ya Mauzo</p></div>';
+
+    const chartOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' } } } };
+    const ctx1 = $('reportChart1');
+    if (ctx1) { chartInstances.r1 = new Chart(ctx1, { type: 'bar', data: { labels: ['Mauzo', 'Matumizi', 'Faida'], datasets: [{ label: 'TZS', data: [totalSales, totalExpenses, profit], backgroundColor: ['#00b894', '#e74c3c', profit >= 0 ? '#6c5ce7' : '#e74c3c'] }] }, options: chartOpts }); }
+    const expCatMap = {};
+    expSnap.docs.forEach(d => { const c = d.data().category || 'Other'; expCatMap[c] = (expCatMap[c] || 0) + (d.data().amount || 0); });
+    const ctx2 = $('reportChart2');
+    if (ctx2) { chartInstances.r2 = new Chart(ctx2, { type: 'doughnut', data: { labels: Object.keys(expCatMap), datasets: [{ data: Object.values(expCatMap), backgroundColor: ['#6c5ce7', '#00b894', '#0984e3', '#f39c12', '#e74c3c', '#a29bfe'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9a9ab0' } } } } }); }
+  } catch (err) {
+    $('reportMetrics').innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>';
+  }
+}
+
+/* ============================================================
+   ACTIVITIES LOG
+   ============================================================ */
+async function renderActivities() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Shughuli</h2><p>Kumbukumbu za shughuli zilizofanywa.</p></div></div><div id="activitiesList"></div>';
+  try {
+    const snap = await db.collection('activityLogs').where('bizId', '==', currentBizId).orderBy('createdAt', 'desc').limit(50).get();
+    const container = $('activitiesList');
+    if (snap.empty) { container.innerHTML = '<div class="empty-s"><i class="fa-solid fa-clock-rotate-left"></i><p>Hakuna shughuli.</p></div>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const a = doc.data();
+      html += '<div class="notif-item"><i class="fa-solid fa-circle-dot" style="color:' + roleColor(a.role) + '"></i><div><h5>' + (a.action || '') + '</h5><p>' + (a.userName || '') + ' — ' + (a.details || '') + '<br/><span style="font-size:10px;color:var(--text3)">' + fmtDateTime(a.createdAt) + '</span></p></div></div>';
+    });
+    container.innerHTML = html;
+  } catch (err) { $('activitiesList').innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>'; }
+}
+
+/* ============================================================
+   NOTIFICATIONS
+   ============================================================ */
+async function renderNotifications() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Arifa</h2><p>Arifa zako zote.</p></div></div><div id="notifListFull"></div>';
+  try {
+    const snap = await db.collection('notifications').where('userId', '==', currentUser.uid).orderBy('createdAt', 'desc').limit(30).get();
+    const container = $('notifListFull');
+    if (snap.empty) { container.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa.</p></div>'; return; }
+    let html = '';
+    snap.docs.forEach(doc => {
+      const n = doc.data();
+      html += '<div class="notif-item" style="' + (n.read ? 'opacity:0.6' : '') + '"><i class="fa-solid fa-bell" style="color:var(--primary2)"></i><div><h5>' + (n.title || '') + '</h5><p>' + (n.message || '') + '<br/><span style="font-size:10px;color:var(--text3)">' + fmtDateTime(n.createdAt) + '</span></p></div></div>';
+    });
+    container.innerHTML = html;
+  } catch (err) { $('notifListFull').innerHTML = '<div class="empty-s"><p>' + err.message + '</p></div>'; }
+}
+
+/* ============================================================
+   PROFILE
+   ============================================================ */
+async function renderProfile() {
+  if (!checkAuth()) return;
+  const main = $('mainContent');
+  main.innerHTML = '<div class="sh"><div><h2>Profaili</h2><p>Mipangilio ya akaunti yako.</p></div></div><div class="prof-grid"><div class="prof-left"><div class="logo-card"><div class="logo-prev" id="profileLogoPrev"><i class="fa-solid fa-user"></i></div><h4 style="margin-bottom:4px">' + (currentUserDoc.name || '') + '</h4><p style="color:var(--text2);font-size:12px">' + roleLabel(currentRole) + '</p><p style="color:var(--text3);font-size:11px;margin-top:4px">' + (currentUserDoc.email || '') + '</p></div></div><div class="prof-right"><h3>Mipangilio</h3><form id="profileForm"><div class="fg"><label>Full Name</label><input class="fi" id="profName" value="' + (currentUserDoc.name || '') + '"/></div><div class="fg"><label>Phone</label><input class="fi" id="profPhone" value="' + (currentUserDoc.phone || '') + '"/></div><div class="fg"><label>Email</label><input class="fi" id="profEmail" value="' + (currentUserDoc.email || '') + '" disabled style="opacity:0.6"/></div>' + (currentRole === 'owner' ? '<div class="fg"><label>Business Name</label><input class="fi" id="profBizName" value="' + (currentUserDoc.businessName || '') + '"/></div><div class="fg"><label>Business Category</label><input class="fi" id="profBizCat" value="' + (currentUserDoc.businessCategory || '') + '"/></div><div class="fg"><label>Business Location</label><input class="fi" id="profBizLoc" value="' + (currentUserDoc.businessLocation || '') + '"/></div>' : '') + '<button type="submit" class="btn btn-p" style="margin-top:12px"><i class="fa-solid fa-save"></i> Save Changes</button></form><div style="margin-top:24px"><h4 style="margin-bottom:12px;color:var(--danger)">Change Password</h4><form id="changePwForm"><div class="fg"><label>New Password</label><input class="fi" id="newPw" type="password" required/></div><div class="fg"><label>Confirm Password</label><input class="fi" id="newPwC" type="password" required/></div><button type="submit" class="btn btn-w"><i class="fa-solid fa-key"></i> Change Password</button></form></div></div></div>';
+
+  $('profileForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const updates = { name: $('profName').value.trim(), phone: $('profPhone').value.trim() };
+      if (currentRole === 'owner') {
+        updates.businessName = $('profBizName').value.trim();
+        updates.businessCategory = $('profBizCat').value.trim();
+        updates.businessLocation = $('profBizLoc').value.trim();
+        /* Also update business doc */
+        if (currentBizId) {
+          await db.collection('businesses').doc(currentBizId).update({ name: updates.businessName, category: updates.businessCategory, location: updates.businessLocation });
+        }
+      }
+      await db.collection('users').doc(currentUser.uid).update(updates);
+      currentUserDoc = { ...currentUserDoc, ...updates };
+      updateTopbar();
+      toast('Profaili imesasishwa.', 's');
+    } catch (err) { toast(err.message, 'e'); }
+  };
+
+  $('changePwForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const pw = $('newPw').value;
+    const pwc = $('newPwC').value;
+    if (pw !== pwc) { toast('Password hailingani.', 'e'); return; }
+    if (pw.length < 6) { toast('Password lazima iwe na angalau herufi 6.', 'e'); return; }
+    try {
+      await currentUser.updatePassword(pw);
+      toast('Password imebadilishwa.', 's');
+      $('newPw').value = '';
+      $('newPwC').value = '';
+    } catch (err) { toast('Hitilafu: ' + err.message + '. Jaribu kuingia tena kwanza.', 'e'); }
+  };
+}
+
+/* ============================================================
+   GENERIC MODAL
+   ============================================================ */
+function closeGenModal() { $('genModal').classList.remove('show'); }
+
+/* ============================================================
+   PUBLIC SHOWCASE — ADS & PRODUCTS
+   ============================================================ */
+async function renderPublicShowcase() {
+  try {
+    /* Ads */
+    const adsSnap = await db.collection('advertisements').where('status', '==', 'active').get();
+    const adsGrid = $('publicAdsGrid');
+    if (adsSnap.empty) {
+      adsGrid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-bullhorn"></i><p>Hakuna matangazo kwa sasa.</p></div>';
+    } else {
+      let adsHtml = '';
+      adsSnap.docs.forEach(doc => {
+        const a = doc.data();
+        const img = a.image ? '<img class="pub-ad-img" src="' + a.image + '" alt=""/>' : '<div class="pub-ad-img-placeholder"><i class="fa-solid fa-image"></i></div>';
+        adsHtml += '<div class="pub-ad-card">' + img + '<div class="pub-ad-body"><h4>' + (a.title || '') + '</h4><p>' + (a.description || '').substring(0, 100) + '</p>' + (a.link ? '<a class="pub-ad-link" href="' + a.link + '" target="_blank">Soma zaidi <i class="fa-solid fa-arrow-right"></i></a>' : '') + '</div></div>';
+      });
+      adsGrid.innerHTML = adsHtml;
+    }
+
+    /* Products */
+    const prodsSnap = await db.collection('publicProducts').where('status', '==', 'active').get();
+    const prodsGrid = $('publicProductsGrid');
+    if (prodsSnap.empty) {
+      prodsGrid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-boxes-stacked"></i><p>Hakuna bidhaa hadharani.</p></div>';
+    } else {
+      let prodsHtml = '';
+      prodsSnap.docs.forEach(doc => {
+        const p = doc.data();
+        const img = p.image ? '<img class="pub-prod-img" src="' + p.image + '" alt=""/>' : '<div class="pub-prod-img-placeholder"><i class="fa-solid fa-image"></i></div>';
+        prodsHtml += '<div class="pub-prod-card">' + img + '<div class="pub-prod-body"><h4>' + (p.name || '') + '</h4><p>' + (p.description || '').substring(0, 80) + '</p><div class="pub-prod-price">' + fmt(p.price) + ' TZS</div><div class="pub-prod-seller">' + (p.shop || p.seller || '') + (p.location ? ' — ' + p.location : '') + (p.phone ? ' — ' + p.phone : '') + '</div></div></div>';
+      });
+      prodsGrid.innerHTML = prodsHtml;
+    }
+  } catch (err) {
+    /* Silently fail on public page */
+    console.log('Public showcase error:', err.message);
+  }
+}
+
+/* ============================================================
+   INITIALIZATION
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  /* Show landing page */
+  showLanding();
+});
+</script>
+</body>
+</html>
 
 
 
