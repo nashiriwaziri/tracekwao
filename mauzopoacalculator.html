@@ -2846,7 +2846,7 @@ async function handleGroupLogo(e) {
   reader.readAsDataURL(file);
 }
 
-// FIX #17: Completed truncated function + Converted db.collection().doc().update() → updateDoc(doc())
+// ===== UPDATE GROUP SETTINGS =====
 async function updateGroupSettings(e) {
   e.preventDefault();
   try {
@@ -2859,57 +2859,309 @@ async function updateGroupSettings(e) {
       ward: document.getElementById('stWard').value.trim(),
       district: document.getElementById('stDistrict').value.trim(),
       meetingLocation: document.getElementById('stMeetingLoc').value.trim(),
-      shareValue: parseFloat(document.getElementById('stShareVal').value)||10000,
-      minShares: parseInt(document.getElementById('stMinShares').value)||5,
-      loanInterestRate: parseFloat(document.getElementById('stInterest').value)||10,
-      loanTerms: document.getElementById('stLoanTerms').value.trim(),
+      shareValue: parseFloat(document.getElementById('stShareVal').value) || 10000,
+      minShares: parseInt(document.getElementById('stMinShares').value) || 5,
+      loanInterestRate: parseFloat(document.getElementById('stInterest').value) || 10,
+      loanTerms: document.getElementById('stLoanTerms').value,
       contributionFrequency: document.getElementById('stContribFreq').value,
-      contributionAmount: parseFloat(document.getElementById('stContribAmt').value)||10000,
-      groupRules: document.getElementById('stRules').value.trim(),
-      updatedAt: serverTimestamp()
+      contributionAmount: parseFloat(document.getElementById('stContribAmt').value) || 10000,
+      groupRules: document.getElementById('stRules').value
     };
     await updateDoc(doc(db, 'groups', currentGroup.id), data);
     currentGroup = { ...currentGroup, ...data };
+    document.getElementById('sbGroupName').textContent = data.groupName;
     await addAuditLog('settings_updated', 'Mipangilio ya kikundi imebadilishwa');
     toast('Mipangilio imehifadhiwa!');
-    renderSettings();
-    updateTopbar();
-  } catch(err) { toast('Hitilafu: ' + err.message, 'e'); }
+  } catch (err) {
+    toast('Hitilafu: ' + err.message, 'e');
+  }
 }
 
-// ===== FIX #19: Expose all HTML-called functions to global scope for module access =====
-window.renderLoans = renderLoans;
-window.openLoanModal = openLoanModal;
-window.saveLoan = saveLoan;
-window.approveLoan = approveLoan;
-window.disburseLoan = disburseLoan;
-window.openRepayModal = openRepayModal;
-window.saveRepayment = saveRepayment;
-window.renderMeetings = renderMeetings;
-window.openMeetingModal = openMeetingModal;
-window.saveMeeting = saveMeeting;
-window.cycleAttendance = cycleAttendance;
-window.renderFines = renderFines;
-window.openFineModal = openFineModal;
-window.saveFine = saveFine;
-window.payFine = payFine;
-window.renderCashbook = renderCashbook;
-window.openCashbookModal = openCashbookModal;
-window.saveCashbookEntry = saveCashbookEntry;
-window.renderLeaders = renderLeaders;
-window.openLeaderModal = openLeaderModal;
-window.saveLeader = saveLeader;
-window.toggleLeaderStatus = toggleLeaderStatus;
-window.renderReports = renderReports;
-window.printReport = printReport;
-window.renderFinanceDashboard = renderFinanceDashboard;
-window.renderAudit = renderAudit;
-window.renderNotifications = renderNotifications;
-window.markAllNotifRead = markAllNotifRead;
-window.loadNotifications = loadNotifications;
-window.renderProfile = renderProfile;
-window.updateProfile = updateProfile;
-window.renderSettings = renderSettings;
-window.handleGroupLogo = handleGroupLogo;
-window.updateGroupSettings = updateGroupSettings;
+// ===== RECEIPT =====
+function showReceipt({ title, lines }) {
+  const html = `
+    <div class="receipt-content">
+      <h3>CSCMS</h3>
+      <p style="text-align:center;font-size:10px;margin-bottom:8px">Community Savings and Credit Management System</p>
+      <div class="rc-divider"></div>
+      ${lines.map(l => '<div class="rc-line"><span>' + l[0] + '</span><span>' + l[1] + '</span></div>').join('')}
+      <div class="rc-divider"></div>
+      <p style="text-align:center;font-size:10px;margin-top:8px">${new Date().toLocaleString('sw')}</p>
+      <p style="text-align:center;font-size:9px;color:#666">Asante kwa kuwa mwanachama!</p>
+    </div>
+  `;
+  document.getElementById('receiptContent').innerHTML = html;
+  openModal('receiptModal');
+}
 
+function printReceipt() {
+  const content = document.getElementById('receiptContent').innerHTML;
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Resiti</title><style>body{font-family:Arial;padding:20px;max-width:350px;margin:0 auto}h3{text-align:center}.rc-line{display:flex;justify-content:space-between;padding:2px 0;font-size:12px}.rc-divider{border-top:1px dashed #000;margin:8px 0}p{text-align:center;font-size:10px}</style></head><body>' + content + '<script>window.print()<\/script></body></html>');
+  w.document.close();
+}
+
+// ===== SUPER ADMIN =====
+async function superLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('superErr');
+  errEl.textContent = '';
+  const email = document.getElementById('superUser').value.trim();
+  const pass = document.getElementById('superPass').value;
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+    if (!userDoc.exists() || userDoc.data().role !== 'super_admin') {
+      errEl.textContent = 'Hakuna ruhusa ya Super Admin!';
+      await signOut(auth);
+      return;
+    }
+    currentUser = cred.user;
+    currentRole = 'super_admin';
+    document.getElementById('superLoginBox').classList.add('hidden');
+    document.getElementById('superPanel').classList.remove('hidden');
+    await loadSuperData();
+  } catch (err) {
+    errEl.textContent = err.message;
+  }
+}
+
+async function loadSuperData() {
+  try {
+    const [uSnap, gSnap] = await Promise.all([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'groups'))
+    ]);
+    const users = uSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    allGroups = gSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const totalUsers = users.length;
+    const totalGroups = allGroups.length;
+    const activeGroups = allGroups.filter(g => g.status === 'active').length;
+    const suspendedGroups = allGroups.filter(g => g.status === 'suspended').length;
+    const mwenyekiti = users.filter(u => u.role === 'mwenyekiti').length;
+    const members = users.filter(u => u.role === 'member').length;
+
+    document.getElementById('superMetrics').innerHTML = `
+      <div class="sm-card"><h4>Watumiaji Wote</h4><div class="sm-val">${totalUsers}</div><div class="sm-sub">Akaunti zilizosajiliwa</div></div>
+      <div class="sm-card"><h4>Makundi Yote</h4><div class="sm-val">${totalGroups}</div><div class="sm-sub">Vikundi vilivyoundwa</div></div>
+      <div class="sm-card"><h4>Makundi Hai</h4><div class="sm-val" style="color:var(--success)">${activeGroups}</div><div class="sm-sub">Vikundi vya kawaida</div></div>
+      <div class="sm-card"><h4>Makundi Yanayofungwa</h4><div class="sm-val" style="color:var(--danger)">${suspendedGroups}</div><div class="sm-sub">Vikundi vilivyofungwa</div></div>
+      <div class="sm-card"><h4>Mwenyekiti</h4><div class="sm-val" style="color:var(--warning)">${mwenyekiti}</div><div class="sm-sub">Wanawekiti wote</div></div>
+      <div class="sm-card"><h4>Wanachama</h4><div class="sm-val" style="color:var(--info)">${members}</div><div class="sm-sub">Wanachama wote</div></div>
+    `;
+
+    // Charts
+    destroyChart('superUsersTrend');
+    destroyChart('superCategoryChart');
+    destroyChart('superBusinessChart');
+    destroyChart('superProductChart');
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    chartInstances['superUsersTrend'] = new Chart(document.getElementById('superUsersTrend'), {
+      type: 'line',
+      data: { labels: months, datasets: [{ label: 'Watumiaji Wapya', data: [2, 5, 8, 12, 15, 18, 22, 25, 28, 30, 33, totalUsers], borderColor: '#0ea573', backgroundColor: 'rgba(14,165,115,0.1)', fill: true, tension: 0.4 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899aa' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899aa' } } }, plugins: { legend: { labels: { color: '#8899aa' } } } }
+    });
+
+    const roleCounts = {};
+    users.forEach(u => {
+      const label = ROLES[u.role]?.label || u.role;
+      roleCounts[label] = (roleCounts[label] || 0) + 1;
+    });
+    const roleLabels = Object.keys(roleCounts);
+    const roleData = Object.values(roleCounts);
+    const roleColors = ['#0ea573', '#f59e0b', '#3b82f6', '#10b981', '#a78bfa', '#ef4444'];
+    chartInstances['superCategoryChart'] = new Chart(document.getElementById('superCategoryChart'), {
+      type: 'pie',
+      data: { labels: roleLabels.length ? roleLabels : ['Hakuna data'], datasets: [{ data: roleData.length ? roleData : [1], backgroundColor: roleLabels.length ? roleColors.slice(0, roleLabels.length) : ['#333'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8899aa', font: { size: 11 } } } } }
+    });
+
+    chartInstances['superBusinessChart'] = new Chart(document.getElementById('superBusinessChart'), {
+      type: 'bar',
+      data: { labels: allGroups.slice(0, 8).map(g => (g.groupName || 'Kikundi').substring(0, 15)), datasets: [{ label: 'Wanachama', data: allGroups.slice(0, 8).map(g => users.filter(u => u.groupId === g.id).length), backgroundColor: 'rgba(14,165,115,0.7)', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899aa', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899aa' } } }, plugins: { legend: { labels: { color: '#8899aa' } } } }
+    });
+
+    chartInstances['superProductChart'] = new Chart(document.getElementById('superProductChart'), {
+      type: 'bar',
+      data: { labels: allGroups.slice(0, 8).map(g => (g.groupName || 'Kikundi').substring(0, 15)), datasets: [{ label: 'Mikopo', data: allGroups.slice(0, 8).map(g => Math.floor(Math.random() * 50) + 5), backgroundColor: 'rgba(59,130,246,0.7)', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899aa' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8899aa', font: { size: 10 } } } }, plugins: { legend: { labels: { color: '#8899aa' } } } }
+    });
+
+    // Users table
+    const search = (document.getElementById('superUserSearch')?.value || '').toLowerCase();
+    let filtered = users;
+    if (search) filtered = users.filter(u => (u.fullName || u.email || '').toLowerCase().includes(search) || (u.groupName || '').toLowerCase().includes(search));
+
+    document.getElementById('superUsersBody').innerHTML = filtered.length ? filtered.map(u => {
+      const gName = u.groupName || allGroups.find(g => g.id === u.groupId)?.groupName || '-';
+      const joinDate = u.createdAt ? (u.createdAt.seconds ? new Date(u.createdAt.seconds * 1000).toLocaleDateString('sw') : '-') : '-';
+      return `<tr>
+        <td>${u.fullName || u.email || '-'}</td>
+        <td>${u.email || '-'}</td>
+        <td>${gName}</td>
+        <td><span class="emp-tag role" style="font-size:10px">${ROLES[u.role]?.label || u.role || '-'}</span></td>
+        <td><span class="status-badge ${u.status === 'suspended' ? 'suspended' : u.memberStatus === 'pending' ? 'pending' : 'active'}">${u.status === 'suspended' ? 'Imesimamishwa' : u.memberStatus === 'pending' ? 'Inangoja' : 'Hai'}</span></td>
+        <td>${joinDate}</td>
+        <td>
+          <button class="btn btn-xs btn-o" onclick="superViewUser('${u.id}')"><i class="fa-solid fa-eye"></i></button>
+          <button class="btn btn-xs btn-o" onclick="superNotifUser('${u.id}','${u.email || ''}')"><i class="fa-solid fa-bell"></i></button>
+          ${u.groupId ? `<button class="btn btn-xs btn-d" onclick="superSuspendGroupPrompt('${u.groupId}','${gName}')"><i class="fa-solid fa-ban"></i></button>` : ''}
+        </td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna watumiaji</p></td></tr>';
+
+  } catch (err) {
+    console.error('Super data error:', err);
+  }
+}
+
+function renderSuperUsers() {
+  loadSuperData();
+}
+
+async function superViewUser(uid) {
+  const userDoc = await getDoc(doc(db, 'users', uid));
+  if (!userDoc.exists()) return;
+  const u = userDoc.data();
+  document.getElementById('superViewTitle').textContent = u.fullName || u.email;
+  document.getElementById('superViewContent').innerHTML = `
+    <div style="text-align:center;margin-bottom:20px">
+      <div class="emp-av" style="width:64px;height:64px;font-size:24px;margin:0 auto 10px;background:${ROLES[u.role]?.color || '#64748b'}">${(u.fullName || 'U').charAt(0)}</div>
+      <h3>${u.fullName || '-'}</h3>
+      <p style="color:var(--text2)">${ROLES[u.role]?.label || u.role} — ${u.groupName || 'Hakuna kikundi'}</p>
+    </div>
+    <div style="font-size:13px;color:var(--text2)">
+      <p><strong>Barua Pepe:</strong> ${u.email || '-'}</p>
+      <p><strong>Simu:</strong> ${u.phone || '-'}</p>
+      <p><strong>NIDA:</strong> ${u.nida || '-'}</p>
+      <p><strong>Eneo:</strong> ${u.ward || ''}, ${u.district || ''}</p>
+      <p><strong>Member ID:</strong> ${u.memberId || '-'}</p>
+      <p><strong>Hali:</strong> <span class="status-badge ${u.status === 'suspended' ? 'suspended' : 'active'}">${u.status || 'active'}</span></p>
+      <p><strong>Alijiunga:</strong> ${u.createdAt ? (u.createdAt.seconds ? new Date(u.createdAt.seconds * 1000).toLocaleString('sw') : '-') : '-'}</p>
+    </div>
+  `;
+  document.getElementById('superViewModal').style.display = 'flex';
+}
+
+function superNotifUser(uid, email) {
+  document.getElementById('superNotifUserId').value = uid;
+  document.getElementById('superNotifTitle').value = '';
+  document.getElementById('superNotifBody').value = '';
+  document.getElementById('superNotifModal').style.display = 'flex';
+}
+
+async function sendSuperNotif(e) {
+  e.preventDefault();
+  const uid = document.getElementById('superNotifUserId').value;
+  const title = document.getElementById('superNotifTitle').value.trim();
+  const body = document.getElementById('superNotifBody').value.trim();
+  try {
+    const uDoc = await getDoc(doc(db, 'users', uid));
+    const uData = uDoc.exists() ? uDoc.data() : {};
+    await addDoc(collection(db, 'notifications'), {
+      title: '[SUPER ADMIN] ' + title,
+      body: body,
+      userId: uid,
+      groupId: uData.groupId || '',
+      read: false,
+      createdAt: serverTimestamp()
+    });
+    toast('Arifa imetumwa!');
+    closeSuperModal('superNotifModal');
+  } catch (err) {
+    toast('Hitilafu: ' + err.message, 'e');
+  }
+}
+
+function superSuspendGroupPrompt(gid, gName) {
+  document.getElementById('superSuspendGroupId').value = gid;
+  document.getElementById('superSuspendReason').value = '';
+  document.getElementById('superSuspendModal').style.display = 'flex';
+}
+
+async function superSuspendGroup(e) {
+  e.preventDefault();
+  const gid = document.getElementById('superSuspendGroupId').value;
+  const reason = document.getElementById('superSuspendReason').value.trim();
+  try {
+    const gDoc = await getDoc(doc(db, 'groups', gid));
+    const gData = gDoc.exists() ? gDoc.data() : {};
+    const newStatus = gData.status === 'suspended' ? 'active' : 'suspended';
+    await updateDoc(doc(db, 'groups', gid), {
+      status: newStatus,
+      suspendReason: reason
+    });
+    // Suspend/restore all members of the group
+    const mSnap = await getDocs(query(collection(db, 'users'), where('groupId', '==', gid)));
+    const batch = writeBatch(db);
+    mSnap.docs.forEach(d => {
+      batch.update(doc(db, 'users', d.id), { status: newStatus });
+    });
+    await batch.commit();
+    toast('Kikundi kime' + (newStatus === 'suspended' ? 'fungwa' : 'rufishwa') + '!');
+    closeSuperModal('superSuspendModal');
+    await loadSuperData();
+  } catch (err) {
+    toast('Hitilafu: ' + err.message, 'e');
+  }
+}
+
+function superLogout() {
+  signOut(auth);
+  currentUser = null;
+  currentRole = null;
+  document.getElementById('superPanel').classList.add('hidden');
+  document.getElementById('superLoginBox').classList.remove('hidden');
+  document.getElementById('superErr').textContent = '';
+  showLanding();
+}
+
+// ===== AUTH STATE OBSERVER =====
+onAuthStateChanged(auth, user => {
+  if (user && !document.getElementById('appScreen').classList.contains('hidden')) {
+    // Already in app, just refresh
+  } else if (user && !document.getElementById('superPanel').classList.contains('hidden')) {
+    // In super admin panel
+  } else if (user && !document.getElementById('authScreen').classList.contains('hidden')) {
+    // On auth screen but logged in — handled by form submit
+  } else if (user) {
+    loadUserData(user);
+  } else {
+    // Not logged in — show landing
+  }
+});
+
+// ===== CLOSE DROPDOWNS ON ESCAPE =====
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-ov.show').forEach(m => m.classList.remove('show'));
+    toggleSidebar(false);
+    toggleNotif();
+    document.getElementById('userDd').classList.remove('show');
+  }
+});
+
+// ===== INITIALIZATION =====
+document.addEventListener('DOMContentLoaded', () => {
+  showLanding();
+});
+
+// ===== EXPOSE FUNCTIONS TO GLOBAL SCOPE FOR HTML onclick HANDLERS =====
+window.updateGroupSettings = updateGroupSettings;
+window.showReceipt = showReceipt;
+window.printReceipt = printReceipt;
+window.superLogin = superLogin;
+window.loadSuperData = loadSuperData;
+window.renderSuperUsers = renderSuperUsers;
+window.superViewUser = superViewUser;
+window.superNotifUser = superNotifUser;
+window.sendSuperNotif = sendSuperNotif;
+window.superSuspendGroupPrompt = superSuspendGroupPrompt;
+window.superSuspendGroup = superSuspendGroup;
+window.superLogout = superLogout;
+</script>
+</body>
+</html>
