@@ -3065,78 +3065,7 @@ async function viewSuperUser(uid) {
   document.getElementById('superViewContent').innerHTML = html;
   document.getElementById('superViewModal').style.display = 'flex';
 }
-/* =========================================================
-   MODULAR FIREBASE - USER SUSPENSION
-   ========================================================= */
-
-async function suspendUser(userId, reason = 'Account suspended by administrator') {
-    try {
-        if (!userId) {
-            throw new Error('User ID haijapatikana.');
-        }
-
-        if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
-            throw new Error('Huna ruhusa ya kususpend User.');
-        }
-
-        await updateDoc(doc(db, 'users', userId), {
-            status: 'suspended',
-            suspended: true,
-            suspensionReason: reason,
-            suspendedAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-
-        alert('User amesimamishwa kikamilifu.');
-
-        if (typeof loadUsers === 'function') {
-            await loadUsers();
-        }
-
-    } catch (error) {
-        console.error('Suspend User Error:', error);
-        alert('Imeshindikana kumsuspend User: ' + error.message);
-    }
-}
-
-
-async function activateUser(userId) {
-    try {
-        if (!userId) {
-            throw new Error('User ID haijapatikana.');
-        }
-
-        if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
-            throw new Error('Huna ruhusa ya ku-activate User.');
-        }
-
-        await updateDoc(doc(db, 'users', userId), {
-            status: 'active',
-            suspended: false,
-            suspensionReason: '',
-            suspendedAt: null,
-            updatedAt: serverTimestamp()
-        });
-
-        alert('User amewezeshwa tena.');
-
-        if (typeof loadUsers === 'function') {
-            await loadUsers();
-        }
-
-    } catch (error) {
-        console.error('Activate User Error:', error);
-        alert('Imeshindikana ku-activate User: ' + error.message);
-    }
-}
-function renderSuperAds() {
-  const el = document.getElementById('superAdsList');
-  if (!S.superAds.length) { el.innerHTML = '<div class="empty-s"><p>Hakuna matangazo</p></div>'; return; }
-  el.innerHTML = S.superAds.map(function(a){
-    return '<div class="super-ad-item"><div class="super-ad-thumb">' + (a.imageUrl ? '<img src="' + escHtml(a.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>') + '</div><div class="super-ad-info"><h5>' + escHtml(a.title) + '</h5><p>' + escHtml(a.description||'').substr(0,60) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperAd(\'' + a.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperAd(\'' + a.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
-  }).join('');
-}
-
+/* ========================================================= MODULAR FIREBASE - USER SUSPENSION / ACTIVATION ========================================================= */ /** * Suspend User * Only Super Admin is allowed to perform this action. */ async function suspendUser( userId, reason = 'Account suspended by administrator' ) { try { if (!userId) { throw new Error('User ID haijapatikana.'); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumsuspend User.' ); } /* Update User status */ await updateDoc( doc(db, 'users', userId), { status: 'suspended', suspended: true, suspensionReason: reason, suspendedAt: serverTimestamp(), updatedAt: serverTimestamp() } ); console.log( 'User suspended successfully:', userId ); alert( 'User amesimamishwa kikamilifu.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Suspend User Error:', error ); alert( 'Imeshindikana kumsuspend User: ' + (error.message || error) ); } } /** * Activate User * Only Super Admin is allowed to perform this action. */ async function activateUser(userId) { try { if (!userId) { throw new Error( 'User ID haijapatikana.' ); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumu-activate User.' ); } /* Restore User access */ await updateDoc( doc(db, 'users', userId), { status: 'active', suspended: false, suspensionReason: '', suspendedAt: null, updatedAt: serverTimestamp() } ); console.log( 'User activated successfully:', userId ); alert( 'User amewezeshwa tena.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Activate User Error:', error ); alert( 'Imeshindikana ku-activate User: ' + (error.message || error) ); } } /* ========================================================= SUPER ADMIN - ADVERTISEMENT LIST ========================================================= */ function renderSuperAds() { const el = document.getElementById( 'superAdsList' ); /* Safety check */ if (!el) { console.warn( 'Element #superAdsList haijapatikana.' ); return; } /* No advertisements */ if ( !S.superAds || !S.superAds.length ) { el.innerHTML = '<div class="empty-s">' + '<i class="fa-solid fa-bullhorn"></i>' + '<p>Hakuna matangazo</p>' + '</div>'; return; } /* Render advertisements */ el.innerHTML = S.superAds.map(function(a) { const title = escHtml( a.title || 'Tangazo bila jina' ); const description = escHtml( a.description || '' ).substring(0, 60); const image = a.imageUrl ? '<img src="' + escHtml(a.imageUrl) + '" alt="' + title + '" loading="lazy">' : '<div class="ad-no-image">' + '<i class="fa-solid fa-image"></i>' + '</div>'; return ( '<div class="super-ad-item">' + '<div class="super-ad-image">' + image + '</div>' + '<div class="super-ad-info">' + '<h4>' + title + '</h4>' + '<p>' + description + (a.description && a.description.length > 60 ? '...' : '') + '</p>' + '</div>' + '</div>' ); }).join(''); }
 function renderSuperProducts() {
   const el = document.getElementById('superProductsList');
   if (!S.superProducts.length) { el.innerHTML = '<div class="empty-s"><p>Hakuna bidhaa hadharani</p></div>'; return; }
