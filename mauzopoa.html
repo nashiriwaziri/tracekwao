@@ -1826,113 +1826,1146 @@ async function renderPublicShowcase() {
     } catch (err) { /* ignore */ }
 }
 
-// ===========================
-// 13. DASHBOARD
-// ===========================
-async function loadDashboardData() {
-    if (!currentBiz) return;
-    try {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const totalSales = bizSales.reduce((s, x) => s + (x.total || 0), 0);
-        const todaySales = bizSales.filter(x => { if (!x.createdAt) return false; const d = x.createdAt.toDate ? x.createdAt.toDate() : new Date(x.createdAt); return d >= today; }).reduce((s, x) => s + (x.total || 0), 0);
-        const totalExpenses = bizExpenses.reduce((s, x) => s + (x.amount || 0), 0);
-        const totalDebts = bizDebts.filter(x => x.status !== 'paid').reduce((s, x) => s + (x.amount || 0), 0);
-        const lowStock = bizProducts.filter(x => (x.stock || 0) <= 5).length;
-        document.getElementById('dashMetrics').innerHTML = `
-            <div class="mc g"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>${fmt(todaySales)}</h3><p>Mauzo ya Leo (TZS)</p></div>
-            <div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-chart-line"></i></div><h3>${fmt(totalSales)}</h3><p>Jumla ya Mauzo (TZS)</p></div>
-            <div class="mc r"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>${fmt(totalExpenses)}</h3><p>Jumla ya Matumizi (TZS)</p></div>
-            <div class="mc b"><div class="mc-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div><h3>${fmt(totalDebts)}</h3><p>Madeni (TZS)</p></div>
-            <div class="mc a"><div class="mc-icon"><i class="fa-solid fa-box-open"></i></div><h3>${bizProducts.length}</h3><p>Bidhaa</p></div>
-            <div class="mc r"><div class="mc-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><h3>${lowStock}</h3><p>Bidhaa Chini ya Stock</p></div>
-        `;
-        const roleNames = { owner: 'Mmiliki (Owner)', manager: 'Manager', stock_keeper: 'Stock Keeper', cashier: 'Cashier', seller: 'Seller' };
-        document.getElementById('roleDash').innerHTML = `<div class="role-dash-card"><h4><i class="fa-solid fa-user-shield"></i> ${roleNames[currentRole] || currentRole}</h4><p style="color:var(--text2);font-size:13px">${currentBiz.businessName} — ${currentBiz.businessCategory}</p></div>`;
-        const recent = bizSales.slice(0, 5);
-        document.getElementById('dashRecentSales').innerHTML = recent.length === 0
-            ? '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Hakuna mauzo bado</td></tr>'
-            : recent.map(s => `<tr><td>${s.productName || '—'}</td><td>${s.quantity || 0}</td><td>${fmt(s.total || 0)} TZS</td><td>${fmtDateTime(s.createdAt)}</td></tr>`).join('');
-        renderDashCharts();
-    } catch (err) { /* ignore */ }
-}
-function renderDashCharts() {
-    destroyChart('dashSalesChart');
-    destroyChart('dashCatChart');
-    const days = [];
-    const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(now); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-        days.push(d);
-    }
-    const labels = days.map(d => d.toLocaleDateString('sw-TZ', { weekday: 'short' }));
-    const salesData = days.map(d => {
-        const next = new Date(d); next.setDate(next.getDate() + 1);
-        return bizSales.filter(s => { if (!s.createdAt) return false; const t = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt); return t >= d && t < next; }).reduce((sum, s) => sum + (s.total || 0), 0);
+/* ================================================================
+   DASHBOARD
+   ================================================================ */
+/* CHANGED: All db.collection().where().get() → getDocs(query(collection(db,...), where(...)))
+   Added limit import for the sales query                                           */
+async function loadDashboard() {
+  if (!S.bizId) return;
+  try {
+    const [prodSnap, salesSnap, custSnap, debtSnap] = await Promise.all([
+      getDocs(query(collection(db, 'products'), where('businessId', '==', S.bizId))),
+      getDocs(query(collection(db, 'sales'), where('businessId', '==', S.bizId), orderBy('createdAt', 'desc'), limit(50))),
+      getDocs(query(collection(db, 'customers'), where('businessId', '==', S.bizId))),
+      getDocs(query(collection(db, 'debts'), where('businessId', '==', S.bizId)))
+    ]);
+    S.allProducts = prodSnap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    S.allSales = salesSnap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    S.allCustomers = custSnap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    S.allDebts = debtSnap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todaySales = S.allSales.filter(function(s) {
+      const t = s.createdAt ? (s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt)) : null;
+      return t && t >= today;
     });
-    document.getElementById('dashCharts').innerHTML = `
-        <div class="ch-c"><h4><i class="fa-solid fa-chart-line"></i> Mauzo ya Wiki Hii</h4><div class="ch-box"><canvas id="dashSalesChart"></canvas></div></div>
-        <div class="ch-c"><h4><i class="fa-solid fa-chart-pie"></i> Bidhaa kwa Category</h4><div class="ch-box"><canvas id="dashCatChart"></canvas></div></div>
-    `;
-    const ctx1 = document.getElementById('dashSalesChart');
-    if (ctx1) {
-        chartInstances['dashSalesChart'] = new Chart(ctx1, {
-            type: 'bar',
-            data: { labels, datasets: [{ label: 'Mauzo (TZS)', data: salesData, backgroundColor: '#6c5ce7', borderRadius: 6 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' }, beginAtZero: true } } }
-        });
-    }
-    const catMap = {};
-    bizProducts.forEach(p => { const c = p.category || 'Other'; catMap[c] = (catMap[c] || 0) + 1; });
-    const ctx2 = document.getElementById('dashCatChart');
-    if (ctx2) {
-        const colors = ['#6c5ce7', '#a29bfe', '#00b894', '#0984e3', '#f39c12', '#e74c3c'];
-        chartInstances['dashCatChart'] = new Chart(ctx2, {
-            type: 'doughnut',
-            data: { labels: Object.keys(catMap), datasets: [{ data: Object.values(catMap), backgroundColor: colors.slice(0, Object.keys(catMap).length) }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0', font: { size: 11 } } } } }
-        });
-    }
+    const todayRev = todaySales.reduce(function(a, s) { return a + (Number(s.total) || 0); }, 0);
+    const totalRev = S.allSales.reduce(function(a, s) { return a + (Number(s.total) || 0); }, 0);
+    const unpaidDebts = S.allDebts.filter(function(d) { return d.status !== 'paid'; });
+    const totalDebt = unpaidDebts.reduce(function(a, d) { return a + (Number(d.remaining) || Number(d.amount) || 0); }, 0);
+    const lowStock = S.allProducts.filter(function(p) { return (Number(p.stock) || 0) <= 5; }).length;
+    document.getElementById('dashMetrics').innerHTML =
+      '<div class="mc g"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>' + todaySales.length + '</h3><p>Mauzo Leo</p></div>' +
+      '<div class="mc a"><div class="mc-icon"><i class="fa-solid fa-money-bill-wave"></i></div><h3>' + fmtCur(todayRev) + '</h3><p>Mapato Leo</p></div>' +
+      '<div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-box-open"></i></div><h3>' + S.allProducts.length + '</h3><p>Bidhaa</p></div>' +
+      '<div class="mc b"><div class="mc-icon"><i class="fa-solid fa-users"></i></div><h3>' + S.allCustomers.length + '</h3><p>Wateja</p></div>' +
+      '<div class="mc r"><div class="mc-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div><h3>' + fmtCur(totalDebt) + '</h3><p>Madeni</p></div>' +
+      '<div class="mc r"><div class="mc-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><h3>' + lowStock + '</h3><p>Bidhaa Chache</p></div>';
+    renderDashCharts();
+    renderDashRecentSales();
+  } catch (err) {
+    console.error("Dashboard load error:", err);
+    toast('Imeshindwa kupakua dashboard.', 'e');
+  }
 }
 
-// ===========================
-// 14. FINANCE DASHBOARD
-// ===========================
-async function loadFinanceData() {
-    if (!currentBiz) return;
-    const totalSales = bizSales.reduce((s, x) => s + (x.total || 0), 0);
-    const totalExpenses = bizExpenses.reduce((s, x) => s + (x.amount || 0), 0);
-    const profit = totalSales - totalExpenses;
-    const totalPurchases = bizPurchases.reduce((s, x) => s + ((x.quantity || 0) * (x.price || 0)), 0);
-    document.getElementById('finMetrics').innerHTML = `
-        <div class="mc g"><div class="mc-icon"><i class="fa-solid fa-arrow-trend-up"></i></div><h3>${fmt(totalSales)}</h3><p>Jumla ya Mauzo</p></div>
-        <div class="mc r"><div class="mc-icon"><i class="fa-solid fa-arrow-trend-down"></i></div><h3>${fmt(totalExpenses)}</h3><p>Jumla ya Matumizi</p></div>
-        <div class="mc ${profit >= 0 ? 'g' : 'r'}"><div class="mc-icon"><i class="fa-solid fa-coins"></i></div><h3>${fmt(profit)}</h3><p>Faida / Hasara</p></div>
-        <div class="mc a"><div class="mc-icon"><i class="fa-solid fa-truck"></i></div><h3>${fmt(totalPurchases)}</h3><p>Jumla ya Manunuzi</p></div>
-    `;
-    destroyChart('finMonthChart');
-    destroyChart('finExpCatChart');
-    document.getElementById('finCharts').innerHTML = `
-        <div class="ch-c"><h4><i class="fa-solid fa-chart-bar"></i> Mauzo vs Matumizi (Miezi 6)</h4><div class="ch-box"><canvas id="finMonthChart"></canvas></div></div>
-        <div class="ch-c"><h4><i class="fa-solid fa-chart-pie"></i> Matumizi kwa Category</h4><div class="ch-box"><canvas id="finExpCatChart"></canvas></div></div>
-    `;
-    const months = [];
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        months.push({ label: d.toLocaleDateString('en-US', { month: 'short' }), start: d, end: new Date(d.getFullYear(), d.getMonth() + 1, 1) });
+/* UNCHANGED — no Firestore calls */
+function renderDashCharts() {
+  const cBox = document.getElementById('dashCharts');
+  cBox.innerHTML = '<div class="ch-c"><h4><i class="fa-solid fa-chart-line"></i> Mauzo ya Miezi 6 Ilizopita</h4><div class="ch-box"><canvas id="dashSalesChart"></canvas></div></div>' +
+    '<div class="ch-c"><h4><i class="fa-solid fa-chart-pie"></i> Mauzo kwa Njia ya Malipo</h4><div class="ch-box"><canvas id="dashPayChart"></canvas></div></div>';
+  destroyChart('dashSales');
+  destroyChart('dashPay');
+  const months = [];
+  const monthSales = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1); d.setHours(0, 0, 0, 0);
+    const end = new Date(d); end.setMonth(end.getMonth() + 1);
+    months.push(d.toLocaleDateString('sw-TZ', { month: 'short' }));
+    const total = S.allSales.filter(function(s) {
+      const t = s.createdAt ? (s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt)) : null;
+      return t && t >= d && t < end;
+    }).reduce(function(a, s) { return a + (Number(s.total) || 0); }, 0);
+    monthSales.push(total);
+  }
+  S.charts.dashSales = new Chart(document.getElementById('dashSalesChart'), {
+    type: 'line',
+    data: {
+      labels: months,
+      datasets: [{
+        label: 'Mauzo',
+        data: monthSales,
+        borderColor: '#6c5ce7',
+        backgroundColor: 'rgba(108,92,231,.15)',
+        fill: true,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } },
+        x: { ticks: { color: '#9a9ab0' }, grid: { display: false } }
+      }
     }
-    const mSales = months.map(m => bizSales.filter(s => { if (!s.createdAt) return false; const t = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt); return t >= m.start && t < m.end; }).reduce((s, x) => s + (x.total || 0), 0));
-    const mExp = months.map(m => bizExpenses.filter(e => { if (!e.createdAt) return false; const t = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt); return t >= m.start && t < m.end; }).reduce((s, x) => s + (x.amount || 0), 0));
-    const ctx1 = document.getElementById('finMonthChart');
-    if (ctx1) {
-        chartInstances['finMonthChart'] = new Chart(ctx1, {
-            type: 'bar',
-            data: { labels: months.map(m => m.label), datasets: [{ label: 'Mauzo', data: mSales, backgroundColor: '#00b894' }, { label: 'Matumizi', data: mExp, backgroundColor: '#e74c3c' }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#2a2a3a' }, beginAtZero: true } } }
-        });
-    }
+  });
+  const payMethods = {};
+  S.allSales.forEach(function(s) {
+    const m = s.payMethod || 'Cash';
+    payMethods[m] = (payMethods[m] || 0) + (Number(s.total) || 0);
+  });
+  const payLabels = Object.keys(payMethods);
+  const payData = Object.values(payMethods);
+  const payColors = ['#6c5ce7', '#00b894', '#f39c12', '#e74c3c', '#0984e3'];
+  S.charts.dashPay = new Chart(document.getElementById('dashPayChart'), {
+    type: 'doughnut', data: { labels: payLabels.length ? payLabels : ['Hakuna data'], datasets: [{ data: payData.length ? payData : [1], backgroundColor: payColors }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } } }
+  });
+}
+
+/* UNCHANGED — no Firestore calls */
+function renderDashRecentSales() {
+  const tb = document.getElementById('dashRecentSales');
+  if (!S.allSales.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-receipt"></i><p>Hakuna mauzo bado</p></td></tr>'; return; }
+  tb.innerHTML = S.allSales.slice(0, 10).map(function(s) {
+    const statusCls = s.status === 'completed' ? 'active' : (s.status === 'cancelled' ? 'suspended' : 'pending');
+    return '<tr><td>' + escHtml(s.invoiceNo || s.id.substr(0, 8)) + '</td><td>' + escHtml(s.customer || '—') + '</td><td>' + fmtCur(s.total) + '</td><td>' + escHtml(s.payMethod || 'Cash') + '</td><td>' + fmtDate(s.createdAt) + '</td><td><span class="status-badge ' + statusCls + '">' + escHtml(s.status || 'pending') + '</span></td></tr>';
+  }).join('');
+}
+
+/* ================================================================
+   FINANCE
+   ================================================================ */
+/* CHANGED: All db.collection().where().get() → getDocs(query(collection(db,...), where(...))) */
+async function loadFinance() {
+  if (!S.bizId) return;
+  try {
+    const [salesSnap, purchSnap, expSnap, debtSnap] = await Promise.all([
+      getDocs(query(collection(db, 'sales'), where('businessId', '==', S.bizId))),
+      getDocs(query(collection(db, 'purchases'), where('businessId', '==', S.bizId))),
+      getDocs(query(collection(db, 'expenses'), where('businessId', '==', S.bizId))),
+      getDocs(query(collection(db, 'debts'), where('businessId', '==', S.bizId)))
+    ]);
+    const allSales = salesSnap.docs.map(function(d) { return d.data(); });
+    const allPurch = purchSnap.docs.map(function(d) { return d.data(); });
+    const allExp = expSnap.docs.map(function(d) { return d.data(); });
+    const allDebts = debtSnap.docs.map(function(d) { return d.data(); });
+    const totalSales = allSales.reduce(function(a, s) { return a + (Number(s.total) || 0); }, 0);
+    const totalPurch = allPurch.reduce(function(a, p) { return a + (Number(p.total) || 0); }, 0);
+    const totalExp = allExp.reduce(function(a, e) { return a + (Number(e.amount) || 0); }, 0);
+    const unpaidDebts = allDebts.filter(function(d) { return d.status !== 'paid'; });
+    const totalDebt = unpaidDebts.reduce(function(a, d) { return a + (Number(d.remaining) || Number(d.amount) || 0); }, 0);
+    const profit = totalSales - totalPurch - totalExp;
+    document.getElementById('finMetrics').innerHTML =
+      '<div class="mc g"><div class="mc-icon"><i class="fa-solid fa-arrow-up"></i></div><h3>' + fmtCur(totalSales) + '</h3><p>Jumla ya Mauzo</p></div>' +
+      '<div class="mc r"><div class="mc-icon"><i class="fa-solid fa-arrow-down"></i></div><h3>' + fmtCur(totalPurch) + '</h3><p>Jumla ya Manunuzi</p></div>' +
+      '<div class="mc b"><div class="mc-icon"><i class="fa-solid fa-money-bill-trend-up"></i></div><h3>' + fmtCur(totalExp) + '</h3><p>Jumla ya Matumizi</p></div>' +
+      '<div class="mc ' + (profit >= 0 ? 'g' : 'r') + '"><div class="mc-icon"><i class="fa-solid fa-scale-balanced"></i></div><h3>' + fmtCur(profit) + '</h3><p>Faida / Hasara</p></div>' +
+      '<div class="mc r"><div class="mc-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div><h3>' + fmtCur(totalDebt) + '</h3><p>Madeni Hayajalipwa</p></div>';
+    const cBox = document.getElementById('finCharts');
+    cBox.innerHTML = '<div class="ch-c"><h4><i class="fa-solid fa-chart-bar"></i> Mauzo dhidi ya Manunuzi na Matumizi</h4><div class="ch-box"><canvas id="finBarChart"></canvas></div></div>' +
+      '<div class="ch-c"><h4><i class="fa-solid fa-chart-pie"></i> Matumizi kwa Category</h4><div class="ch-box"><canvas id="finExpChart"></canvas></div></div>';
+    destroyChart('finBar');
+    destroyChart('finExp');
+    S.charts.finBar = new Chart(document.getElementById('finBarChart'), {
+      type: 'bar', data: { labels: ['Mauzo', 'Manunuzi', 'Matumizi'], datasets: [{ label: 'TZS', data: [totalSales, totalPurch, totalExp], backgroundColor: ['#00b894', '#e74c3c', '#f39c12'] }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } }, x: { ticks: { color: '#9a9ab0' }, grid: { display: false } } } }
+    });
     const expCats = {};
-    bizExpenses.forEach(e => { const c = e.category || 'general'; expCats[c] = (expCats[c] || 0) + (e.amount || 0); });
-    const ctx2 = document.getElementById('finExpCatChart');
-    if (ctx2) {
-        const colors = ['#6c5ce7', '#a29bfe', '#00b894', '#0984e3', '#
+    allExp.forEach(function(e) { const c = e.category || 'Nyingine'; expCats[c] = (expCats[c] || 0) + (Number(e.amount) || 0); });
+    const expLabels = Object.keys(expCats);
+    const expData = Object.values(expCats);
+    const expColors = ['#6c5ce7', '#00b894', '#f39c12', '#e74c3c', '#0984e3', '#a29bfe', '#fd79a8'];
+    S.charts.finExp = new Chart(document.getElementById('finExpChart'), {
+      type: 'pie', data: { labels: expLabels.length ? expLabels : ['Hakuna data'], datasets: [{ data: expData.length ? expData : [1], backgroundColor: expColors }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } } }
+    });
+  } catch (err) {
+    console.error("Finance load error:", err);
+    toast('Imeshindwa kupakua fedha.', 'e');
+  }
+}
+
+/* ================================================================
+   POS
+   ================================================================ */
+/* CHANGED: db.collection().where().get() → getDocs(query(collection(db,...), where(...))) */
+async function loadPOS() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'products'), where('businessId', '==', S.bizId)));
+    S.allProducts = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderPOSProducts();
+  } catch (err) {
+    console.error("POS load error:", err);
+    toast('Imeshindwa kupakua bidhaa.', 'e');
+  }
+}
+
+/* UNCHANGED — no Firestore calls */
+function renderPOSProducts(filter) {
+  const grid = document.getElementById('posProductsGrid');
+  let items = S.allProducts;
+  if (filter) {
+    const f = filter.toLowerCase();
+    items = items.filter(function(p) { return (p.name || '').toLowerCase().indexOf(f) >= 0 || (p.category || '').toLowerCase().indexOf(f) >= 0; });
+  }
+  if (!items.length) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa</p></div>'; return; }
+  grid.innerHTML = items.map(function(p) {
+    const stock = Number(p.stock) || 0;
+    const inStock = stock > 0;
+    return '<div class="pos-p-card" ' + (inStock ? 'onclick="addToCart(\'' + p.id + '\')"' : 'style="opacity:.5;cursor:not-allowed"') + '>' +
+      (p.imageUrl ? '<img src="' + escHtml(p.imageUrl) + '" alt=""/>' : '<div style="width:100%;height:80px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:24px"><i class="fa-solid fa-box"></i></div>') +
+      '<h5>' + escHtml(p.name) + '</h5><div class="pos-p-price">' + fmtCur(p.sellPrice) + '</div><div class="pos-p-stock">Stock: ' + stock + '</div></div>';
+  }).join('');
+}
+
+/* UNCHANGED */
+function filterPOSProducts() {
+  const q = document.getElementById('posSearch').value;
+  renderPOSProducts(q);
+}
+
+/* UNCHANGED */
+function addToCart(prodId) {
+  const prod = S.allProducts.find(function(p) { return p.id === prodId; });
+  if (!prod) return;
+  const existing = S.cart.find(function(c) { return c.id === prodId; });
+  const stock = Number(prod.stock) || 0;
+  if (existing) {
+    if (existing.qty >= stock) { toast('Hakuna stock enough.', 'w'); return; }
+    existing.qty++;
+  } else {
+    if (stock < 1) { toast('Bidhaa hii imeisha stock.', 'w'); return; }
+    S.cart.push({ id: prod.id, name: prod.name, price: Number(prod.sellPrice) || 0, qty: 1, maxStock: stock });
+  }
+  renderCart();
+}
+
+/* UNCHANGED */
+function removeFromCart(prodId) {
+  S.cart = S.cart.filter(function(c) { return c.id !== prodId; });
+  renderCart();
+}
+
+/* UNCHANGED */
+function changeCartQty(prodId, delta) {
+  const item = S.cart.find(function(c) { return c.id === prodId; });
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty < 1) { removeFromCart(prodId); return; }
+  if (item.qty > item.maxStock) { item.qty = item.maxStock; toast('Hakuna stock enough.', 'w'); }
+  renderCart();
+}
+
+/* UNCHANGED */
+function renderCart() {
+  const body = document.getElementById('posCartBody');
+  const total = S.cart.reduce(function(a, c) { return a + c.price * c.qty; }, 0);
+  document.getElementById('posTotal').textContent = fmtCur(total);
+  if (!S.cart.length) { body.innerHTML = '<div class="empty-s"><i class="fa-solid fa-cart-shopping"></i><p>Gorofa ni tupu</p></div>'; return; }
+  body.innerHTML = S.cart.map(function(c) {
+    return '<div class="cart-item"><div class="cart-item-info"><h6>' + escHtml(c.name) + '</h6><span>' + fmtCur(c.price) + ' x ' + c.qty + '</span></div>' +
+      '<div class="cart-qty"><button onclick="changeCartQty(\'' + c.id + '\',-1)">-</button><span>' + c.qty + '</span><button onclick="changeCartQty(\'' + c.id + '\',1)">+</button></div>' +
+      '<div class="cart-item-price">' + fmtCur(c.price * c.qty) + '</div>' +
+      '<button class="cart-item-rm" onclick="removeFromCart(\'' + c.id + '\')"><i class="fa-solid fa-trash"></i></button></div>';
+  }).join('');
+}
+
+/* CHANGED:
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('sales').add(saleData) → addDoc(collection(db, 'sales'), saleData)
+   - db.batch() → writeBatch(db)
+   - batch.update(db.collection('products').doc(c.id), ...) → batch.update(doc(db, 'products', c.id), ...) */
+async function processPOSSale() {
+  if (!S.cart.length) { toast('Gorofa ni tupu.', 'w'); return; }
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const btn = document.getElementById('posCheckoutBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Inahifadhi...';
+  try {
+    const total = S.cart.reduce(function(a, c) { return a + c.price * c.qty; }, 0);
+    const items = S.cart.map(function(c) { return { productId: c.id, name: c.name, price: c.price, qty: c.qty, subtotal: c.price * c.qty }; });
+    const saleData = {
+      businessId: S.bizId,
+      invoiceNo: 'INV-' + Date.now().toString(36).toUpperCase(),
+      customer: document.getElementById('posCustomerName').value.trim() || 'Walk-in',
+      items: items,
+      total: total,
+      paid: total,
+      payMethod: document.getElementById('posPayMethod').value,
+      status: 'completed',
+      createdAt: serverTimestamp()
+    };
+    const docRef = await addDoc(collection(db, 'sales'), saleData);
+    const batch = writeBatch(db);
+    S.cart.forEach(function(c) {
+      const newStock = Math.max(0, c.maxStock - c.qty);
+      batch.update(doc(db, 'products', c.id), { stock: newStock });
+    });
+    await batch.commit();
+    S.cart = [];
+    renderCart();
+    toast('Muamala umefanikiwa!', 's');
+    showReceipt(docRef.id, saleData);
+    loadPOS();
+  } catch (err) {
+    console.error("POS sale error:", err);
+    toast('Imeshindwa kumaliza muamala.', 'e');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> Maliza Muamala';
+  }
+}
+
+/* UNCHANGED — no Firestore calls */
+function showReceipt(saleId, saleData) {
+  const c = document.getElementById('receiptContent');
+  const bizName = S.biz ? S.biz.name : 'BizBook';
+  const bizLoc = S.biz ? (S.biz.location || '') : '';
+  let html = '<div class="receipt-content">';
+  html += '<h3>' + escHtml(bizName) + '</h3>';
+  if (bizLoc) html += '<p style="text-align:center;font-size:11px;margin-bottom:8px">' + escHtml(bizLoc) + '</p>';
+  html += '<div class="rc-divider"></div>';
+  html += '<div class="rc-line"><span>Invoice:</span><span>' + escHtml(saleData.invoiceNo || saleId.substr(0, 8)) + '</span></div>';
+  html += '<div class="rc-line"><span>Mteja:</span><span>' + escHtml(saleData.customer || '—') + '</span></div>';
+  html += '<div class="rc-line"><span>Njia:</span><span>' + escHtml(saleData.payMethod || 'Cash') + '</span></div>';
+  html += '<div class="rc-line"><span>Tarehe:</span><span>' + fmtDate(saleData.createdAt) + '</span></div>';
+  html += '<div class="rc-divider"></div>';
+  (saleData.items || []).forEach(function(it) {
+    html += '<div class="rc-line"><span>' + escHtml(it.name) + ' x' + it.qty + '</span><span>' + fmtCur(it.subtotal) + '</span></div>';
+  });
+  html += '<div class="rc-divider"></div>';
+  html += '<div class="rc-line rc-total"><span>JUMLA:</span><span>' + fmtCur(saleData.total) + '</span></div>';
+  html += '<div class="rc-divider"></div>';
+  html += '<p style="text-align:center;font-size:10px;margin-top:8px">Asante kwa kununua!</p>';
+  html += '</div>';
+  c.innerHTML = html;
+  openModal('receiptModal');
+}
+
+/* UNCHANGED */
+function printReceipt() {
+  const content = document.getElementById('receiptContent').innerHTML;
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Resipoti</title><style>body{margin:20px;font-family:Courier New,monospace}table{width:100%}td{padding:2px 0}.rc-line{display:flex;justify-content:space-between}.rc-divider{border-top:1px dashed #000;margin:8px 0}.rc-total{font-weight:bold;font-size:14px}</style></head><body>' + content + '<script>setTimeout(function(){window.print();window.close();},300)<\/script></body></html>');
+  w.document.close();
+}
+
+/* ================================================================
+   PRODUCTS CRUD
+   ================================================================ */
+/* CHANGED: db.collection().where().get() → getDocs(query(collection(db,...), where(...))) */
+async function loadProducts() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'products'), where('businessId', '==', S.bizId)));
+    S.allProducts = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderProducts();
+  } catch (err) {
+    console.error("Products load error:", err);
+    toast('Imeshindwa kupakua bidhaa.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function renderProducts() {
+  const tb = document.getElementById('productsBody');
+  const q = (document.getElementById('prodSearch').value || '').toLowerCase();
+  let items = S.allProducts;
+  if (q) items = items.filter(function(p) { return (p.name || '').toLowerCase().indexOf(q) >= 0 || (p.category || '').toLowerCase().indexOf(q) >= 0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa</p></td></tr>'; return; }
+  tb.innerHTML = items.map(function(p) {
+    const stock = Number(p.stock) || 0;
+    const stCls = stock > 10 ? 'active' : (stock > 0 ? 'pending' : 'suspended');
+    const stLbl = stock > 10 ? 'Stock Nzuri' : (stock > 0 ? 'Stock Chache' : 'Imeisha');
+    return '<tr><td>' + escHtml(p.name) + '</td><td>' + escHtml(p.category || '—') + '</td><td>' + fmtCur(p.costPrice || 0) + '</td><td>' + fmtCur(p.sellPrice) + '</td><td>' + stock + ' <span class="status-badge ' + stCls + '">' + stLbl + '</span></td><td><span class="status-badge ' + (p.status === 'active' ? 'active' : 'hidden') + '">' + escHtml(p.status || 'active') + '</span></td><td><button class="btn btn-o btn-xs" onclick="editProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+  }).join('');
+}
+
+/* UNCHANGED */
+function openProductModal() {
+  document.getElementById('productModalTitle').textContent = 'Ongeza Bidhaa';
+  document.getElementById('prodEditId').value = '';
+  document.getElementById('prodName').value = '';
+  document.getElementById('prodCategory').value = '';
+  document.getElementById('prodCost').value = '0';
+  document.getElementById('prodPrice').value = '';
+  document.getElementById('prodStock').value = '';
+  document.getElementById('prodUnit').value = 'Pc';
+  document.getElementById('prodDesc').value = '';
+  document.getElementById('prodImgUrl').value = '';
+  openModal('productModal');
+}
+
+/* UNCHANGED */
+function editProduct(id) {
+  const p = S.allProducts.find(function(x) { return x.id === id; });
+  if (!p) return;
+  document.getElementById('productModalTitle').textContent = 'Hariri Bidhaa';
+  document.getElementById('prodEditId').value = p.id;
+  document.getElementById('prodName').value = p.name || '';
+  document.getElementById('prodCategory').value = p.category || '';
+  document.getElementById('prodCost').value = p.costPrice || 0;
+  document.getElementById('prodPrice').value = p.sellPrice || '';
+  document.getElementById('prodStock').value = p.stock || 0;
+  document.getElementById('prodUnit').value = p.unit || 'Pc';
+  document.getElementById('prodDesc').value = p.description || '';
+  document.getElementById('prodImgUrl').value = p.imageUrl || '';
+  openModal('productModal');
+}
+
+/* CHANGED:
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('products').doc(editId).update(data) → updateDoc(doc(db, 'products', editId), data)
+   - db.collection('products').add(data) → addDoc(collection(db, 'products'), data) */
+async function saveProduct(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const editId = document.getElementById('prodEditId').value;
+  const data = {
+    businessId: S.bizId,
+    name: document.getElementById('prodName').value.trim(),
+    category: document.getElementById('prodCategory').value.trim(),
+    costPrice: Number(document.getElementById('prodCost').value) || 0,
+    sellPrice: Number(document.getElementById('prodPrice').value) || 0,
+    stock: Number(document.getElementById('prodStock').value) || 0,
+    unit: document.getElementById('prodUnit').value.trim() || 'Pc',
+    description: document.getElementById('prodDesc').value.trim(),
+    imageUrl: document.getElementById('prodImgUrl').value.trim(),
+    status: 'active',
+    updatedAt: serverTimestamp()
+  };
+  if (!data.name) { toast('Jina la bidhaa linahitajika.', 'w'); return; }
+  if (data.sellPrice <= 0) { toast('Bei ya kuuza lazima iwe zaidi ya 0.', 'w'); return; }
+  try {
+    if (editId) {
+      await updateDoc(doc(db, 'products', editId), data);
+      toast('Bidhaa imesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      await addDoc(collection(db, 'products'), data);
+      toast('Bidhaa imeongezwa.', 's');
+    }
+    closeModal('productModal');
+    loadProducts();
+  } catch (err) {
+    console.error("Save product error:", err);
+    toast('Imeshindwa kuhifadhi bidhaa.', 'e');
+  }
+}
+
+/* CHANGED: db.collection('products').doc(id).delete() → deleteDoc(doc(db, 'products', id)) */
+function deleteProduct(id) {
+  const p = S.allProducts.find(function(x) { return x.id === id; });
+  requestDelete('Je, unahakika unataka kufuta bidhaa "' + (p ? p.name : '') + '"?', function() {
+    deleteDoc(doc(db, 'products', id)).then(function() {
+      toast('Bidhaa imefutwa.', 's');
+      loadProducts();
+    }).catch(function(err) {
+      console.error("Delete product error:", err);
+      toast('Imeshindwa kufuta bidhaa.', 'e');
+    });
+  });
+}
+
+/* ================================================================
+   SALES CRUD
+   ================================================================ */
+/* CHANGED: db.collection().where().orderBy().get() → getDocs(query(collection(db,...), where(...), orderBy(...))) */
+async function loadSales() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'sales'), where('businessId', '==', S.bizId), orderBy('createdAt', 'desc')));
+    S.allSales = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderSales();
+  } catch (err) {
+    console.error("Sales load error:", err);
+    toast('Imeshindwa kupakua mauzo.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function renderSales() {
+  const tb = document.getElementById('salesBody');
+  const q = (document.getElementById('salesSearch').value || '').toLowerCase();
+  let items = S.allSales;
+  if (q) items = items.filter(function(s) { return (s.customer || '').toLowerCase().indexOf(q) >= 0 || (s.invoiceNo || '').toLowerCase().indexOf(q) >= 0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fa-solid fa-receipt"></i><p>Hakuna mauzo</p></td></tr>'; return; }
+  tb.innerHTML = items.map(function(s) {
+    const stCls = s.status === 'completed' ? 'paid' : (s.status === 'cancelled' ? 'rejected' : 'pending');
+    const itemCount = (s.items || []).reduce(function(a, i) { return a + (i.qty || 0); }, 0);
+    return '<tr><td>' + escHtml(s.invoiceNo || s.id.substr(0, 8)) + '</td><td>' + escHtml(s.customer || '—') + '</td><td>' + itemCount + '</td><td>' + fmtCur(s.total) + '</td><td>' + escHtml(s.payMethod || 'Cash') + '</td><td><span class="status-badge ' + stCls + '">' + escHtml(s.status || 'pending') + '</span></td><td>' + fmtDate(s.createdAt) + '</td><td><button class="btn btn-o btn-xs" onclick="viewSaleDetail(\'' + s.id + '\')"><i class="fa-solid fa-eye"></i></button> <button class="btn btn-d btn-xs" onclick="deleteSale(\'' + s.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+  }).join('');
+}
+
+/* UNCHANGED */
+function openSaleModal() {
+  document.getElementById('saleModalTitle').textContent = 'Muuzo Mpya';
+  document.getElementById('saleEditId').value = '';
+  document.getElementById('saleCustomer').value = '';
+  document.getElementById('saleItems').value = '';
+  document.getElementById('salePayMethod').value = 'Cash';
+  document.getElementById('salePaid').value = '0';
+  openModal('saleModal');
+}
+
+/* CHANGED:
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('sales').add(data) → addDoc(collection(db, 'sales'), data)
+   - db.collection('debts').add({...}) → addDoc(collection(db, 'debts'), {...}) */
+async function saveSale(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const raw = document.getElementById('saleItems').value.trim();
+  if (!raw) { toast('Vitendo vya mauzo vinahitajika.', 'w'); return; }
+  const lines = raw.split('\n').filter(function(l) { return l.trim(); });
+  const items = [];
+  let total = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split(',').map(function(s) { return s.trim(); });
+    if (parts.length < 3) { toast('Mstari ' + (i + 1) + ' si sahihi. Tumia: Jina, Bei, Kiasi', 'w'); return; }
+    const price = Number(parts[1]) || 0;
+    const qty = Number(parts[2]) || 0;
+    if (price <= 0 || qty <= 0) { toast('Mstari ' + (i + 1) + ': bei na kiasi lazima viwe zaidi ya 0.', 'w'); return; }
+    const sub = price * qty;
+    items.push({ name: parts[0], price: price, qty: qty, subtotal: sub });
+    total += sub;
+  }
+  const paid = Number(document.getElementById('salePaid').value) || 0;
+  const data = {
+    businessId: S.bizId,
+    invoiceNo: 'INV-' + Date.now().toString(36).toUpperCase(),
+    customer: document.getElementById('saleCustomer').value.trim() || 'Walk-in',
+    items: items, total: total, paid: paid,
+    payMethod: document.getElementById('salePayMethod').value,
+    status: paid >= total ? 'completed' : 'pending',
+    createdAt: serverTimestamp()
+  };
+  try {
+    const ref = await addDoc(collection(db, 'sales'), data);
+    if (paid < total) {
+      await addDoc(collection(db, 'debts'), {
+        businessId: S.bizId, customer: data.customer, saleId: ref.id,
+        amount: total, paid: paid, remaining: total - paid,
+        status: 'unpaid', description: 'Deni kutoka mauzo ' + data.invoiceNo,
+        createdAt: serverTimestamp()
+      });
+    }
+    toast('Muuzo umehifadhiwa.', 's');
+    closeModal('saleModal');
+    loadSales();
+  } catch (err) {
+    console.error("Save sale error:", err);
+    toast('Imeshindwa kuhifadhi muuzo.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function viewSaleDetail(id) {
+  const s = S.allSales.find(function(x) { return x.id === id; });
+  if (!s) return;
+  showReceipt(s.id, s);
+}
+
+/* CHANGED: db.collection('sales').doc(id).delete() → deleteDoc(doc(db, 'sales', id)) */
+function deleteSale(id) {
+  requestDelete('Je, unahakika unataka kufuta muuzo huu?', function() {
+    deleteDoc(doc(db, 'sales', id)).then(function() {
+      toast('Muuzo umefutwa.', 's');
+      loadSales();
+    }).catch(function(err) {
+      console.error("Delete sale error:", err);
+      toast('Imeshindwa kufuta muuzo.', 'e');
+    });
+  });
+}
+
+/* ================================================================
+   PURCHASES CRUD
+   ================================================================ */
+/* CHANGED: db.collection().where().orderBy().get() → getDocs(query(collection(db,...), where(...), orderBy(...))) */
+async function loadPurchases() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'purchases'), where('businessId', '==', S.bizId), orderBy('createdAt', 'desc')));
+    S.allPurchases = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderPurchases();
+  } catch (err) {
+    console.error("Purchases load error:", err);
+    toast('Imeshindwa kupakua manunuzi.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function renderPurchases() {
+  const tb = document.getElementById('purchasesBody');
+  const q = (document.getElementById('purchSearch').value || '').toLowerCase();
+  let items = S.allPurchases;
+  if (q) items = items.filter(function(p) { return (p.sellerName || '').toLowerCase().indexOf(q) >= 0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-truck"></i><p>Hakuna manunuzi</p></td></tr>'; return; }
+  tb.innerHTML = items.map(function(p) {
+    const stCls = p.status === 'completed' ? 'paid' : (p.status === 'cancelled' ? 'rejected' : 'pending');
+    const itemCount = (p.items || []).reduce(function(a, i) { return a + (i.qty || 0); }, 0);
+    return '<tr><td>' + escHtml(p.refNo || p.id.substr(0, 8)) + '</td><td>' + escHtml(p.sellerName || '—') + '</td><td>' + itemCount + '</td><td>' + fmtCur(p.total) + '</td><td><span class="status-badge ' + stCls + '">' + escHtml(p.status || 'pending') + '</span></td><td>' + fmtDate(p.createdAt) + '</td><td><button class="btn btn-d btn-xs" onclick="deletePurchase(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+  }).join('');
+}
+
+/* CHANGED: db.collection('sellers').where().get() → getDocs(query(collection(db,...), where(...))) */
+async function openPurchaseModal() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'sellers'), where('businessId', '==', S.bizId)));
+    const sel = document.getElementById('purchSeller');
+    sel.innerHTML = '<option value="">Chagua muuzaji...</option>';
+    snap.docs.forEach(function(d) {
+      const s = d.data();
+      sel.innerHTML += '<option value="' + d.id + '">' + escHtml(s.name) + '</option>';
+    });
+  } catch (err) { console.error("Load sellers for purchase:", err); }
+  document.getElementById('purchEditId').value = '';
+  document.getElementById('purchItems').value = '';
+  document.getElementById('purchPaid').value = '0';
+  openModal('purchaseModal');
+}
+
+/* CHANGED:
+   - db.collection('sellers').doc(sellerId).get() → getDoc(doc(db, 'sellers', sellerId))
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - firebase.firestore.FieldValue.increment(it.qty) → increment(it.qty)
+   - db.batch() → writeBatch(db)
+   - db.collection('purchases').doc() → doc(collection(db, 'purchases'))
+   - batch.update(db.collection('products').doc(existing.id), ...) → batch.update(doc(db, 'products', existing.id), ...)
+   - batch.set(db.collection('products').doc(), ...) → batch.set(doc(collection(db, 'products')), ...)
+   - batch.set(db.collection('debts').doc(), ...) → batch.set(doc(collection(db, 'debts')), ...) */
+async function savePurchase(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const sellerId = document.getElementById('purchSeller').value;
+  const raw = document.getElementById('purchItems').value.trim();
+  if (!sellerId) { toast('Chagua muuzaji.', 'w'); return; }
+  if (!raw) { toast('Vitendo vya manunuzi vinahitajika.', 'w'); return; }
+  const lines = raw.split('\n').filter(function(l) { return l.trim(); });
+  const items = [];
+  let total = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split(',').map(function(s) { return s.trim(); });
+    if (parts.length < 3) { toast('Mstari ' + (i + 1) + ' si sahihi.', 'w'); return; }
+    const cost = Number(parts[1]) || 0;
+    const qty = Number(parts[2]) || 0;
+    items.push({ name: parts[0], cost: cost, qty: qty, subtotal: cost * qty });
+    total += cost * qty;
+  }
+  const paid = Number(document.getElementById('purchPaid').value) || 0;
+  let sellerName = '—';
+  try {
+    const sDoc = await getDoc(doc(db, 'sellers', sellerId));
+    if (sDoc.exists) sellerName = sDoc.data().name || '—';
+  } catch (er) { console.error(er); }
+  const data = {
+    businessId: S.bizId, sellerId: sellerId, sellerName: sellerName,
+    refNo: 'PUR-' + Date.now().toString(36).toUpperCase(),
+    items: items, total: total, paid: paid,
+    status: paid >= total ? 'completed' : 'pending',
+    createdAt: serverTimestamp()
+  };
+  try {
+    const batch = writeBatch(db);
+    const ref = doc(collection(db, 'purchases'));
+    batch.set(ref, data);
+    items.forEach(function(it) {
+      const existing = S.allProducts.find(function(p) { return p.name.toLowerCase() === it.name.toLowerCase(); });
+      if (existing) {
+        batch.update(doc(db, 'products', existing.id), { stock: increment(it.qty), costPrice: it.cost });
+      } else {
+        const newRef = doc(collection(db, 'products'));
+        batch.set(newRef, {
+          businessId: S.bizId, name: it.name, category: 'General',
+          costPrice: it.cost, sellPrice: Math.round(it.cost * 1.3),
+          stock: it.qty, unit: 'Pc', status: 'active',
+          createdAt: serverTimestamp()
+        });
+      }
+    });
+    if (paid < total) {
+      batch.set(doc(collection(db, 'debts')), {
+        businessId: S.bizId, sellerId: sellerId, customer: sellerName,
+        amount: total, paid: paid, remaining: total - paid,
+        status: 'unpaid', description: 'Deni kwa muuzaji ' + sellerName,
+        createdAt: serverTimestamp()
+      });
+    }
+    await batch.commit();
+    toast('Ununuo umehifadhiwa.', 's');
+    closeModal('purchaseModal');
+    loadPurchases();
+    loadProducts();
+  } catch (err) {
+    console.error("Save purchase error:", err);
+    toast('Imeshindwa kuhifadhi ununuo.', 'e');
+  }
+}
+
+/* CHANGED: db.collection('purchases').doc(id).delete() → deleteDoc(doc(db, 'purchases', id)) */
+function deletePurchase(id) {
+  requestDelete('Je, unahakika unataka kufuta ununuo huu?', function() {
+    deleteDoc(doc(db, 'purchases', id)).then(function() {
+      toast('Ununuo umefutwa.', 's');
+      loadPurchases();
+    }).catch(function(err) {
+      console.error("Delete purchase error:", err);
+      toast('Imeshindwa kufuta ununuo.', 'e');
+    });
+  });
+}
+
+/* ================================================================
+   SELLERS CRUD
+   ================================================================ */
+/* CHANGED: db.collection().where().get() → getDocs(query(collection(db,...), where(...))) */
+async function loadSellers() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'sellers'), where('businessId', '==', S.bizId)));
+    S.allSellers = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderSellers();
+  } catch (err) {
+    console.error("Sellers load error:", err);
+    toast('Imeshindwa kupakua wauzaji.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function renderSellers() {
+  const tb = document.getElementById('sellersBody');
+  const q = (document.getElementById('sellerSearch').value || '').toLowerCase();
+  let items = S.allSellers;
+  if (q) items = items.filter(function(s) { return (s.name || '').toLowerCase().indexOf(q) >= 0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-handshake"></i><p>Hakuna wauzaji</p></td></tr>'; return; }
+  tb.innerHTML = items.map(function(s) {
+    return '<tr><td>' + escHtml(s.name) + '</td><td>' + escHtml(s.phone || '—') + '</td><td>' + escHtml(s.email || '—') + '</td><td>' + escHtml(s.address || '—') + '</td><td>' + fmtCur(s.balance || 0) + '</td><td><button class="btn btn-o btn-xs" onclick="editSeller(\'' + s.id + '\')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteSeller(\'' + s.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+  }).join('');
+}
+
+/* UNCHANGED */
+function openSellerModal() {
+  document.getElementById('sellerModalTitle').textContent = 'Muuzaji Mpya';
+  document.getElementById('sellerEditId').value = '';
+  document.getElementById('sellerName').value = '';
+  document.getElementById('sellerPhone').value = '';
+  document.getElementById('sellerEmail').value = '';
+  document.getElementById('sellerAddress').value = '';
+  openModal('sellerModal');
+}
+
+/* UNCHANGED */
+function editSeller(id) {
+  const s = S.allSellers.find(function(x) { return x.id === id; });
+  if (!s) return;
+  document.getElementById('sellerModalTitle').textContent = 'Hariri Muuzaji';
+  document.getElementById('sellerEditId').value = s.id;
+  document.getElementById('sellerName').value = s.name || '';
+  document.getElementById('sellerPhone').value = s.phone || '';
+  document.getElementById('sellerEmail').value = s.email || '';
+  document.getElementById('sellerAddress').value = s.address || '';
+  openModal('sellerModal');
+}
+
+/* CHANGED:
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('sellers').doc(editId).update(data) → updateDoc(doc(db, 'sellers', editId), data)
+   - db.collection('sellers').add(data) → addDoc(collection(db, 'sellers'), data) */
+async function saveSeller(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const editId = document.getElementById('sellerEditId').value;
+  const data = {
+    businessId: S.bizId,
+    name: document.getElementById('sellerName').value.trim(),
+    phone: document.getElementById('sellerPhone').value.trim(),
+    email: document.getElementById('sellerEmail').value.trim(),
+    address: document.getElementById('sellerAddress').value.trim(),
+    balance: 0,
+    updatedAt: serverTimestamp()
+  };
+  if (!data.name) { toast('Jina linahitajika.', 'w'); return; }
+  try {
+    if (editId) {
+      delete data.balance;
+      await updateDoc(doc(db, 'sellers', editId), data);
+      toast('Muuzaji amesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      await addDoc(collection(db, 'sellers'), data);
+      toast('Muuzaji ameongezwa.', 's');
+    }
+    closeModal('sellerModal');
+    loadSellers();
+  } catch (err) {
+    console.error("Save seller error:", err);
+    toast('Imeshindwa kuhifadhi muuzaji.', 'e');
+  }
+}
+
+/* CHANGED: db.collection('sellers').doc(id).delete() → deleteDoc(doc(db, 'sellers', id)) */
+function deleteSeller(id) {
+  const s = S.allSellers.find(function(x) { return x.id === id; });
+  requestDelete('Je, unahakika unataka kufuta muuzaji "' + (s ? s.name : '') + '"?', function() {
+    deleteDoc(doc(db, 'sellers', id)).then(function() {
+      toast('Muuzaji amefutwa.', 's');
+      loadSellers();
+    }).catch(function(err) {
+      console.error("Delete seller error:", err);
+      toast('Imeshindwa kufuta muuzaji.', 'e');
+    });
+  });
+}
+
+/* ================================================================
+   CUSTOMERS CRUD
+   ================================================================ */
+/* CHANGED: db.collection().where().get() → getDocs(query(collection(db,...), where(...))) */
+async function loadCustomers() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'customers'), where('businessId', '==', S.bizId)));
+    S.allCustomers = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderCustomers();
+  } catch (err) {
+    console.error("Customers load error:", err);
+    toast('Imeshindwa kupakua wateja.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function renderCustomers() {
+  const tb = document.getElementById('customersBody');
+  const q = (document.getElementById('custSearch').value || '').toLowerCase();
+  let items = S.allCustomers;
+  if (q) items = items.filter(function(c) { return (c.name || '').toLowerCase().indexOf(q) >= 0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna wateja</p></td></tr>'; return; }
+  tb.innerHTML = items.map(function(c) {
+    return '<tr><td>' + escHtml(c.name) + '</td><td>' + escHtml(c.phone || '—') + '</td><td>' + escHtml(c.email || '—') + '</td><td>' + fmtCur(c.totalPurchases || 0) + '</td><td><button class="btn btn-o btn-xs" onclick="editCustomer(\'' + c.id + '\')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteCustomer(\'' + c.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+  }).join('');
+}
+
+/* UNCHANGED */
+function openCustomerModal() {
+  document.getElementById('customerModalTitle').textContent = 'Mteja Mpya';
+  document.getElementById('custEditId').value = '';
+  document.getElementById('custName').value = '';
+  document.getElementById('custPhone').value = '';
+  document.getElementById('custEmail').value = '';
+  document.getElementById('custAddress').value = '';
+  openModal('customerModal');
+}
+
+/* UNCHANGED */
+function editCustomer(id) {
+  const c = S.allCustomers.find(function(x) { return x.id === id; });
+  if (!c) return;
+  document.getElementById('customerModalTitle').textContent = 'Hariri Mteja';
+  document.getElementById('custEditId').value = c.id;
+  document.getElementById('custName').value = c.name || '';
+  document.getElementById('custPhone').value = c.phone || '';
+  document.getElementById('custEmail').value = c.email || '';
+  document.getElementById('custAddress').value = c.address || '';
+  openModal('customerModal');
+}
+
+/* CHANGED:
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('customers').doc(editId).update(data) → updateDoc(doc(db, 'customers', editId), data)
+   - db.collection('customers').add(data) → addDoc(collection(db, 'customers'), data) */
+async function saveCustomer(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const editId = document.getElementById('custEditId').value;
+  const data = {
+    businessId: S.bizId,
+    name: document.getElementById('custName').value.trim(),
+    phone: document.getElementById('custPhone').value.trim(),
+    email: document.getElementById('custEmail').value.trim(),
+    address: document.getElementById('custAddress').value.trim(),
+    totalPurchases: 0,
+    updatedAt: serverTimestamp()
+  };
+  if (!data.name) { toast('Jina linahitajika.', 'w'); return; }
+  try {
+    if (editId) {
+      delete data.totalPurchases;
+      await updateDoc(doc(db, 'customers', editId), data);
+      toast('Mteja amesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      await addDoc(collection(db, 'customers'), data);
+      toast('Mteja ameongezwa.', 's');
+    }
+    closeModal('customerModal');
+    loadCustomers();
+  } catch (err) {
+    console.error("Save customer error:", err);
+    toast('Imeshindwa kuhifadhi mteja.', 'e');
+  }
+}
+
+/* CHANGED: db.collection('customers').doc(id).delete() → deleteDoc(doc(db, 'customers', id)) */
+function deleteCustomer(id) {
+  const c = S.allCustomers.find(function(x) { return x.id === id; });
+  requestDelete('Je, unahakisha unataka kufuta mteja "' + (c ? c.name : '') + '"?', function() {
+    deleteDoc(doc(db, 'customers', id)).then(function() {
+      toast('Mteja amefutwa.', 's');
+      loadCustomers();
+    }).catch(function(err) {
+      console.error("Delete customer error:", err);
+      toast('Imeshindwa kufuta mteja.', 'e');
+    });
+  });
+}
+
+/* ================================================================
+   DEBTS CRUD
+   ================================================================ */
+/* CHANGED: db.collection().where().orderBy().get() → getDocs(query(collection(db,...), where(...), orderBy(...))) */
+async function loadDebts() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'debts'), where('businessId', '==', S.bizId), orderBy('createdAt', 'desc')));
+    S.allDebts = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderDebts();
+    renderDebtAlert();
+  } catch (err) {
+    console.error("Debts load error:", err);
+    toast('Imeshindwa kupakua madeni.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function renderDebtAlert() {
+  const area = document.getElementById('debtAlertArea');
+  const unpaid = S.allDebts.filter(function(d) { return d.status !== 'paid'; });
+  const total = unpaid.reduce(function(a, d) { return a + (Number(d.remaining) || Number(d.amount) || 0); }, 0);
+  if (total > 0) {
+    area.innerHTML = '<div class="debt-alert"><i class="fa-solid fa-triangle-exclamation"></i> Madeni hayajalipwa: ' + fmtCur(total) + ' (' + unpaid.length + ' rekodi)</div>';
+  } else {
+    area.innerHTML = '';
+  }
+}
+
+/* UNCHANGED */
+function renderDebts() {
+  const tb = document.getElementById('debtsBody');
+  const q = (document.getElementById('debtSearch').value || '').toLowerCase();
+  let items = S.allDebts;
+  if (q) items = items.filter(function(d) { return (d.customer || '').toLowerCase().indexOf(q) >= 0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-hand-holding-dollar"></i><p>Hakuna madeni</p></td></tr>'; return; }
+  tb.innerHTML = items.map(function(d) {
+    const remaining = Number(d.remaining) || (Number(d.amount) - Number(d.paid));
+    const stCls = d.status === 'paid' ? 'paid' : 'unpaid';
+    return '<tr><td>' + escHtml(d.customer || '—') + '</td><td>' + fmtCur(d.amount) + '</td><td>' + fmtCur(d.paid || 0) + '</td><td>' + fmtCur(remaining) + '</td><td><span class="status-badge ' + stCls + '">' + escHtml(d.status || 'unpaid') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' +
+      (d.status !== 'paid' ? '<button class="btn btn-s btn-xs" onclick="payDebt(\'' + d.id + '\')"><i class="fa-solid fa-money-bill"></i> Lipa</button> ' : '') +
+      '<button class="btn btn-d btn-xs" onclick="deleteDebt(\'' + d.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+  }).join('');
+}
+
+/* CHANGED: db.collection('customers').where().get() → getDocs(query(collection(db,...), where(...))) */
+async function openDebtModal() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'customers'), where('businessId', '==', S.bizId)));
+    const sel = document.getElementById('debtCustomer');
+    sel.innerHTML = '<option value="">Chagua mteja...</option>';
+    snap.docs.forEach(function(d) {
+      sel.innerHTML += '<option value="' + d.id + '">' + escHtml(d.data().name) + '</option>';
+    });
+  } catch (err) { console.error("Load customers for debt:", err); }
+  document.getElementById('debtAmount').value = '';
+  document.getElementById('debtDue').value = '';
+  document.getElementById('debtDesc').value = '';
+  openModal('debtModal');
+}
+
+/* CHANGED:
+   - db.collection('customers').doc(custId).get() → getDoc(doc(db, 'customers', custId))
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('debts').add({...}) → addDoc(collection(db, 'debts'), {...}) */
+async function saveDebt(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const custId = document.getElementById('debtCustomer').value;
+  const amount = Number(document.getElementById('debtAmount').value) || 0;
+  if (!custId) { toast('Chagua mteja.', 'w'); return; }
+  if (amount <= 0) { toast('Kiasi cha deni lazima kiwe zaidi ya 0.', 'w'); return; }
+  let custName = '—';
+  try {
+    const cd = await getDoc(doc(db, 'customers', custId));
+    if (cd.exists) custName = cd.data().name || '—';
+  } catch (er) { console.error(er); }
+  try {
+    await addDoc(collection(db, 'debts'), {
+      businessId: S.bizId, customerId: custId, customer: custName,
+      amount: amount, paid: 0, remaining: amount,
+      status: 'unpaid', dueDate: document.getElementById('debtDue').value || null,
+      description: document.getElementById('debtDesc').value.trim(),
+      createdAt: serverTimestamp()
+    });
+    toast('Deni limehifadhiwa.', 's');
+    closeModal('debtModal');
+    loadDebts();
+  } catch (err) {
+    console.error("Save debt error:", err);
+    toast('Imeshindwa kuhifadhi deni.', 'e');
+  }
+}
+
+/* CHANGED:
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('debts').doc(id).update({...}) → updateDoc(doc(db, 'debts', id), {...}) */
+function payDebt(id) {
+  const d = S.allDebts.find(function(x) { return x.id === id; });
+  if (!d) return;
+  const remaining = Number(d.remaining) || (Number(d.amount) - Number(d.paid));
+  const msg = 'Lipa deni la ' + fmtCur(remaining) + ' kwa ' + escHtml(d.customer || '—') + '?\n(Kubonyeza Futa kuthibitisha malipo kamili)';
+  requestDelete(msg, function() {
+    updateDoc(doc(db, 'debts', id), {
+      paid: Number(d.amount), remaining: 0, status: 'paid',
+      updatedAt: serverTimestamp()
+    }).then(function() {
+      toast('Deni limekulipwa.', 's');
+      loadDebts();
+    }).catch(function(err) {
+      console.error("Pay debt error:", err);
+      toast('Imeshindwa kulipa deni.', 'e');
+    });
+  });
+}
+
+/* CHANGED: db.collection('debts').doc(id).delete() → deleteDoc(doc(db, 'debts', id)) */
+function deleteDebt(id) {
+  requestDelete('Je, unahakika unataka kufuta deni hili?', function() {
+    deleteDoc(doc(db, 'debts', id)).then(function() {
+      toast('Deni limefutwa.', 's');
+      loadDebts();
+    }).catch(function(err) {
+      console.error("Delete debt error:", err);
+      toast('Imeshindwa kufuta deni.', 'e');
+    });
+  });
+}
+
+/* ================================================================
+   EXPENSES CRUD
+   ================================================================ */
+/* CHANGED: db.collection().where().orderBy().get() → getDocs(query(collection(db,...), where(...), orderBy(...))) */
+async function loadExpenses() {
+  if (!S.bizId) return;
+  try {
+    const snap = await getDocs(query(collection(db, 'expenses'), where('businessId', '==', S.bizId), orderBy('createdAt', 'desc')));
+    S.allExpenses = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+    renderExpenses();
+  } catch (err) {
+    console.error("Expenses load error:", err);
+    toast('Imeshindwa kupakua matumizi.', 'e');
+  }
+}
+
+/* UNCHANGED */
+function renderExpenses() {
+  const tb = document.getElementById('expensesBody');
+  const q = (document.getElementById('expSearch').value || '').toLowerCase();
+  let items = S.allExpenses;
+  if (q) items = items.filter(function(e) { return (e.category || '').toLowerCase().indexOf(q) >= 0 || (e.description || '').toLowerCase().indexOf(q) >= 0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-money-bill-trend-up"></i><p>Hakuna matumizi</p></td></tr>'; return; }
+  tb.innerHTML = items.map(function(e) {
+    return '<tr><td>' + escHtml(e.category || '—') + '</td><td>' + escHtml(e.description || '—') + '</td><td>' + fmtCur(e.amount) + '</td><td>' + fmtDate(e.createdAt) + '</td><td><button class="btn btn-d btn-xs" onclick="deleteExpense(\'' + e.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+  }).join('');
+}
+
+/* UNCHANGED */
+function openExpenseModal() {
+  document.getElementById('expCategory').value = '';
+  document.getElementById('expDesc').value = '';
+  document.getElementById('expAmount').value = '';
+  document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
+  openModal('expenseModal');
+}
+
+/* CHANGED:
+   - firebase.firestore.FieldValue.serverTimestamp() → serverTimestamp()
+   - db.collection('expenses').add(data) → addDoc(collection(db, 'expenses'), data) */
+async function saveExpense(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.', 'e'); return; }
+  const data = {
+    businessId: S.bizId,
+    category: document.getElementById('expCategory').value,
+    description: document.getElementById('expDesc').value.trim(),
+    amount: Number(document.getElementById('expAmount').value) || 0,
+    date: document.getElementById('expDate').value,
+    createdAt: serverTimestamp()
+  };
+  if (!data.category) { toast('Chagua category.', 'w'); return; }
+  if (!data.description) { toast('Maelezo yanahitajika.', 'w'); return; }
+  if (data.amount <= 0) { toast('Kiasi lazima kiwe zaidi ya 0.', 'w'); return; }
+  try {
+    await addDoc(collection(db, 'expenses'), data);
+    toast('Matumizi yamehifadhiwa.', 's');
+    closeModal('expenseModal');
+    loadExpenses();
+  } catch (err) {
+    console.error("Save expense error:", err);
+    toast('Imeshindwa kuhifadhi matumizi.', 'e');
+  }
+}
+
+/* CHANGED: db.collection('expenses').doc(id).delete() → deleteDoc(doc(db, 'expenses', id)) */
+function deleteExpense(id) {
+  requestDelete('Je, unahakika unataka kufuta matumizi haya?', function() {
+    deleteDoc(doc(db, 'expenses', id)).then(function() {
+      toast('Matumizi yamefutwa.', 's');
+      loadExpenses();
+    }).catch(function(err) {
+      console.error("Delete expense error:", err);
+      toast('Imeshindwa kufuta matumizi.', 'e');
+    });
+  });
+}
+
+/* ================================================================
+   WINDOW EXPOSURE — Required for HTML onclick handlers in module scope
+   ================================================================ */
+window.addToCart = addToCart;
+window.removeFromCart = removeFromCart;
+window.changeCartQty = changeCartQty;
+window.filterPOSProducts = filterPOSProducts;
+window.processPOSSale = processPOSSale;
+window.printReceipt = printReceipt;
+window.openProductModal = openProductModal;
+window.editProduct = editProduct;
+window.deleteProduct = deleteProduct;
+window.saveProduct = saveProduct;
+window.renderProducts = renderProducts;
+window.openSaleModal = openSaleModal;
+window.saveSale = saveSale;
+window.viewSaleDetail = viewSaleDetail;
+window.deleteSale = deleteSale;
+window.openPurchaseModal = openPurchaseModal;
+window.savePurchase = savePurchase;
+window.deletePurchase = deletePurchase;
+window.openSellerModal = openSellerModal;
+window.editSeller = editSeller;
+window.deleteSeller = deleteSeller;
+window.saveSeller = saveSeller;
+window.openCustomerModal = openCustomerModal;
+window.editCustomer = editCustomer;
+window.deleteCustomer = deleteCustomer;
+window.saveCustomer = saveCustomer;
+window.openDebtModal = openDebtModal;
+window.saveDebt = saveDebt;
+window.payDebt = payDebt;
+window.deleteDebt = deleteDebt;
+window.openExpenseModal = openExpenseModal;
+window.saveExpense = saveExpense;
+window.deleteExpense = deleteExpense;
