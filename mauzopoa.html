@@ -2926,51 +2926,1111 @@ async function saveExpense(e) {
 }
 
 /* CHANGED: db.collection('expenses').doc(id).delete() → deleteDoc(doc(db, 'expenses', id)) */
-function deleteExpense(id) {
-  requestDelete('Je, unahakika unataka kufuta matumizi haya?', function() {
-    deleteDoc(doc(db, 'expenses', id)).then(function() {
-      toast('Matumizi yamefutwa.', 's');
-      loadExpenses();
-    }).catch(function(err) {
-      console.error("Delete expense error:", err);
-      toast('Imeshindwa kufuta matumizi.', 'e');
-    });
-  });
+```javascript
+/* ================================================================
+   DELETE EXPENSE
+   ================================================================ */
+
+async function deleteExpense(id) {
+
+    try {
+
+        /* Validate expense ID */
+        if (!id) {
+            toast(
+                'ID ya matumizi haijapatikana.',
+                'e'
+            );
+            return;
+        }
+
+        /* Confirmation */
+        requestDelete(
+            'Je, una uhakika unataka kufuta matumizi haya?',
+            async function () {
+
+                try {
+
+                    /* Delete expense from Firestore */
+                    await deleteDoc(
+                        doc(
+                            db,
+                            'expenses',
+                            String(id)
+                        )
+                    );
+
+                    /* Success message */
+                    toast(
+                        'Matumizi yamefutwa.',
+                        's'
+                    );
+
+                    /* Reload expenses */
+                    if (
+                        typeof loadExpenses === 'function'
+                    ) {
+                        await loadExpenses();
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        'Delete expense error:',
+                        error
+                    );
+
+                    toast(
+                        'Imeshindwa kufuta matumizi.',
+                        'e'
+                    );
+                }
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            'Delete expense function error:',
+            error
+        );
+
+        toast(
+            'Kuna tatizo katika kufuta matumizi.',
+            'e'
+        );
+    }
 }
 
+
 /* ================================================================
-   WINDOW EXPOSURE — Required for HTML onclick handlers in module scope
+   WINDOW EXPOSURE
+   Required for HTML onclick handlers in ES Module scope
    ================================================================ */
+
+/* POS */
 window.addToCart = addToCart;
 window.removeFromCart = removeFromCart;
 window.changeCartQty = changeCartQty;
 window.filterPOSProducts = filterPOSProducts;
 window.processPOSSale = processPOSSale;
 window.printReceipt = printReceipt;
+
+/* Products */
 window.openProductModal = openProductModal;
 window.editProduct = editProduct;
 window.deleteProduct = deleteProduct;
 window.saveProduct = saveProduct;
 window.renderProducts = renderProducts;
+
+/* Sales */
 window.openSaleModal = openSaleModal;
 window.saveSale = saveSale;
 window.viewSaleDetail = viewSaleDetail;
 window.deleteSale = deleteSale;
+
+/* Purchases */
 window.openPurchaseModal = openPurchaseModal;
 window.savePurchase = savePurchase;
 window.deletePurchase = deletePurchase;
+
+/* Sellers */
 window.openSellerModal = openSellerModal;
 window.editSeller = editSeller;
 window.deleteSeller = deleteSeller;
 window.saveSeller = saveSeller;
+
+/* Customers */
 window.openCustomerModal = openCustomerModal;
 window.editCustomer = editCustomer;
 window.deleteCustomer = deleteCustomer;
-window.saveCustomer = saveCustomer;
+
+/* Debts */
 window.openDebtModal = openDebtModal;
 window.saveDebt = saveDebt;
 window.payDebt = payDebt;
 window.deleteDebt = deleteDebt;
+
+/* Expenses */
 window.openExpenseModal = openExpenseModal;
 window.saveExpense = saveExpense;
 window.deleteExpense = deleteExpense;
+```
+
+**Muhimu:** kwa kuwa unatumia Firebase Modular, sehemu hii ndiyo sahihi:
+
+```javascript
+await deleteDoc(
+    doc(db, 'expenses', String(id))
+);
+```
+
+na siyo:
+
+```javascript
+db.collection('expenses').doc(id).delete();
+```
+
+Pia kwa sababu code yako iko ndani ya:
+
+```html
+<script type="module">
+```
+
+`window.deleteExpense = deleteExpense;` inahakikisha HTML kama:
+
+```html
+onclick="deleteExpense('123')"
+```
+
+inaweza kuipata function hiyo.
+
+
+/* ================================================================
+   EMPLOYEES CRUD
+   ================================================================ */
+async function loadEmployees() {
+  if (!S.bizId) return;
+  try {
+    const snap = await db.collection('employees').where('businessId','==',S.bizId).get();
+    S.allEmployees = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
+    renderEmployees();
+  } catch(err) {
+    console.error("Employees load error:", err);
+    toast('Imeshindwa kupakua wafanyakazi.','e');
+  }
+}
+
+function renderEmployees() {
+  const grid = document.getElementById('employeesGrid');
+  const q = (document.getElementById('empSearch').value || '').toLowerCase();
+  let items = S.allEmployees;
+  if (q) items = items.filter(function(e){ return (e.name||'').toLowerCase().indexOf(q)>=0; });
+  if (!items.length) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-id-badge"></i><p>Hakuna wafanyakazi</p></div>'; return; }
+  const colors = ['#6c5ce7','#00b894','#f39c12','#e74c3c','#0984e3'];
+  grid.innerHTML = items.map(function(e, idx){
+    const initials = (e.name||'?').split(' ').map(function(w){return w.charAt(0);}).join('').substr(0,2).toUpperCase();
+    const active = e.status !== 'inactive';
+    return '<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:' + colors[idx % colors.length] + '">' + escHtml(initials) + '</div><div><h4>' + escHtml(e.name) + '</h4><p>' + escHtml(e.email||e.phone||'—') + '</p></div></div><div class="emp-card-body"><span class="emp-tag role">' + escHtml(e.role||'Staff') + '</span><span class="emp-tag status ' + (active?'':'inactive') + '">' + (active?'Active':'Inactive') + '</span></div><div class="emp-card-foot"><button class="btn btn-o btn-xs" onclick="editEmployee(\'' + e.id + '\')"><i class="fa-solid fa-pen"></i> Hariri</button><button class="btn btn-d btn-xs" onclick="deleteEmployee(\'' + e.id + '\')"><i class="fa-solid fa-trash"></i> Futa</button></div></div>';
+  }).join('');
+}
+
+function openEmployeeModal() {
+  document.getElementById('empModalTitle').textContent = 'Mfanyakazi Mpya';
+  document.getElementById('empEditId').value = '';
+  document.getElementById('empName').value = '';
+  document.getElementById('empEmail').value = '';
+  document.getElementById('empPhone').value = '';
+  document.getElementById('empRole').value = 'Staff';
+  document.getElementById('empSalary').value = '0';
+  openModal('employeeModal');
+}
+
+function editEmployee(id) {
+  const e = S.allEmployees.find(function(x){ return x.id === id; });
+  if (!e) return;
+  document.getElementById('empModalTitle').textContent = 'Hariri Mfanyakazi';
+  document.getElementById('empEditId').value = e.id;
+  document.getElementById('empName').value = e.name || '';
+  document.getElementById('empEmail').value = e.email || '';
+  document.getElementById('empPhone').value = e.phone || '';
+  document.getElementById('empRole').value = e.role || 'Staff';
+  document.getElementById('empSalary').value = e.salary || 0;
+  openModal('employeeModal');
+}
+
+async function saveEmployee(e) {
+  e.preventDefault();
+  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
+  const editId = document.getElementById('empEditId').value;
+  const data = {
+    businessId: S.bizId,
+    name: document.getElementById('empName').value.trim(),
+    email: document.getElementById('empEmail').value.trim(),
+    phone: document.getElementById('empPhone').value.trim(),
+    role: document.getElementById('empRole').value,
+    salary: Number(document.getElementById('empSalary').value) || 0,
+    status: 'active',
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (!data.name) { toast('Jina linahitajika.','w'); return; }
+  try {
+    if (editId) {
+      await db.collection('employees').doc(editId).update(data);
+      toast('Mfanyakazi amesasishwa.','s');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('employees').add(data);
+      toast('Mfanyakazi ameongezwa.','s');
+    }
+    closeModal('employeeModal');
+    loadEmployees();
+  } catch(err) {
+    console.error("Save employee error:", err);
+    toast('Imeshindwa kuhifadhi mfanyakazi.','e');
+  }
+}
+
+function deleteEmployee(id) {
+  const e = S.allEmployees.find(function(x){ return x.id === id; });
+  requestDelete('Je, unahakika unataka kufuta mfanyakazi "' + (e?e.name:'') + '"?', function(){
+    db.collection('employees').doc(id).delete().then(function(){
+      toast('Mfanyakazi amefutwa.','s');
+      loadEmployees();
+    }).catch(function(err){
+      console.error("Delete employee error:", err);
+      toast('Imeshindwa kufuta mfanyakazi.','e');
+    });
+  });
+}
+
+/* ================================================================
+   SUB-USERS (Business users)
+   ================================================================ */
+async function loadUsers() {
+  if (!S.bizId) return;
+  try {
+    const snap = await db.collection('users').where('businessId','==',S.bizId).get();
+    S.allUsers = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
+    renderUsers();
+  } catch(err) {
+    console.error("Users load error:", err);
+    toast('Imeshindwa kupakua watumiaji.','e');
+  }
+}
+
+function renderUsers() {
+  const tb = document.getElementById('usersBody');
+
+  if (!S.allUsers.length) {
+    tb.innerHTML =
+      '<tr>' +
+        '<td colspan="5" class="empty-s">' +
+          '<i class="fa-solid fa-user-shield"></i>' +
+          '<p>Hakuna watumiaji</p>' +
+        '</td>' +
+      '</tr>';
+
+    return;
+  }
+
+  tb.innerHTML = S.allUsers.map(function(u) {
+
+    /* User status */
+    const isSuspended =
+      u.status === 'suspended' ||
+      u.suspended === true;
+
+    const stCls = isSuspended ? 'suspended' : 'active';
+    const stText = isSuspended ? 'Suspended' : 'Active';
+
+    /* Suspend / Activate button */
+    const statusBtn = isSuspended
+      ? '<button class="btn btn-xs btn-success" ' +
+          'onclick="activateUser(\'' + u.id + '\')" ' +
+          'title="Activate User">' +
+          '<i class="fa-solid fa-user-check"></i>' +
+        '</button>'
+      : '<button class="btn btn-xs btn-warning" ' +
+          'onclick="suspendUser(\'' + u.id + '\')" ' +
+          'title="Suspend User">' +
+          '<i class="fa-solid fa-user-slash"></i>' +
+        '</button>';
+
+    return (
+      '<tr>' +
+
+        /* Name */
+        '<td>' +
+          escHtml(u.name || '—') +
+        '</td>' +
+
+        /* Email */
+        '<td>' +
+          escHtml(u.email || '—') +
+        '</td>' +
+
+        /* Role */
+        '<td>' +
+          '<span class="emp-tag role">' +
+            escHtml(ROLE_LABELS[u.role] || u.role || 'Staff') +
+          '</span>' +
+        '</td>' +
+
+        /* Status */
+        '<td>' +
+          '<span class="status-badge ' + stCls + '">' +
+            stText +
+          '</span>' +
+        '</td>' +
+
+        /* Actions */
+        '<td>' +
+          statusBtn +
+
+          '<button class="btn btn-d btn-xs" ' +
+            'onclick="removeUser(\'' + u.id + '\')" ' +
+            'title="Delete User">' +
+            '<i class="fa-solid fa-trash"></i>' +
+          '</button>' +
+
+        '</td>' +
+
+      '</tr>'
+    );
+
+  }).join('');
+}
+function openUserModal() {
+  document.getElementById('subUserName').value = '';
+  document.getElementById('subUserEmail').value = '';
+  document.getElementById('subUserPass').value = '';
+  document.getElementById('subUserRole').value = 'staff';
+  openModal('userModal');
+}
+
+async function saveSubUser(e) {
+  e.preventDefault();
+  if (!S.bizId || !auth) { toast('Biashara au auth haijapatikana.','e'); return; }
+  const name = document.getElementById('subUserName').value.trim();
+  const email = document.getElementById('subUserEmail').value.trim();
+  const pw = document.getElementById('subUserPass').value;
+  const role = document.getElementById('subUserRole').value;
+  if (!name || !email || !pw) { toast('Jina, barua pepe na nenosiri vinahitajika.','w'); return; }
+  if (pw.length < 6) { toast('Nenosiri lazima iwe na angalau herufi 6.','w'); return; }
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pw);
+    await db.collection('users').doc(cred.user.uid).set({
+      name: name, email: email, role: role,
+      businessId: S.bizId, createdBy: S.uid,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Mtumiaji ameundwa.','s');
+    closeModal('userModal');
+    loadUsers();
+  } catch(err) {
+    console.error("Create user error:", err);
+    toast('Imeshindwa kuunda mtumiaji: ' + (err.message || ''), 'e');
+  }
+}
+
+function removeUser(id) {
+  if (id === S.uid) { toast('Huwezi kujiondoa mwenyewe.','w'); return; }
+  requestDelete('Je, unahakika unataka kuondoa mtumiaji huu?', function(){
+    db.collection('users').doc(id).delete().then(function(){
+      toast('Mtumiaji ameondolewa.','s');
+      loadUsers();
+    }).catch(function(err){
+      console.error("Remove user error:", err);
+      toast('Imeshindwa kuondoa mtumiaji.','e');
+    });
+  });
+}
+
+/* ================================================================
+   NOTIFICATIONS
+   ================================================================ */
+async function loadNotifications() {
+  if (!S.bizId) return;
+  try {
+    const snap = await db.collection('notifications').where('businessId','==',S.bizId).orderBy('createdAt','desc').limit(50).get();
+    S.allNotifs = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
+    renderNotifsSection();
+    renderNotifPanel();
+    updateNotifBadge();
+  } catch(err) {
+    console.error("Notifications load error:", err);
+  }
+}
+
+function renderNotifsSection() {
+  const el = document.getElementById('notifSectionList');
+  if (!S.allNotifs.length) { el.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa</p></div>'; return; }
+  el.innerHTML = S.allNotifs.map(function(n){
+    const icon = n.type === 'warning' ? 'fa-triangle-exclamation' : (n.type === 'success' ? 'fa-check-circle' : 'fa-circle-info');
+    const color = n.type === 'warning' ? 'var(--warning)' : (n.type === 'success' ? 'var(--success)' : 'var(--info)');
+    const unread = !n.read ? 'font-weight:700;' : 'opacity:.6;';
+    return '<div class="notif-item" style="' + unread + '"><i class="fa-solid ' + icon + '" style="color:' + color + '"></i><div><h5>' + escHtml(n.title||'—') + '</h5><p>' + escHtml(n.message||'') + '</p><p style="font-size:10px;margin-top:4px">' + fmtDate(n.createdAt) + '</p></div></div>';
+  }).join('');
+}
+
+function renderNotifPanel() {
+  const el = document.getElementById('nList');
+  if (!S.allNotifs.length) { el.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa</p></div>'; return; }
+  el.innerHTML = S.allNotifs.slice(0,20).map(function(n){
+    const icon = n.type === 'warning' ? 'fa-triangle-exclamation' : (n.type === 'success' ? 'fa-check-circle' : 'fa-circle-info');
+    const color = n.type === 'warning' ? 'var(--warning)' : (n.type === 'success' ? 'var(--success)' : 'var(--info)');
+    return '<div class="notif-item"><i class="fa-solid ' + icon + '" style="color:' + color + '"></i><div><h5>' + escHtml(n.title||'—') + '</h5><p>' + escHtml(n.message||'') + '</p></div></div>';
+  }).join('');
+}
+
+function updateNotifBadge() {
+  const unread = S.allNotifs.filter(function(n){ return !n.read; }).length;
+  const bdg = document.getElementById('sbNotifBdg');
+  const cnt = document.getElementById('tbNotifCnt');
+  if (unread > 0) {
+    bdg.textContent = unread; bdg.style.display = '';
+    cnt.textContent = unread; cnt.style.display = '';
+  } else {
+    bdg.style.display = 'none';
+    cnt.style.display = 'none';
+  }
+}
+
+async function markAllNotifsRead() {
+  if (!S.allNotifs.length) return;
+  const batch = db.batch();
+  let count = 0;
+  S.allNotifs.forEach(function(n){
+    if (!n.read) {
+      batch.update(db.collection('notifications').doc(n.id), {read: true});
+      n.read = true;
+      count++;
+    }
+  });
+  if (count === 0) { toast('Arifa zote zimesomwa tayari.','i'); return; }
+  try {
+    await batch.commit();
+    toast(count + ' arifa zimesomwa.','s');
+    renderNotifsSection();
+    updateNotifBadge();
+  } catch(err) {
+    console.error("Mark notifications error:", err);
+    toast('Imeshindwa kusoma arifa.','e');
+  }
+}
+
+/* ================================================================
+   PROFILE
+   ================================================================ */
+async function loadProfile() {
+  if (!S.user) return;
+  try {
+    const uDoc = await db.collection('users').doc(S.uid).get();
+    const ud = uDoc.exists ? uDoc.data() : {};
+    document.getElementById('profName').value = ud.name || S.user.displayName || '';
+    document.getElementById('profEmail').value = S.user.email || '';
+    document.getElementById('profPhone').value = ud.phone || '';
+    if (S.biz) {
+      document.getElementById('profBizName').textContent = S.biz.name || '—';
+      document.getElementById('profBizCat').textContent = S.biz.category || '—';
+      document.getElementById('profBizNameInput').value = S.biz.name || '';
+      document.getElementById('profBizCatInput').value = S.biz.category || '';
+      document.getElementById('profBizLoc').value = S.biz.location || '';
+      if (S.biz.logo) {
+        document.getElementById('logoPrev').innerHTML = '<img src="' + escHtml(S.biz.logo) + '" alt="Logo"/>';
+      }
+    }
+  } catch(err) {
+    console.error("Profile load error:", err);
+  }
+}
+
+async function saveProfile(e) {
+  e.preventDefault();
+  if (!S.uid || !S.bizId) { toast('Data haijapatikana.','e'); return; }
+  try {
+    await db.collection('users').doc(S.uid).update({
+      name: document.getElementById('profName').value.trim(),
+      phone: document.getElementById('profPhone').value.trim(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('businesses').doc(S.bizId).update({
+      name: document.getElementById('profBizNameInput').value.trim(),
+      category: document.getElementById('profBizCatInput').value,
+      location: document.getElementById('profBizLoc').value.trim(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    const bDoc = await db.collection('businesses').doc(S.bizId).get();
+    if (bDoc.exists) S.biz = bDoc.data();
+    document.getElementById('profBizName').textContent = S.biz.name || '—';
+    document.getElementById('profBizCat').textContent = S.biz.category || '—';
+    applyRolePermissions();
+    toast('Profaili imehifadhiwa.','s');
+  } catch(err) {
+    console.error("Save profile error:", err);
+    toast('Imeshindwa kuhifadhi profaili.','e');
+  }
+}
+
+function handleLogoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('Picha lazima iwe chini ya 2MB.','w'); return; }
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const dataUrl = ev.target.result;
+    document.getElementById('logoPrev').innerHTML = '<img src="' + dataUrl + '" alt="Logo"/>';
+    if (S.bizId && db) {
+      db.collection('businesses').doc(S.bizId).update({logo: dataUrl}).then(function(){
+        if (S.biz) S.biz.logo = dataUrl;
+        const sbLogo = document.getElementById('sbBizLogo');
+        sbLogo.src = dataUrl; sbLogo.style.display = '';
+        toast('Logo imehifadhiwa.','s');
+      }).catch(function(err){
+        console.error("Logo save error:", err);
+        toast('Imeshindwa kuhifadhi logo.','e');
+      });
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ================================================================
+   SUPER ADMIN
+   ================================================================ */
+function superLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('superUser').value.trim();
+  const pw = document.getElementById('superPass').value;
+  if (email === SUPER_CREDS.email && pw === SUPER_CREDS.password) {
+    document.getElementById('superErr').textContent = '';
+    document.getElementById('superLoginBox').classList.add('hidden');
+    document.getElementById('superPanel').classList.remove('hidden');
+    loadSuperAdmin();
+  } else {
+    document.getElementById('superErr').textContent = 'Barua pepe au nenosiri si sahihi.';
+  }
+}
+
+function superLogout() {
+  document.getElementById('superPanel').classList.add('hidden');
+  document.getElementById('superLoginBox').classList.remove('hidden');
+  document.getElementById('superUser').value = '';
+  document.getElementById('superPass').value = '';
+  document.getElementById('superErr').textContent = '';
+  Object.keys(S.charts).forEach(function(k){ destroyChart(k); });
+  showLanding();
+}
+
+function returnToSuperPanel() {
+  document.getElementById('superBodyMain').classList.remove('hidden');
+  document.getElementById('superBodyDetail').classList.add('hidden');
+  document.getElementById('superBackBtn').classList.remove('show');
+  loadSuperAdmin();
+}
+
+async function loadSuperAdmin() {
+  if (!db) {
+    document.getElementById('superMetrics').innerHTML = '<div class="sm-card"><h4>Warning</h4><div class="sm-val" style="font-size:14px;color:var(--warning)">Firebase haijawaunganishwa. Weka config sahihi.</div></div>';
+    return;
+  }
+  try {
+    const [usersSnap, bizSnap, adsSnap, prodSnap] = await Promise.all([
+      db.collection('users').get(),
+      db.collection('businesses').get(),
+      db.collection('globalAds').orderBy('createdAt','desc').get(),
+      db.collection('globalProducts').orderBy('createdAt','desc').get()
+    ]);
+    S.superUsers = usersSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
+    const businesses = bizSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
+    S.superAds = adsSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
+    S.superProducts = prodSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
+    const activeBiz = businesses.filter(function(b){ return b.status === 'active'; }).length;
+    const suspendedBiz = businesses.filter(function(b){ return b.status === 'suspended'; }).length;
+    document.getElementById('superMetrics').innerHTML =
+      '<div class="mc pu"><h4>Watumiaji</h4><div class="sm-val">' + S.superUsers.length + '</div><div class="sm-sub">Registered accounts</div></div>' +
+      '<div class="mc g"><h4>Biashara</h4><div class="sm-val">' + businesses.length + '</div><div class="sm-sub">Active: ' + activeBiz + '</div></div>' +
+      '<div class="mc r"><h4>Zilizosimamishwa</h4><div class="sm-val">' + suspendedBiz + '</div><div class="sm-sub">Suspended businesses</div></div>' +
+      '<div class="mc a"><h4>Matangazo</h4><div class="sm-val">' + S.superAds.length + '</div><div class="sm-sub">Global advertisements</div></div>' +
+      '<div class="mc b"><h4>Bidhaa Hadharani</h4><div class="sm-val">' + S.superProducts.length + '</div><div class="sm-sub">Public catalogue</div></div>';
+    renderSuperUsers();
+    renderSuperAds();
+    renderSuperProducts();
+    renderSuperCharts();
+  } catch(err) {
+    console.error("Super admin load error:", err);
+    toast('Imeshindwa kupakua data ya super admin.','e');
+  }
+}
+
+function renderSuperUsers() {
+  const tb = document.getElementById('superUsersBody');
+  const q = (document.getElementById('superUserSearch').value || '').toLowerCase();
+  let items = S.superUsers;
+  if (q) items = items.filter(function(u){ return (u.name||'').toLowerCase().indexOf(q)>=0 || (u.email||'').toLowerCase().indexOf(q)>=0; });
+  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><p>Hakuna watumiaji</p></td></tr>'; return; }
+  const bizMap = {};
+  S.superUsers.forEach(function(u){ if (u.businessId) bizMap[u.businessId] = u; });
+  tb.innerHTML = items.map(function(u){
+    const stCls = 'active';
+    return '<tr><td>' + escHtml(u.name||'—') + '</td><td>' + escHtml(u.email||'—') + '</td><td>' + escHtml(u.businessName||'—') + '</td><td>' + escHtml(u.businessCategory||'—') + '</td><td><span class="status-badge ' + stCls + '">Active</span></td><td>' + fmtDate(u.createdAt) + '</td><td><button class="btn btn-i btn-xs" onclick="viewSuperUser(\'' + u.id + '\')"><i class="fa-solid fa-eye"></i></button> <button class="btn btn-w btn-xs" onclick="openSuperNotifModal(\'' + u.id + '\')"><i class="fa-solid fa-bell"></i></button></td></tr>';
+  }).join('');
+}
+
+async function viewSuperUser(uid) {
+  const user = S.superUsers.find(function(u){ return u.id === uid; });
+  if (!user) return;
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  html += '<div><strong>Jina:</strong> ' + escHtml(user.name||'—') + '</div>';
+  html += '<div><strong>Barua:</strong> ' + escHtml(user.email||'—') + '</div>';
+  html += '<div><strong>Simu:</strong> ' + escHtml(user.phone||'—') + '</div>';
+  html += '<div><strong>Jukumu:</strong> ' + escHtml(ROLE_LABELS[user.role]||user.role||'—') + '</div>';
+  html += '<div><strong>Biashara:</strong> ' + escHtml(user.businessName||'—') + '</div>';
+  html += '<div><strong>Category:</strong> ' + escHtml(user.businessCategory||'—') + '</div>';
+  html += '<div><strong>Imejiunga:</strong> ' + fmtDate(user.createdAt) + '</div>';
+  html += '</div>';
+  if (user.businessId && db) {
+    try {
+      const bizDoc = await db.collection('businesses').doc(user.businessId).get();
+      if (bizDoc.exists) {
+        const b = bizDoc.data();
+        html += '<div style="margin-top:16px;padding:12px;background:var(--bg3);border-radius:8px"><h4 style="margin-bottom:8px"><i class="fa-solid fa-store" style="color:var(--primary2);margin-right:6px"></i> Taarifa za Biashara</h4>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">';
+        html += '<div><strong>Jina:</strong> ' + escHtml(b.name) + '</div>';
+        html += '<div><strong>Category:</strong> ' + escHtml(b.category) + '</div>';
+        html += '<div><strong>Eneo:</strong> ' + escHtml(b.location||'—') + '</div>';
+        html += '<div><strong>Hatua:</strong> <span class="status-badge ' + (b.status==='active'?'active':'suspended') + '">' + escHtml(b.status||'active') + '</span></div>';
+        html += '</div></div>';
+      }
+    } catch(err) { console.error("View biz error:", err); }
+  }
+  document.getElementById('superViewTitle').textContent = 'Taarifa za Mtumiaji';
+  document.getElementById('superViewContent').innerHTML = html;
+  document.getElementById('superViewModal').style.display = 'flex';
+}
+/* ========================================================= MODULAR FIREBASE - USER SUSPENSION / ACTIVATION ========================================================= */ /** * Suspend User * Only Super Admin is allowed to perform this action. */ async function suspendUser( userId, reason = 'Account suspended by administrator' ) { try { if (!userId) { throw new Error('User ID haijapatikana.'); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumsuspend User.' ); } /* Update User status */ await updateDoc( doc(db, 'users', userId), { status: 'suspended', suspended: true, suspensionReason: reason, suspendedAt: serverTimestamp(), updatedAt: serverTimestamp() } ); console.log( 'User suspended successfully:', userId ); alert( 'User amesimamishwa kikamilifu.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Suspend User Error:', error ); alert( 'Imeshindikana kumsuspend User: ' + (error.message || error) ); } } /** * Activate User * Only Super Admin is allowed to perform this action. */ async function activateUser(userId) { try { if (!userId) { throw new Error( 'User ID haijapatikana.' ); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumu-activate User.' ); } /* Restore User access */ await updateDoc( doc(db, 'users', userId), { status: 'active', suspended: false, suspensionReason: '', suspendedAt: null, updatedAt: serverTimestamp() } ); console.log( 'User activated successfully:', userId ); alert( 'User amewezeshwa tena.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Activate User Error:', error ); alert( 'Imeshindikana ku-activate User: ' + (error.message || error) ); } } /* ========================================================= SUPER ADMIN - ADVERTISEMENT LIST ========================================================= */ function renderSuperAds() { const el = document.getElementById( 'superAdsList' ); /* Safety check */ if (!el) { console.warn( 'Element #superAdsList haijapatikana.' ); return; } /* No advertisements */ if ( !S.superAds || !S.superAds.length ) { el.innerHTML = '<div class="empty-s">' + '<i class="fa-solid fa-bullhorn"></i>' + '<p>Hakuna matangazo</p>' + '</div>'; return; } /* Render advertisements */ el.innerHTML = S.superAds.map(function(a) { const title = escHtml( a.title || 'Tangazo bila jina' ); const description = escHtml( a.description || '' ).substring(0, 60); const image = a.imageUrl ? '<img src="' + escHtml(a.imageUrl) + '" alt="' + title + '" loading="lazy">' : '<div class="ad-no-image">' + '<i class="fa-solid fa-image"></i>' + '</div>'; return ( '<div class="super-ad-item">' + '<div class="super-ad-image">' + image + '</div>' + '<div class="super-ad-info">' + '<h4>' + title + '</h4>' + '<p>' + description + (a.description && a.description.length > 60 ? '...' : '') + '</p>' + '</div>' + '</div>' ); }).join(''); }
+function renderSuperProducts() {
+  const el = document.getElementById('superProductsList');
+  if (!S.superProducts.length) { el.innerHTML = '<div class="empty-s"><p>Hakuna bidhaa hadharani</p></div>'; return; }
+  el.innerHTML = S.superProducts.map(function(p){
+    return '<div class="super-prod-item"><div class="super-ad-thumb">' + (p.imageUrl ? '<img src="' + escHtml(p.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-box"></i></div>') + '</div><div class="super-ad-info"><h5>' + escHtml(p.name) + '</h5><p>' + escHtml(p.seller||'') + ' — ' + fmtCur(p.price) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+  }).join('');
+}
+
+function renderSuperCharts() {
+  destroyChart('superUsersTrendC');
+  destroyChart('superCatC');
+  destroyChart('superBizC');
+  destroyChart('superProdC');
+  const months = [];
+  const mData = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1); d.setHours(0,0,0,0);
+    const end = new Date(d); end.setMonth(end.getMonth() + 1);
+    months.push(d.toLocaleDateString('sw-TZ',{month:'short'}));
+    const count = S.superUsers.filter(function(u){
+      const t = u.createdAt ? (u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt)) : null;
+      return t && t >= d && t < end;
+    }).length;
+    mData.push(count);
+  }
+  S.charts.superUsersTrendC = new Chart(document.getElementById('superUsersTrend'), {
+    type:'line', data:{labels:months, datasets:[{label:'Users',data:mData,borderColor:'#6c5ce7',backgroundColor:'rgba(108,92,231,.15)',fill:true,tension:.4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},x:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
+  });
+  const cats = {};
+  S.superUsers.forEach(function(u){ const c = u.businessCategory||'Nyingine'; cats[c] = (cats[c]||0)+1; });
+  const catLabels = Object.keys(cats);
+  const catData = Object.values(cats);
+  const catColors = ['#6c5ce7','#00b894','#f39c12','#e74c3c','#0984e3','#a29bfe','#fd79a8'];
+  S.charts.superCatC = new Chart(document.getElementById('superCategoryChart'), {
+    type:'doughnut', data:{labels:catLabels.length?catLabels:['Hakuna data'],datasets:[{data:catData.length?catData:[1],backgroundColor:catColors}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9a9ab0'}}}}
+  });
+  S.charts.superBizC = new Chart(document.getElementById('superBusinessChart'), {
+    type:'bar', data:{labels:catLabels.length?catLabels.slice(0,6):['Hakuna data'],datasets:[{label:'Biashara',data:catData.length?catData.slice(0,6):[0],backgroundColor:'#00b894'}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
+  });
+  const prodCats = {};
+  S.superProducts.forEach(function(p){ const c = p.category||'Nyingine'; prodCats[c] = (prodCats[c]||0)+1; });
+  const pLabels = Object.keys(prodCats);
+  const pData = Object.values(prodCats);
+  S.charts.superProdC = new Chart(document.getElementById('superProductChart'), {
+    type:'bar', data:{labels:pLabels.length?pLabels:['Hakuna data'],datasets:[{label:'Products',data:pData.length?pData:[0],backgroundColor:'#f39c12'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},x:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
+  });
+}
+
+/* Super Ads CRUD */
+function openSuperAdModal() {
+  document.getElementById('superAdId').value = '';
+  document.getElementById('superAdTitle').value = '';
+  document.getElementById('superAdText').value = '';
+  document.getElementById('superAdImage').value = '';
+  document.getElementById('superAdLink').value = '';
+  document.querySelector('#superAdModal .super-modal-head h3').textContent = 'Create Advertisement';
+  document.getElementById('superAdModal').style.display = 'flex';
+}
+
+function editSuperAd(id) {
+  const a = S.superAds.find(function(x){ return x.id === id; });
+  if (!a) return;
+  document.getElementById('superAdId').value = a.id;
+  document.getElementById('superAdTitle').value = a.title || '';
+  document.getElementById('superAdText').value = a.description || '';
+  document.getElementById('superAdImage').value = a.imageUrl || '';
+  document.getElementById('superAdLink').value = a.link || '';
+  document.querySelector('#superAdModal .super-modal-head h3').textContent = 'Edit Advertisement';
+  document.getElementById('superAdModal').style.display = 'flex';
+}
+
+async function saveSuperAd(e) {
+  e.preventDefault();
+  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
+  const editId = document.getElementById('superAdId').value;
+  const data = {
+    title: document.getElementById('superAdTitle').value.trim(),
+    description: document.getElementById('superAdText').value.trim(),
+    imageUrl: document.getElementById('superAdImage').value.trim(),
+    link: document.getElementById('superAdLink').value.trim()
+  };
+  if (!data.title) { toast('Title linahitajika.','w'); return; }
+  try {
+    if (editId) {
+      await db.collection('globalAds').doc(editId).update(data);
+      toast('Matangazo yamesasishwa.','s');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('globalAds').add(data);
+      toast('Matangazo yameongezwa.','s');
+    }
+    closeSuperModal('superAdModal');
+    loadSuperAdmin();
+  } catch(err) {
+    console.error("Save ad error:", err);
+    toast('Imeshindwa kuhifadhi matangazo.','e');
+  }
+}
+
+function deleteSuperAd(id) {
+  requestDelete('Je, unahakika unataka kufuta matangazo haya?', function(){
+    db.collection('globalAds').doc(id).delete().then(function(){
+      toast('Matangazo yamefutwa.','s');
+      loadSuperAdmin();
+    }).catch(function(err){
+      console.error("Delete ad error:", err);
+      toast('Imeshindwa kufuta matangazo.','e');
+    });
+  });
+}
+
+/* Super Products CRUD */
+function openSuperProductModal() {
+  document.getElementById('superProdId').value = '';
+  document.getElementById('superProdName').value = '';
+  document.getElementById('superProdCategory').value = '';
+  document.getElementById('superProdSeller').value = '';
+  document.getElementById('superProdShop').value = '';
+  document.getElementById('superProdPhone').value = '';
+  document.getElementById('superProdLocation').value = '';
+  document.getElementById('superProdPrice').value = '';
+  document.getElementById('superProdDesc').value = '';
+  document.getElementById('superProdImageUrl').value = '';
+  document.querySelector('#superProductModal .super-modal-head h3').textContent = 'Public Product Catalogue';
+  document.getElementById('superProductModal').style.display = 'flex';
+}
+
+function editSuperProduct(id) {
+  const p = S.superProducts.find(function(x){ return x.id === id; });
+  if (!p) return;
+  document.getElementById('superProdId').value = p.id;
+  document.getElementById('superProdName').value = p.name || '';
+  document.getElementById('superProdCategory').value = p.category || '';
+  document.getElementById('superProdSeller').value = p.seller || '';
+  document.getElementById('superProdShop').value = p.shop || '';
+  document.getElementById('superProdPhone').value = p.phone || '';
+  document.getElementById('superProdLocation').value = p.location || '';
+  document.getElementById('superProdPrice').value = p.price || '';
+  document.getElementById('superProdDesc').value = p.description || '';
+  document.getElementById('superProdImageUrl').value = p.imageUrl || '';
+  document.querySelector('#superProductModal .super-modal-head h3').textContent = 'Edit Product';
+  document.getElementById('superProductModal').style.display = 'flex';
+}
+
+async function saveSuperProduct(e) {
+  e.preventDefault();
+  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
+  const editId = document.getElementById('superProdId').value;
+  const data = {
+    name: document.getElementById('superProdName').value.trim(),
+    category: document.getElementById('superProdCategory').value.trim(),
+    seller: document.getElementById('superProdSeller').value.trim(),
+    shop: document.getElementById('superProdShop').value.trim(),
+    phone: document.getElementById('superProdPhone').value.trim(),
+    location: document.getElementById('superProdLocation').value.trim(),
+    price: Number(document.getElementById('superProdPrice').value) || 0,
+    description: document.getElementById('superProdDesc').value.trim(),
+    imageUrl: document.getElementById('superProdImageUrl').value.trim()
+  };
+  if (!data.name) { toast('Jina la bidhaa linahitajika.','w'); return; }
+  if (data.price <= 0) { toast('Bei lazima iwe zaidi ya 0.','w'); return; }
+  try {
+    if (editId) {
+      await db.collection('globalProducts').doc(editId).update(data);
+      toast('Bidhaa imesasishwa.','s');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('globalProducts').add(data);
+      toast('Bidhaa imechapishwa.','s');
+    }
+    closeSuperModal('superProductModal');
+    loadSuperAdmin();
+  } catch(err) {
+    console.error("Save product error:", err);
+    toast('Imeshindwa kuhifadhi bidhaa.','e');
+  }
+}
+
+function deleteSuperProduct(id) {
+  requestDelete('Je, unahakika unataka kufuta bidhaa hii?', function(){
+    db.collection('globalProducts').doc(id).delete().then(function(){
+      toast('Bidhaa imefutwa.','s');
+      loadSuperAdmin();
+    }).catch(function(err){
+      console.error("Delete product error:", err);
+      toast('Imeshindwa kufuta bidhaa.','e');
+    });
+  });
+}
+
+/* Super Notification */
+function openSuperNotifModal(userId) {
+  document.getElementById('superNotifUserId').value = userId;
+  document.getElementById('superNotifTitle').value = '';
+  document.getElementById('superNotifMsg').value = '';
+  document.getElementById('superNotifModal').style.display = 'flex';
+}
+
+async function sendSuperNotif(e) {
+  e.preventDefault();
+  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
+  const userId = document.getElementById('superNotifUserId').value;
+  const title = document.getElementById('superNotifTitle').value.trim();
+  const msg = document.getElementById('superNotifMsg').value.trim();
+  if (!title || !msg) { toast('Title na message vinahitajika.','w'); return; }
+  try {
+    const uDoc = await db.collection('users').doc(userId).get();
+    const bizId = uDoc.exists ? uDoc.data().businessId : null;
+    await db.collection('notifications').add({
+      userId: userId, businessId: bizId,
+      title: title, message: msg,
+      type: 'info', fromSuper: true, read: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Arifa imetumwa.','s');
+    closeSuperModal('superNotifModal');
+  } catch(err) {
+    console.error("Send notif error:", err);
+    toast('Imeshindwa kutuma arifa.','e');
+  }
+}
+
+/* Super Modal Helpers */
+function closeSuperModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+/* Export Users PDF */
+function exportUsersPDF() {
+  if (!S.superUsers.length) { toast('Hakuna watumiaji kuexport.','w'); return; }
+  let html = '<!DOCTYPE html><html><head><title>BizBook Users Report</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:12px}th{background:#6c5ce7;color:#fff}h1{font-size:20px}p{color:#666;font-size:13px}</style></head><body>';
+  html += '<h1>BizBook - Users Report</h1>';
+  html += '<p>Generated: ' + new Date().toLocaleString() + '</p>';
+  html += '<p>Total Users: ' + S.superUsers.length + '</p>';
+  html += '<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Business</th><th>Category</th><th>Joined</th></tr></thead><tbody>';
+  S.superUsers.forEach(function(u){
+    html += '<tr><td>' + escHtml(u.name||'—') + '</td><td>' + escHtml(u.email||'—') + '</td><td>' + escHtml(u.phone||'—') + '</td><td>' + escHtml(ROLE_LABELS[u.role]||u.role||'—') + '</td><td>' + escHtml(u.businessName||'—') + '</td><td>' + escHtml(u.businessCategory||'—') + '</td><td>' + fmtDate(u.createdAt) + '</td></tr>';
+  });
+  html += '</tbody></table></body></html>';
+  const w = window.open('', '_blank');
+  w.document.write(html + '<script>setTimeout(function(){window.print();},500)<\/script>');
+  w.document.close();
+}
+
+/* Share Public Catalogue */
+function sharePublicCatalogue() {
+  const url = window.location.href.split('?')[0] + '#catalogue';
+  if (navigator.share) {
+    navigator.share({title:'BizBook Product Catalogue', text:'Tazama bidhaa zetu!', url:url}).catch(function(){});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(function(){
+      toast('Link imekopiwwa.', 's');
+    }).catch(function(){
+      toast('Imeshindwa kukopi link.', 'e');
+    });
+  } else {
+    prompt('Copy catalogue link:', url);
+  }
+}
+
+/* ================================================================
+   PUBLIC SHOWCASE
+   ================================================================ */
+function renderPublicShowcase() {
+  if (!db) {
+    document.getElementById('publicAdsGrid').innerHTML = '<div class="empty-s"><p>Firebase haijawaunganishwa.</p></div>';
+    document.getElementById('publicProductsGrid').innerHTML = '<div class="empty-s"><p>Firebase haijawaunganishwa.</p></div>';
+    return;
+  }
+  Promise.all([
+    db.collection('globalAds').orderBy('createdAt','desc').get(),
+    db.collection('globalProducts').orderBy('createdAt','desc').get()
+  ]).then(function(results){
+    const ads = results[0].docs.map(function(d){ return d.data(); });
+    const prods = results[1].docs.map(function(d){ return d.data(); });
+    const adsGrid = document.getElementById('publicAdsGrid');
+    if (!ads.length) {
+      adsGrid.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bullhorn"></i><p>Hakuna matangazo bado</p></div>';
+    } else {
+      adsGrid.innerHTML = ads.map(function(a){
+        return '<div class="pub-ad-card">' + (a.imageUrl ? '<img class="pub-ad-img" src="' + escHtml(a.imageUrl) + '" alt=""/>' : '<div class="pub-ad-img-placeholder"><i class="fa-solid fa-image"></i></div>') +
+          '<div class="pub-ad-body"><h4>' + escHtml(a.title) + '</h4><p>' + escHtml(a.description||'') + '</p>' + (a.link ? '<a class="pub-ad-link" href="' + escHtml(a.link) + '" target="_blank" rel="noopener">Pata zaidi <i class="fa-solid fa-arrow-right"></i></a>' : '') + '</div></div>';
+      }).join('');
+    }
+    const prodGrid = document.getElementById('publicProductsGrid');
+    if (!prods.length) {
+      prodGrid.innerHTML = '<div class="empty-s"><i class="fa-solid fa-boxes-stacked"></i><p>Hakuna bidhaa hadharani bado</p></div>';
+    } else {
+      prodGrid.innerHTML = prods.map(function(p){
+        return '<div class="pub-prod-card">' + (p.imageUrl ? '<img class="pub-prod-img" src="' + escHtml(p.imageUrl) + '" alt=""/>' : '<div class="pub-prod-img-placeholder"><i class="fa-solid fa-box"></i></div>') +
+          '<div class="pub-prod-body"><h4>' + escHtml(p.name) + '</h4><p>' + escHtml(p.description||'').substr(0,80) + '</p><div class="pub-prod-price">' + fmtCur(p.price) + '</div><div class="pub-prod-seller">' + escHtml(p.seller||'') + (p.shop ? ' — ' + escHtml(p.shop) : '') + (p.phone ? ' — ' + escHtml(p.phone) : '') + '</div></div></div>';
+      }).join('');
+    }
+  }).catch(function(err){
+    console.error("Public showcase error:", err);
+    document.getElementById('publicAdsGrid').innerHTML = '<div class="empty-s"><p>Imeshindwa kupakua data.</p></div>';
+    document.getElementById('publicProductsGrid').innerHTML = '<div class="empty-s"><p>Imeshindwa kupakua data.</p></div>';
+  });
+}
+
+/* ================================================================
+   AUTH STATE LISTENER
+   ================================================================ */
+function initAuthListener() {
+  if (!auth) {
+    showLanding();
+    return;
+  }
+  auth.onAuthStateChanged(function(user) {
+    if (user) {
+      S.user = user;
+      S.uid = user.uid;
+      db.collection('users').doc(user.uid).get().then(function(uDoc) {
+        if (uDoc.exists) {
+          const ud = uDoc.data();
+          S.bizId = ud.businessId;
+          S.role = ud.role || 'admin';
+          if (S.bizId) {
+            return db.collection('businesses').doc(S.bizId).get().then(function(bDoc){
+              if (bDoc.exists) S.biz = bDoc.data();
+            });
+          }
+        }
+      }).then(function(){
+        if (S.bizId) {
+          showRoleScreen();
+        } else {
+          showLanding();
+        }
+      }).catch(function(err){
+        console.error("Auth state error:", err);
+        showLanding();
+      });
+    } else {
+      S.user = null;
+      S.uid = null;
+      S.bizId = null;
+      S.biz = null;
+      showLanding();
+    }
+  });
+}
+
+/* ================================================================
+   ENRICH SUPER USER DATA WITH BUSINESS INFO
+   ================================================================ */
+async function enrichSuperUsersWithBiz() {
+  if (!db || !S.superUsers.length) return;
+  const bizIds = [];
+  S.superUsers.forEach(function(u){
+    if (u.businessId && bizIds.indexOf(u.businessId) < 0) bizIds.push(u.businessId);
+  });
+  if (!bizIds.length) return;
+  try {
+    const snaps = await Promise.all(bizIds.map(function(bid){ return db.collection('businesses').doc(bid).get(); }));
+    const bizMap = {};
+    snaps.forEach(function(snap){
+      if (snap.exists) bizMap[snap.id] = snap.data();
+    });
+    S.superUsers.forEach(function(u){
+      if (u.businessId && bizMap[u.businessId]) {
+        u.businessName = bizMap[u.businessId].name || '—';
+        u.businessCategory = bizMap[u.businessId].category || '—';
+      }
+    });
+  } catch(err) { console.error("Enrich users error:", err); }
+}
+
+/* Override renderSuperUsers to include enrichment */
+var _origRenderSuperUsers = renderSuperUsers;
+renderSuperUsers = function() {
+  enrichSuperUsersWithBiz().then(function(){
+    _origRenderSuperUsers();
+  }).catch(function(){
+    _origRenderSuperUsers();
+  });
+};
+
+/* ================================================================
+   GLOBAL ERROR HANDLERS
+   ================================================================ */
+window.addEventListener('error', function(event) {
+  console.error('Global error:', event.error);
+});
+
+window.addEventListener('unhandledrejection', function(event) {
+  console.error('Unhandled promise rejection:', event.reason);
+});
+
+/* Close user dropdown when clicking outside */
+document.addEventListener('click', function(e) {
+  const chip = document.querySelector('.u-chip');
+  const dd = document.getElementById('uDd');
+  if (chip && dd && dd.classList.contains('show') && !chip.contains(e.target)) {
+    dd.classList.remove('show');
+  }
+});
+
+/* Close notification panel when clicking outside */
+document.addEventListener('click', function(e) {
+  const panel = document.getElementById('notifPanel');
+  const btn = document.querySelector('.tb-btn[onclick="toggleNotifPanel()"]');
+  if (panel && panel.classList.contains('show') && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+    panel.classList.remove('show');
+  }
+});
+
+/* Keyboard shortcut: Escape to close modals */
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-ov.show').forEach(function(m){ m.classList.remove('show'); });
+    document.querySelectorAll('.super-modal').forEach(function(m){ if(m.style.display === 'flex') m.style.display = 'none'; });
+    if (document.getElementById('priceCalculatorModal').style.display === 'flex') {
+      closePriceCalculator();
+    }
+    closeSidebar();
+    closeNotifPanel();
+    closeUserDd();
+  }
+});
+
+/* ================================================================
+   INITIALIZATION
+   ================================================================ */
+function init() {
+  console.log('BizBook initializing...');
+  showLanding();
+  initAuthListener();
+}
+
+/* Wait for DOM to be ready */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
+
