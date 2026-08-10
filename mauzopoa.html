@@ -2675,89 +2675,403 @@ async function loadUsers() {
   }
 }
 
-function renderUsers() {
-  const tb = document.getElementById('usersBody');
+```javascript
+function renderSuperMetrics() {
+    var users = normalizeUsers();
 
-  if (!S.allUsers.length) {
-    tb.innerHTML =
-      '<tr>' +
-        '<td colspan="5" class="empty-s">' +
-          '<i class="fa-solid fa-user-shield"></i>' +
-          '<p>Hakuna watumiaji</p>' +
-        '</td>' +
-      '</tr>';
+    var active = users.filter(function (u) {
+        return u.status !== 'suspended';
+    }).length;
 
-    return;
-  }
+    var suspended = users.filter(function (u) {
+        return u.status === 'suspended';
+    }).length;
 
-  tb.innerHTML = S.allUsers.map(function(u) {
+    var biz = getAllBusinesses().length;
+    var sales = getGlobalSales();
 
-    /* User status */
-    const isSuspended =
-      u.status === 'suspended' ||
-      u.suspended === true;
+    var revenue = sales.reduce(function (a, x) {
+        return a + (Number(x.sale.total) || 0);
+    }, 0);
 
-    const stCls = isSuspended ? 'suspended' : 'active';
-    const stText = isSuspended ? 'Suspended' : 'Active';
+    var container = document.getElementById('superMetrics');
 
-    /* Suspend / Activate button */
-    const statusBtn = isSuspended
-      ? '<button class="btn btn-xs btn-success" ' +
-          'onclick="activateUser(\'' + u.id + '\')" ' +
-          'title="Activate User">' +
-          '<i class="fa-solid fa-user-check"></i>' +
-        '</button>'
-      : '<button class="btn btn-xs btn-warning" ' +
-          'onclick="suspendUser(\'' + u.id + '\')" ' +
-          'title="Suspend User">' +
-          '<i class="fa-solid fa-user-slash"></i>' +
-        '</button>';
+    if (!container) {
+        console.warn('superMetrics element not found.');
+        return;
+    }
 
-    return (
-      '<tr>' +
+    container.innerHTML =
+        '<div class="super-metric">' +
+            '<div class="super-metric-value">' + users.length + '</div>' +
+            '<div class="super-metric-label">Total Users</div>' +
+        '</div>' +
 
-        /* Name */
-        '<td>' +
-          escHtml(u.name || '—') +
-        '</td>' +
+        '<div class="super-metric">' +
+            '<div class="super-metric-value">' + active + '</div>' +
+            '<div class="super-metric-label">Active Users</div>' +
+        '</div>' +
 
-        /* Email */
-        '<td>' +
-          escHtml(u.email || '—') +
-        '</td>' +
+        '<div class="super-metric">' +
+            '<div class="super-metric-value">' + suspended + '</div>' +
+            '<div class="super-metric-label">Suspended / Inactive</div>' +
+        '</div>' +
 
-        /* Role */
-        '<td>' +
-          '<span class="emp-tag role">' +
-            escHtml(ROLE_LABELS[u.role] || u.role || 'Staff') +
-          '</span>' +
-        '</td>' +
+        '<div class="super-metric">' +
+            '<div class="super-metric-value">' + biz + '</div>' +
+            '<div class="super-metric-label">Registered Businesses</div>' +
+        '</div>' +
 
-        /* Status */
-        '<td>' +
-          '<span class="status-badge ' + stCls + '">' +
-            stText +
-          '</span>' +
-        '</td>' +
+        '<div class="super-metric">' +
+            '<div class="super-metric-value">' + fmt(revenue) + '</div>' +
+            '<div class="super-metric-label">Global Sales Value</div>' +
+        '</div>';
+}
 
-        /* Actions */
-        '<td>' +
-          statusBtn +
 
-          '<button class="btn btn-d btn-xs" ' +
-            'onclick="removeUser(\'' + u.id + '\')" ' +
-            'title="Delete User">' +
-            '<i class="fa-solid fa-trash"></i>' +
-          '</button>' +
+function renderSuperUsers() {
+    var users = normalizeUsers();
 
-        '</td>' +
+    var searchEl = document.getElementById('superUserSearch');
+    var body = document.getElementById('superUsersBody');
 
-      '</tr>'
+    if (!body) {
+        console.warn('superUsersBody element not found.');
+        return;
+    }
+
+    var q = searchEl
+        ? (searchEl.value || '').toLowerCase().trim()
+        : '';
+
+    var filtered = users.filter(function (u) {
+        var businesses = u.businesses || [];
+
+        var businessText = businesses.map(function (b) {
+            return (b.name || '') + ' ' + (b.category || '');
+        }).join(' ');
+
+        var searchText =
+            (u.name || '') + ' ' +
+            (u.email || '') + ' ' +
+            businessText;
+
+        return searchText.toLowerCase().indexOf(q) >= 0;
+    });
+
+    if (!filtered.length) {
+        body.innerHTML =
+            '<tr>' +
+                '<td colspan="7" class="empty-s">No users found</td>' +
+            '</tr>';
+
+        return;
+    }
+
+    body.innerHTML = filtered.map(function (u) {
+
+        var businesses = u.businesses || [];
+
+        var role = u.systemRole || 'user';
+
+        var status = u.status === 'suspended'
+            ? 'suspended'
+            : 'active';
+
+        var avatar = (u.name || 'U')
+            .charAt(0)
+            .toUpperCase();
+
+        var businessHtml = businesses.length
+            ? businesses.map(function (b) {
+                return (
+                    '<div>' +
+                        '<strong>' + esc(b.name || 'Unnamed Business') + '</strong>' +
+                        '<small>' + esc(b.category || 'Other') + '</small>' +
+                    '</div>'
+                );
+            }).join('')
+            : '<span class="muted">No business registered</span>';
+
+        var statusButton = status === 'active'
+            ? (
+                '<button type="button" class="sa-yellow" ' +
+                'onclick="superSetUserStatus(\'' +
+                escAttr(u.id) +
+                '\', \'suspended\')">' +
+                'Suspend' +
+                '</button>'
+            )
+            : (
+                '<button type="button" class="sa-green" ' +
+                'onclick="superSetUserStatus(\'' +
+                escAttr(u.id) +
+                '\', \'active\')">' +
+                'Activate' +
+                '</button>'
+            );
+
+        return (
+            '<tr>' +
+
+                '<td>' +
+                    '<div class="super-user">' +
+                        '<div class="super-user-av">' +
+                            esc(avatar) +
+                        '</div>' +
+
+                        '<div>' +
+                            '<strong>' +
+                                esc(u.name || 'Unknown User') +
+                            '</strong>' +
+
+                            '<small>' +
+                                esc(u.phone || 'No phone') +
+                            '</small>' +
+                        '</div>' +
+                    '</div>' +
+                '</td>' +
+
+                '<td>' +
+                    esc(u.email || 'No email') +
+                '</td>' +
+
+                '<td>' +
+                    businessHtml +
+                '</td>' +
+
+                '<td>' +
+                    '<span class="super-role">' +
+                        esc(role) +
+                    '</span>' +
+                '</td>' +
+
+                '<td>' +
+                    '<span class="super-status ' +
+                        escAttr(status) +
+                    '">' +
+                        (
+                            status === 'active'
+                                ? 'ACTIVE'
+                                : 'SUSPENDED'
+                        ) +
+                    '</span>' +
+                '</td>' +
+
+                '<td>' +
+                    fmtD(u.createdAt) +
+                '</td>' +
+
+                '<td>' +
+                    '<div class="super-actions">' +
+
+                        statusButton +
+
+                        '<button type="button" class="sa-blue" ' +
+                            'onclick="superMakeManager(\'' +
+                            escAttr(u.id) +
+                            '\')">' +
+                            'Make Manager' +
+                        '</button>' +
+
+                        '<button type="button" class="sa-red" ' +
+                            'onclick="superDeleteUser(\'' +
+                            escAttr(u.id) +
+                            '\')">' +
+                            'Delete' +
+                        '</button>' +
+
+                    '</div>' +
+                '</td>' +
+
+            '</tr>'
+        );
+    }).join('');
+}
+
+
+/* ===== HTML ESCAPING ===== */
+
+function esc(v) {
+    return String(v == null ? '' : v).replace(
+        /[&<>"']/g,
+        function (c) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[c];
+        }
+    );
+}
+
+
+/* ===== ATTRIBUTE ESCAPING ===== */
+
+function escAttr(v) {
+    return String(v == null ? '' : v)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
+}
+
+
+/* ===== CHANGE USER STATUS ===== */
+
+function superSetUserStatus(id, status) {
+    var users = normalizeUsers();
+
+    var u = users.find(function (x) {
+        return x.id === id;
+    });
+
+    if (!u) {
+        toast('User not found.', 'e');
+        return;
+    }
+
+    if (status !== 'active' && status !== 'suspended') {
+        toast('Invalid user status.', 'e');
+        return;
+    }
+
+    u.status = status;
+    u.lastSeen = new Date().toISOString();
+
+    sU(users);
+
+    renderSuperAdmin();
+
+    toast(
+        status === 'suspended'
+            ? 'User suspended'
+            : 'User activated',
+        status === 'suspended'
+            ? 'w'
+            : 's'
+    );
+}
+
+
+/* ===== MAKE USER SYSTEM MANAGER ===== */
+
+function superMakeManager(id) {
+    var users = normalizeUsers();
+
+    var u = users.find(function (x) {
+        return x.id === id;
+    });
+
+    if (!u) {
+        toast('User not found.', 'e');
+        return;
+    }
+
+    u.systemRole = 'manager';
+
+    sU(users);
+
+    renderSuperAdmin();
+
+    toast('User role changed to System Manager', 's');
+}
+
+
+/* ===== DELETE USER ===== */
+
+function superDeleteUser(id) {
+    var users = normalizeUsers();
+
+    var u = users.find(function (x) {
+        return x.id === id;
+    });
+
+    if (!u) {
+        toast('User not found.', 'e');
+        return;
+    }
+
+    var confirmed = confirm(
+        'Delete this user and all registered business data?'
     );
 
-  }).join('');
+    if (!confirmed) {
+        return;
+    }
+
+    /*
+     * Delete registered businesses.
+     * Use Promise.all so all deletion operations can complete.
+     */
+    var businessDeletes = (u.businesses || []).map(function (b) {
+
+        if (
+            window.__fb &&
+            typeof window.__fb.deleteBusiness === 'function'
+        ) {
+            return window.__fb
+                .deleteBusiness(b.id)
+                .catch(function (error) {
+                    console.error(
+                        'Failed to delete business:',
+                        b.id,
+                        error
+                    );
+                });
+        }
+
+        return Promise.resolve();
+    });
+
+    Promise.all(businessDeletes)
+        .then(function () {
+
+            /* Remove user */
+            sU(
+                users.filter(function (x) {
+                    return x.id !== id;
+                })
+            );
+
+            /* Remove staff records */
+            sSt(
+                gSt().filter(function (x) {
+                    return x.userId !== id;
+                })
+            );
+
+            /* Remove membership/control records */
+            sMC(
+                gMC().filter(function (x) {
+                    return x.userId !== id;
+                })
+            );
+
+            /* Refresh Super Admin interface */
+            renderSuperAdmin();
+
+            toast(
+                'User and business records deleted',
+                's'
+            );
+        })
+        .catch(function (error) {
+
+            console.error(
+                'User deletion failed:',
+                error
+            );
+
+            toast(
+                'Failed to delete user completely.',
+                'e'
+            );
+        });
 }
-function openUserModal() {
+```
+
+  function openUserModal() {
   document.getElementById('subUserName').value = '';
   document.getElementById('subUserEmail').value = '';
   document.getElementById('subUserPass').value = '';
