@@ -3389,398 +3389,40 @@ function returnToSuperPanel() {
   loadSuperAdmin();
 }
 
-```javascript
+  javascript
 /* ============================================================
-   SUPER ADMIN - LOAD ALL DASHBOARD DATA
-   Safe Firebase/Firestore version
+   SUPER ADMIN - SAFE DATA MANAGEMENT
+   ONE UNIFIED DATA LOADER
    ============================================================ */
 
-async function loadSuperAdmin() {
-
-    console.log("=== SUPER ADMIN DATA LOAD START ===");
-
-    /* ---------------------------------------------------------
-       1. CHECK FIREBASE / FIRESTORE
-       --------------------------------------------------------- */
-
-    if (!db) {
-
-        console.error("Firestore database is not initialized.");
-
-        var metrics = document.getElementById("superMetrics");
-
-        if (metrics) {
-            metrics.innerHTML =
-                '<div class="sm-card">' +
-                    '<h4>Warning</h4>' +
-                    '<div class="sm-val" style="font-size:14px;color:var(--warning)">' +
-                        'Firebase haijaunganishwa. Tafadhali hakikisha Firebase configuration iko sahihi.' +
-                    '</div>' +
-                '</div>';
-        }
-
-        return;
-    }
-
-
-    /* ---------------------------------------------------------
-       2. INITIALIZE STATE SAFELY
-       --------------------------------------------------------- */
-
-    if (!window.S) {
-        window.S = {};
-    }
-
-    S.superUsers = [];
-    S.superAds = [];
-    S.superProducts = [];
-
-
-    try {
-
-        /* -----------------------------------------------------
-           3. LOAD USERS
-           ----------------------------------------------------- */
-
-        console.log("Loading users...");
-
-        var usersSnap = await db
-            .collection("users")
-            .get();
-
-        S.superUsers = usersSnap.docs.map(function (doc) {
-
-            return {
-                id: doc.id,
-                ...doc.data()
-            };
-
-        });
-
-        console.log(
-            "Users loaded:",
-            S.superUsers.length
-        );
-
-
-        /* -----------------------------------------------------
-           4. LOAD BUSINESSES
-           ----------------------------------------------------- */
-
-        console.log("Loading businesses...");
-
-        var bizSnap = await db
-            .collection("businesses")
-            .get();
-
-        var businesses = bizSnap.docs.map(function (doc) {
-
-            return {
-                id: doc.id,
-                ...doc.data()
-            };
-
-        });
-
-        console.log(
-            "Businesses loaded:",
-            businesses.length
-        );
-
-
-        /* -----------------------------------------------------
-           5. LOAD GLOBAL ADS
-           
-           IMPORTANT:
-           We first load without orderBy().
-           This prevents the entire query from failing when
-           some documents do not have createdAt.
-           ----------------------------------------------------- */
-
-        console.log("Loading global advertisements...");
-
-        var adsSnap = await db
-            .collection("globalAds")
-            .get();
-
-        S.superAds = adsSnap.docs.map(function (doc) {
-
-            return {
-                id: doc.id,
-                ...doc.data()
-            };
-
-        });
-
-
-        /* Sort safely in JavaScript */
-
-        S.superAds.sort(function (a, b) {
-
-            var dateA = getSafeDateValue(a.createdAt);
-            var dateB = getSafeDateValue(b.createdAt);
-
-            return dateB - dateA;
-
-        });
-
-        console.log(
-            "Global ads loaded:",
-            S.superAds.length
-        );
-
-
-        /* -----------------------------------------------------
-           6. LOAD GLOBAL PRODUCTS
-           
-           Again, do NOT depend on Firestore orderBy()
-           if createdAt may be missing.
-           ----------------------------------------------------- */
-
-        console.log("Loading global products...");
-
-        var prodSnap = await db
-            .collection("globalProducts")
-            .get();
-
-        S.superProducts = prodSnap.docs.map(function (doc) {
-
-            return {
-                id: doc.id,
-                ...doc.data()
-            };
-
-        });
-
-
-        S.superProducts.sort(function (a, b) {
-
-            var dateA = getSafeDateValue(a.createdAt);
-            var dateB = getSafeDateValue(b.createdAt);
-
-            return dateB - dateA;
-
-        });
-
-        console.log(
-            "Global products loaded:",
-            S.superProducts.length
-        );
-
-
-        /* -----------------------------------------------------
-           7. BUSINESS STATUS METRICS
-           ----------------------------------------------------- */
-
-        var activeBiz = businesses.filter(function (b) {
-
-            return String(b.status || "")
-                .toLowerCase() === "active";
-
-        }).length;
-
-
-        var suspendedBiz = businesses.filter(function (b) {
-
-            return String(b.status || "")
-                .toLowerCase() === "suspended";
-
-        }).length;
-
-
-        /* -----------------------------------------------------
-           8. RENDER SUPER ADMIN METRICS
-           ----------------------------------------------------- */
-
-        var superMetrics =
-            document.getElementById("superMetrics");
-
-
-        if (superMetrics) {
-
-            superMetrics.innerHTML =
-
-                '<div class="mc pu">' +
-                    '<h4>Watumiaji</h4>' +
-                    '<div class="sm-val">' +
-                        S.superUsers.length +
-                    '</div>' +
-                    '<div class="sm-sub">' +
-                        'Registered accounts' +
-                    '</div>' +
-                '</div>' +
-
-                '<div class="mc g">' +
-                    '<h4>Biashara</h4>' +
-                    '<div class="sm-val">' +
-                        businesses.length +
-                    '</div>' +
-                    '<div class="sm-sub">' +
-                        'Active: ' +
-                        activeBiz +
-                    '</div>' +
-                '</div>' +
-
-                '<div class="mc r">' +
-                    '<h4>Zilizosimamishwa</h4>' +
-                    '<div class="sm-val">' +
-                        suspendedBiz +
-                    '</div>' +
-                    '<div class="sm-sub">' +
-                        'Suspended businesses' +
-                    '</div>' +
-                '</div>' +
-
-                '<div class="mc a">' +
-                    '<h4>Matangazo</h4>' +
-                    '<div class="sm-val">' +
-                        S.superAds.length +
-                    '</div>' +
-                    '<div class="sm-sub">' +
-                        'Global advertisements' +
-                    '</div>' +
-                '</div>' +
-
-                '<div class="mc b">' +
-                    '<h4>Bidhaa Hadharani</h4>' +
-                    '<div class="sm-val">' +
-                        S.superProducts.length +
-                    '</div>' +
-                    '<div class="sm-sub">' +
-                        'Public catalogue' +
-                    '</div>' +
-                '</div>';
-        }
-
-
-        /* -----------------------------------------------------
-           9. RENDER TABLES / SECTIONS
-           ----------------------------------------------------- */
-
-        if (typeof renderSuperUsers === "function") {
-            renderSuperUsers();
-        } else {
-            console.warn(
-                "renderSuperUsers() does not exist."
-            );
-        }
-
-
-        if (typeof renderSuperAds === "function") {
-            renderSuperAds();
-        } else {
-            console.warn(
-                "renderSuperAds() does not exist."
-            );
-        }
-
-
-        if (typeof renderSuperProducts === "function") {
-            renderSuperProducts();
-        } else {
-            console.warn(
-                "renderSuperProducts() does not exist."
-            );
-        }
-
-
-        if (typeof renderSuperCharts === "function") {
-            renderSuperCharts();
-        } else {
-            console.warn(
-                "renderSuperCharts() does not exist."
-            );
-        }
-
-
-        console.log(
-            "=== SUPER ADMIN DATA LOAD SUCCESS ==="
-        );
-
-        console.log({
-            users: S.superUsers.length,
-            businesses: businesses.length,
-            activeBusinesses: activeBiz,
-            suspendedBusinesses: suspendedBiz,
-            advertisements: S.superAds.length,
-            products: S.superProducts.length
-        });
-
-
-    } catch (err) {
-
-        console.error(
-            "=== SUPER ADMIN LOAD ERROR ==="
-        );
-
-        console.error(
-            "Error code:",
-            err && err.code
-        );
-
-        console.error(
-            "Error message:",
-            err && err.message
-        );
-
-        console.error(
-            "Full error:",
-            err
-        );
-
-
-        var errorBox =
-            document.getElementById("superMetrics");
-
-
-        if (errorBox) {
-
-            errorBox.innerHTML =
-
-                '<div class="sm-card">' +
-
-                    '<h4>Data Loading Error</h4>' +
-
-                    '<div class="sm-val" ' +
-                    'style="font-size:13px;color:var(--warning)">' +
-
-                        'Imeshindwa kupakua data.' +
-
-                    '</div>' +
-
-                    '<div class="sm-sub">' +
-
-                        esc(
-                            err && err.message
-                                ? err.message
-                                : "Unknown Firebase error"
-                        ) +
-
-                    '</div>' +
-
-                '</div>';
-        }
-
-
-        if (typeof toast === "function") {
-
-            toast(
-                "Imeshindwa kupakua data ya Super Admin.",
-                "e"
-            );
-        }
-    }
-}
-
 
 /* ============================================================
-   SAFE DATE CONVERTER
-   Handles:
-   - Firestore Timestamp
-   - JavaScript Date
-   - ISO date
-   - numeric timestamp
-   - missing date
+   GLOBAL SUPER ADMIN STATE
+   ============================================================ */
+
+if (typeof window.SA_STATE !== "object" || window.SA_STATE === null) {
+    window.SA_STATE = {};
+}
+
+var SA_STATE = window.SA_STATE;
+
+SA_STATE.superUsers = Array.isArray(SA_STATE.superUsers)
+    ? SA_STATE.superUsers
+    : [];
+
+SA_STATE.superBusinesses = Array.isArray(SA_STATE.superBusinesses)
+    ? SA_STATE.superBusinesses
+    : [];
+
+SA_STATE.superAds = Array.isArray(SA_STATE.superAds)
+    ? SA_STATE.superAds
+    : [];
+
+SA_STATE.superProducts = Array.isArray(SA_STATE.superProducts)
+    ? SA_STATE.superProducts
+    : [];
+/* ============================================================
+   SAFE DATE VALUE
    ============================================================ */
 
 function getSafeDateValue(value) {
@@ -3789,68 +3431,720 @@ function getSafeDateValue(value) {
         return 0;
     }
 
+    try {
 
-    /* Firestore Timestamp */
+        /* Firestore Timestamp */
 
-    if (
-        typeof value === "object" &&
-        typeof value.toDate === "function"
-    ) {
+        if (
+            typeof value === "object" &&
+            typeof value.toDate === "function"
+        ) {
+            var date = value.toDate();
 
-        var d = value.toDate();
+            return date instanceof Date
+                ? date.getTime()
+                : 0;
+        }
 
-        return d instanceof Date
-            ? d.getTime()
-            : 0;
+
+        /* JavaScript Date */
+
+        if (value instanceof Date) {
+            return value.getTime();
+        }
+
+
+        /* Numeric timestamp */
+
+        if (typeof value === "number") {
+            return isFinite(value) ? value : 0;
+        }
+
+
+        /* String date */
+
+        if (typeof value === "string") {
+
+            var parsed = Date.parse(value);
+
+            return isNaN(parsed)
+                ? 0
+                : parsed;
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Date conversion failed:",
+            error
+        );
     }
 
-
-    /* JavaScript Date */
-
-    if (value instanceof Date) {
-
-        return value.getTime();
-    }
-
-
-    /* Numeric timestamp */
-
-    if (typeof value === "number") {
-
-        return value;
-    }
-
-
-    /* String date */
-
-    var parsed = Date.parse(value);
-
-    return Number.isNaN(parsed)
-        ? 0
-        : parsed;
+    return 0;
 }
-// ============================================================
-// === LOAD SUPER DATA ===
-// ============================================================
+
+
+/* ============================================================
+   SAFE FIRESTORE COLLECTION LOADER
+   ============================================================ */
+
+async function safeLoadCollection(collectionName) {
+
+    if (!db) {
+        throw new Error(
+            "Firestore database is not initialized."
+        );
+    }
+
+    if (!collectionName) {
+        throw new Error(
+            "Firestore collection name is missing."
+        );
+    }
+
+    console.log(
+        "Loading collection:",
+        collectionName
+    );
+
+    var snapshot = await db
+        .collection(collectionName)
+        .get();
+
+    var data = snapshot.docs.map(function (doc) {
+
+        return Object.assign(
+            {
+                id: doc.id
+            },
+            doc.data() || {}
+        );
+
+    });
+
+    console.log(
+        collectionName +
+        " loaded:",
+        data.length
+    );
+
+    return data;
+}
+
+
+/* ============================================================
+   RETURN TO SUPER ADMIN PANEL
+   ============================================================ */
+
+function returnToSuperPanel() {
+
+    try {
+
+        var main = document.getElementById(
+            "superBodyMain"
+        );
+
+        var detail = document.getElementById(
+            "superBodyDetail"
+        );
+
+        var backBtn = document.getElementById(
+            "superBackBtn"
+        );
+
+
+        if (main) {
+            main.classList.remove("hidden");
+        }
+
+
+        if (detail) {
+            detail.classList.add("hidden");
+        }
+
+
+        if (backBtn) {
+            backBtn.classList.remove("show");
+        }
+
+
+        /* Reload dashboard safely */
+
+        loadSuperAdmin().catch(function (error) {
+
+            console.error(
+                "Failed to reload Super Admin panel:",
+                error
+            );
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "returnToSuperPanel error:",
+            error
+        );
+
+    }
+}
+
+
+/* ============================================================
+   MAIN SUPER ADMIN DATA LOADER
+   ============================================================ */
+
+async function loadSuperAdmin() {
+
+    console.log(
+        "======================================"
+    );
+
+    console.log(
+        "SUPER ADMIN DATA LOAD START"
+    );
+
+    console.log(
+        "======================================"
+    );
+
+
+    /* ---------------------------------------------------------
+       CHECK FIRESTORE
+       --------------------------------------------------------- */
+
+    if (!db) {
+
+        console.error(
+            "Firestore is not initialized."
+        );
+
+        showSuperAdminError(
+            "Firebase haijaunganishwa. Hakikisha Firebase configuration yako iko sahihi."
+        );
+
+        return false;
+    }
+
+
+    try {
+
+        /* -----------------------------------------------------
+           LOAD USERS
+           ----------------------------------------------------- */
+
+        var users = await safeLoadCollection(
+            "users"
+        );
+
+        SA_STATE.superUsers = users;
+
+
+        /* -----------------------------------------------------
+           LOAD BUSINESSES
+           ----------------------------------------------------- */
+
+        var businesses = await safeLoadCollection(
+            "businesses"
+        );
+
+        SA_STATE.superBusinesses = businesses;
+
+
+        /* -----------------------------------------------------
+           LOAD GLOBAL ADS
+           
+           NO orderBy() HERE.
+           This prevents missing createdAt/index issues.
+           ----------------------------------------------------- */
+
+        var ads = await safeLoadCollection(
+            "globalAds"
+        );
+
+        ads.sort(function (a, b) {
+
+            return (
+                getSafeDateValue(b.createdAt) -
+                getSafeDateValue(a.createdAt)
+            );
+
+        });
+
+        SA_STATE.superAds = ads;
+
+
+        /* -----------------------------------------------------
+           LOAD GLOBAL PRODUCTS
+           ----------------------------------------------------- */
+
+        var products = await safeLoadCollection(
+            "globalProducts"
+        );
+
+        products.sort(function (a, b) {
+
+            return (
+                getSafeDateValue(b.createdAt) -
+                getSafeDateValue(a.createdAt)
+            );
+
+        });
+
+        SA_STATE.superProducts = products;
+
+
+        /* -----------------------------------------------------
+           BUSINESS STATUS
+           ----------------------------------------------------- */
+
+        var activeBusinesses =
+            businesses.filter(function (business) {
+
+                return String(
+                    business.status || ""
+                ).toLowerCase() === "active";
+
+            }).length;
+
+
+        var suspendedBusinesses =
+            businesses.filter(function (business) {
+
+                return String(
+                    business.status || ""
+                ).toLowerCase() === "suspended";
+
+            }).length;
+
+
+        /* -----------------------------------------------------
+           UPDATE METRICS
+           ----------------------------------------------------- */
+
+        renderSuperMetricsSafe(
+            users,
+            businesses,
+            activeBusinesses,
+            suspendedBusinesses,
+            ads,
+            products
+        );
+
+
+        /* -----------------------------------------------------
+           RENDER USERS
+           ----------------------------------------------------- */
+
+        if (
+            typeof window.renderSuperUsers ===
+            "function"
+        ) {
+
+            window.renderSuperUsers();
+
+        } else {
+
+            console.warn(
+                "renderSuperUsers() not found."
+            );
+        }
+
+
+        /* -----------------------------------------------------
+           RENDER ADS
+           ----------------------------------------------------- */
+
+        if (
+            typeof window.renderSuperAds ===
+            "function"
+        ) {
+
+            window.renderSuperAds();
+
+        } else {
+
+            console.warn(
+                "renderSuperAds() not found."
+            );
+        }
+
+
+        /* -----------------------------------------------------
+           RENDER PRODUCTS
+           ----------------------------------------------------- */
+
+        if (
+            typeof window.renderSuperProducts ===
+            "function"
+        ) {
+
+            window.renderSuperProducts();
+
+        } else {
+
+            console.warn(
+                "renderSuperProducts() not found."
+            );
+        }
+
+
+        /* -----------------------------------------------------
+           RENDER CHARTS
+           ----------------------------------------------------- */
+
+        if (
+            typeof window.renderSuperCharts ===
+            "function"
+        ) {
+
+            try {
+
+                window.renderSuperCharts();
+
+            } catch (chartError) {
+
+                console.error(
+                    "Super Admin chart error:",
+                    chartError
+                );
+            }
+
+        } else {
+
+            console.warn(
+                "renderSuperCharts() not found."
+            );
+        }
+
+        /* -----------------------------------------------------
+           OPTIONAL BACKWARD COMPATIBILITY
+           
+           If the old system expects usersCache,
+           keep it synchronized.
+           ----------------------------------------------------- */
+
+        window.usersCache = users;
+
+        console.log(
+            "======================================"
+        );
+
+        console.log(
+            "SUPER ADMIN DATA LOAD SUCCESS"
+        );
+
+        console.log({
+            users: users.length,
+            businesses: businesses.length,
+            activeBusinesses: activeBusinesses,
+            suspendedBusinesses: suspendedBusinesses,
+            advertisements: ads.length,
+            products: products.length
+        });
+
+        console.log(
+            "======================================"
+        );
+
+
+        return true;
+
+
+    } catch (error) {
+
+        console.error(
+            "======================================"
+        );
+
+        console.error(
+            "SUPER ADMIN DATA LOAD FAILED"
+        );
+
+        console.error(
+            "Error code:",
+            error && error.code
+        );
+
+        console.error(
+            "Error message:",
+            error && error.message
+        );
+
+        console.error(
+            "Full error:",
+            error
+        );
+
+        console.error(
+            "======================================"
+        );
+
+
+        showSuperAdminError(
+            error && error.message
+                ? error.message
+                : "Imeshindwa kupakua data ya Super Admin."
+        );
+
+
+        if (
+            typeof window.toast ===
+            "function"
+        ) {
+
+            try {
+
+                window.toast(
+                    "Imeshindwa kupakua data ya Super Admin.",
+                    "e"
+                );
+
+            } catch (toastError) {
+
+                console.error(
+                    "Toast error:",
+                    toastError
+                );
+            }
+        }
+
+
+        return false;
+    }
+}
+
+
+/* ============================================================
+   RENDER SUPER ADMIN METRICS
+   ============================================================ */
+
+function renderSuperMetricsSafe(
+    users,
+    businesses,
+    activeBusinesses,
+    suspendedBusinesses,
+    ads,
+    products
+) {
+
+    var container =
+        document.getElementById(
+            "superMetrics"
+        );
+
+
+    if (!container) {
+
+        console.warn(
+            "superMetrics element not found."
+        );
+
+        return;
+    }
+
+
+    container.innerHTML =
+
+        '<div class="mc pu">' +
+            '<h4>Watumiaji</h4>' +
+            '<div class="sm-val">' +
+                users.length +
+            '</div>' +
+            '<div class="sm-sub">' +
+                'Registered accounts' +
+            '</div>' +
+        '</div>' +
+
+        '<div class="mc g">' +
+            '<h4>Biashara</h4>' +
+            '<div class="sm-val">' +
+                businesses.length +
+            '</div>' +
+            '<div class="sm-sub">' +
+                'Active: ' +
+                activeBusinesses +
+            '</div>' +
+        '</div>' +
+
+        '<div class="mc r">' +
+            '<h4>Zilizosimamishwa</h4>' +
+            '<div class="sm-val">' +
+                suspendedBusinesses +
+            '</div>' +
+            '<div class="sm-sub">' +
+                'Suspended businesses' +
+            '</div>' +
+        '</div>' +
+
+        '<div class="mc a">' +
+            '<h4>Matangazo</h4>' +
+            '<div class="sm-val">' +
+                ads.length +
+            '</div>' +
+            '<div class="sm-sub">' +
+                'Global advertisements' +
+            '</div>' +
+        '</div>' +
+
+        '<div class="mc b">' +
+            '<h4>Bidhaa Hadharani</h4>' +
+            '<div class="sm-val">' +
+                products.length +
+            '</div>' +
+            '<div class="sm-sub">' +
+                'Public catalogue' +
+            '</div>' +
+        '</div>';
+}
+
+
+/* ============================================================
+   ERROR DISPLAY
+   ============================================================ */
+
+function showSuperAdminError(message) {
+
+    var container =
+        document.getElementById(
+            "superMetrics"
+        );
+
+
+    if (!container) {
+        return;
+    }
+
+
+    container.innerHTML =
+
+        '<div class="sm-card">' +
+
+            '<h4>Data Loading Error</h4>' +
+
+            '<div class="sm-val" ' +
+            'style="font-size:14px;color:var(--warning)">' +
+
+                'Imeshindwa kupakua data.' +
+
+            '</div>' +
+
+            '<div class="sm-sub">' +
+
+                escapeSuperText(
+                    message
+                ) +
+
+            '</div>' +
+
+        '</div>';
+}
+
+
+/* ============================================================
+   SAFE TEXT ESCAPING
+   ============================================================ */
+
+function escapeSuperText(value) {
+
+    return String(
+        value == null
+            ? ""
+            : value
+    ).replace(
+        /[&<>"']/g,
+        function (character) {
+
+            return {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;"
+            }[character];
+
+        }
+    );
+}
+
+
+/* ============================================================
+   BACKWARD COMPATIBILITY
+   DO NOT LOAD DATA TWICE
+   ============================================================ */
+
 async function loadSuperData() {
-  await loadAllUsers();
-  renderSuperMetrics();
-  renderSuperUsers();
-  renderSuperAds();
-  renderSuperProducts();
-  renderSuperCharts();
+
+    return await loadSuperAdmin();
 }
+
+
+/* ============================================================
+   BACKWARD COMPATIBILITY FOR OLD CODE
+   ============================================================ */
 
 async function loadAllUsers() {
-  try {
-    const snap = await db.collection('users').get();
-    usersCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (err) {
-    console.error('Error loading users:', err);
-    usersCache = [];
-  }
+
+    try {
+
+        var users =
+            await safeLoadCollection(
+                "users"
+            );
+
+        window.usersCache = users;
+
+        SA_STATE.superUsers = users;
+
+        return users;
+
+    } catch (error) {
+
+        console.error(
+            "Error loading users:",
+            error
+        );
+javascript
+        window.usersCache = [];
+
+        SA_STATE.superUsers = [];
+
+        return [];
+
+    }
 }
 
+Hivyo **mwisho kamili wa `loadAllUsers()`** uwe:
+async function loadAllUsers() {
+
+    try {
+
+        var users =
+            await safeLoadCollection(
+                "users"
+            );
+
+        window.usersCache = users;
+
+        SA_STATE.superUsers = users;
+
+        return users;
+
+    } catch (error) {
+
+        console.error(
+            "Error loading users:",
+            error
+        );
+
+        window.usersCache = [];
+
+        SA_STATE.superUsers = [];
+
+        return [];
+
+    }
+}
 // ============================================================
 // === RENDER SUPER METRICS ===
 // ============================================================
