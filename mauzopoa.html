@@ -2168,1554 +2168,1075 @@ async function completeSale() {
 
         // Update product cache
 
-      
-/* ================================================================
-   SALES CRUD
-   ================================================================ */
-async function loadSales() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('sales').where('businessId','==',S.bizId).orderBy('createdAt','desc').get();
-    S.allSales = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderSales();
-  } catch(err) {
-    console.error("Sales load error:", err);
-    toast('Imeshindwa kupakua mauzo.','e');
-  }
-}
 
-function renderSales() {
-  const tb = document.getElementById('salesBody');
-  const q = (document.getElementById('salesSearch').value || '').toLowerCase();
-  let items = S.allSales;
-  if (q) items = items.filter(function(s){ return (s.customer||'').toLowerCase().indexOf(q)>=0 || (s.invoiceNo||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fa-solid fa-receipt"></i><p>Hakuna mauzo</p></td></tr>'; return; }
-  tb.innerHTML = items.map(function(s){
-    const stCls = s.status==='completed'?'paid':(s.status==='cancelled'?'rejected':'pending');
-    const itemCount = (s.items||[]).reduce(function(a,i){ return a + (i.qty||0); },0);
-    return '<tr><td>' + escHtml(s.invoiceNo||s.id.substr(0,8)) + '</td><td>' + escHtml(s.customer||'—') + '</td><td>' + itemCount + '</td><td>' + fmtCur(s.total) + '</td><td>' + escHtml(s.payMethod||'Cash') + '</td><td><span class="status-badge ' + stCls + '">' + escHtml(s.status||'pending') + '</span></td><td>' + fmtDate(s.createdAt) + '</td><td><button class="btn btn-o btn-xs" onclick="viewSaleDetail(\'' + s.id + '\')"><i class="fa-solid fa-eye"></i></button> <button class="btn btn-d btn-xs" onclick="deleteSale(\'' + s.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
-  }).join('');
-}
-
-function openSaleModal() {
-  document.getElementById('saleModalTitle').textContent = 'Muuzo Mpya';
-  document.getElementById('saleEditId').value = '';
-  document.getElementById('saleCustomer').value = '';
-  document.getElementById('saleItems').value = '';
-  document.getElementById('salePayMethod').value = 'Cash';
-  document.getElementById('salePaid').value = '0';
-  openModal('saleModal');
-}
-
-async function saveSale(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const raw = document.getElementById('saleItems').value.trim();
-  if (!raw) { toast('Vitendo vya mauzo vinahitajika.','w'); return; }
-  const lines = raw.split('\n').filter(function(l){ return l.trim(); });
-  const items = [];
-  let total = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const parts = lines[i].split(',').map(function(s){ return s.trim(); });
-    if (parts.length < 3) { toast('Mstari ' + (i+1) + ' si sahihi. Tumia: Jina, Bei, Kiasi','w'); return; }
-    const price = Number(parts[1]) || 0;
-    const qty = Number(parts[2]) || 0;
-    if (price <= 0 || qty <= 0) { toast('Mstari ' + (i+1) + ': bei na kiasi lazima viwe zaidi ya 0.','w'); return; }
-    const sub = price * qty;
-    items.push({name:parts[0], price:price, qty:qty, subtotal:sub});
-    total += sub;
-  }
-  const paid = Number(document.getElementById('salePaid').value) || 0;
-  const data = {
-    businessId: S.bizId,
-    invoiceNo: 'INV-' + Date.now().toString(36).toUpperCase(),
-    customer: document.getElementById('saleCustomer').value.trim() || 'Walk-in',
-    items: items, total: total, paid: paid,
-    payMethod: document.getElementById('salePayMethod').value,
-    status: paid >= total ? 'completed' : 'pending',
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  try {
-    const ref = await db.collection('sales').add(data);
-    if (paid < total) {
-      await db.collection('debts').add({
-        businessId: S.bizId, customer: data.customer, saleId: ref.id,
-        amount: total, paid: paid, remaining: total - paid,
-        status: 'unpaid', description: 'Deni kutoka mauzo ' + data.invoiceNo,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-    toast('Muuzo umehifadhiwa.','s');
-    closeModal('saleModal');
-    loadSales();
-  } catch(err) {
-    console.error("Save sale error:", err);
-    toast('Imeshindwa kuhifadhi muuzo.','e');
-  }
-}
-
-function viewSaleDetail(id) {
-  const s = S.allSales.find(function(x){ return x.id === id; });
-  if (!s) return;
-  showReceipt(s.id, s);
-}
-
-function deleteSale(id) {
-  requestDelete('Je, unahakika unataka kufuta muuzo huu?', function(){
-    db.collection('sales').doc(id).delete().then(function(){
-      toast('Muuzo umefutwa.','s');
-      loadSales();
-    }).catch(function(err){
-      console.error("Delete sale error:", err);
-      toast('Imeshindwa kufuta muuzo.','e');
-    });
-  });
-}
-
-/* ================================================================
-   PURCHASES CRUD
-   ================================================================ */
-async function loadPurchases() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('purchases').where('businessId','==',S.bizId).orderBy('createdAt','desc').get();
-    S.allPurchases = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderPurchases();
-  } catch(err) {
-    console.error("Purchases load error:", err);
-    toast('Imeshindwa kupakua manunuzi.','e');
-  }
-}
-
-function renderPurchases() {
-  const tb = document.getElementById('purchasesBody');
-  const q = (document.getElementById('purchSearch').value || '').toLowerCase();
-  let items = S.allPurchases;
-  if (q) items = items.filter(function(p){ return (p.sellerName||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-truck"></i><p>Hakuna manunuzi</p></td></tr>'; return; }
-  tb.innerHTML = items.map(function(p){
-    const stCls = p.status==='completed'?'paid':(p.status==='cancelled'?'rejected':'pending');
-    const itemCount = (p.items||[]).reduce(function(a,i){ return a + (i.qty||0); },0);
-    return '<tr><td>' + escHtml(p.refNo||p.id.substr(0,8)) + '</td><td>' + escHtml(p.sellerName||'—') + '</td><td>' + itemCount + '</td><td>' + fmtCur(p.total) + '</td><td><span class="status-badge ' + stCls + '">' + escHtml(p.status||'pending') + '</span></td><td>' + fmtDate(p.createdAt) + '</td><td><button class="btn btn-d btn-xs" onclick="deletePurchase(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
-  }).join('');
-}
-
-async function openPurchaseModal() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('sellers').where('businessId','==',S.bizId).get();
-    const sel = document.getElementById('purchSeller');
-    sel.innerHTML = '<option value="">Chagua muuzaji...</option>';
-    snap.docs.forEach(function(d){
-      const s = d.data();
-      sel.innerHTML += '<option value="' + d.id + '">' + escHtml(s.name) + '</option>';
-    });
-  } catch(err) { console.error("Load sellers for purchase:", err); }
-  document.getElementById('purchEditId').value = '';
-  document.getElementById('purchItems').value = '';
-  document.getElementById('purchPaid').value = '0';
-  openModal('purchaseModal');
-}
-
-async function savePurchase(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const sellerId = document.getElementById('purchSeller').value;
-  const raw = document.getElementById('purchItems').value.trim();
-  if (!sellerId) { toast('Chagua muuzaji.','w'); return; }
-  if (!raw) { toast('Vitendo vya manunuzi vinahitajika.','w'); return; }
-  const lines = raw.split('\n').filter(function(l){ return l.trim(); });
-  const items = [];
-  let total = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const parts = lines[i].split(',').map(function(s){ return s.trim(); });
-    if (parts.length < 3) { toast('Mstari ' + (i+1) + ' si sahihi.','w'); return; }
-    const cost = Number(parts[1]) || 0;
-    const qty = Number(parts[2]) || 0;
-    items.push({name:parts[0], cost:cost, qty:qty, subtotal:cost*qty});
-    total += cost * qty;
-  }
-  const paid = Number(document.getElementById('purchPaid').value) || 0;
-  let sellerName = '—';
-  try {
-    const sDoc = await db.collection('sellers').doc(sellerId).get();
-    if (sDoc.exists) sellerName = sDoc.data().name || '—';
-  } catch(er) { console.error(er); }
-  const data = {
-    businessId: S.bizId, sellerId: sellerId, sellerName: sellerName,
-    refNo: 'PUR-' + Date.now().toString(36).toUpperCase(),
-    items: items, total: total, paid: paid,
-    status: paid >= total ? 'completed' : 'pending',
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  try {
-    const batch = db.batch();
-    const ref = db.collection('purchases').doc();
-    batch.set(ref, data);
-    items.forEach(function(it){
-      const existing = S.allProducts.find(function(p){ return p.name.toLowerCase() === it.name.toLowerCase(); });
-      if (existing) {
-        batch.update(db.collection('products').doc(existing.id), {stock: firebase.firestore.FieldValue.increment(it.qty), costPrice: it.cost});
-      } else {
-        const newRef = db.collection('products').doc();
-        batch.set(newRef, {
-          businessId: S.bizId, name: it.name, category: 'General',
-          costPrice: it.cost, sellPrice: Math.round(it.cost * 1.3),
-          stock: it.qty, unit: 'Pc', status: 'active',
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          // Update product cache
+        cart.forEach(function(item) {
+            var cached = allProducts.find(function(p) { return p.id === item.productId; });
+            if (cached) cached.stock = safeNumber(cached.stock) - item.qty;
         });
-      }
-    });
-    if (paid < total) {
-      batch.set(db.collection('debts').doc(), {
-        businessId: S.bizId, sellerId: sellerId, customer: sellerName,
-        amount: total, paid: paid, remaining: total - paid,
-        status: 'unpaid', description: 'Deni kwa muuzaji ' + sellerName,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+
+        // Show receipt
+        showReceipt(saleData, docRef.id);
+
+        // Clear cart
+        cart = [];
+        renderCart();
+
+        // Refresh data
+        loadDashboard();
+        loadPOS();
+
+        showToast("Muuzaji umekamilika!", "s");
+    } catch (err) {
+        console.error("Complete sale failed:", err);
+        showToast("Imeshindwa kukamilisha muuzaji: " + err.message, "e");
     }
-    await batch.commit();
-    toast('Ununuo umehifadhiwa.','s');
-    closeModal('purchaseModal');
-    loadPurchases();
-    loadProducts();
-  } catch(err) {
-    console.error("Save purchase error:", err);
-    toast('Imeshindwa kuhifadhi ununuo.','e');
-  }
 }
 
-function deletePurchase(id) {
-  requestDelete('Je, unahakika unataka kufuta ununuo huu?', function(){
-    db.collection('purchases').doc(id).delete().then(function(){
-      toast('Ununuo umefutwa.','s');
-      loadPurchases();
-    }).catch(function(err){
-      console.error("Delete purchase error:", err);
-      toast('Imeshindwa kufuta ununuo.','e');
+function showReceipt(saleData, saleId) {
+    var container = document.getElementById("receiptContent");
+    if (!container) return;
+    var bizName = currentBusinessData ? currentBusinessData.businessName : "BizBook";
+    var bizAddr = currentBusinessData ? currentBusinessData.businessAddress || "" : "";
+    var bizPhone = currentBusinessData ? currentBusinessData.businessPhone || "" : "";
+    var dateStr = new Date().toLocaleString("sw-TZ");
+    var html = '<div class="receipt-content">' +
+        '<h3>' + bizName + '</h3>' +
+        (bizAddr ? '<p style="text-align:center;font-size:11px">' + bizAddr + '</p>' : '') +
+        (bizPhone ? '<p style="text-align:center;font-size:11px">' + bizPhone + '</p>' : '') +
+        '<div class="rc-divider"></div>' +
+        '<p style="font-size:11px">Namba: ' + (saleData.receiptNumber || saleId.substring(0, 8)) + '</p>' +
+        '<p style="font-size:11px">Tarehe: ' + dateStr + '</p>' +
+        '<p style="font-size:11px">Mhasiri: ' + (saleData.staffName || "—") + '</p>' +
+        '<div class="rc-divider"></div>';
+    (saleData.items || []).forEach(function(item) {
+        html += '<div class="rc-line"><span>' + item.name + ' x' + item.qty + '</span><span>' + formatCurrency(item.total) + '</span></div>';
     });
-  });
+    html += '<div class="rc-divider"></div>' +
+        '<div class="rc-line rc-total"><span>JUMLA</span><span>' + formatCurrency(saleData.total) + '</span></div>' +
+        '<div class="rc-line"><span>Njia</span><span>' + (saleData.paymentMethod || "cash") + '</span></div>' +
+        '<div class="rc-divider"></div>' +
+        '<p style="text-align:center;font-size:10px">Asante kwa kununua!</p>' +
+        '</div>';
+    container.innerHTML = html;
+    openModal("receiptModal");
 }
 
-/* ================================================================
-   SELLERS CRUD
-   ================================================================ */
-async function loadSellers() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('sellers').where('businessId','==',S.bizId).get();
-    S.allSellers = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderSellers();
-  } catch(err) {
-    console.error("Sellers load error:", err);
-    toast('Imeshindwa kupakua wauzaji.','e');
-  }
-}
-
-function renderSellers() {
-  const tb = document.getElementById('sellersBody');
-  const q = (document.getElementById('sellerSearch').value || '').toLowerCase();
-  let items = S.allSellers;
-  if (q) items = items.filter(function(s){ return (s.name||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-handshake"></i><p>Hakuna wauzaji</p></td></tr>'; return; }
-  tb.innerHTML = items.map(function(s){
-    return '<tr><td>' + escHtml(s.name) + '</td><td>' + escHtml(s.phone||'—') + '</td><td>' + escHtml(s.email||'—') + '</td><td>' + escHtml(s.address||'—') + '</td><td>' + fmtCur(s.balance||0) + '</td><td><button class="btn btn-o btn-xs" onclick="editSeller(\'' + s.id + '\')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteSeller(\'' + s.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
-  }).join('');
-}
-
-function openSellerModal() {
-  document.getElementById('sellerModalTitle').textContent = 'Muuzaji Mpya';
-  document.getElementById('sellerEditId').value = '';
-  document.getElementById('sellerName').value = '';
-  document.getElementById('sellerPhone').value = '';
-  document.getElementById('sellerEmail').value = '';
-  document.getElementById('sellerAddress').value = '';
-  openModal('sellerModal');
-}
-
-function editSeller(id) {
-  const s = S.allSellers.find(function(x){ return x.id === id; });
-  if (!s) return;
-  document.getElementById('sellerModalTitle').textContent = 'Hariri Muuzaji';
-  document.getElementById('sellerEditId').value = s.id;
-  document.getElementById('sellerName').value = s.name || '';
-  document.getElementById('sellerPhone').value = s.phone || '';
-  document.getElementById('sellerEmail').value = s.email || '';
-  document.getElementById('sellerAddress').value = s.address || '';
-  openModal('sellerModal');
-}
-
-async function saveSeller(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const editId = document.getElementById('sellerEditId').value;
-  const data = {
-    businessId: S.bizId,
-    name: document.getElementById('sellerName').value.trim(),
-    phone: document.getElementById('sellerPhone').value.trim(),
-    email: document.getElementById('sellerEmail').value.trim(),
-    address: document.getElementById('sellerAddress').value.trim(),
-    balance: 0,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  if (!data.name) { toast('Jina linahitajika.','w'); return; }
-  try {
-    if (editId) {
-      delete data.balance;
-      await db.collection('sellers').doc(editId).update(data);
-      toast('Muuzaji amesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('sellers').add(data);
-      toast('Muuzaji ameongezwa.','s');
+// ======================== PRODUCTS ========================
+async function loadProducts() {
+    if (!currentBusinessId || !db) return;
+    var body = document.getElementById("prodBody");
+    var countEl = document.getElementById("prodCount");
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="6" class="empty-s"><div class="spinner"></div>Inapakia...</td></tr>';
+    try {
+        var snap = await db.collection("products").where("businessId", "==", currentBusinessId).get();
+        allProducts = [];
+        snap.forEach(function(doc) { allProducts.push({ id: doc.id, ...doc.data() }); });
+        if (countEl) countEl.textContent = allProducts.length + " bidhaa";
+        renderProductsTable(allProducts);
+    } catch (err) {
+        console.error("Load products failed:", err);
+        showError(body.parentElement, "Imeshindwa kupakia: " + err.message);
     }
-    closeModal('sellerModal');
-    loadSellers();
-  } catch(err) {
-    console.error("Save seller error:", err);
-    toast('Imeshindwa kuhifadhi muuzaji.','e');
-  }
 }
 
-function deleteSeller(id) {
-  const s = S.allSellers.find(function(x){ return x.id === id; });
-  requestDelete('Je, unahakika unataka kufuta muuzaji "' + (s?s.name:'') + '"?', function(){
-    db.collection('sellers').doc(id).delete().then(function(){
-      toast('Muuzaji amefutwa.','s');
-      loadSellers();
-    }).catch(function(err){
-      console.error("Delete seller error:", err);
-      toast('Imeshindwa kufuta muuzaji.','e');
+function renderProductsTable(products) {
+    var body = document.getElementById("prodBody");
+    if (!body) return;
+    if (products.length === 0) { showTableEmpty(body, 6); return; }
+    var html = "";
+    products.forEach(function(p) {
+        var stock = safeNumber(p.stock);
+        var min = safeNumber(p.minStock);
+        var statusCls = "active";
+        var statusTxt = "Ipo";
+        if (stock <= 0) { statusCls = "suspended"; statusTxt = "Imekwisha"; }
+        else if (min > 0 && stock <= min) { statusCls = "pending"; statusTxt = "Chini"; }
+        var actions = '<button class="btn btn-xs btn-o" onclick="editProduct(\'' + p.id + '\')"><i class="fas fa-edit"></i></button> ';
+        actions += '<button class="btn btn-xs btn-d" onclick="deleteProduct(\'' + p.id + '\',\'' + (p.name || "").replace(/'/g, "\\'") + '\')"><i class="fas fa-trash"></i></button>';
+        html += '<tr><td>' + (p.name || "—") + '</td><td>' + (p.category || "—") + '</td><td style="color:var(--success);font-weight:600">' + formatCurrency(p.price) + '</td><td>' + stock + ' ' + (p.unit || "") + '</td><td><span class="status-badge ' + statusCls + '">' + statusTxt + '</span></td><td>' + actions + '</td></tr>';
     });
-  });
+    body.innerHTML = html;
 }
 
-/* ================================================================
-   CUSTOMERS CRUD
-   ================================================================ */
+function filterProductsTable(q) {
+    q = q.toLowerCase().trim();
+    if (!q) { renderProductsTable(allProducts); return; }
+    var filtered = allProducts.filter(function(p) { return (p.name || "").toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q); });
+    renderProductsTable(filtered);
+}
+
+function openProductModal(editId) {
+    document.getElementById("prodEditId").value = "";
+    document.getElementById("prodModalTitle").textContent = "Ongeza Bidhaa";
+    document.getElementById("prodName").value = "";
+    document.getElementById("prodCategory").value = "";
+    document.getElementById("prodPrice").value = "";
+    document.getElementById("prodCost").value = "";
+    document.getElementById("prodStock").value = "";
+    document.getElementById("prodMinStock").value = "";
+    document.getElementById("prodUnit").value = "";
+    openModal("productModal");
+}
+
+function editProduct(id) {
+    var p = allProducts.find(function(pr) { return pr.id === id; });
+    if (!p) return;
+    document.getElementById("prodEditId").value = id;
+    document.getElementById("prodModalTitle").textContent = "Hariri Bidhaa";
+    document.getElementById("prodName").value = p.name || "";
+    document.getElementById("prodCategory").value = p.category || "";
+    document.getElementById("prodPrice").value = p.price || "";
+    document.getElementById("prodCost").value = p.costPrice || "";
+    document.getElementById("prodStock").value = p.stock || "";
+    document.getElementById("prodMinStock").value = p.minStock || "";
+    document.getElementById("prodUnit").value = p.unit || "";
+    openModal("productModal");
+}
+
+async function saveProduct(e) {
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var editId = document.getElementById("prodEditId").value;
+    var data = {
+        businessId: currentBusinessId,
+        name: document.getElementById("prodName").value.trim(),
+        category: document.getElementById("prodCategory").value.trim(),
+        price: safeNumber(document.getElementById("prodPrice").value),
+        costPrice: safeNumber(document.getElementById("prodCost").value),
+        stock: safeNumber(document.getElementById("prodStock").value),
+        minStock: safeNumber(document.getElementById("prodMinStock").value),
+        unit: document.getElementById("prodUnit").value.trim(),
+        status: "active",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!data.name) { showToast("Jina la bidhaa linahitajika", "w"); return; }
+    try {
+        if (editId) {
+            await db.collection("products").doc(editId).update(data);
+            showToast("Bidhaa imehaririwa", "s");
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection("products").add(data);
+            showToast("Bidhaa imeongezwa", "s");
+        }
+        closeModal("productModal");
+        loadProducts();
+        loadDashboard();
+    } catch (err) {
+        console.error("Save product failed:", err);
+        showToast("Imeshindwa kuhifadhi: " + err.message, "e");
+    }
+}
+
+function deleteProduct(id, name) {
+    showConfirm({
+        type: "danger",
+        title: "Futa Bidhaa",
+        message: "Utafuta bidhaa hii kabisa.",
+        target: name,
+        onConfirm: async function() {
+            try {
+                await db.collection("products").doc(id).delete();
+                showToast("Bidhaa imefutwa", "s");
+                loadProducts();
+                loadDashboard();
+            } catch (err) {
+                console.error("Delete product failed:", err);
+                showToast("Imeshindwa kufuta", "e");
+            }
+        }
+    });
+}
+
+// ======================== INVENTORY ========================
+async function loadInventory() {
+    if (!currentBusinessId || !db) return;
+    var metricsEl = document.getElementById("invMetrics");
+    var body = document.getElementById("invBody");
+    if (!metricsEl || !body) return;
+    showLoading(metricsEl);
+    body.innerHTML = '<tr><td colspan="4" class="empty-s"><div class="spinner"></div>Inapakia...</td></tr>';
+    try {
+        if (allProducts.length === 0) {
+            var snap = await db.collection("products").where("businessId", "==", currentBusinessId).get();
+            allProducts = [];
+            snap.forEach(function(doc) { allProducts.push({ id: doc.id, ...doc.data() }); });
+        }
+        var totalStock = allProducts.reduce(function(t, p) { return t + safeNumber(p.stock); }, 0);
+        var lowStock = allProducts.filter(function(p) { return safeNumber(p.minStock) > 0 && safeNumber(p.stock) <= safeNumber(p.minStock) && safeNumber(p.stock) > 0; });
+        var outOfStock = allProducts.filter(function(p) { return safeNumber(p.stock) <= 0; });
+        var inventoryValue = allProducts.reduce(function(t, p) { return t + (safeNumber(p.stock) * safeNumber(p.price)); }, 0);
+
+        metricsEl.innerHTML =
+            '<div class="mc a"><div class="mc-icon"><i class="fas fa-boxes-stacked"></i></div><h3>' + allProducts.length + '</h3><p>Jumla ya Bidhaa</p></div>' +
+            '<div class="mc g"><div class="mc-icon"><i class="fas fa-warehouse"></i></div><h3>' + totalStock + '</h3><p>Stok Yote</p></div>' +
+            '<div class="mc b"><div class="mc-icon"><i class="fas fa-exclamation-triangle"></i></div><h3>' + lowStock.length + '</h3><p>Stok Chini</p></div>' +
+            '<div class="mc r"><div class="mc-icon"><i class="fas fa-ban"></i></div><h3>' + outOfStock.length + '</h3><p>Stok Imekwisha</p></div>' +
+            '<div class="mc pu"><div class="mc-icon"><i class="fas fa-gem"></i></div><h3>' + formatCurrency(inventoryValue) + '</h3><p>Thamani ya Stok</p></div>';
+
+        // Load stock logs
+        var logsSnap = await db.collection("stockLogs").where("businessId", "==", currentBusinessId).orderBy("createdAt", "desc").limit(50).get();
+        allStockLogs = [];
+        logsSnap.forEach(function(doc) { allStockLogs.push({ id: doc.id, ...doc.data() }); });
+
+        var stockIn = allStockLogs.filter(function(l) { return l.type === "in"; }).reduce(function(t, l) { return t + safeNumber(l.qty); }, 0);
+        var stockOut = allStockLogs.filter(function(l) { return l.type === "out"; }).reduce(function(t, l) { return t + safeNumber(l.qty); }, 0);
+
+        // Render table
+        if (allProducts.length === 0) { showTableEmpty(body, 4); return; }
+        var html = "";
+        allProducts.forEach(function(p) {
+            var stock = safeNumber(p.stock);
+            var value = stock * safeNumber(p.price);
+            var statusCls = "active";
+            var statusTxt = "Ipo";
+            if (stock <= 0) { statusCls = "suspended"; statusTxt = "Imekwisha"; }
+            else if (safeNumber(p.minStock) > 0 && stock <= safeNumber(p.minStock)) { statusCls = "pending"; statusTxt = "Chini"; }
+            html += '<tr><td>' + (p.name || "—") + '</td><td>' + stock + ' ' + (p.unit || "") + '</td><td style="color:var(--success)">' + formatCurrency(value) + '</td><td><span class="status-badge ' + statusCls + '">' + statusTxt + '</span></td></tr>';
+        });
+        body.innerHTML = html;
+    } catch (err) {
+        console.error("Inventory load failed:", err);
+        showError(metricsEl, "Imeshindwa kupakia: " + err.message);
+    }
+}
+
+function openStockModal(type) {
+    document.getElementById("stockType").value = type || "in";
+    document.getElementById("stockModalTitle").textContent = type === "out" ? "Punguza Stok" : "Ongeza Stok";
+    document.getElementById("stockQty").value = "";
+    document.getElementById("stockNote").value = "";
+    // Populate product select
+    var sel = document.getElementById("stockProduct");
+    sel.innerHTML = '<option value="">Chagua bidhaa</option>';
+    allProducts.forEach(function(p) {
+        sel.innerHTML += '<option value="' + p.id + '">' + p.name + ' (Stok: ' + safeNumber(p.stock) + ')</option>';
+    });
+    openModal("stockModal");
+}
+
+async function saveStockLog(e) {
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var productId = document.getElementById("stockProduct").value;
+    var qty = safeNumber(document.getElementById("stockQty").value);
+    var type = document.getElementById("stockType").value;
+    var note = document.getElementById("stockNote").value.trim();
+    if (!productId || qty <= 0) { showToast("Chagua bidhaa na weka idadi", "w"); return; }
+    var product = allProducts.find(function(p) { return p.id === productId; });
+    if (!product) { showToast("Bidhaa haipatikani", "e"); return; }
+    if (type === "out" && qty > safeNumber(product.stock)) { showToast("Stok haitoshi", "w"); return; }
+    try {
+        var logData = {
+            businessId: currentBusinessId,
+            productId: productId,
+            productName: product.name,
+            type: type,
+            qty: qty,
+            note: note || (type === "in" ? "Kuongeza stok" : "Kupunguza stok"),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await db.collection("stockLogs").add(logData);
+        var increment = type === "in" ? qty : -qty;
+        await db.collection("products").doc(productId).update({ stock: firebase.firestore.FieldValue.increment(increment) });
+        // Update cache
+        product.stock = safeNumber(product.stock) + increment;
+        closeModal("stockModal");
+        showToast("Stok imesasishwa", "s");
+        loadInventory();
+        loadDashboard();
+    } catch (err) {
+        console.error("Save stock log failed:", err);
+        showToast("Imeshindwa: " + err.message, "e");
+    }
+}
+
+// ======================== CUSTOMERS ========================
 async function loadCustomers() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('customers').where('businessId','==',S.bizId).get();
-    S.allCustomers = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderCustomers();
-  } catch(err) {
-    console.error("Customers load error:", err);
-    toast('Imeshindwa kupakua wateja.','e');
-  }
+    if (!currentBusinessId || !db) return;
+    var body = document.getElementById("custBody");
+    var countEl = document.getElementById("custCount");
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="5" class="empty-s"><div class="spinner"></div>Inapakia...</td></tr>';
+    try {
+        var snap = await db.collection("customers").where("businessId", "==", currentBusinessId).get();
+        allCustomers = [];
+        snap.forEach(function(doc) { allCustomers.push({ id: doc.id, ...doc.data() }); });
+        if (countEl) countEl.textContent = allCustomers.length + " wateja";
+        renderCustomersTable(allCustomers);
+    } catch (err) {
+        console.error("Load customers failed:", err);
+        showError(body.parentElement, "Imeshindwa kupakia: " + err.message);
+    }
 }
 
-function renderCustomers() {
-  const tb = document.getElementById('customersBody');
-  const q = (document.getElementById('custSearch').value || '').toLowerCase();
-  let items = S.allCustomers;
-  if (q) items = items.filter(function(c){ return (c.name||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna wateja</p></td></tr>'; return; }
-  tb.innerHTML = items.map(function(c){
-    return '<tr><td>' + escHtml(c.name) + '</td><td>' + escHtml(c.phone||'—') + '</td><td>' + escHtml(c.email||'—') + '</td><td>' + fmtCur(c.totalPurchases||0) + '</td><td><button class="btn btn-o btn-xs" onclick="editCustomer(\'' + c.id + '\')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteCustomer(\'' + c.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
-  }).join('');
+function renderCustomersTable(customers) {
+    var body = document.getElementById("custBody");
+    if (!body) return;
+    if (customers.length === 0) { showTableEmpty(body, 5); return; }
+    var html = "";
+    customers.forEach(function(c) {
+        var actions = '<button class="btn btn-xs btn-o" onclick="editCustomer(\'' + c.id + '\')"><i class="fas fa-edit"></i></button> ';
+        actions += '<button class="btn btn-xs btn-d" onclick="deleteCustomer(\'' + c.id + '\',\'' + (c.name || "").replace(/'/g, "\\'") + '\')"><i class="fas fa-trash"></i></button>';
+        html += '<tr><td>' + (c.name || "—") + '</td><td>' + (c.phone || "—") + '</td><td>' + safeNumber(c.purchaseCount) + '</td><td style="color:' + (safeNumber(c.balance) > 0 ? 'var(--danger)' : 'var(--success)') + '">' + formatCurrency(c.balance) + '</td><td>' + actions + '</td></tr>';
+    });
+    body.innerHTML = html;
+}
+
+function filterCustomers(q) {
+    q = q.toLowerCase().trim();
+    if (!q) { renderCustomersTable(allCustomers); return; }
+    var filtered = allCustomers.filter(function(c) { return (c.name || "").toLowerCase().includes(q) || (c.phone || "").includes(q); });
+    renderCustomersTable(filtered);
 }
 
 function openCustomerModal() {
-  document.getElementById('customerModalTitle').textContent = 'Mteja Mpya';
-  document.getElementById('custEditId').value = '';
-  document.getElementById('custName').value = '';
-  document.getElementById('custPhone').value = '';
-  document.getElementById('custEmail').value = '';
-  document.getElementById('custAddress').value = '';
-  openModal('customerModal');
+    document.getElementById("custEditId").value = "";
+    document.getElementById("custModalTitle").textContent = "Ongeza Mteja";
+    document.getElementById("custName").value = "";
+    document.getElementById("custPhone").value = "";
+    document.getElementById("custEmail").value = "";
+    document.getElementById("custAddr").value = "";
+    openModal("customerModal");
 }
 
 function editCustomer(id) {
-  const c = S.allCustomers.find(function(x){ return x.id === id; });
-  if (!c) return;
-  document.getElementById('customerModalTitle').textContent = 'Hariri Mteja';
-  document.getElementById('custEditId').value = c.id;
-  document.getElementById('custName').value = c.name || '';
-  document.getElementById('custPhone').value = c.phone || '';
-  document.getElementById('custEmail').value = c.email || '';
-  document.getElementById('custAddress').value = c.address || '';
-  openModal('customerModal');
+    var c = allCustomers.find(function(cu) { return cu.id === id; });
+    if (!c) return;
+    document.getElementById("custEditId").value = id;
+    document.getElementById("custModalTitle").textContent = "Hariri Mteja";
+    document.getElementById("custName").value = c.name || "";
+    document.getElementById("custPhone").value = c.phone || "";
+    document.getElementById("custEmail").value = c.email || "";
+    document.getElementById("custAddr").value = c.address || "";
+    openModal("customerModal");
 }
 
 async function saveCustomer(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const editId = document.getElementById('custEditId').value;
-  const data = {
-    businessId: S.bizId,
-    name: document.getElementById('custName').value.trim(),
-    phone: document.getElementById('custPhone').value.trim(),
-    email: document.getElementById('custEmail').value.trim(),
-    address: document.getElementById('custAddress').value.trim(),
-    totalPurchases: 0,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  if (!data.name) { toast('Jina linahitajika.','w'); return; }
-  try {
-    if (editId) {
-      delete data.totalPurchases;
-      await db.collection('customers').doc(editId).update(data);
-      toast('Mteja amesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('customers').add(data);
-      toast('Mteja ameongezwa.','s');
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var editId = document.getElementById("custEditId").value;
+    var data = {
+        businessId: currentBusinessId,
+        name: document.getElementById("custName").value.trim(),
+        phone: document.getElementById("custPhone").value.trim(),
+        email: document.getElementById("custEmail").value.trim(),
+        address: document.getElementById("custAddr").value.trim(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!data.name) { showToast("Jina linahitajika", "w"); return; }
+    try {
+        if (editId) {
+            await db.collection("customers").doc(editId).update(data);
+            showToast("Mteja amehaririwa", "s");
+        } else {
+            data.purchaseCount = 0;
+            data.balance = 0;
+            data.status = "active";
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection("customers").add(data);
+            showToast("Mteja ameongezwa", "s");
+        }
+        closeModal("customerModal");
+        loadCustomers();
+    } catch (err) {
+        console.error("Save customer failed:", err);
+        showToast("Imeshindwa: " + err.message, "e");
     }
-    closeModal('customerModal');
-    loadCustomers();
-  } catch(err) {
-    console.error("Save customer error:", err);
-    toast('Imeshindwa kuhifadhi mteja.','e');
-  }
 }
 
-function deleteCustomer(id) {
-  const c = S.allCustomers.find(function(x){ return x.id === id; });
-  requestDelete('Je, unahakika unataka kufuta mteja "' + (c?c.name:'') + '"?', function(){
-    db.collection('customers').doc(id).delete().then(function(){
-      toast('Mteja amefutwa.','s');
-      loadCustomers();
-    }).catch(function(err){
-      console.error("Delete customer error:", err);
-      toast('Imeshindwa kufuta mteja.','e');
+function deleteCustomer(id, name) {
+    showConfirm({
+        type: "danger",
+        title: "Futa Mteja",
+        message: "Utafuta mteja huyu.",
+        target: name,
+        onConfirm: async function() {
+            try {
+                await db.collection("customers").doc(id).delete();
+                showToast("Mteja amefutwa", "s");
+                loadCustomers();
+            } catch (err) {
+                console.error("Delete customer failed:", err);
+                showToast("Imeshindwa kufuta", "e");
+            }
+        }
     });
-  });
 }
 
-/* ================================================================
-   DEBTS CRUD
-   ================================================================ */
-async function loadDebts() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('debts').where('businessId','==',S.bizId).orderBy('createdAt','desc').get();
-    S.allDebts = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderDebts();
-    renderDebtAlert();
-  } catch(err) {
-    console.error("Debts load error:", err);
-    toast('Imeshindwa kupakua madeni.','e');
-  }
+// ======================== SUPPLIERS ========================
+async function loadSuppliers() {
+    if (!currentBusinessId || !db) return;
+    var body = document.getElementById("suppBody");
+    var countEl = document.getElementById("suppCount");
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="4" class="empty-s"><div class="spinner"></div>Inapakia...</td></tr>';
+    try {
+        var snap = await db.collection("suppliers").where("businessId", "==", currentBusinessId).get();
+        allSuppliers = [];
+        snap.forEach(function(doc) { allSuppliers.push({ id: doc.id, ...doc.data() }); });
+        if (countEl) countEl.textContent = allSuppliers.length + " wauzaji";
+        renderSuppliersTable(allSuppliers);
+    } catch (err) {
+        console.error("Load suppliers failed:", err);
+        showError(body.parentElement, "Imeshindwa kupakia: " + err.message);
+    }
 }
 
-function renderDebtAlert() {
-  const area = document.getElementById('debtAlertArea');
-  const unpaid = S.allDebts.filter(function(d){ return d.status !== 'paid'; });
-  const total = unpaid.reduce(function(a,d){ return a + (Number(d.remaining)||Number(d.amount)||0); }, 0);
-  if (total > 0) {
-    area.innerHTML = '<div class="debt-alert"><i class="fa-solid fa-triangle-exclamation"></i> Madeni hayajalipwa: ' + fmtCur(total) + ' (' + unpaid.length + ' rekodi)</div>';
-  } else {
-    area.innerHTML = '';
-  }
-}
-
-function renderDebts() {
-  const tb = document.getElementById('debtsBody');
-  const q = (document.getElementById('debtSearch').value || '').toLowerCase();
-  let items = S.allDebts;
-  if (q) items = items.filter(function(d){ return (d.customer||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-hand-holding-dollar"></i><p>Hakuna madeni</p></td></tr>'; return; }
-  tb.innerHTML = items.map(function(d){
-    const remaining = Number(d.remaining) || (Number(d.amount) - Number(d.paid));
-    const stCls = d.status==='paid'?'paid':'unpaid';
-    return '<tr><td>' + escHtml(d.customer||'—') + '</td><td>' + fmtCur(d.amount) + '</td><td>' + fmtCur(d.paid||0) + '</td><td>' + fmtCur(remaining) + '</td><td><span class="status-badge ' + stCls + '">' + escHtml(d.status||'unpaid') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' +
-      (d.status!=='paid' ? '<button class="btn btn-s btn-xs" onclick="payDebt(\'' + d.id + '\')"><i class="fa-solid fa-money-bill"></i> Lipa</button> ' : '') +
-      '<button class="btn btn-d btn-xs" onclick="deleteDebt(\'' + d.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
-  }).join('');
-}
-
-async function openDebtModal() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('customers').where('businessId','==',S.bizId).get();
-    const sel = document.getElementById('debtCustomer');
-    sel.innerHTML = '<option value="">Chagua mteja...</option>';
-    snap.docs.forEach(function(d){
-      sel.innerHTML += '<option value="' + d.id + '">' + escHtml(d.data().name) + '</option>';
+function renderSuppliersTable(suppliers) {
+    var body = document.getElementById("suppBody");
+    if (!body) return;
+    if (suppliers.length === 0) { showTableEmpty(body, 4); return; }
+    var html = "";
+    suppliers.forEach(function(s) {
+        var actions = '<button class="btn btn-xs btn-o" onclick="editSupplier(\'' + s.id + '\')"><i class="fas fa-edit"></i></button> ';
+        actions += '<button class="btn btn-xs btn-d" onclick="deleteSupplier(\'' + s.id + '\',\'' + (s.name || "").replace(/'/g, "\\'") + '\')"><i class="fas fa-trash"></i></button>';
+        html += '<tr><td>' + (s.name || "—") + '</td><td>' + (s.phone || "—") + '</td><td style="color:' + (safeNumber(s.balance) > 0 ? 'var(--danger)' : 'var(--success)') + '">' + formatCurrency(s.balance) + '</td><td>' + actions + '</td></tr>';
     });
-  } catch(err) { console.error("Load customers for debt:", err); }
-  document.getElementById('debtAmount').value = '';
-  document.getElementById('debtDue').value = '';
-  document.getElementById('debtDesc').value = '';
-  openModal('debtModal');
+    body.innerHTML = html;
 }
 
-async function saveDebt(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const custId = document.getElementById('debtCustomer').value;
-  const amount = Number(document.getElementById('debtAmount').value) || 0;
-  if (!custId) { toast('Chagua mteja.','w'); return; }
-  if (amount <= 0) { toast('Kiasi cha deni lazima kiwe zaidi ya 0.','w'); return; }
-  let custName = '—';
-  try {
-    const cd = await db.collection('customers').doc(custId).get();
-    if (cd.exists) custName = cd.data().name || '—';
-  } catch(er) { console.error(er); }
-  try {
-    await db.collection('debts').add({
-      businessId: S.bizId, customerId: custId, customer: custName,
-      amount: amount, paid: 0, remaining: amount,
-      status: 'unpaid', dueDate: document.getElementById('debtDue').value || null,
-      description: document.getElementById('debtDesc').value.trim(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+function filterSuppliers(q) {
+    q = q.toLowerCase().trim();
+    if (!q) { renderSuppliersTable(allSuppliers); return; }
+    var filtered = allSuppliers.filter(function(s) { return (s.name || "").toLowerCase().includes(q) || (s.phone || "").includes(q); });
+    renderSuppliersTable(filtered);
+}
+
+function openSupplierModal() {
+    document.getElementById("suppEditId").value = "";
+    document.getElementById("suppModalTitle").textContent = "Ongeza Muuzaji";
+    document.getElementById("suppName").value = "";
+    document.getElementById("suppPhone").value = "";
+    document.getElementById("suppEmail").value = "";
+    document.getElementById("suppAddr").value = "";
+    openModal("supplierModal");
+}
+
+function editSupplier(id) {
+    var s = allSuppliers.find(function(su) { return su.id === id; });
+    if (!s) return;
+    document.getElementById("suppEditId").value = id;
+    document.getElementById("suppModalTitle").textContent = "Hariri Muuzaji";
+    document.getElementById("suppName").value = s.name || "";
+    document.getElementById("suppPhone").value = s.phone || "";
+    document.getElementById("suppEmail").value = s.email || "";
+    document.getElementById("suppAddr").value = s.address || "";
+    openModal("supplierModal");
+}
+
+async function saveSupplier(e) {
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var editId = document.getElementById("suppEditId").value;
+    var data = {
+        businessId: currentBusinessId,
+        name: document.getElementById("suppName").value.trim(),
+        phone: document.getElementById("suppPhone").value.trim(),
+        email: document.getElementById("suppEmail").value.trim(),
+        address: document.getElementById("suppAddr").value.trim(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!data.name) { showToast("Jina linahitajika", "w"); return; }
+    try {
+        if (editId) {
+            await db.collection("suppliers").doc(editId).update(data);
+            showToast("Muuzaji amehaririwa", "s");
+        } else {
+            data.balance = 0;
+            data.status = "active";
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection("suppliers").add(data);
+            showToast("Muuzaji ameongezwa", "s");
+        }
+        closeModal("supplierModal");
+        loadSuppliers();
+    } catch (err) {
+        console.error("Save supplier failed:", err);
+        showToast("Imeshindwa: " + err.message, "e");
+    }
+}
+
+function deleteSupplier(id, name) {
+    showConfirm({
+        type: "danger",
+        title: "Futa Muuzaji",
+        message: "Utafuta muuzaji huyu.",
+        target: name,
+        onConfirm: async function() {
+            try {
+                await db.collection("suppliers").doc(id).delete();
+                showToast("Muuzaji amefutwa", "s");
+                loadSuppliers();
+            } catch (err) {
+                console.error("Delete supplier failed:", err);
+                showToast("Imeshindwa kufuta", "e");
+            }
+        }
     });
-    toast('Deni limehifadhiwa.','s');
-    closeModal('debtModal');
-    loadDebts();
-  } catch(err) {
-    console.error("Save debt error:", err);
-    toast('Imeshindwa kuhifadhi deni.','e');
-  }
 }
 
-function payDebt(id) {
-  const d = S.allDebts.find(function(x){ return x.id === id; });
-  if (!d) return;
-  const remaining = Number(d.remaining) || (Number(d.amount) - Number(d.paid));
-  const msg = 'Lipa deni la ' + fmtCur(remaining) + ' kwa ' + escHtml(d.customer || '—') + '?\n(Kubonyeza Futa kuthibitisha malipo kamili)';
-  requestDelete(msg, function(){
-    db.collection('debts').doc(id).update({
-      paid: Number(d.amount), remaining: 0, status: 'paid',
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function(){
-      toast('Deni limekulipwa.','s');
-      loadDebts();
-    }).catch(function(err){
-      console.error("Pay debt error:", err);
-      toast('Imeshindwa kulipa deni.','e');
-    });
-  });
-}
-
-function deleteDebt(id) {
-  requestDelete('Je, unahakika unataka kufuta deni hili?', function(){
-    db.collection('debts').doc(id).delete().then(function(){
-      toast('Deni limefutwa.','s');
-      loadDebts();
-    }).catch(function(err){
-      console.error("Delete debt error:", err);
-      toast('Imeshindwa kufuta deni.','e');
-    });
-  });
-}
-
-/* ================================================================
-   EXPENSES CRUD
-   ================================================================ */
+// ======================== EXPENSES ========================
 async function loadExpenses() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('expenses').where('businessId','==',S.bizId).orderBy('createdAt','desc').get();
-    S.allExpenses = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderExpenses();
-  } catch(err) {
-    console.error("Expenses load error:", err);
-    toast('Imeshindwa kupakua matumizi.','e');
-  }
-}
+    if (!currentBusinessId || !db) return;
+    var metricsEl = document.getElementById("expMetrics");
+    var body = document.getElementById("expBody");
+    var countEl = document.getElementById("expCount");
+    if (!metricsEl || !body) return;
+    showLoading(metricsEl);
+    body.innerHTML = '<tr><td colspan="5" class="empty-s"><div class="spinner"></div>Inapakia...</td></tr>';
+    try {
+        var snap = await db.collection("expenses").where("businessId", "==", currentBusinessId).orderBy("createdAt", "desc").get();
+        allExpenses = [];
+        snap.forEach(function(doc) { allExpenses.push({ id: doc.id, ...doc.data() }); });
+        if (countEl) countEl.textContent = allExpenses.length + " matumizi";
 
-function renderExpenses() {
-  const tb = document.getElementById('expensesBody');
-  const q = (document.getElementById('expSearch').value || '').toLowerCase();
-  let items = S.allExpenses;
-  if (q) items = items.filter(function(e){ return (e.category||'').toLowerCase().indexOf(q)>=0 || (e.description||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-money-bill-trend-up"></i><p>Hakuna matumizi</p></td></tr>'; return; }
-  tb.innerHTML = items.map(function(e){
-    return '<tr><td>' + escHtml(e.category||'—') + '</td><td>' + escHtml(e.description||'—') + '</td><td>' + fmtCur(e.amount) + '</td><td>' + fmtDate(e.createdAt) + '</td><td><button class="btn btn-d btn-xs" onclick="deleteExpense(\'' + e.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
-  }).join('');
+        var today = getToday();
+        var monthStart = getMonthStart();
+        var totalExp = allExpenses.reduce(function(t, e) { return t + safeNumber(e.amount); }, 0);
+        var todayExp = allExpenses.filter(function(e) { return isSameDay(e.date || e.createdAt, today); }).reduce(function(t, e) { return t + safeNumber(e.amount); }, 0);
+        var monthExp = allExpenses.filter(function(e) { return isBetween(e.date || e.createdAt, monthStart, today); }).reduce(function(t, e) { return t + safeNumber(e.amount); }, 0);
+
+        metricsEl.innerHTML =
+            '<div class="mc r"><div class="mc-icon"><i class="fas fa-receipt"></i></div><h3>' + formatCurrency(totalExp) + '</h3><p>Matumizi Yote</p></div>' +
+            '<div class="mc b"><div class="mc-icon"><i class="fas fa-calendar-day"></i></div><h3>' + formatCurrency(todayExp) + '</h3><p>Matumizi ya Leo</p></div>' +
+            '<div class="mc b"><div class="mc-icon"><i class="fas fa-calendar-alt"></i></div><h3>' + formatCurrency(monthExp) + '</h3><p>Matumizi ya Mwezi</p></div>';
+
+        if (allExpenses.length === 0) { showTableEmpty(body, 5); return; }
+        var html = "";
+        allExpenses.forEach(function(ex) {
+            var actions = '<button class="btn btn-xs btn-o" onclick="editExpense(\'' + ex.id + '\')"><i class="fas fa-edit"></i></button> ';
+            actions += '<button class="btn btn-xs btn-d" onclick="deleteExpense(\'' + ex.id + '\')"><i class="fas fa-trash"></i></button>';
+            html += '<tr><td>' + (ex.description || "—") + '</td><td>' + (ex.category || "—") + '</td><td style="color:var(--danger);font-weight:600">' + formatCurrency(ex.amount) + '</td><td>' + formatDate(ex.date || ex.createdAt) + '</td><td>' + actions + '</td></tr>';
+        });
+        body.innerHTML = html;
+    } catch (err) {
+        console.error("Load expenses failed:", err);
+        showError(metricsEl, "Imeshindwa kupakia: " + err.message);
+    }
 }
 
 function openExpenseModal() {
-  document.getElementById('expCategory').value = '';
-  document.getElementById('expDesc').value = '';
-  document.getElementById('expAmount').value = '';
-  document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
-  openModal('expenseModal');
+    document.getElementById("expEditId").value = "";
+    document.getElementById("expModalTitle").textContent = "Ongeza Matumizi";
+    document.getElementById("expDesc").value = "";
+    document.getElementById("expCategory").value = "general";
+    document.getElementById("expAmount").value = "";
+    document.getElementById("expDate").value = new Date().toISOString().split("T")[0];
+    openModal("expenseModal");
+}
+
+function editExpense(id) {
+    var ex = allExpenses.find(function(e) { return e.id === id; });
+    if (!ex) return;
+    document.getElementById("expEditId").value = id;
+    document.getElementById("expModalTitle").textContent = "Hariri Matumizi";
+    document.getElementById("expDesc").value = ex.description || "";
+    document.getElementById("expCategory").value = ex.category || "general";
+    document.getElementById("expAmount").value = ex.amount || "";
+    var d = toDate(ex.date || ex.createdAt);
+    document.getElementById("expDate").value = d ? d.toISOString().split("T")[0] : "";
+    openModal("expenseModal");
 }
 
 async function saveExpense(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const data = {
-    businessId: S.bizId,
-    category: document.getElementById('expCategory').value,
-    description: document.getElementById('expDesc').value.trim(),
-    amount: Number(document.getElementById('expAmount').value) || 0,
-    date: document.getElementById('expDate').value,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  if (!data.category) { toast('Chagua category.','w'); return; }
-  if (!data.description) { toast('Maelezo yanahitajika.','w'); return; }
-  if (data.amount <= 0) { toast('Kiasi lazima kiwe zaidi ya 0.','w'); return; }
-  try {
-    await db.collection('expenses').add(data);
-    toast('Matumizi yamehifadhiwa.','s');
-    closeModal('expenseModal');
-    loadExpenses();
-  } catch(err) {
-    console.error("Save expense error:", err);
-    toast('Imeshindwa kuhifadhi matumizi.','e');
-  }
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var editId = document.getElementById("expEditId").value;
+    var dateVal = document.getElementById("expDate").value;
+    var data = {
+        businessId: currentBusinessId,
+        description: document.getElementById("expDesc").value.trim(),
+        category: document.getElementById("expCategory").value,
+        amount: safeNumber(document.getElementById("expAmount").value),
+        date: dateVal ? firebase.firestore.Timestamp.fromDate(new Date(dateVal)) : firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!data.description) { showToast("Uelezo unahitajika", "w"); return; }
+    if (data.amount <= 0) { showToast("Kiasi lazima kiwe kubwa kuliko 0", "w"); return; }
+    try {
+        if (editId) {
+            await db.collection("expenses").doc(editId).update(data);
+            showToast("Matumizi yamehaririwa", "s");
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection("expenses").add(data);
+            showToast("Matumizi yameongezwa", "s");
+        }
+        closeModal("expenseModal");
+        loadExpenses();
+        loadDashboard();
+    } catch (err) {
+        console.error("Save expense failed:", err);
+        showToast("Imeshindwa: " + err.message, "e");
+    }
 }
 
 function deleteExpense(id) {
-  requestDelete('Je, unahakika unataka kufuta matumizi haya?', function(){
-    db.collection('expenses').doc(id).delete().then(function(){
-      toast('Matumizi yamefutwa.','s');
-      loadExpenses();
-    }).catch(function(err){
-      console.error("Delete expense error:", err);
-      toast('Imeshindwa kufuta matumizi.','e');
+    showConfirm({
+        type: "danger",
+        title: "Futa Matumizi",
+        message: "Utafuta rekodi hii ya matumizi.",
+        onConfirm: async function() {
+            try {
+                await db.collection("expenses").doc(id).delete();
+                showToast("Matumizi yamefutwa", "s");
+                loadExpenses();
+                loadDashboard();
+            } catch (err) {
+                console.error("Delete expense failed:", err);
+                showToast("Imeshindwa kufuta", "e");
+            }
+        }
     });
-  });
 }
 
-/* ================================================================
-   EMPLOYEES CRUD
-   ================================================================ */
-async function loadEmployees() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('employees').where('businessId','==',S.bizId).get();
-    S.allEmployees = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderEmployees();
-  } catch(err) {
-    console.error("Employees load error:", err);
-    toast('Imeshindwa kupakua wafanyakazi.','e');
-  }
-}
-
-function renderEmployees() {
-  const grid = document.getElementById('employeesGrid');
-  const q = (document.getElementById('empSearch').value || '').toLowerCase();
-  let items = S.allEmployees;
-  if (q) items = items.filter(function(e){ return (e.name||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-id-badge"></i><p>Hakuna wafanyakazi</p></div>'; return; }
-  const colors = ['#6c5ce7','#00b894','#f39c12','#e74c3c','#0984e3'];
-  grid.innerHTML = items.map(function(e, idx){
-    const initials = (e.name||'?').split(' ').map(function(w){return w.charAt(0);}).join('').substr(0,2).toUpperCase();
-    const active = e.status !== 'inactive';
-    return '<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:' + colors[idx % colors.length] + '">' + escHtml(initials) + '</div><div><h4>' + escHtml(e.name) + '</h4><p>' + escHtml(e.email||e.phone||'—') + '</p></div></div><div class="emp-card-body"><span class="emp-tag role">' + escHtml(e.role||'Staff') + '</span><span class="emp-tag status ' + (active?'':'inactive') + '">' + (active?'Active':'Inactive') + '</span></div><div class="emp-card-foot"><button class="btn btn-o btn-xs" onclick="editEmployee(\'' + e.id + '\')"><i class="fa-solid fa-pen"></i> Hariri</button><button class="btn btn-d btn-xs" onclick="deleteEmployee(\'' + e.id + '\')"><i class="fa-solid fa-trash"></i> Futa</button></div></div>';
-  }).join('');
-}
-
-function openEmployeeModal() {
-  document.getElementById('empModalTitle').textContent = 'Mfanyakazi Mpya';
-  document.getElementById('empEditId').value = '';
-  document.getElementById('empName').value = '';
-  document.getElementById('empEmail').value = '';
-  document.getElementById('empPhone').value = '';
-  document.getElementById('empRole').value = 'Staff';
-  document.getElementById('empSalary').value = '0';
-  openModal('employeeModal');
-}
-
-function editEmployee(id) {
-  const e = S.allEmployees.find(function(x){ return x.id === id; });
-  if (!e) return;
-  document.getElementById('empModalTitle').textContent = 'Hariri Mfanyakazi';
-  document.getElementById('empEditId').value = e.id;
-  document.getElementById('empName').value = e.name || '';
-  document.getElementById('empEmail').value = e.email || '';
-  document.getElementById('empPhone').value = e.phone || '';
-  document.getElementById('empRole').value = e.role || 'Staff';
-  document.getElementById('empSalary').value = e.salary || 0;
-  openModal('employeeModal');
-}
-
-async function saveEmployee(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const editId = document.getElementById('empEditId').value;
-  const data = {
-    businessId: S.bizId,
-    name: document.getElementById('empName').value.trim(),
-    email: document.getElementById('empEmail').value.trim(),
-    phone: document.getElementById('empPhone').value.trim(),
-    role: document.getElementById('empRole').value,
-    salary: Number(document.getElementById('empSalary').value) || 0,
-    status: 'active',
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  if (!data.name) { toast('Jina linahitajika.','w'); return; }
-  try {
-    if (editId) {
-      await db.collection('employees').doc(editId).update(data);
-      toast('Mfanyakazi amesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('employees').add(data);
-      toast('Mfanyakazi ameongezwa.','s');
-    }
-    closeModal('employeeModal');
-    loadEmployees();
-  } catch(err) {
-    console.error("Save employee error:", err);
-    toast('Imeshindwa kuhifadhi mfanyakazi.','e');
-  }
-}
-
-function deleteEmployee(id) {
-  const e = S.allEmployees.find(function(x){ return x.id === id; });
-  requestDelete('Je, unahakika unataka kufuta mfanyakazi "' + (e?e.name:'') + '"?', function(){
-    db.collection('employees').doc(id).delete().then(function(){
-      toast('Mfanyakazi amefutwa.','s');
-      loadEmployees();
-    }).catch(function(err){
-      console.error("Delete employee error:", err);
-      toast('Imeshindwa kufuta mfanyakazi.','e');
-    });
-  });
-}
-
-/* ================================================================
-   SUB-USERS (Business users)
-   ================================================================ */
-async function loadUsers() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('users').where('businessId','==',S.bizId).get();
-    S.allUsers = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderUsers();
-  } catch(err) {
-    console.error("Users load error:", err);
-    toast('Imeshindwa kupakua watumiaji.','e');
-  }
-}
-
-function renderUsers() {
-  const tb = document.getElementById('usersBody');
-
-  if (!S.allUsers.length) {
-    tb.innerHTML =
-      '<tr>' +
-        '<td colspan="5" class="empty-s">' +
-          '<i class="fa-solid fa-user-shield"></i>' +
-          '<p>Hakuna watumiaji</p>' +
-        '</td>' +
-      '</tr>';
-
-    return;
-  }
-
-  tb.innerHTML = S.allUsers.map(function(u) {
-
-    /* User status */
-    const isSuspended =
-      u.status === 'suspended' ||
-      u.suspended === true;
-
-    const stCls = isSuspended ? 'suspended' : 'active';
-    const stText = isSuspended ? 'Suspended' : 'Active';
-
-    /* Suspend / Activate button */
-    const statusBtn = isSuspended
-      ? '<button class="btn btn-xs btn-success" ' +
-          'onclick="activateUser(\'' + u.id + '\')" ' +
-          'title="Activate User">' +
-          '<i class="fa-solid fa-user-check"></i>' +
-        '</button>'
-      : '<button class="btn btn-xs btn-warning" ' +
-          'onclick="suspendUser(\'' + u.id + '\')" ' +
-          'title="Suspend User">' +
-          '<i class="fa-solid fa-user-slash"></i>' +
-        '</button>';
-
-    return (
-      '<tr>' +
-
-        /* Name */
-        '<td>' +
-          escHtml(u.name || '—') +
-        '</td>' +
-
-        /* Email */
-        '<td>' +
-          escHtml(u.email || '—') +
-        '</td>' +
-
-        /* Role */
-        '<td>' +
-          '<span class="emp-tag role">' +
-            escHtml(ROLE_LABELS[u.role] || u.role || 'Staff') +
-          '</span>' +
-        '</td>' +
-
-        /* Status */
-        '<td>' +
-          '<span class="status-badge ' + stCls + '">' +
-            stText +
-          '</span>' +
-        '</td>' +
-
-        /* Actions */
-        '<td>' +
-          statusBtn +
-
-          '<button class="btn btn-d btn-xs" ' +
-            'onclick="removeUser(\'' + u.id + '\')" ' +
-            'title="Delete User">' +
-            '<i class="fa-solid fa-trash"></i>' +
-          '</button>' +
-
-        '</td>' +
-
-      '</tr>'
-    );
-
-  }).join('');
-}
-function openUserModal() {
-  document.getElementById('subUserName').value = '';
-  document.getElementById('subUserEmail').value = '';
-  document.getElementById('subUserPass').value = '';
-  document.getElementById('subUserRole').value = 'staff';
-  openModal('userModal');
-}
-
-async function saveSubUser(e) {
-  e.preventDefault();
-  if (!S.bizId || !auth) { toast('Biashara au auth haijapatikana.','e'); return; }
-  const name = document.getElementById('subUserName').value.trim();
-  const email = document.getElementById('subUserEmail').value.trim();
-  const pw = document.getElementById('subUserPass').value;
-  const role = document.getElementById('subUserRole').value;
-  if (!name || !email || !pw) { toast('Jina, barua pepe na nenosiri vinahitajika.','w'); return; }
-  if (pw.length < 6) { toast('Nenosiri lazima iwe na angalau herufi 6.','w'); return; }
-  try {
-    const cred = await auth.createUserWithEmailAndPassword(email, pw);
-    await db.collection('users').doc(cred.user.uid).set({
-      name: name, email: email, role: role,
-      businessId: S.bizId, createdBy: S.uid,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    toast('Mtumiaji ameundwa.','s');
-    closeModal('userModal');
-    loadUsers();
-  } catch(err) {
-    console.error("Create user error:", err);
-    toast('Imeshindwa kuunda mtumiaji: ' + (err.message || ''), 'e');
-  }
-}
-
-function removeUser(id) {
-  if (id === S.uid) { toast('Huwezi kujiondoa mwenyewe.','w'); return; }
-  requestDelete('Je, unahakika unataka kuondoa mtumiaji huu?', function(){
-    db.collection('users').doc(id).delete().then(function(){
-      toast('Mtumiaji ameondolewa.','s');
-      loadUsers();
-    }).catch(function(err){
-      console.error("Remove user error:", err);
-      toast('Imeshindwa kuondoa mtumiaji.','e');
-    });
-  });
-}
-
-/* ================================================================
-   NOTIFICATIONS
-   ================================================================ */
-async function loadNotifications() {
-  if (!S.bizId) return;
-  try {
-    const snap = await db.collection('notifications').where('businessId','==',S.bizId).orderBy('createdAt','desc').limit(50).get();
-    S.allNotifs = snap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    renderNotifsSection();
-    renderNotifPanel();
-    updateNotifBadge();
-  } catch(err) {
-    console.error("Notifications load error:", err);
-  }
-}
-
-function renderNotifsSection() {
-  const el = document.getElementById('notifSectionList');
-  if (!S.allNotifs.length) { el.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa</p></div>'; return; }
-  el.innerHTML = S.allNotifs.map(function(n){
-    const icon = n.type === 'warning' ? 'fa-triangle-exclamation' : (n.type === 'success' ? 'fa-check-circle' : 'fa-circle-info');
-    const color = n.type === 'warning' ? 'var(--warning)' : (n.type === 'success' ? 'var(--success)' : 'var(--info)');
-    const unread = !n.read ? 'font-weight:700;' : 'opacity:.6;';
-    return '<div class="notif-item" style="' + unread + '"><i class="fa-solid ' + icon + '" style="color:' + color + '"></i><div><h5>' + escHtml(n.title||'—') + '</h5><p>' + escHtml(n.message||'') + '</p><p style="font-size:10px;margin-top:4px">' + fmtDate(n.createdAt) + '</p></div></div>';
-  }).join('');
-}
-
-function renderNotifPanel() {
-  const el = document.getElementById('nList');
-  if (!S.allNotifs.length) { el.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa</p></div>'; return; }
-  el.innerHTML = S.allNotifs.slice(0,20).map(function(n){
-    const icon = n.type === 'warning' ? 'fa-triangle-exclamation' : (n.type === 'success' ? 'fa-check-circle' : 'fa-circle-info');
-    const color = n.type === 'warning' ? 'var(--warning)' : (n.type === 'success' ? 'var(--success)' : 'var(--info)');
-    return '<div class="notif-item"><i class="fa-solid ' + icon + '" style="color:' + color + '"></i><div><h5>' + escHtml(n.title||'—') + '</h5><p>' + escHtml(n.message||'') + '</p></div></div>';
-  }).join('');
-}
-
-function updateNotifBadge() {
-  const unread = S.allNotifs.filter(function(n){ return !n.read; }).length;
-  const bdg = document.getElementById('sbNotifBdg');
-  const cnt = document.getElementById('tbNotifCnt');
-  if (unread > 0) {
-    bdg.textContent = unread; bdg.style.display = '';
-    cnt.textContent = unread; cnt.style.display = '';
-  } else {
-    bdg.style.display = 'none';
-    cnt.style.display = 'none';
-  }
-}
-
-async function markAllNotifsRead() {
-  if (!S.allNotifs.length) return;
-  const batch = db.batch();
-  let count = 0;
-  S.allNotifs.forEach(function(n){
-    if (!n.read) {
-      batch.update(db.collection('notifications').doc(n.id), {read: true});
-      n.read = true;
-      count++;
-    }
-  });
-  if (count === 0) { toast('Arifa zote zimesomwa tayari.','i'); return; }
-  try {
-    await batch.commit();
-    toast(count + ' arifa zimesomwa.','s');
-    renderNotifsSection();
-    updateNotifBadge();
-  } catch(err) {
-    console.error("Mark notifications error:", err);
-    toast('Imeshindwa kusoma arifa.','e');
-  }
-}
-
-/* ================================================================
-   PROFILE
-   ================================================================ */
-async function loadProfile() {
-  if (!S.user) return;
-  try {
-    const uDoc = await db.collection('users').doc(S.uid).get();
-    const ud = uDoc.exists ? uDoc.data() : {};
-    document.getElementById('profName').value = ud.name || S.user.displayName || '';
-    document.getElementById('profEmail').value = S.user.email || '';
-    document.getElementById('profPhone').value = ud.phone || '';
-    if (S.biz) {
-      document.getElementById('profBizName').textContent = S.biz.name || '—';
-      document.getElementById('profBizCat').textContent = S.biz.category || '—';
-      document.getElementById('profBizNameInput').value = S.biz.name || '';
-      document.getElementById('profBizCatInput').value = S.biz.category || '';
-      document.getElementById('profBizLoc').value = S.biz.location || '';
-      if (S.biz.logo) {
-        document.getElementById('logoPrev').innerHTML = '<img src="' + escHtml(S.biz.logo) + '" alt="Logo"/>';
-      }
-    }
-  } catch(err) {
-    console.error("Profile load error:", err);
-  }
-}
-
-async function saveProfile(e) {
-  e.preventDefault();
-  if (!S.uid || !S.bizId) { toast('Data haijapatikana.','e'); return; }
-  try {
-    await db.collection('users').doc(S.uid).update({
-      name: document.getElementById('profName').value.trim(),
-      phone: document.getElementById('profPhone').value.trim(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    await db.collection('businesses').doc(S.bizId).update({
-      name: document.getElementById('profBizNameInput').value.trim(),
-      category: document.getElementById('profBizCatInput').value,
-      location: document.getElementById('profBizLoc').value.trim(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    const bDoc = await db.collection('businesses').doc(S.bizId).get();
-    if (bDoc.exists) S.biz = bDoc.data();
-    document.getElementById('profBizName').textContent = S.biz.name || '—';
-    document.getElementById('profBizCat').textContent = S.biz.category || '—';
-    applyRolePermissions();
-    toast('Profaili imehifadhiwa.','s');
-  } catch(err) {
-    console.error("Save profile error:", err);
-    toast('Imeshindwa kuhifadhi profaili.','e');
-  }
-}
-
-function handleLogoUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) { toast('Picha lazima iwe chini ya 2MB.','w'); return; }
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    const dataUrl = ev.target.result;
-    document.getElementById('logoPrev').innerHTML = '<img src="' + dataUrl + '" alt="Logo"/>';
-    if (S.bizId && db) {
-      db.collection('businesses').doc(S.bizId).update({logo: dataUrl}).then(function(){
-        if (S.biz) S.biz.logo = dataUrl;
-        const sbLogo = document.getElementById('sbBizLogo');
-        sbLogo.src = dataUrl; sbLogo.style.display = '';
-        toast('Logo imehifadhiwa.','s');
-      }).catch(function(err){
-        console.error("Logo save error:", err);
-        toast('Imeshindwa kuhifadhi logo.','e');
-      });
-    }
-  };
-  reader.readAsDataURL(file);
-}
-
-/* ================================================================
-   SUPER ADMIN
-   ================================================================ */
-function superLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById('superUser').value.trim();
-  const pw = document.getElementById('superPass').value;
-  if (email === SUPER_CREDS.email && pw === SUPER_CREDS.password) {
-    document.getElementById('superErr').textContent = '';
-    document.getElementById('superLoginBox').classList.add('hidden');
-    document.getElementById('superPanel').classList.remove('hidden');
-    loadSuperAdmin();
-  } else {
-    document.getElementById('superErr').textContent = 'Barua pepe au nenosiri si sahihi.';
-  }
-}
-
-function superLogout() {
-  document.getElementById('superPanel').classList.add('hidden');
-  document.getElementById('superLoginBox').classList.remove('hidden');
-  document.getElementById('superUser').value = '';
-  document.getElementById('superPass').value = '';
-  document.getElementById('superErr').textContent = '';
-  Object.keys(S.charts).forEach(function(k){ destroyChart(k); });
-  showLanding();
-}
-
-function returnToSuperPanel() {
-  document.getElementById('superBodyMain').classList.remove('hidden');
-  document.getElementById('superBodyDetail').classList.add('hidden');
-  document.getElementById('superBackBtn').classList.remove('show');
-  loadSuperAdmin();
-}
-
-async function loadSuperAdmin() {
-  if (!db) {
-    document.getElementById('superMetrics').innerHTML = '<div class="sm-card"><h4>Warning</h4><div class="sm-val" style="font-size:14px;color:var(--warning)">Firebase haijawaunganishwa. Weka config sahihi.</div></div>';
-    return;
-  }
-  try {
-    const [usersSnap, bizSnap, adsSnap, prodSnap] = await Promise.all([
-      db.collection('users').get(),
-      db.collection('businesses').get(),
-      db.collection('globalAds').orderBy('createdAt','desc').get(),
-      db.collection('globalProducts').orderBy('createdAt','desc').get()
-    ]);
-    S.superUsers = usersSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    const businesses = bizSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    S.superAds = adsSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    S.superProducts = prodSnap.docs.map(function(d){ return {id:d.id,...d.data()}; });
-    const activeBiz = businesses.filter(function(b){ return b.status === 'active'; }).length;
-    const suspendedBiz = businesses.filter(function(b){ return b.status === 'suspended'; }).length;
-    document.getElementById('superMetrics').innerHTML =
-      '<div class="mc pu"><h4>Watumiaji</h4><div class="sm-val">' + S.superUsers.length + '</div><div class="sm-sub">Registered accounts</div></div>' +
-      '<div class="mc g"><h4>Biashara</h4><div class="sm-val">' + businesses.length + '</div><div class="sm-sub">Active: ' + activeBiz + '</div></div>' +
-      '<div class="mc r"><h4>Zilizosimamishwa</h4><div class="sm-val">' + suspendedBiz + '</div><div class="sm-sub">Suspended businesses</div></div>' +
-      '<div class="mc a"><h4>Matangazo</h4><div class="sm-val">' + S.superAds.length + '</div><div class="sm-sub">Global advertisements</div></div>' +
-      '<div class="mc b"><h4>Bidhaa Hadharani</h4><div class="sm-val">' + S.superProducts.length + '</div><div class="sm-sub">Public catalogue</div></div>';
-    renderSuperUsers();
-    renderSuperAds();
-    renderSuperProducts();
-    renderSuperCharts();
-  } catch(err) {
-    console.error("Super admin load error:", err);
-    toast('Imeshindwa kupakua data ya super admin.','e');
-  }
-}
-
-function renderSuperUsers() {
-  const tb = document.getElementById('superUsersBody');
-  const q = (document.getElementById('superUserSearch').value || '').toLowerCase();
-  let items = S.superUsers;
-  if (q) items = items.filter(function(u){ return (u.name||'').toLowerCase().indexOf(q)>=0 || (u.email||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><p>Hakuna watumiaji</p></td></tr>'; return; }
-  const bizMap = {};
-  S.superUsers.forEach(function(u){ if (u.businessId) bizMap[u.businessId] = u; });
-  tb.innerHTML = items.map(function(u){
-    const stCls = 'active';
-    return '<tr><td>' + escHtml(u.name||'—') + '</td><td>' + escHtml(u.email||'—') + '</td><td>' + escHtml(u.businessName||'—') + '</td><td>' + escHtml(u.businessCategory||'—') + '</td><td><span class="status-badge ' + stCls + '">Active</span></td><td>' + fmtDate(u.createdAt) + '</td><td><button class="btn btn-i btn-xs" onclick="viewSuperUser(\'' + u.id + '\')"><i class="fa-solid fa-eye"></i></button> <button class="btn btn-w btn-xs" onclick="openSuperNotifModal(\'' + u.id + '\')"><i class="fa-solid fa-bell"></i></button></td></tr>';
-  }).join('');
-}
-
-async function viewSuperUser(uid) {
-  const user = S.superUsers.find(function(u){ return u.id === uid; });
-  if (!user) return;
-  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
-  html += '<div><strong>Jina:</strong> ' + escHtml(user.name||'—') + '</div>';
-  html += '<div><strong>Barua:</strong> ' + escHtml(user.email||'—') + '</div>';
-  html += '<div><strong>Simu:</strong> ' + escHtml(user.phone||'—') + '</div>';
-  html += '<div><strong>Jukumu:</strong> ' + escHtml(ROLE_LABELS[user.role]||user.role||'—') + '</div>';
-  html += '<div><strong>Biashara:</strong> ' + escHtml(user.businessName||'—') + '</div>';
-  html += '<div><strong>Category:</strong> ' + escHtml(user.businessCategory||'—') + '</div>';
-  html += '<div><strong>Imejiunga:</strong> ' + fmtDate(user.createdAt) + '</div>';
-  html += '</div>';
-  if (user.businessId && db) {
+// ======================== STAFF ========================
+async function loadStaff() {
+    if (!currentBusinessId || !db) return;
+    var grid = document.getElementById("staffGrid");
+    var countEl = document.getElementById("staffCount");
+    if (!grid) return;
+    showLoading(grid);
     try {
-      const bizDoc = await db.collection('businesses').doc(user.businessId).get();
-      if (bizDoc.exists) {
-        const b = bizDoc.data();
-        html += '<div style="margin-top:16px;padding:12px;background:var(--bg3);border-radius:8px"><h4 style="margin-bottom:8px"><i class="fa-solid fa-store" style="color:var(--primary2);margin-right:6px"></i> Taarifa za Biashara</h4>';
-        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">';
-        html += '<div><strong>Jina:</strong> ' + escHtml(b.name) + '</div>';
-        html += '<div><strong>Category:</strong> ' + escHtml(b.category) + '</div>';
-        html += '<div><strong>Eneo:</strong> ' + escHtml(b.location||'—') + '</div>';
-        html += '<div><strong>Hatua:</strong> <span class="status-badge ' + (b.status==='active'?'active':'suspended') + '">' + escHtml(b.status||'active') + '</span></div>';
-        html += '</div></div>';
-      }
-    } catch(err) { console.error("View biz error:", err); }
-  }
-  document.getElementById('superViewTitle').textContent = 'Taarifa za Mtumiaji';
-  document.getElementById('superViewContent').innerHTML = html;
-  document.getElementById('superViewModal').style.display = 'flex';
-}
-/* ========================================================= MODULAR FIREBASE - USER SUSPENSION / ACTIVATION ========================================================= */ /** * Suspend User * Only Super Admin is allowed to perform this action. */ async function suspendUser( userId, reason = 'Account suspended by administrator' ) { try { if (!userId) { throw new Error('User ID haijapatikana.'); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumsuspend User.' ); } /* Update User status */ await updateDoc( doc(db, 'users', userId), { status: 'suspended', suspended: true, suspensionReason: reason, suspendedAt: serverTimestamp(), updatedAt: serverTimestamp() } ); console.log( 'User suspended successfully:', userId ); alert( 'User amesimamishwa kikamilifu.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Suspend User Error:', error ); alert( 'Imeshindikana kumsuspend User: ' + (error.message || error) ); } } /** * Activate User * Only Super Admin is allowed to perform this action. */ async function activateUser(userId) { try { if (!userId) { throw new Error( 'User ID haijapatikana.' ); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumu-activate User.' ); } /* Restore User access */ await updateDoc( doc(db, 'users', userId), { status: 'active', suspended: false, suspensionReason: '', suspendedAt: null, updatedAt: serverTimestamp() } ); console.log( 'User activated successfully:', userId ); alert( 'User amewezeshwa tena.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Activate User Error:', error ); alert( 'Imeshindikana ku-activate User: ' + (error.message || error) ); } } /* ========================================================= SUPER ADMIN - ADVERTISEMENT LIST ========================================================= */ function renderSuperAds() { const el = document.getElementById( 'superAdsList' ); /* Safety check */ if (!el) { console.warn( 'Element #superAdsList haijapatikana.' ); return; } /* No advertisements */ if ( !S.superAds || !S.superAds.length ) { el.innerHTML = '<div class="empty-s">' + '<i class="fa-solid fa-bullhorn"></i>' + '<p>Hakuna matangazo</p>' + '</div>'; return; } /* Render advertisements */ el.innerHTML = S.superAds.map(function(a) { const title = escHtml( a.title || 'Tangazo bila jina' ); const description = escHtml( a.description || '' ).substring(0, 60); const image = a.imageUrl ? '<img src="' + escHtml(a.imageUrl) + '" alt="' + title + '" loading="lazy">' : '<div class="ad-no-image">' + '<i class="fa-solid fa-image"></i>' + '</div>'; return ( '<div class="super-ad-item">' + '<div class="super-ad-image">' + image + '</div>' + '<div class="super-ad-info">' + '<h4>' + title + '</h4>' + '<p>' + description + (a.description && a.description.length > 60 ? '...' : '') + '</p>' + '</div>' + '</div>' ); }).join(''); }
-function renderSuperProducts() {
-  const el = document.getElementById('superProductsList');
-  if (!S.superProducts.length) { el.innerHTML = '<div class="empty-s"><p>Hakuna bidhaa hadharani</p></div>'; return; }
-  el.innerHTML = S.superProducts.map(function(p){
-    return '<div class="super-prod-item"><div class="super-ad-thumb">' + (p.imageUrl ? '<img src="' + escHtml(p.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-box"></i></div>') + '</div><div class="super-ad-info"><h5>' + escHtml(p.name) + '</h5><p>' + escHtml(p.seller||'') + ' — ' + fmtCur(p.price) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
-  }).join('');
-}
-
-function renderSuperCharts() {
-  destroyChart('superUsersTrendC');
-  destroyChart('superCatC');
-  destroyChart('superBizC');
-  destroyChart('superProdC');
-  const months = [];
-  const mData = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1); d.setHours(0,0,0,0);
-    const end = new Date(d); end.setMonth(end.getMonth() + 1);
-    months.push(d.toLocaleDateString('sw-TZ',{month:'short'}));
-    const count = S.superUsers.filter(function(u){
-      const t = u.createdAt ? (u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt)) : null;
-      return t && t >= d && t < end;
-    }).length;
-    mData.push(count);
-  }
-  S.charts.superUsersTrendC = new Chart(document.getElementById('superUsersTrend'), {
-    type:'line', data:{labels:months, datasets:[{label:'Users',data:mData,borderColor:'#6c5ce7',backgroundColor:'rgba(108,92,231,.15)',fill:true,tension:.4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},x:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
-  });
-  const cats = {};
-  S.superUsers.forEach(function(u){ const c = u.businessCategory||'Nyingine'; cats[c] = (cats[c]||0)+1; });
-  const catLabels = Object.keys(cats);
-  const catData = Object.values(cats);
-  const catColors = ['#6c5ce7','#00b894','#f39c12','#e74c3c','#0984e3','#a29bfe','#fd79a8'];
-  S.charts.superCatC = new Chart(document.getElementById('superCategoryChart'), {
-    type:'doughnut', data:{labels:catLabels.length?catLabels:['Hakuna data'],datasets:[{data:catData.length?catData:[1],backgroundColor:catColors}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9a9ab0'}}}}
-  });
-  S.charts.superBizC = new Chart(document.getElementById('superBusinessChart'), {
-    type:'bar', data:{labels:catLabels.length?catLabels.slice(0,6):['Hakuna data'],datasets:[{label:'Biashara',data:catData.length?catData.slice(0,6):[0],backgroundColor:'#00b894'}]},
-    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
-  });
-  const prodCats = {};
-  S.superProducts.forEach(function(p){ const c = p.category||'Nyingine'; prodCats[c] = (prodCats[c]||0)+1; });
-  const pLabels = Object.keys(prodCats);
-  const pData = Object.values(prodCats);
-  S.charts.superProdC = new Chart(document.getElementById('superProductChart'), {
-    type:'bar', data:{labels:pLabels.length?pLabels:['Hakuna data'],datasets:[{label:'Products',data:pData.length?pData:[0],backgroundColor:'#f39c12'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},x:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
-  });
-}
-
-/* Super Ads CRUD */
-function openSuperAdModal() {
-  document.getElementById('superAdId').value = '';
-  document.getElementById('superAdTitle').value = '';
-  document.getElementById('superAdText').value = '';
-  document.getElementById('superAdImage').value = '';
-  document.getElementById('superAdLink').value = '';
-  document.querySelector('#superAdModal .super-modal-head h3').textContent = 'Create Advertisement';
-  document.getElementById('superAdModal').style.display = 'flex';
-}
-
-function editSuperAd(id) {
-  const a = S.superAds.find(function(x){ return x.id === id; });
-  if (!a) return;
-  document.getElementById('superAdId').value = a.id;
-  document.getElementById('superAdTitle').value = a.title || '';
-  document.getElementById('superAdText').value = a.description || '';
-  document.getElementById('superAdImage').value = a.imageUrl || '';
-  document.getElementById('superAdLink').value = a.link || '';
-  document.querySelector('#superAdModal .super-modal-head h3').textContent = 'Edit Advertisement';
-  document.getElementById('superAdModal').style.display = 'flex';
-}
-
-async function saveSuperAd(e) {
-  e.preventDefault();
-  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
-  const editId = document.getElementById('superAdId').value;
-  const data = {
-    title: document.getElementById('superAdTitle').value.trim(),
-    description: document.getElementById('superAdText').value.trim(),
-    imageUrl: document.getElementById('superAdImage').value.trim(),
-    link: document.getElementById('superAdLink').value.trim()
-  };
-  if (!data.title) { toast('Title linahitajika.','w'); return; }
-  try {
-    if (editId) {
-      await db.collection('globalAds').doc(editId).update(data);
-      toast('Matangazo yamesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('globalAds').add(data);
-      toast('Matangazo yameongezwa.','s');
+        var snap = await db.collection("staff").where("businessId", "==", currentBusinessId).get();
+        allStaff = [];
+        snap.forEach(function(doc) { allStaff.push({ id: doc.id, ...doc.data() }); });
+        if (countEl) countEl.textContent = allStaff.length + " wafanyakazi";
+        renderStaffGrid(allStaff);
+    } catch (err) {
+        console.error("Load staff failed:", err);
+        showError(grid, "Imeshindwa kupakia: " + err.message);
     }
-    closeSuperModal('superAdModal');
-    loadSuperAdmin();
-  } catch(err) {
-    console.error("Save ad error:", err);
-    toast('Imeshindwa kuhifadhi matangazo.','e');
-  }
 }
 
-function deleteSuperAd(id) {
-  requestDelete('Je, unahakika unataka kufuta matangazo haya?', function(){
-    db.collection('globalAds').doc(id).delete().then(function(){
-      toast('Matangazo yamefutwa.','s');
-      loadSuperAdmin();
-    }).catch(function(err){
-      console.error("Delete ad error:", err);
-      toast('Imeshindwa kufuta matangazo.','e');
+function renderStaffGrid(staff) {
+    var grid = document.getElementById("staffGrid");
+    if (!grid) return;
+    if (staff.length === 0) { showEmpty(grid, "Hakuna wafanyakazi"); return; }
+    var html = "";
+    staff.forEach(function(s) {
+        var colors = { manager: "#f39c12", staff: "#0984e3", cashier: "#00b894" };
+        var bgColor = colors[s.role] || "#6c5ce7";
+        var statusCls = s.status === "active" ? "" : "inactive";
+        var actions = '<button class="btn btn-xs btn-o" onclick="editStaff(\'' + s.id + '\')"><i class="fas fa-edit"></i></button> ';
+        actions += '<button class="btn btn-xs btn-d" onclick="deleteStaff(\'' + s.id + '\',\'' + (s.name || "").replace(/'/g, "\\'") + '\')"><i class="fas fa-trash"></i></button>';
+        html += '<div class="emp-card">' +
+            '<div class="emp-card-head"><div class="emp-av" style="background:' + bgColor + '">' + getInitials(s.name) + '</div><div><h4>' + (s.name || "—") + '</h4><p>' + (s.phone || "—") + '</p></div></div>' +
+            '<div class="emp-card-body"><span class="emp-tag role">' + getRoleLabel(s.role) + '</span><span class="emp-tag status ' + statusCls + '">' + (s.status || "active") + '</span></div>' +
+            '<div class="emp-card-foot">' + actions + '</div>' +
+            '</div>';
     });
-  });
+    grid.innerHTML = html;
 }
 
-/* Super Products CRUD */
-function openSuperProductModal() {
-  document.getElementById('superProdId').value = '';
-  document.getElementById('superProdName').value = '';
-  document.getElementById('superProdCategory').value = '';
-  document.getElementById('superProdSeller').value = '';
-  document.getElementById('superProdShop').value = '';
-  document.getElementById('superProdPhone').value = '';
-  document.getElementById('superProdLocation').value = '';
-  document.getElementById('superProdPrice').value = '';
-  document.getElementById('superProdDesc').value = '';
-  document.getElementById('superProdImageUrl').value = '';
-  document.querySelector('#superProductModal .super-modal-head h3').textContent = 'Public Product Catalogue';
-  document.getElementById('superProductModal').style.display = 'flex';
+function openStaffModal() {
+    document.getElementById("staffEditId").value = "";
+    document.getElementById("staffModalTitle").textContent = "Ongeza Mfanyakazi";
+    document.getElementById("staffName").value = "";
+    document.getElementById("staffEmail").value = "";
+    document.getElementById("staffPhone").value = "";
+    document.getElementById("staffRole").value = "staff";
+    openModal("staffModal");
 }
 
-function editSuperProduct(id) {
-  const p = S.superProducts.find(function(x){ return x.id === id; });
-  if (!p) return;
-  document.getElementById('superProdId').value = p.id;
-  document.getElementById('superProdName').value = p.name || '';
-  document.getElementById('superProdCategory').value = p.category || '';
-  document.getElementById('superProdSeller').value = p.seller || '';
-  document.getElementById('superProdShop').value = p.shop || '';
-  document.getElementById('superProdPhone').value = p.phone || '';
-  document.getElementById('superProdLocation').value = p.location || '';
-  document.getElementById('superProdPrice').value = p.price || '';
-  document.getElementById('superProdDesc').value = p.description || '';
-  document.getElementById('superProdImageUrl').value = p.imageUrl || '';
-  document.querySelector('#superProductModal .super-modal-head h3').textContent = 'Edit Product';
-  document.getElementById('superProductModal').style.display = 'flex';
+function editStaff(id) {
+    var s = allStaff.find(function(st) { return st.id === id; });
+    if (!s) return;
+    document.getElementById("staffEditId").value = id;
+    document.getElementById("staffModalTitle").textContent = "Hariri Mfanyakazi";
+    document.getElementById("staffName").value = s.name || "";
+    document.getElementById("staffEmail").value = s.email || "";
+    document.getElementById("staffPhone").value = s.phone || "";
+    document.getElementById("staffRole").value = s.role || "staff";
+    openModal("staffModal");
 }
 
-async function saveSuperProduct(e) {
-  e.preventDefault();
-  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
-  const editId = document.getElementById('superProdId').value;
-  const data = {
-    name: document.getElementById('superProdName').value.trim(),
-    category: document.getElementById('superProdCategory').value.trim(),
-    seller: document.getElementById('superProdSeller').value.trim(),
-    shop: document.getElementById('superProdShop').value.trim(),
-    phone: document.getElementById('superProdPhone').value.trim(),
-    location: document.getElementById('superProdLocation').value.trim(),
-    price: Number(document.getElementById('superProdPrice').value) || 0,
-    description: document.getElementById('superProdDesc').value.trim(),
-    imageUrl: document.getElementById('superProdImageUrl').value.trim()
-  };
-  if (!data.name) { toast('Jina la bidhaa linahitajika.','w'); return; }
-  if (data.price <= 0) { toast('Bei lazima iwe zaidi ya 0.','w'); return; }
-  try {
-    if (editId) {
-      await db.collection('globalProducts').doc(editId).update(data);
-      toast('Bidhaa imesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('globalProducts').add(data);
-      toast('Bidhaa imechapishwa.','s');
-    }
-    closeSuperModal('superProductModal');
-    loadSuperAdmin();
-  } catch(err) {
-    console.error("Save product error:", err);
-    toast('Imeshindwa kuhifadhi bidhaa.','e');
-  }
-}
-
-function deleteSuperProduct(id) {
-  requestDelete('Je, unahakika unataka kufuta bidhaa hii?', function(){
-    db.collection('globalProducts').doc(id).delete().then(function(){
-      toast('Bidhaa imefutwa.','s');
-      loadSuperAdmin();
-    }).catch(function(err){
-      console.error("Delete product error:", err);
-      toast('Imeshindwa kufuta bidhaa.','e');
-    });
-  });
-}
-
-/* Super Notification */
-function openSuperNotifModal(userId) {
-  document.getElementById('superNotifUserId').value = userId;
-  document.getElementById('superNotifTitle').value = '';
-  document.getElementById('superNotifMsg').value = '';
-  document.getElementById('superNotifModal').style.display = 'flex';
-}
-
-async function sendSuperNotif(e) {
-  e.preventDefault();
-  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
-  const userId = document.getElementById('superNotifUserId').value;
-  const title = document.getElementById('superNotifTitle').value.trim();
-  const msg = document.getElementById('superNotifMsg').value.trim();
-  if (!title || !msg) { toast('Title na message vinahitajika.','w'); return; }
-  try {
-    const uDoc = await db.collection('users').doc(userId).get();
-    const bizId = uDoc.exists ? uDoc.data().businessId : null;
-    await db.collection('notifications').add({
-      userId: userId, businessId: bizId,
-      title: title, message: msg,
-      type: 'info', fromSuper: true, read: false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    toast('Arifa imetumwa.','s');
-    closeSuperModal('superNotifModal');
-  } catch(err) {
-    console.error("Send notif error:", err);
-    toast('Imeshindwa kutuma arifa.','e');
-  }
-}
-
-/* Super Modal Helpers */
-function closeSuperModal(id) {
-  document.getElementById(id).style.display = 'none';
-}
-
-/* Export Users PDF */
-function exportUsersPDF() {
-  if (!S.superUsers.length) { toast('Hakuna watumiaji kuexport.','w'); return; }
-  let html = '<!DOCTYPE html><html><head><title>BizBook Users Report</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:12px}th{background:#6c5ce7;color:#fff}h1{font-size:20px}p{color:#666;font-size:13px}</style></head><body>';
-  html += '<h1>BizBook - Users Report</h1>';
-  html += '<p>Generated: ' + new Date().toLocaleString() + '</p>';
-  html += '<p>Total Users: ' + S.superUsers.length + '</p>';
-  html += '<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Business</th><th>Category</th><th>Joined</th></tr></thead><tbody>';
-  S.superUsers.forEach(function(u){
-    html += '<tr><td>' + escHtml(u.name||'—') + '</td><td>' + escHtml(u.email||'—') + '</td><td>' + escHtml(u.phone||'—') + '</td><td>' + escHtml(ROLE_LABELS[u.role]||u.role||'—') + '</td><td>' + escHtml(u.businessName||'—') + '</td><td>' + escHtml(u.businessCategory||'—') + '</td><td>' + fmtDate(u.createdAt) + '</td></tr>';
-  });
-  html += '</tbody></table></body></html>';
-  const w = window.open('', '_blank');
-  w.document.write(html + '<script>setTimeout(function(){window.print();},500)<\/script>');
-  w.document.close();
-}
-
-/* Share Public Catalogue */
-function sharePublicCatalogue() {
-  const url = window.location.href.split('?')[0] + '#catalogue';
-  if (navigator.share) {
-    navigator.share({title:'BizBook Product Catalogue', text:'Tazama bidhaa zetu!', url:url}).catch(function(){});
-  } else if (navigator.clipboard) {
-    navigator.clipboard.writeText(url).then(function(){
-      toast('Link imekopiwwa.', 's');
-    }).catch(function(){
-      toast('Imeshindwa kukopi link.', 'e');
-    });
-  } else {
-    prompt('Copy catalogue link:', url);
-  }
-}
-
-/* ================================================================
-   PUBLIC SHOWCASE
-   ================================================================ */
-function renderPublicShowcase() {
-  if (!db) {
-    document.getElementById('publicAdsGrid').innerHTML = '<div class="empty-s"><p>Firebase haijawaunganishwa.</p></div>';
-    document.getElementById('publicProductsGrid').innerHTML = '<div class="empty-s"><p>Firebase haijawaunganishwa.</p></div>';
-    return;
-  }
-  Promise.all([
-    db.collection('globalAds').orderBy('createdAt','desc').get(),
-    db.collection('globalProducts').orderBy('createdAt','desc').get()
-  ]).then(function(results){
-    const ads = results[0].docs.map(function(d){ return d.data(); });
-    const prods = results[1].docs.map(function(d){ return d.data(); });
-    const adsGrid = document.getElementById('publicAdsGrid');
-    if (!ads.length) {
-      adsGrid.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bullhorn"></i><p>Hakuna matangazo bado</p></div>';
-    } else {
-      adsGrid.innerHTML = ads.map(function(a){
-        return '<div class="pub-ad-card">' + (a.imageUrl ? '<img class="pub-ad-img" src="' + escHtml(a.imageUrl) + '" alt=""/>' : '<div class="pub-ad-img-placeholder"><i class="fa-solid fa-image"></i></div>') +
-          '<div class="pub-ad-body"><h4>' + escHtml(a.title) + '</h4><p>' + escHtml(a.description||'') + '</p>' + (a.link ? '<a class="pub-ad-link" href="' + escHtml(a.link) + '" target="_blank" rel="noopener">Pata zaidi <i class="fa-solid fa-arrow-right"></i></a>' : '') + '</div></div>';
-      }).join('');
-    }
-    const prodGrid = document.getElementById('publicProductsGrid');
-    if (!prods.length) {
-      prodGrid.innerHTML = '<div class="empty-s"><i class="fa-solid fa-boxes-stacked"></i><p>Hakuna bidhaa hadharani bado</p></div>';
-    } else {
-      prodGrid.innerHTML = prods.map(function(p){
-        return '<div class="pub-prod-card">' + (p.imageUrl ? '<img class="pub-prod-img" src="' + escHtml(p.imageUrl) + '" alt=""/>' : '<div class="pub-prod-img-placeholder"><i class="fa-solid fa-box"></i></div>') +
-          '<div class="pub-prod-body"><h4>' + escHtml(p.name) + '</h4><p>' + escHtml(p.description||'').substr(0,80) + '</p><div class="pub-prod-price">' + fmtCur(p.price) + '</div><div class="pub-prod-seller">' + escHtml(p.seller||'') + (p.shop ? ' — ' + escHtml(p.shop) : '') + (p.phone ? ' — ' + escHtml(p.phone) : '') + '</div></div></div>';
-      }).join('');
-    }
-  }).catch(function(err){
-    console.error("Public showcase error:", err);
-    document.getElementById('publicAdsGrid').innerHTML = '<div class="empty-s"><p>Imeshindwa kupakua data.</p></div>';
-    document.getElementById('publicProductsGrid').innerHTML = '<div class="empty-s"><p>Imeshindwa kupakua data.</p></div>';
-  });
-}
-
-/* ================================================================
-   AUTH STATE LISTENER
-   ================================================================ */
-function initAuthListener() {
-  if (!auth) {
-    showLanding();
-    return;
-  }
-  auth.onAuthStateChanged(function(user) {
-    if (user) {
-      S.user = user;
-      S.uid = user.uid;
-      db.collection('users').doc(user.uid).get().then(function(uDoc) {
-        if (uDoc.exists) {
-          const ud = uDoc.data();
-          S.bizId = ud.businessId;
-          S.role = ud.role || 'admin';
-          if (S.bizId) {
-            return db.collection('businesses').doc(S.bizId).get().then(function(bDoc){
-              if (bDoc.exists) S.biz = bDoc.data();
-            });
-          }
-        }
-      }).then(function(){
-        if (S.bizId) {
-          showRoleScreen();
+async function saveStaff(e) {
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var editId = document.getElementById("staffEditId").value;
+    var data = {
+        businessId: currentBusinessId,
+        name: document.getElementById("staffName").value.trim(),
+        email: document.getElementById("staffEmail").value.trim(),
+        phone: document.getElementById("staffPhone").value.trim(),
+        role: document.getElementById("staffRole").value,
+        status: "active",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!data.name) { showToast("Jina linahitajika", "w"); return; }
+    try {
+        if (editId) {
+            await db.collection("staff").doc(editId).update(data);
+            showToast("Mfanyakazi amehaririwa", "s");
         } else {
-          showLanding();
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection("staff").add(data);
+            showToast("Mfanyakazi ameongezwa", "s");
         }
-      }).catch(function(err){
-        console.error("Auth state error:", err);
-        showLanding();
-      });
-    } else {
-      S.user = null;
-      S.uid = null;
-      S.bizId = null;
-      S.biz = null;
-      showLanding();
+        closeModal("staffModal");
+        loadStaff();
+        loadDashboard();
+    } catch (err) {
+        console.error("Save staff failed:", err);
+        showToast("Imeshindwa: " + err.message, "e");
     }
-  });
 }
 
-/* ================================================================
-   ENRICH SUPER USER DATA WITH BUSINESS INFO
-   ================================================================ */
-async function enrichSuperUsersWithBiz() {
-  if (!db || !S.superUsers.length) return;
-  const bizIds = [];
-  S.superUsers.forEach(function(u){
-    if (u.businessId && bizIds.indexOf(u.businessId) < 0) bizIds.push(u.businessId);
-  });
-  if (!bizIds.length) return;
-  try {
-    const snaps = await Promise.all(bizIds.map(function(bid){ return db.collection('businesses').doc(bid).get(); }));
-    const bizMap = {};
-    snaps.forEach(function(snap){
-      if (snap.exists) bizMap[snap.id] = snap.data();
+function deleteStaff(id, name) {
+    showConfirm({
+        type: "danger",
+        title: "Futa Mfanyakazi",
+        message: "Utafuta mfanyakazi huyu.",
+        target: name,
+        onConfirm: async function() {
+            try {
+                await db.collection("staff").doc(id).delete();
+                showToast("Mfanyakazi amefutwa", "s");
+                loadStaff();
+                loadDashboard();
+            } catch (err) {
+                console.error("Delete staff failed:", err);
+                showToast("Imeshindwa kufuta", "e");
+            }
+        }
     });
-    S.superUsers.forEach(function(u){
-      if (u.businessId && bizMap[u.businessId]) {
-        u.businessName = bizMap[u.businessId].name || '—';
-        u.businessCategory = bizMap[u.businessId].category || '—';
-      }
-    });
-  } catch(err) { console.error("Enrich users error:", err); }
 }
 
-/* Override renderSuperUsers to include enrichment */
-var _origRenderSuperUsers = renderSuperUsers;
-renderSuperUsers = function() {
-  enrichSuperUsersWithBiz().then(function(){
-    _origRenderSuperUsers();
-  }).catch(function(){
-    _origRenderSuperUsers();
-  });
-};
+// ======================== REPORTS ========================
+async function loadReports() {
+    if (!currentBusinessId || !db) return;
+    try {
+        // Load data if needed
+        if (allSales.length === 0) {
+            var salesSnap = await db.collection("sales").where("businessId", "==", currentBusinessId).get();
+            allSales = [];
+            salesSnap.forEach(function(doc) { allSales.push({ id: doc.id, ...doc.data() }); });
+        }
+        if (allExpenses.length === 0) {
+            var expSnap = await db.collection("expenses").where("businessId", "==", currentBusinessId).get();
+            allExpenses = [];
+            expSnap.forEach(function(doc) { allExpenses.push({ id: doc.id, ...doc.data() }); });
+        }
 
-/* ================================================================
-   GLOBAL ERROR HANDLERS
-   ================================================================ */
-window.addEventListener('error', function(event) {
-  console.error('Global error:', event.error);
-});
-
-window.addEventListener('unhandledrejection', function(event) {
-  console.error('Unhandled promise rejection:', event.reason);
-});
-
-/* Close user dropdown when clicking outside */
-document.addEventListener('click', function(e) {
-  const chip = document.querySelector('.u-chip');
-  const dd = document.getElementById('uDd');
-  if (chip && dd && dd.classList.contains('show') && !chip.contains(e.target)) {
-    dd.classList.remove('show');
-  }
-});
-
-/* Close notification panel when clicking outside */
-document.addEventListener('click', function(e) {
-  const panel = document.getElementById('notifPanel');
-  const btn = document.querySelector('.tb-btn[onclick="toggleNotifPanel()"]');
-  if (panel && panel.classList.contains('show') && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
-    panel.classList.remove('show');
-  }
-});
-
-/* Keyboard shortcut: Escape to close modals */
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-ov.show').forEach(function(m){ m.classList.remove('show'); });
-    document.querySelectorAll('.super-modal').forEach(function(m){ if(m.style.display === 'flex') m.style.display = 'none'; });
-    if (document.getElementById('priceCalculatorModal').style.display === 'flex') {
-      closePriceCalculator();
+        renderReportDailyChart();
+        renderReportRevExpChart();
+        renderReportTopProducts();
+    } catch (err) {
+        console.error("Reports load failed:", err);
+        showToast("Imeshindwa kupakia ripoti: " + err.message, "e");
     }
-    closeSidebar();
-    closeNotifPanel();
-    closeUserDd();
-  }
-});
-
-/* ================================================================
-   INITIALIZATION
-   ================================================================ */
-function init() {
-  console.log('BizBook initializing...');
-  showLanding();
-  initAuthListener();
 }
 
-/* Wait for DOM to be ready */
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+function renderReportDailyChart() {
+    destroyChart("reportChartDaily");
+    var canvas = document.getElementById("reportChartDaily");
+    if (!canvas) return;
+    var now = new Date();
+    var daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    var labels = [];
+    var data = [];
+    for (var d = 1; d <= daysInMonth; d++) {
+        var dayDate = new Date(now.getFullYear(), now.getMonth(), d);
+        labels.push(d.toString());
+        var dayTotal = allSales.filter(function(s) { return isSameDay(s.createdAt, dayDate); }).reduce(function(t, s) { return t + safeNumber(s.total); }, 0);
+        data.push(dayTotal);
+    }
+    chartInstances["reportChartDaily"] = new Chart(canvas, {
+        type: "bar",
+        data: { labels: labels, datasets: [{ label: "Mauzo", data: data, backgroundColor: "rgba(108,92,231,.6)", borderColor: "#6c5ce7", borderWidth: 1 }] },
+        options: JSON.parse(JSON.stringify(chartDefaults))
+    });
 }
+
+function renderReportRevExpChart() {
+    destroyChart("reportChartRevExp");
+    var canvas = document.getElementById("reportChartRevExp");
+    if (!canvas) return;
+    var months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ago", "Sep", "Okt", "Nov", "Des"];
+    var now = new Date();
+    var labels = [];
+    var revData = [];
+    var expData = [];
+    // Last 6 months
+    for (var i = 5; i >= 0; i--) {
+        var mDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        var mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+        labels.push(months[mDate.getMonth()]);
+        var mRev = allSales.filter(function(s) { return isBetween(s.createdAt, mDate, mEnd); }).reduce(function(t, s) { return t + safeNumber(s.total); }, 0);
+        var mExp = allExpenses.filter(function(e) { return isBetween(e.date || e.createdAt, mDate, mEnd); }).reduce(function(t, e) { return t + safeNumber(e.amount); }, 0);
+        revData.push(mRev);
+        expData.push(mExp);
+    }
+    var opts = JSON.parse(JSON.stringify(chartDefaults));
+    chartInstances["reportChartRevExp"] = new Chart(canvas, {
+        type: "line",
+        data: { labels: labels, datasets: [
+            { label: "Mapato", data: revData, borderColor: "#00b894", backgroundColor: "rgba(0,184,148,.15)", fill: true, tension: .4 },
+            { label: "Matumizi", data: expData, borderColor: "#e74c3c", backgroundColor: "rgba(231,76,60,.15)", fill: true, tension: .4 }
+        ] },
+        options: opts
+    });
+}
+
+function renderReportTopProducts() {
+    var body = document.getElementById("reportTopProds");
+    if (!body) return;
+    // Aggregate product sales
+    var prodSales = {};
+    allSales.forEach(function(s) {
+        (s.items || []).forEach(function(item) {
+            var pid = item.productId || item.name;
+            if (!prodSales[pid]) prodSales[pid] = { name: item.name || "—", qty: 0, revenue: 0 };
+            prodSales[pid].qty += safeNumber(item.qty);
+            prodSales[pid].revenue += safeNumber(item.total);
+        });
+    });
+    var sorted = Object.values(prodSales).sort(function(a, b) { return b.revenue - a.revenue; });
+    if (sorted.length === 0) { showTableEmpty(body, 3); return; }
+    var top = sorted.slice(0, 10);
+    var html = "";
+    top.forEach(function(p) {
+        html += '<tr><td>' + p.name + '</td><td>' + p.qty + '</td><td style="color:var(--success);font-weight:600">' + formatCurrency(p.revenue) + '</td></tr>';
+    });
+    body.innerHTML = html;
+}
+
+// ======================== ADS ========================
+async function loadAds() {
+    if (!currentBusinessId || !db) return;
+    var grid = document.getElementById("adsGrid");
+    var countEl = document.getElementById("adsCount");
+    if (!grid) return;
+    showLoading(grid);
+    try {
+        var snap = await db.collection("advertisements").where("businessId", "==", currentBusinessId).orderBy("createdAt", "desc").get();
+        allAds = [];
+        snap.forEach(function(doc) { allAds.push({ id: doc.id, ...doc.data() }); });
+        if (countEl) countEl.textContent = allAds.length + " matangazo";
+        renderAdsGrid(allAds);
+    } catch (err) {
+        console.error("Load ads failed:", err);
+        showError(grid, "Imeshindwa kupakia: " + err.message);
+    }
+}
+
+function renderAdsGrid(ads) {
+    var grid = document.getElementById("adsGrid");
+    if (!grid) return;
+    if (ads.length === 0) { showEmpty(grid, "Hakuna matangazo"); return; }
+    var html = "";
+    ads.forEach(function(ad) {
+        var statusCls = ad.status || "active";
+        var actions = '<button class="btn btn-xs btn-o" onclick="editAd(\'' + ad.id + '\')"><i class="fas fa-edit"></i></button> ';
+        actions += '<button class="btn btn-xs btn-d" onclick="deleteAd(\'' + ad.id + '\')"><i class="fas fa-trash"></i></button>';
+        html += '<div class="emp-card">' +
+            '<div style="padding:12px 18px 0;display:flex;justify-content:space-between;align-items:center"><h4 style="font-size:14px">' + (ad.title || "—") + '</h4><span class="status-badge ' + statusCls + '">' + statusCls + '</span></div>' +
+            '<div style="padding:8px 18px"><p style="font-size:12px;color:var(--text2);line-height:1.5">' + (ad.description || "").substring(0, 100) + '</p></div>' +
+            '<div style="padding:0 18px 12px;display:flex;gap:6px">' + actions + '</div>' +
+            '</div>';
+    });
+    grid.innerHTML = html;
+}
+
+function openAdModal() {
+    document.getElementById("adEditId").value = "";
+    document.getElementById("adModalTitle").textContent = "Ongeza Tangazo";
+    document.getElementById("adTitle").value = "";
+    document.getElementById("adDesc").value = "";
+    document.getElementById("adLink").value = "";
+    document.getElementById("adStatus").value = "active";
+    openModal("adModal");
+}
+
+function editAd(id) {
+    var ad = allAds.find(function(a) { return a.id === id; });
+    if (!ad) return;
+    document.getElementById("adEditId").value = id;
+    document.getElementById("adModalTitle").textContent = "Hariri Tangazo";
+    document.getElementById("adTitle").value = ad.title || "";
+    document.getElementById("adDesc").value = ad.description || "";
+    document.getElementById("adLink").value = ad.link || "";
+    document.getElementById("adStatus").value = ad.status || "active";
+    openModal("adModal");
+}
+
+async function saveAd(e) {
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var editId = document.getElementById("adEditId").value;
+    var data = {
+        businessId: currentBusinessId,
+        title: document.getElementById("adTitle").value.trim(),
+        description: document.getElementById("adDesc").value.trim(),
+        link: document.getElementById("adLink").value.trim(),
+        status: document.getElementById("adStatus").value,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!data.title) { showToast("Kichwa kinahitajika", "w"); return; }
+    try {
+        if (editId) {
+            await db.collection("advertisements").doc(editId).update(data);
+            showToast("Tangazo limehaririwa", "s");
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await db.collection("advertisements").add(data);
+            showToast("Tangazo limeongezwa", "s");
+        }
+        closeModal("adModal");
+        loadAds();
+    } catch (err) {
+        console.error("Save ad failed:", err);
+        showToast("Imeshindwa: " + err.message, "e");
+    }
+}
+
+function deleteAd(id) {
+    showConfirm({
+        type: "danger",
+        title: "Futa Tangazo",
+        message: "Utafuta tangazo hili.",
+        onConfirm: async function() {
+            try {
+                await db.collection("advertisements").doc(id).delete();
+                showToast("Tangazo limefutwa", "s");
+                loadAds();
+            } catch (err) {
+                console.error("Delete ad failed:", err);
+                showToast("Imeshindwa kufuta", "e");
+            }
+        }
+    });
+}
+
+// ======================== PROFILE ========================
+async function loadProfile() {
+    if (!currentBusinessId || !db || !currentBusinessData) return;
+    document.getElementById("profBizName").value = currentBusinessData.businessName || "";
+    document.getElementById("profBizType").value = currentBusinessData.businessType || "duka";
+    document.getElementById("profBizAddr").value = currentBusinessData.businessAddress || "";
+    document.getElementById("profBizPhone").value = currentBusinessData.businessPhone || "";
+    var logoPrev = document.getElementById("logoPrev");
+    if (logoPrev && currentBusinessData.logo) {
+        logoPrev.innerHTML = '<img src="' + currentBusinessData.logo + '" alt="Logo"/>';
+    }
+}
+
+async function updateProfile(e) {
+    e.preventDefault();
+    if (!currentBusinessId || !db) { showToast("Firebase haipo", "e"); return; }
+    var data = {
+        businessName: document.getElementById("profBizName").value.trim(),
+        businessType: document.getElementById("profBizType").value,
+        businessAddress: document.getElementById("profBizAddr").value.trim(),
+        businessPhone: document.getElementById("profBizPhone").value.trim(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    try {
+        await db.collection("businesses").doc(currentBusinessId).update(data);
+        currentBusinessData = { ...currentBusinessData, ...data };
+        updateTopbar();
+        showToast("Wasifu umesasishwa", "s");
+    } catch (err) {
+        console.error("Update profile failed:", err);
+        showToast("Imeshindwa kusasisha: " + err.message, "e");
+    }
+}
+
+async function uploadLogo(file) {
+    if (!file || !currentBusinessId || !db) return;
+    // Since we don't have Firebase Storage initialized, use base64
+    var reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            var base64 = e.target.result;
+            await db.collection("businesses").doc(currentBusinessId).update({ logo: base64 });
+            currentBusinessData.logo = base64;
+            var logoPrev = document.getElementById("logoPrev");
+            if (logoPrev) logoPrev.innerHTML = '<img src="' + base64 + '" alt="Logo"/>';
+            showToast("Logo imepakwa", "s");
+        } catch (err) {
+            console.error("Upload logo failed:", err);
+            showToast("Imeshindwa kupakia logo", "e");
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+// ======================== PUBLIC DATA ========================
+async function loadPublicAds() {
+    var grid = document.getElementById("publicAdsGrid");
+    if (!grid || !db) return;
+    showLoading(grid);
+    try {
+        var snap = await db.collection("advertisements").where("status", "in", ["active", "featured"]).orderBy("createdAt", "desc").limit(12).get();
+        var ads = [];
+        snap.forEach(function(doc) { ads.push({ id: doc.id, ...doc.data() }); });
+        if (ads.length === 0) { showEmpty(grid, "Hakuna matangazo ya sasa"); return; }
+        var html = "";
+        ads.forEach(function(ad) {
+            html += '<div class="pub-ad-card">' +
+                '<div class="pub-ad-img-placeholder"><i class="fas fa-bullhorn"></i></div>' +
+                '<div class="pub-ad-body"><h4>' + (ad.title || "—") + '</h4><p>' + (ad.description || "").substring(0, 80) + '</p>' +
+                (ad.link ? '<a class="pub-ad-link" href="' + ad.link + '" target="_blank">Soma zaidi <i class="fas fa-external-link-alt"></i></a>' : '') +
+                '</div></div>';
+        });
+        grid.innerHTML = html;
+    } catch (err) {
+        console.error("Load public ads failed:", err);
+        showError(grid, "Imeshindwa kupakia");
+    }
+}
+
+async function loadPublicProducts() {
+    var grid = document.getElementById("publicProdsGrid");
+    if (!grid || !db) return;
+    showLoading(grid);
+    try {
+        var snap = await db.collection("products").where("status", "==", "active").orderBy("createdAt", "desc").limit(12).get();
+        var prods = [];
+        snap.forEach(function(doc) { prods.push({ id: doc.id, ...doc.data() }); });
+        if (prods.length === 0) { showEmpty(grid, "Hakuna bidhaa za sasa"); return; }
+        var html = "";
+        prods.forEach(function(p) {
+            html += '<div class="pub-prod-card">' +
+                '<div class="pub-prod-img-placeholder"><i class="fas fa-box"></i></div>' +
+                '<div class="pub-prod-body"><h4>' + (p.name || "—") + '</h4>' +
+                '<div class="pub-prod-price">' + formatCurrency(p.price) + '</div>' +
+                '<div class="pub-prod-seller">Stok: ' + safeNumber(p.stock) + ' ' + (p.unit || "") + '</div>' +
+                '</div></div>';
+        });
+        grid.innerHTML = html;
+    } catch (err) {
+        console.error("Load public products failed:", err);
+        showError(grid, "Imeshindwa kupakia");
+    }
+}
+
+// ======================== INITIALIZATION ========================
+function initApp() {
+    if (!auth || !db) {
+        console.warn("Firebase not initialized - check config");
+        document.addEventListener("DOMContentLoaded", function() {
+            showScreen("landing");
+            loadPublicAds();
+            loadPublicProducts();
+        });
+        return;
+    }
+    initAuth();
+    document.addEventListener("DOMContentLoaded", function() {
+        showScreen("landing");
+        loadPublicAds();
+        loadPublicProducts();
+    });
+}
+
+// Start the app
+initApp();
 </script>
 </body>
 </html>
