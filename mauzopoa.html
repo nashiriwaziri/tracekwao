@@ -3334,354 +3334,636 @@ async function loadSuperAdmin() {
   }
 }
 
-function renderSuperUsers() {
-  const tb = document.getElementById('superUsersBody');
-  const q = (document.getElementById('superUserSearch').value || '').toLowerCase();
-  let items = S.superUsers;
-  if (q) items = items.filter(function(u){ return (u.name||'').toLowerCase().indexOf(q)>=0 || (u.email||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><p>Hakuna watumiaji</p></td></tr>'; return; }
-  const bizMap = {};
-  S.superUsers.forEach(function(u){ if (u.businessId) bizMap[u.businessId] = u; });
-  tb.innerHTML = items.map(function(u){
-    const stCls = 'active';
-    return '<tr><td>' + escHtml(u.name||'—') + '</td><td>' + escHtml(u.email||'—') + '</td><td>' + escHtml(u.businessName||'—') + '</td><td>' + escHtml(u.businessCategory||'—') + '</td><td><span class="status-badge ' + stCls + '">Active</span></td><td>' + fmtDate(u.createdAt) + '</td><td><button class="btn btn-i btn-xs" onclick="viewSuperUser(\'' + u.id + '\')"><i class="fa-solid fa-eye"></i></button> <button class="btn btn-w btn-xs" onclick="openSuperNotifModal(\'' + u.id + '\')"><i class="fa-solid fa-bell"></i></button></td></tr>';
-  }).join('');
+function renderSuperMetrics() {
+  var users = normalizeUsers();
+  var active = users.filter(function(u) { return u.status !== 'suspended'; }).length;
+  var suspended = users.filter(function(u) { return u.status === 'suspended'; }).length;
+  var biz = getAllBusinesses().length;
+  var sales = getGlobalSales();
+  var revenue = sales.reduce(function(a, x) { return a + (Number(x.sale.total) || 0); }, 0);
+
+  document.getElementById('superMetrics').innerHTML =
+    '<div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-users"></i></div>' +
+    '<h2>' + users.length + '</h2><p>Total Users</p></div>' +
+    '<div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-user-check"></i></div>' +
+    '<h2>' + active + '</h2><p>Active Users</p></div>' +
+    '<div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-user-slash"></i></div>' +
+    '<h2>' + suspended + '</h2><p>Suspended / Inactive</p></div>' +
+    '<div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-building"></i></div>' +
+    '<h2>' + biz + '</h2><p>Registered Businesses</p></div>' +
+    '<div class="super-metric"><div class="sm-icon"><i class="fa-solid fa-chart-line"></i></div>' +
+    '<h2>' + fmt(revenue) + '</h2><p>Global Sales Value</p></div>';
 }
 
-async function viewSuperUser(uid) {
-  const user = S.superUsers.find(function(u){ return u.id === uid; });
-  if (!user) return;
-  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
-  html += '<div><strong>Jina:</strong> ' + escHtml(user.name||'—') + '</div>';
-  html += '<div><strong>Barua:</strong> ' + escHtml(user.email||'—') + '</div>';
-  html += '<div><strong>Simu:</strong> ' + escHtml(user.phone||'—') + '</div>';
-  html += '<div><strong>Jukumu:</strong> ' + escHtml(ROLE_LABELS[user.role]||user.role||'—') + '</div>';
-  html += '<div><strong>Biashara:</strong> ' + escHtml(user.businessName||'—') + '</div>';
-  html += '<div><strong>Category:</strong> ' + escHtml(user.businessCategory||'—') + '</div>';
-  html += '<div><strong>Imejiunga:</strong> ' + fmtDate(user.createdAt) + '</div>';
-  html += '</div>';
-  if (user.businessId && db) {
-    try {
-      const bizDoc = await db.collection('businesses').doc(user.businessId).get();
-      if (bizDoc.exists) {
-        const b = bizDoc.data();
-        html += '<div style="margin-top:16px;padding:12px;background:var(--bg3);border-radius:8px"><h4 style="margin-bottom:8px"><i class="fa-solid fa-store" style="color:var(--primary2);margin-right:6px"></i> Taarifa za Biashara</h4>';
-        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">';
-        html += '<div><strong>Jina:</strong> ' + escHtml(b.name) + '</div>';
-        html += '<div><strong>Category:</strong> ' + escHtml(b.category) + '</div>';
-        html += '<div><strong>Eneo:</strong> ' + escHtml(b.location||'—') + '</div>';
-        html += '<div><strong>Hatua:</strong> <span class="status-badge ' + (b.status==='active'?'active':'suspended') + '">' + escHtml(b.status||'active') + '</span></div>';
-        html += '</div></div>';
-      }
-    } catch(err) { console.error("View biz error:", err); }
-  }
-  document.getElementById('superViewTitle').textContent = 'Taarifa za Mtumiaji';
-  document.getElementById('superViewContent').innerHTML = html;
-  document.getElementById('superViewModal').style.display = 'flex';
-}
-/* ========================================================= MODULAR FIREBASE - USER SUSPENSION / ACTIVATION ========================================================= */ /** * Suspend User * Only Super Admin is allowed to perform this action. */ async function suspendUser( userId, reason = 'Account suspended by administrator' ) { try { if (!userId) { throw new Error('User ID haijapatikana.'); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumsuspend User.' ); } /* Update User status */ await updateDoc( doc(db, 'users', userId), { status: 'suspended', suspended: true, suspensionReason: reason, suspendedAt: serverTimestamp(), updatedAt: serverTimestamp() } ); console.log( 'User suspended successfully:', userId ); alert( 'User amesimamishwa kikamilifu.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Suspend User Error:', error ); alert( 'Imeshindikana kumsuspend User: ' + (error.message || error) ); } } /** * Activate User * Only Super Admin is allowed to perform this action. */ async function activateUser(userId) { try { if (!userId) { throw new Error( 'User ID haijapatikana.' ); } /* Verify Super Admin permission */ if ( typeof isSuperAdmin === 'function' && !isSuperAdmin() ) { throw new Error( 'Huna ruhusa ya kumu-activate User.' ); } /* Restore User access */ await updateDoc( doc(db, 'users', userId), { status: 'active', suspended: false, suspensionReason: '', suspendedAt: null, updatedAt: serverTimestamp() } ); console.log( 'User activated successfully:', userId ); alert( 'User amewezeshwa tena.' ); /* Refresh Users list */ if (typeof loadUsers === 'function') { await loadUsers(); } if (typeof renderUsers === 'function') { renderUsers(); } } catch (error) { console.error( 'Activate User Error:', error ); alert( 'Imeshindikana ku-activate User: ' + (error.message || error) ); } } /* ========================================================= SUPER ADMIN - ADVERTISEMENT LIST ========================================================= */ function renderSuperAds() { const el = document.getElementById( 'superAdsList' ); /* Safety check */ if (!el) { console.warn( 'Element #superAdsList haijapatikana.' ); return; } /* No advertisements */ if ( !S.superAds || !S.superAds.length ) { el.innerHTML = '<div class="empty-s">' + '<i class="fa-solid fa-bullhorn"></i>' + '<p>Hakuna matangazo</p>' + '</div>'; return; } /* Render advertisements */ el.innerHTML = S.superAds.map(function(a) { const title = escHtml( a.title || 'Tangazo bila jina' ); const description = escHtml( a.description || '' ).substring(0, 60); const image = a.imageUrl ? '<img src="' + escHtml(a.imageUrl) + '" alt="' + title + '" loading="lazy">' : '<div class="ad-no-image">' + '<i class="fa-solid fa-image"></i>' + '</div>'; return ( '<div class="super-ad-item">' + '<div class="super-ad-image">' + image + '</div>' + '<div class="super-ad-info">' + '<h4>' + title + '</h4>' + '<p>' + description + (a.description && a.description.length > 60 ? '...' : '') + '</p>' + '</div>' + '</div>' ); }).join(''); }
-function renderSuperProducts() {
-  const el = document.getElementById('superProductsList');
-  if (!S.superProducts.length) { el.innerHTML = '<div class="empty-s"><p>Hakuna bidhaa hadharani</p></div>'; return; }
-  el.innerHTML = S.superProducts.map(function(p){
-    return '<div class="super-prod-item"><div class="super-ad-thumb">' + (p.imageUrl ? '<img src="' + escHtml(p.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-box"></i></div>') + '</div><div class="super-ad-info"><h5>' + escHtml(p.name) + '</h5><p>' + escHtml(p.seller||'') + ' — ' + fmtCur(p.price) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
-  }).join('');
+function destroySuperCharts() {
+  Object.keys(SUPER_CHARTS).forEach(function(k) {
+    if (SUPER_CHARTS[k] && SUPER_CHARTS[k].destroy) SUPER_CHARTS[k].destroy();
+  });
+  SUPER_CHARTS = {};
 }
 
 function renderSuperCharts() {
-  destroyChart('superUsersTrendC');
-  destroyChart('superCatC');
-  destroyChart('superBizC');
-  destroyChart('superProdC');
-  const months = [];
-  const mData = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1); d.setHours(0,0,0,0);
-    const end = new Date(d); end.setMonth(end.getMonth() + 1);
-    months.push(d.toLocaleDateString('sw-TZ',{month:'short'}));
-    const count = S.superUsers.filter(function(u){
-      const t = u.createdAt ? (u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt)) : null;
-      return t && t >= d && t < end;
+  destroySuperCharts();
+  var users = normalizeUsers();
+  var months = [];
+  var now = new Date();
+
+  for (var i = 11; i >= 0; i--) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      key: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'),
+      label: d.toLocaleDateString('en-US', { month: 'short' })
+    });
+  }
+
+  var trend = months.map(function(m) {
+    return users.filter(function(u) {
+      return String(u.createdAt || '').slice(0, 7) === m.key;
     }).length;
-    mData.push(count);
-  }
-  S.charts.superUsersTrendC = new Chart(document.getElementById('superUsersTrend'), {
-    type:'line', data:{labels:months, datasets:[{label:'Users',data:mData,borderColor:'#6c5ce7',backgroundColor:'rgba(108,92,231,.15)',fill:true,tension:.4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},x:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
   });
-  const cats = {};
-  S.superUsers.forEach(function(u){ const c = u.businessCategory||'Nyingine'; cats[c] = (cats[c]||0)+1; });
-  const catLabels = Object.keys(cats);
-  const catData = Object.values(cats);
-  const catColors = ['#6c5ce7','#00b894','#f39c12','#e74c3c','#0984e3','#a29bfe','#fd79a8'];
-  S.charts.superCatC = new Chart(document.getElementById('superCategoryChart'), {
-    type:'doughnut', data:{labels:catLabels.length?catLabels:['Hakuna data'],datasets:[{data:catData.length?catData:[1],backgroundColor:catColors}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9a9ab0'}}}}
-  });
-  S.charts.superBizC = new Chart(document.getElementById('superBusinessChart'), {
-    type:'bar', data:{labels:catLabels.length?catLabels.slice(0,6):['Hakuna data'],datasets:[{label:'Biashara',data:catData.length?catData.slice(0,6):[0],backgroundColor:'#00b894'}]},
-    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
-  });
-  const prodCats = {};
-  S.superProducts.forEach(function(p){ const c = p.category||'Nyingine'; prodCats[c] = (prodCats[c]||0)+1; });
-  const pLabels = Object.keys(prodCats);
-  const pData = Object.values(prodCats);
-  S.charts.superProdC = new Chart(document.getElementById('superProductChart'), {
-    type:'bar', data:{labels:pLabels.length?pLabels:['Hakuna data'],datasets:[{label:'Products',data:pData.length?pData:[0],backgroundColor:'#f39c12'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{color:'#9a9ab0'},grid:{color:'#2a2a3a'}},x:{ticks:{color:'#9a9ab0'},grid:{display:false}}}}
-  });
-}
 
-/* Super Ads CRUD */
-function openSuperAdModal() {
-  document.getElementById('superAdId').value = '';
-  document.getElementById('superAdTitle').value = '';
-  document.getElementById('superAdText').value = '';
-  document.getElementById('superAdImage').value = '';
-  document.getElementById('superAdLink').value = '';
-  document.querySelector('#superAdModal .super-modal-head h3').textContent = 'Create Advertisement';
-  document.getElementById('superAdModal').style.display = 'flex';
-}
-
-function editSuperAd(id) {
-  const a = S.superAds.find(function(x){ return x.id === id; });
-  if (!a) return;
-  document.getElementById('superAdId').value = a.id;
-  document.getElementById('superAdTitle').value = a.title || '';
-  document.getElementById('superAdText').value = a.description || '';
-  document.getElementById('superAdImage').value = a.imageUrl || '';
-  document.getElementById('superAdLink').value = a.link || '';
-  document.querySelector('#superAdModal .super-modal-head h3').textContent = 'Edit Advertisement';
-  document.getElementById('superAdModal').style.display = 'flex';
-}
-
-async function saveSuperAd(e) {
-  e.preventDefault();
-  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
-  const editId = document.getElementById('superAdId').value;
-  const data = {
-    title: document.getElementById('superAdTitle').value.trim(),
-    description: document.getElementById('superAdText').value.trim(),
-    imageUrl: document.getElementById('superAdImage').value.trim(),
-    link: document.getElementById('superAdLink').value.trim()
-  };
-  if (!data.title) { toast('Title linahitajika.','w'); return; }
-  try {
-    if (editId) {
-      await db.collection('globalAds').doc(editId).update(data);
-      toast('Matangazo yamesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('globalAds').add(data);
-      toast('Matangazo yameongezwa.','s');
+  SUPER_CHARTS.users = new Chart(document.getElementById('superUsersTrend'), {
+    type: 'line',
+    data: {
+      labels: months.map(function(m) { return m.label; }),
+      datasets: [{
+        label: 'New Users',
+        data: trend,
+        tension: 0.35,
+        fill: true,
+        borderColor: '#7c3aed',
+        backgroundColor: 'rgba(124,58,237,.12)'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, precision: 0 } }
     }
-    closeSuperModal('superAdModal');
-    loadSuperAdmin();
-  } catch(err) {
-    console.error("Save ad error:", err);
-    toast('Imeshindwa kuhifadhi matangazo.','e');
-  }
+  });
+
+  var cats = {};
+  getAllBusinesses().forEach(function(x) {
+    var c = x.biz.category || 'Other';
+    cats[c] = (cats[c] || 0) + 1;
+  });
+
+  SUPER_CHARTS.cat = new Chart(document.getElementById('superCategoryChart'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(cats).length ? Object.keys(cats) : ['No Data'],
+      datasets: [{
+        data: Object.keys(cats).length ? Object.values(cats) : [1],
+        backgroundColor: ['#7c3aed', '#059669', '#0284c7', '#d97706', '#dc2626', '#64748b', '#db2777'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'right' } }
+    }
+  });
+
+  var bizMap = {};
+  getGlobalSales().forEach(function(x) {
+    var id = x.biz.id;
+    bizMap[id] = bizMap[id] || { name: x.biz.name, total: 0 };
+    bizMap[id].total += Number(x.sale.total) || 0;
+  });
+
+  var topB = Object.values(bizMap).sort(function(a, b) { return b.total - a.total; }).slice(0, 7);
+
+  SUPER_CHARTS.biz = new Chart(document.getElementById('superBusinessChart'), {
+    type: 'bar',
+    data: {
+      labels: topB.map(function(x) { return x.name; }),
+      datasets: [{
+        label: 'Sales',
+        data: topB.map(function(x) { return x.total; }),
+        backgroundColor: '#059669',
+        borderRadius: 6
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true } }
+    }
+  });
+
+  var prodMap = {};
+  getGlobalSales().forEach(function(x) {
+    (x.sale.items || []).forEach(function(it) {
+      var key = it.name || 'Unknown';
+      prodMap[key] = (prodMap[key] || 0) + Number(it.qty || 0);
+    });
+  });
+
+  var topP = Object.entries(prodMap).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 7);
+
+  SUPER_CHARTS.prod = new Chart(document.getElementById('superProductChart'), {
+    type: 'bar',
+    data: {
+      labels: topP.map(function(x) { return x[0]; }),
+      datasets: [{
+        label: 'Units Sold',
+        data: topP.map(function(x) { return x[1]; }),
+        backgroundColor: '#0284c7',
+        borderRadius: 6
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, precision: 0 } }
+    }
+  });
+}
+
+function renderSuperUsers() {
+  var users = normalizeUsers();
+  var q = (document.getElementById('superUserSearch').value || '').toLowerCase();
+  var body = document.getElementById('superUsersBody');
+
+  var filtered = users.filter(function(u) {
+    var bs = (u.businesses || []).map(function(b) { return b.name + ' ' + b.category; }).join(' ');
+    return (u.name + ' ' + u.email + ' ' + bs).toLowerCase().indexOf(q) >= 0;
+  });
+
+  body.innerHTML = filtered.length
+    ? filtered.map(function(u) {
+        var businesses = (u.businesses || []);
+        var role = u.systemRole || 'user';
+        var status = u.status === 'suspended' ? 'suspended' : 'active';
+
+        return '<tr>' +
+          '<td><div class="super-user"><div class="super-user-av">' + (u.name || 'U').charAt(0).toUpperCase() + '</div>' +
+          '<div><strong>' + esc(u.name) + '</strong><small>' + esc(u.phone || 'No phone') + '</small></div></div></td>' +
+          '<td>' + esc(u.email) + '</td>' +
+          '<td>' + businesses.map(function(b) {
+            return '<div><strong>' + esc(b.name) + '</strong><small>' + esc(b.category || 'Other') + '</small></div>';
+          }).join('') + '</td>' +
+          '<td><span class="super-role">' + esc(role) + '</span></td>' +
+          '<td><span class="super-status ' + status + '">' + (status === 'active' ? 'ACTIVE' : 'SUSPENDED') + '</span></td>' +
+          '<td>' + fmtD(u.createdAt) + '</td>' +
+          '<td><div class="super-actions">' +
+            (status === 'active'
+              ? '<button class="sa-yellow" onclick="superSetUserStatus(\'' + u.id + '\',\'suspended\')">Suspend</button>'
+              : '<button class="sa-green" onclick="superSetUserStatus(\'' + u.id + '\',\'active\')">Activate</button>') +
+            '<button class="sa-blue" onclick="superMakeManager(\'' + u.id + '\')">Make Manager</button>' +
+            '<button class="sa-red" onclick="superDeleteUser(\'' + u.id + '\')">Delete</button>' +
+          '</div></td></tr>';
+      }).join('')
+    : '<tr><td colspan="7" class="empty-s">No users found</td></tr>';
+}
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function superSetUserStatus(id, status) {
+  var users = normalizeUsers();
+  var u = users.find(function(x) { return x.id === id; });
+  if (!u) return;
+
+  u.status = status;
+  u.lastSeen = new Date().toISOString();
+  sU(users);
+  renderSuperAdmin();
+  toast(status === 'suspended' ? 'User suspended' : 'User activated', status === 'suspended' ? 'w' : 's');
+}
+
+function superMakeManager(id) {
+  var users = normalizeUsers();
+  var u = users.find(function(x) { return x.id === id; });
+  if (!u) return;
+
+  u.systemRole = 'manager';
+  sU(users);
+  renderSuperAdmin();
+  toast('User role changed to System Manager');
+}
+
+function superDeleteUser(id) {
+  var users = normalizeUsers();
+  var u = users.find(function(x) { return x.id === id; });
+  if (!u) return;
+  if (!confirm('Delete this user and all registered business data?')) return;
+
+  (u.businesses || []).forEach(function(b) {
+    if (window.__fb) window.__fb.deleteBusiness(b.id).catch(console.error);
+  });
+
+  sU(users.filter(function(x) { return x.id !== id; }));
+  sSt(gSt().filter(function(x) { return x.userId !== id; }));
+  sMC(gMC().filter(function(x) { return x.userId !== id; }));
+  renderSuperAdmin();
+  toast('User and business records deleted', 'e');
+}
+
+function exportUsersPDF() {
+  var users = normalizeUsers();
+  var J = window.jspdf && window.jspdf.jsPDF;
+  if (!J) { toast('PDF library haijapakiwa', 'e'); return; }
+
+  var doc = new J({ orientation: 'landscape' });
+  doc.setFontSize(18);
+  doc.text('BizBook - Users & Registered Businesses', 14, 16);
+  doc.setFontSize(9);
+  doc.text('Generated: ' + new Date().toLocaleString('en-US'), 14, 23);
+
+  var rows = [];
+  users.forEach(function(u) {
+    (u.businesses || []).forEach(function(b) {
+      rows.push([
+        u.name, u.email, u.systemRole || 'user', u.status || 'active',
+        b.name, b.category || 'Other', b.phone || '', b.address || ''
+      ]);
+    });
+  });
+
+  doc.autoTable({
+    head: [['User', 'Email', 'Role', 'Status', 'Business', 'Category', 'Phone', 'Address']],
+    body: rows,
+    startY: 30,
+    styles: { fontSize: 7 }
+  });
+
+  doc.save('BizBook_Users_and_Businesses.pdf');
+  toast('PDF report imepakuliwa');
+}
+
+function openSuperAdModal(id) {
+  var ads = superGet('bb_super_ads', []);
+  var a = id ? ads.find(function(x) { return x.id === id; }) : null;
+
+  document.getElementById('superAdId').value = a ? a.id : '';
+  document.getElementById('superAdTitle').value = a ? a.title : '';
+  document.getElementById('superAdText').value = a ? a.text : '';
+  document.getElementById('superAdImage').value = a ? a.image : '';
+  document.getElementById('superAdLink').value = a ? a.link : '';
+  document.getElementById('superAdModal').classList.add('show');
+}
+
+function saveSuperAd(e) {
+  e.preventDefault();
+  var ads = superGet('bb_super_ads', []);
+  var id = document.getElementById('superAdId').value || gid();
+  var a = {
+    id: id,
+    title: document.getElementById('superAdTitle').value.trim(),
+    text: document.getElementById('superAdText').value.trim(),
+    image: document.getElementById('superAdImage').value.trim(),
+    link: document.getElementById('superAdLink').value.trim(),
+    visible: true,
+    updatedAt: new Date().toISOString()
+  };
+
+  var i = ads.findIndex(function(x) { return x.id === id; });
+  if (i >= 0) ads[i] = a;
+  else ads.unshift(a);
+
+  superSet('bb_super_ads', ads);
+  closeSuperModal('superAdModal');
+  renderSuperAds();
+  renderPublicShowcase();
+  toast('Advertisement published');
+}
+
+function renderSuperAds() {
+  var ads = superGet('bb_super_ads', []);
+  var el = document.getElementById('superAdsList');
+
+  el.innerHTML = ads.length
+    ? ads.map(function(a) {
+        return '<div class="super-ad-row">' +
+          '<img class="super-thumb" src="' + esc(a.image || '') + '" onerror="this.style.visibility=\'hidden\'"/>' +
+          '<div class="super-row-main"><strong>' + esc(a.title) + '</strong>' +
+          '<small>' + esc(a.text || 'No description') + '</small>' +
+          '<small>' + (a.visible !== false ? 'Visible on landing page' : 'Hidden from landing page') + '</small></div>' +
+          '<div class="super-row-actions">' +
+            '<button onclick="toggleSuperAd(\'' + a.id + '\')">' + (a.visible !== false ? 'Hide' : 'Show') + '</button>' +
+            '<button onclick="openSuperAdModal(\'' + a.id + '\')"><i class="fa-solid fa-pen"></i></button>' +
+            '<button onclick="deleteSuperAd(\'' + a.id + '\')"><i class="fa-solid fa-trash"></i></button>' +
+          '</div></div>';
+      }).join('')
+    : '<div class="public-empty">No advertisements yet.</div>';
+}
+
+function toggleSuperAd(id) {
+  var ads = superGet('bb_super_ads', []);
+  var a = ads.find(function(x) { return x.id === id; });
+  if (a) a.visible = a.visible === false;
+  superSet('bb_super_ads', ads);
+  renderSuperAds();
+  renderPublicShowcase();
 }
 
 function deleteSuperAd(id) {
-  requestDelete('Je, unahakika unataka kufuta matangazo haya?', function(){
-    db.collection('globalAds').doc(id).delete().then(function(){
-      toast('Matangazo yamefutwa.','s');
-      loadSuperAdmin();
-    }).catch(function(err){
-      console.error("Delete ad error:", err);
-      toast('Imeshindwa kufuta matangazo.','e');
-    });
-  });
+  if (!confirm('Delete this advertisement?')) return;
+  superSet('bb_super_ads', superGet('bb_super_ads', []).filter(function(x) { return x.id !== id; }));
+  renderSuperAds();
+  renderPublicShowcase();
 }
 
-/* Super Products CRUD */
-function openSuperProductModal() {
-  document.getElementById('superProdId').value = '';
-  document.getElementById('superProdName').value = '';
-  document.getElementById('superProdCategory').value = '';
-  document.getElementById('superProdSeller').value = '';
-  document.getElementById('superProdShop').value = '';
-  document.getElementById('superProdPhone').value = '';
-  document.getElementById('superProdLocation').value = '';
-  document.getElementById('superProdPrice').value = '';
-  document.getElementById('superProdDesc').value = '';
-  document.getElementById('superProdImageUrl').value = '';
-  document.querySelector('#superProductModal .super-modal-head h3').textContent = 'Public Product Catalogue';
-  document.getElementById('superProductModal').style.display = 'flex';
-}
-
-function editSuperProduct(id) {
-  const p = S.superProducts.find(function(x){ return x.id === id; });
-  if (!p) return;
-  document.getElementById('superProdId').value = p.id;
-  document.getElementById('superProdName').value = p.name || '';
-  document.getElementById('superProdCategory').value = p.category || '';
-  document.getElementById('superProdSeller').value = p.seller || '';
-  document.getElementById('superProdShop').value = p.shop || '';
-  document.getElementById('superProdPhone').value = p.phone || '';
-  document.getElementById('superProdLocation').value = p.location || '';
-  document.getElementById('superProdPrice').value = p.price || '';
-  document.getElementById('superProdDesc').value = p.description || '';
-  document.getElementById('superProdImageUrl').value = p.imageUrl || '';
-  document.querySelector('#superProductModal .super-modal-head h3').textContent = 'Edit Product';
-  document.getElementById('superProductModal').style.display = 'flex';
-}
-
-async function saveSuperProduct(e) {
-  e.preventDefault();
-  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
-  const editId = document.getElementById('superProdId').value;
-  const data = {
-    name: document.getElementById('superProdName').value.trim(),
-    category: document.getElementById('superProdCategory').value.trim(),
-    seller: document.getElementById('superProdSeller').value.trim(),
-    shop: document.getElementById('superProdShop').value.trim(),
-    phone: document.getElementById('superProdPhone').value.trim(),
-    location: document.getElementById('superProdLocation').value.trim(),
-    price: Number(document.getElementById('superProdPrice').value) || 0,
-    description: document.getElementById('superProdDesc').value.trim(),
-    imageUrl: document.getElementById('superProdImageUrl').value.trim()
+function openSuperProductModal(id) {
+  var ps = superGet('bb_public_products', []);
+  var p = id ? ps.find(function(x) { return x.id === id; }) : null;
+  var set = function(id, v) {
+    var el = document.getElementById(id);
+    if (el) el.value = v || '';
   };
-  if (!data.name) { toast('Jina la bidhaa linahitajika.','w'); return; }
-  if (data.price <= 0) { toast('Bei lazima iwe zaidi ya 0.','w'); return; }
-  try {
-    if (editId) {
-      await db.collection('globalProducts').doc(editId).update(data);
-      toast('Bidhaa imesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('globalProducts').add(data);
-      toast('Bidhaa imechapishwa.','s');
-    }
+
+  set('superProdId', p ? p.id : '');
+  set('superProdName', p ? p.name : '');
+  set('superProdCategory', p ? p.category : '');
+  set('superProdSeller', p ? p.seller : '');
+  set('superProdShop', p ? p.shopName : '');
+  set('superProdPhone', p ? p.phone : '');
+  set('superProdLocation', p ? p.location : '');
+  set('superProdPrice', p ? p.price : '');
+  set('superProdDesc', p ? p.description : '');
+  set('superProdImageUrl', p && p.image && p.image.indexOf('data:') !== 0 ? p.image : '');
+  set('superProdVideo', p ? p.video || p.videoUrl : '');
+
+  var f = document.getElementById('superProdImage');
+  if (f) f.value = '';
+
+  document.getElementById('superProductModal').classList.add('show');
+}
+
+function saveSuperProduct(e) {
+  e.preventDefault();
+  var val = function(id) {
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  };
+
+  var file = document.getElementById('superProdImage').files[0];
+  var base = {
+    id: val('superProdId') || gid(),
+    name: val('superProdName'),
+    category: val('superProdCategory'),
+    seller: val('superProdSeller'),
+    shopName: val('superProdShop'),
+    phone: val('superProdPhone'),
+    location: val('superProdLocation'),
+    price: Number(document.getElementById('superProdPrice').value) || 0,
+    description: val('superProdDesc'),
+    video: val('superProdVideo'),
+    visible: true,
+    updatedAt: new Date().toISOString()
+  };
+
+  var save = function(image) {
+    var ps = superGet('bb_public_products', []);
+    var old = ps.find(function(x) { return x.id === base.id; });
+    base.image = image || (old && old.image) || val('superProdImageUrl');
+
+    var i = ps.findIndex(function(x) { return x.id === base.id; });
+    if (i >= 0) ps[i] = base;
+    else ps.unshift(base);
+
+    superSet('bb_public_products', ps);
     closeSuperModal('superProductModal');
-    loadSuperAdmin();
-  } catch(err) {
-    console.error("Save product error:", err);
-    toast('Imeshindwa kuhifadhi bidhaa.','e');
+    renderSuperProducts();
+    renderPublicShowcase();
+    toast('Product catalogue updated');
+  };
+
+  if (file) {
+    var r = new FileReader();
+    r.onload = function() { save(r.result); };
+    r.readAsDataURL(file);
+  } else {
+    save('');
   }
+}
+
+function renderSuperProducts() {
+  var ps = superGet('bb_public_products', []);
+  var el = document.getElementById('superProductsList');
+
+  el.innerHTML = ps.length
+    ? ps.map(function(p) {
+        return '<div class="super-product-row">' +
+          '<img class="super-thumb" src="' + esc(p.image || '') + '" onerror="this.style.visibility=\'hidden\'"/>' +
+          '<div class="super-row-main">' +
+            '<strong>' + esc(p.name) + ' — ' + fmt(p.price) + '</strong>' +
+            '<small>' + esc(p.category) + ' • Seller: ' + esc(p.seller) + '</small>' +
+            '<small><i class="fa-solid fa-store"></i> ' + esc(p.shopName || 'Duka halijawekwa') +
+            ' • <i class="fa-solid fa-location-dot"></i> ' + esc(p.location || 'Eneo halijawekwa') + '</small>' +
+            '<small><i class="fa-solid fa-phone"></i> ' + esc(p.phone || 'Simu haijawekwa') + '</small>' +
+            '<small>' + (p.visible !== false ? 'Visible' : 'Hidden') + '</small>' +
+          '</div>' +
+          '<div class="super-row-actions">' +
+            '<button onclick="toggleSuperProduct(\'' + p.id + '\')">' + (p.visible !== false ? 'Hide' : 'Show') + '</button>' +
+            '<button onclick="openSuperProductModal(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button>' +
+            '<button onclick="deleteSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button>' +
+          '</div></div>';
+      }).join('')
+    : '<div class="public-empty">No public products yet.</div>';
+}
+
+function renderPublicShowcase() {
+  var ads = superGet('bb_super_ads', []).filter(function(a) { return a.visible !== false; });
+  var ag = document.getElementById('publicAdsGrid');
+  var pg = document.getElementById('publicProductsGrid');
+  if (!ag || !pg) return;
+
+  ag.innerHTML = ads.length
+    ? ads.map(function(a) {
+        return '<article class="public-ad">' +
+          (a.image ? '<img src="' + esc(a.image) + '" onerror="this.style.display=\'none\'"/>' : '') +
+          '<div class="public-ad-body"><h4>' + esc(a.title) + '</h4><p>' + esc(a.text || '') + '</p>' +
+          '<div class="public-actions">' +
+            '<button class="btn btn-p btn-sm" onclick="shareText(\'' + encodeURIComponent(a.title + ' - ' + (a.text || '')) + '\')">' +
+            '<i class="fa-solid fa-share-nodes"></i> Share</button>' +
+            (a.link ? '<a class="btn btn-o btn-sm" href="' + esc(a.link) + '" target="_blank" rel="noopener">Open</a>' : '') +
+          '</div></div></article>';
+      }).join('')
+    : '<div class="public-empty">Hakuna matangazo yaliyowekwa kwa sasa.</div>';
+
+  createPublicProductSearch();
+  showPublicSearchMessage();
+}
+
+function createPublicProductSearch() {
+  var grid = document.getElementById('publicProductsGrid');
+  if (!grid || document.getElementById('publicProductSearchBox')) return;
+
+  var box = document.createElement('div');
+  box.id = 'publicProductSearchBox';
+  box.innerHTML =
+    '<div id="publicProductSearchWrap"><i class="fa-solid fa-magnifying-glass"></i>' +
+    '<input type="search" id="publicProductSearch" placeholder="Tafuta bidhaa, category, duka, muuzaji au eneo..." autocomplete="off"/></div>' +
+    '<button type="button" id="publicProductSearchBtn"><i class="fa-solid fa-magnifying-glass"></i> Tafuta</button>';
+  grid.parentNode.insertBefore(box, grid);
+
+  var input = document.getElementById('publicProductSearch');
+  var btn = document.getElementById('publicProductSearchBtn');
+
+  if (input) {
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); searchPublicProducts(); }
+    });
+    input.addEventListener('input', function() {
+      if (!this.value.trim()) showPublicSearchMessage();
+    });
+  }
+  if (btn) btn.addEventListener('click', searchPublicProducts);
+}
+
+function showPublicSearchMessage() {
+  var grid = document.getElementById('publicProductsGrid');
+  if (!grid) return;
+  grid.innerHTML =
+    '<div class="public-no-results"><i class="fa-solid fa-magnifying-glass"></i>' +
+    '<strong>Tafuta bidhaa ili kuiona</strong>' +
+    '<div style="margin-top:7px;font-size:.75rem">Bidhaa zote zimefichwa mpaka Customer au Mtumiaji wa Mfumo atafuta bidhaa.</div></div>';
+}
+
+function togglePublicProductMedia(button) {
+  var media = button.closest('.public-product-media');
+  if (!media) return;
+  var video = media.querySelector('video');
+  if (!video) return;
+
+  if (media.classList.contains('is-playing')) {
+    video.pause();
+    media.classList.remove('is-playing');
+    button.innerHTML = '<i class="fa-solid fa-play"></i>';
+  } else {
+    media.classList.add('is-playing');
+    video.play().catch(function() {});
+    button.innerHTML = '<i class="fa-solid fa-pause"></i>';
+  }
+}
+
+function searchPublicProducts() {
+  var input = document.getElementById('publicProductSearch');
+  var grid = document.getElementById('publicProductsGrid');
+  if (!input || !grid) return;
+
+  var keyword = input.value.trim().toLowerCase();
+  if (!keyword) { showPublicSearchMessage(); return; }
+
+  var products = superGet('bb_public_products', []).filter(function(p) { return p.visible !== false; });
+  var results = products.filter(function(p) {
+    return [p.name, p.category, p.seller, p.shopName, p.phone, p.location, p.description]
+      .filter(Boolean).join(' ').toLowerCase().includes(keyword);
+  });
+
+  if (!results.length) {
+    grid.innerHTML =
+      '<div class="public-no-results"><i class="fa-solid fa-box-open"></i>' +
+      '<strong>Hakuna bidhaa iliyopatikana</strong>' +
+      '<div style="margin-top:7px;font-size:.8rem">Jaribu jina jingine la bidhaa, duka, muuzaji au eneo.</div></div>';
+    return;
+  }
+
+  grid.innerHTML = results.map(function(p) {
+    var image = p.image || '';
+    var video = p.video || p.videoUrl || '';
+    var media = video
+      ? '<div class="public-product-media"><span class="public-media-badge"><i class="fa-solid fa-video"></i> Video</span>' +
+        '<img src="' + esc(image) + '" alt="' + esc(p.name || 'Product') + '" onerror="this.style.display=\'none\'"/>' +
+        '<video src="' + esc(video) + '" muted loop playsinline preload="metadata"></video>' +
+        '<button class="public-media-play" type="button" onclick="togglePublicProductMedia(this)" aria-label="Play product video">' +
+        '<i class="fa-solid fa-play"></i></button></div>'
+      : image
+        ? '<div class="public-product-media"><img src="' + esc(image) + '" alt="' + esc(p.name || 'Product') +
+          '" loading="lazy" onerror="this.style.display=\'none\'"/></div>'
+        : '<div class="public-product-no-image"><i class="fa-solid fa-box-open"></i></div>';
+
+    return '<article class="public-product">' + media +
+      '<div class="public-product-body">' +
+        '<h4>' + esc(p.name) + '</h4>' +
+        '<div class="public-product-category"><i class="fa-solid fa-layer-group"></i> ' + esc(p.category || 'General') + '</div>' +
+        '<div class="public-product-price">' + fmt(p.price) + '</div>' +
+        '<div class="public-product-description">' + esc(p.description || 'Hakuna maelezo ya ziada ya bidhaa.') + '</div>' +
+        '<div class="public-seller-box">' +
+          '<div class="public-seller-title"><i class="fa-solid fa-store"></i> Taarifa za Muuzaji</div>' +
+          '<div class="public-seller-row"><i class="fa-solid fa-user"></i><span><strong>Muuzaji:</strong> ' + esc(p.seller || 'Haijawekwa') + '</span></div>' +
+          '<div class="public-seller-row"><i class="fa-solid fa-store"></i><span><strong>Duka:</strong> ' + esc(p.shopName || 'Haijawekwa') + '</span></div>' +
+          '<div class="public-seller-row"><i class="fa-solid fa-location-dot"></i><span><strong>Eneo:</strong> ' + esc(p.location || 'Haijawekwa') + '</span></div>' +
+          '<div class="public-seller-row"><i class="fa-solid fa-phone"></i><span><strong>Simu:</strong> ' +
+            (p.phone ? '<a class="public-seller-phone" href="tel:' + esc(p.phone) + '">' + esc(p.phone) + '</a>' : 'Haijawekwa') +
+          '</span></div>' +
+        '</div>' +
+        '<div class="public-product-actions">' +
+          (p.phone ? '<a class="btn btn-p btn-sm" href="tel:' + esc(p.phone) + '"><i class="fa-solid fa-phone"></i> Piga Simu</a>' : '') +
+          '<button class="btn btn-i btn-sm" onclick="shareProduct(\'' + p.id + '\')"><i class="fa-solid fa-share-nodes"></i> Share Product</button>' +
+        '</div></div></article>';
+  }).join('');
+}
+
+function shareProduct(id) {
+  var p = superGet('bb_public_products', []).find(function(x) { return x.id === id; });
+  if (!p) return;
+  shareText(encodeURIComponent(
+    'BizBook Product\n' +
+    'Product: ' + (p.name || '') + '\n' +
+    'Category: ' + (p.category || '') + '\n' +
+    'Price: ' + fmt(p.price || 0) + '\n' +
+    'Seller: ' + (p.seller || '') + '\n' +
+    'Shop: ' + (p.shopName || '') + '\n' +
+    'Location: ' + (p.location || '') + '\n' +
+    'Phone: ' + (p.phone || '') + '\n' +
+    'Description: ' + (p.description || '') + '\n' +
+    location.href
+  ));
+}
+
+function toggleSuperProduct(id) {
+  var ps = superGet('bb_public_products', []);
+  var p = ps.find(function(x) { return x.id === id; });
+  if (p) p.visible = p.visible === false;
+  superSet('bb_public_products', ps);
+  renderSuperProducts();
+  renderPublicShowcase();
 }
 
 function deleteSuperProduct(id) {
-  requestDelete('Je, unahakika unataka kufuta bidhaa hii?', function(){
-    db.collection('globalProducts').doc(id).delete().then(function(){
-      toast('Bidhaa imefutwa.','s');
-      loadSuperAdmin();
-    }).catch(function(err){
-      console.error("Delete product error:", err);
-      toast('Imeshindwa kufuta bidhaa.','e');
-    });
-  });
+  if (!confirm('Delete this product from public catalogue?')) return;
+  superSet('bb_public_products', superGet('bb_public_products', []).filter(function(x) { return x.id !== id; }));
+  renderSuperProducts();
+  renderPublicShowcase();
 }
 
-/* Super Notification */
-function openSuperNotifModal(userId) {
-  document.getElementById('superNotifUserId').value = userId;
-  document.getElementById('superNotifTitle').value = '';
-  document.getElementById('superNotifMsg').value = '';
-  document.getElementById('superNotifModal').style.display = 'flex';
-}
-
-async function sendSuperNotif(e) {
-  e.preventDefault();
-  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
-  const userId = document.getElementById('superNotifUserId').value;
-  const title = document.getElementById('superNotifTitle').value.trim();
-  const msg = document.getElementById('superNotifMsg').value.trim();
-  if (!title || !msg) { toast('Title na message vinahitajika.','w'); return; }
-  try {
-    const uDoc = await db.collection('users').doc(userId).get();
-    const bizId = uDoc.exists ? uDoc.data().businessId : null;
-    await db.collection('notifications').add({
-      userId: userId, businessId: bizId,
-      title: title, message: msg,
-      type: 'info', fromSuper: true, read: false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    toast('Arifa imetumwa.','s');
-    closeSuperModal('superNotifModal');
-  } catch(err) {
-    console.error("Send notif error:", err);
-    toast('Imeshindwa kutuma arifa.','e');
-  }
-}
-
-/* Super Modal Helpers */
 function closeSuperModal(id) {
-  document.getElementById(id).style.display = 'none';
+  document.getElementById(id).classList.remove('show');
 }
 
-/* Export Users PDF */
-function exportUsersPDF() {
-  if (!S.superUsers.length) { toast('Hakuna watumiaji kuexport.','w'); return; }
-  let html = '<!DOCTYPE html><html><head><title>BizBook Users Report</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:12px}th{background:#6c5ce7;color:#fff}h1{font-size:20px}p{color:#666;font-size:13px}</style></head><body>';
-  html += '<h1>BizBook - Users Report</h1>';
-  html += '<p>Generated: ' + new Date().toLocaleString() + '</p>';
-  html += '<p>Total Users: ' + S.superUsers.length + '</p>';
-  html += '<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Business</th><th>Category</th><th>Joined</th></tr></thead><tbody>';
-  S.superUsers.forEach(function(u){
-    html += '<tr><td>' + escHtml(u.name||'—') + '</td><td>' + escHtml(u.email||'—') + '</td><td>' + escHtml(u.phone||'—') + '</td><td>' + escHtml(ROLE_LABELS[u.role]||u.role||'—') + '</td><td>' + escHtml(u.businessName||'—') + '</td><td>' + escHtml(u.businessCategory||'—') + '</td><td>' + fmtDate(u.createdAt) + '</td></tr>';
-  });
-  html += '</tbody></table></body></html>';
-  const w = window.open('', '_blank');
-  w.document.write(html + '<script>setTimeout(function(){window.print();},500)<\/script>');
-  w.document.close();
-}
-
-/* Share Public Catalogue */
-function sharePublicCatalogue() {
-  const url = window.location.href.split('?')[0] + '#catalogue';
+function shareText(encoded) {
+  var text = decodeURIComponent(encoded);
+  var url = location.href;
   if (navigator.share) {
-    navigator.share({title:'BizBook Product Catalogue', text:'Tazama bidhaa zetu!', url:url}).catch(function(){});
-  } else if (navigator.clipboard) {
-    navigator.clipboard.writeText(url).then(function(){
-      toast('Link imekopiwwa.', 's');
-    }).catch(function(){
-      toast('Imeshindwa kukopi link.', 'e');
-    });
+    navigator.share({ title: 'BizBook', text: text, url: url }).catch(function() {});
   } else {
-    prompt('Copy catalogue link:', url);
+    window.open('https://wa.me/?text=' + encodeURIComponent(text + ' ' + url), '_blank');
   }
 }
 
-/* ================================================================
-   PUBLIC SHOWCASE
-   ================================================================ */
-function renderPublicShowcase() {
-  if (!db) {
-    document.getElementById('publicAdsGrid').innerHTML = '<div class="empty-s"><p>Firebase haijawaunganishwa.</p></div>';
-    document.getElementById('publicProductsGrid').innerHTML = '<div class="empty-s"><p>Firebase haijawaunganishwa.</p></div>';
-    return;
+function sharePublicCatalogue() {
+  var text = 'BizBook Public Product Catalogue - ' + location.href;
+  if (navigator.share) {
+    navigator.share({ title: 'BizBook Product Catalogue', text: text, url: location.href }).catch(function() {});
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   }
-  Promise.all([
-    db.collection('globalAds').orderBy('createdAt','desc').get(),
-    db.collection('globalProducts').orderBy('createdAt','desc').get()
-  ]).then(function(results){
-    const ads = results[0].docs.map(function(d){ return d.data(); });
-    const prods = results[1].docs.map(function(d){ return d.data(); });
-    const adsGrid = document.getElementById('publicAdsGrid');
-    if (!ads.length) {
-      adsGrid.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bullhorn"></i><p>Hakuna matangazo bado</p></div>';
-    } else {
-      adsGrid.innerHTML = ads.map(function(a){
-        return '<div class="pub-ad-card">' + (a.imageUrl ? '<img class="pub-ad-img" src="' + escHtml(a.imageUrl) + '" alt=""/>' : '<div class="pub-ad-img-placeholder"><i class="fa-solid fa-image"></i></div>') +
-          '<div class="pub-ad-body"><h4>' + escHtml(a.title) + '</h4><p>' + escHtml(a.description||'') + '</p>' + (a.link ? '<a class="pub-ad-link" href="' + escHtml(a.link) + '" target="_blank" rel="noopener">Pata zaidi <i class="fa-solid fa-arrow-right"></i></a>' : '') + '</div></div>';
-      }).join('');
-    }
-    const prodGrid = document.getElementById('publicProductsGrid');
-    if (!prods.length) {
-      prodGrid.innerHTML = '<div class="empty-s"><i class="fa-solid fa-boxes-stacked"></i><p>Hakuna bidhaa hadharani bado</p></div>';
-    } else {
-      prodGrid.innerHTML = prods.map(function(p){
-        return '<div class="pub-prod-card">' + (p.imageUrl ? '<img class="pub-prod-img" src="' + escHtml(p.imageUrl) + '" alt=""/>' : '<div class="pub-prod-img-placeholder"><i class="fa-solid fa-box"></i></div>') +
-          '<div class="pub-prod-body"><h4>' + escHtml(p.name) + '</h4><p>' + escHtml(p.description||'').substr(0,80) + '</p><div class="pub-prod-price">' + fmtCur(p.price) + '</div><div class="pub-prod-seller">' + escHtml(p.seller||'') + (p.shop ? ' — ' + escHtml(p.shop) : '') + (p.phone ? ' — ' + escHtml(p.phone) : '') + '</div></div></div>';
-      }).join('');
-    }
-  }).catch(function(err){
-    console.error("Public showcase error:", err);
-    document.getElementById('publicAdsGrid').innerHTML = '<div class="empty-s"><p>Imeshindwa kupakua data.</p></div>';
-    document.getElementById('publicProductsGrid').innerHTML = '<div class="empty-s"><p>Imeshindwa kupakua data.</p></div>';
-  });
+}
+
+function initPublicShowcase() {
+  renderPublicShowcase();
 }
 
 /* ================================================================
