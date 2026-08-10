@@ -1162,12 +1162,798 @@ function saveAd(id){
     const i=ads.findIndex(a=>a.id===id);
     if(i>-1) Object.assign(ads[i],{title,description:desc,link,status,featured});
   } else {
-    ads.push({id:'a'+
+    ads.push({id:'a'+ uid(),businessId:currentBiz.id,title,description:desc,link,image:'',status,featured,createdAt:Date.now()});
+  }
+  DB.set('ads',ads); closeModal(); renderAds(); toast(id?'Tangazo limehaririwa':'Tangazo limeongezwa','s');
+}
+function deleteAd(id){
+  pendingConfirm = {type:'deleteAd',id};
+  document.getElementById('confirmIcon').className='confirm-icon danger';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-trash"></i>';
+  document.getElementById('confirmTitle').textContent='Futa Tangazo';
+  document.getElementById('confirmMsg').textContent='Tangazo hili litafutwa kabisa.';
+  document.getElementById('confirmTarget').classList.add('hidden');
+  document.getElementById('confirmOk').className='btn btn-d';
+  document.getElementById('confirmOk').textContent='Futa';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
 
+// ===== POS =====
+function renderPOS(){
+  const prods = (DB.get('products')||[]).filter(p=>p.businessId===currentBiz.id && p.status==='active');
+  document.getElementById('sec-pos').innerHTML = `
+    <div class="sh"><div><h2>Point of Sale</h2><p>Fanya mauzo haraka</p></div>
+    <div class="sh-acts">
+      <div class="sb-bar" style="margin-bottom:0"><i class="fas fa-search"></i><input placeholder="Tafuta bidhaa..." id="posSearch" oninput="filterPosProducts(this.value)"/></div>
+    </div></div>
+    <div class="pos-layout">
+      <div class="pos-products" id="posProducts">${prods.map(p=>`
+        <div class="pos-p-card" data-name="${p.name.toLowerCase()}" onclick="addToCart('${p.id}')">
+          <div style="width:100%;height:80px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;margin-bottom:6px"><i class="fas fa-box" style="color:var(--text3);font-size:24px"></i></div>
+          <h5>${p.name}</h5>
+          <div class="pos-p-price">${fmt(p.price)}</div>
+          <div class="pos-p-stock">Stock: ${p.stock}</div>
+        </div>
+      `).join('')||'<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>Hakuna bidhaa zinazouzwa</p></div>'}</div>
+      <div class="pos-cart">
+        <div class="pos-cart-head"><i class="fas fa-shopping-cart" style="margin-right:8px;color:var(--primary2)"></i> Gorola (${cart.length})</div>
+        <div class="pos-cart-body" id="cartBody">${cart.length===0?'<div class="empty-s"><i class="fas fa-shopping-cart"></i><p>Gorola ni tupu</p></div>':''}${cart.map((c,i)=>`
+          <div class="cart-item">
+            <div class="cart-item-info"><h6>${c.name}</h6><span>${fmt(c.price)} kila moja</span></div>
+            <div class="cart-qty">
+              <button onclick="changeQty(${i},-1)">-</button>
+              <span>${c.qty}</span>
+              <button onclick="changeQty(${i},1)">+</button>
+            </div>
+            <div class="cart-item-price">${fmt(c.price*c.qty)}</div>
+            <button class="cart-item-rm" onclick="removeFromCart(${i})"><i class="fas fa-times"></i></button>
+          </div>
+        `).join('')}</div>
+        <div class="pos-cart-foot">
+          <div class="pos-total"><span>Jumla:</span><span id="cartTotal">${fmt(cart.reduce((a,c)=>a+c.price*c.qty,0))}</span></div>
+          <div class="fg"><label>Njia ya Malipo</label><select class="fi" id="payMethod"><option value="cash">Cash</option><option value="mpesa">M-Pesa</option></select></div>
+          <div class="fg"><label>Jina la Mteja (si lazima)</label><input class="fi" id="payCustomer" placeholder="Jina la mteja"/></div>
+          <button class="btn btn-s" style="width:100%;justify-content:center;padding:12px" onclick="completeSale()" ${cart.length===0?'disabled':''}><i class="fas fa-check-circle"></i> Maliza Muamala</button>
+          <button class="btn btn-o btn-sm" style="width:100%;justify-content:center;margin-top:8px" onclick="clearCart()"><i class="fas fa-trash"></i> Futa Gorola</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function filterPosProducts(q){
+  q=q.toLowerCase();
+  document.querySelectorAll('.pos-p-card').forEach(c=>{
+    c.style.display = c.dataset.name.includes(q)?'':'none';
+  });
+}
+function addToCart(pid){
+  const prods = DB.get('products')||[];
+  const p = prods.find(x=>x.id===pid);
+  if(!p) return;
+  const existing = cart.find(c=>c.productId===pid);
+  if(existing){
+    if(existing.qty>=p.stock){ toast('Stock haikutoshi','w'); return; }
+    existing.qty++;
+  } else {
+    cart.push({productId:p.id,name:p.name,price:p.price,qty:1,maxStock:p.stock});
+  }
+  renderPOS();
+}
+function changeQty(i,d){
+  cart[i].qty += d;
+  if(cart[i].qty<=0) cart.splice(i,1);
+  else if(cart[i].qty>cart[i].maxStock){ cart[i].qty=cart[i].maxStock; toast('Stock haikutoshi','w'); }
+  renderPOS();
+}
+function removeFromCart(i){ cart.splice(i,1); renderPOS(); }
+function clearCart(){ cart=[]; renderPOS(); }
+function completeSale(){
+  if(cart.length===0) return;
+  const method = document.getElementById('payMethod').value;
+  const customer = document.getElementById('payCustomer').value.trim();
+  const total = cart.reduce((a,c)=>a+c.price*c.qty,0);
+  const sales = DB.get('sales')||[];
+  const saleId = 's'+uid();
+  sales.push({id:saleId,businessId:currentBiz.id,items:[...cart],total,method,cashier:currentUser.name,customer,createdAt:Date.now()});
+  DB.set('sales',sales);
+  // Update stock
+  const prods = DB.get('products')||[];
+  cart.forEach(c=>{
+    const p=prods.find(x=>x.id===c.productId);
+    if(p) p.stock = Math.max(0,p.stock-c.qty);
+  });
+  DB.set('products',prods);
+  // Add notification
+  const notifs = DB.get('notifications')||[];
+  notifs.push({id:'n'+uid(),userId:currentUser.id,title:'Muamala Mpya',message:`Muamala wa ${fmt(total)} umekamilika kwa njia ya ${method}`,type:'success',read:false,createdAt:Date.now()});
+  DB.set('notifications',notifs);
+  updateNotifCnt();
+  // Show receipt
+  showReceipt(saleId,cart,total,method,customer);
+  cart = [];
+  renderPOS();
+}
+function showReceipt(saleId,items,total,method,customer){
+  document.getElementById('modalTitle').textContent='Risiti';
+  document.getElementById('modalBody').innerHTML=`
+    <div class="receipt-content">
+      <h3>${currentBiz?currentBiz.name:'Biashara'}</h3>
+      <p style="text-align:center;font-size:10px;margin-bottom:8px">${currentBiz?currentBiz.phone:''}</p>
+      <div class="rc-divider"></div>
+      <div class="rc-line"><span>ID:</span><span>${saleId.slice(-8)}</span></div>
+      <div class="rc-line"><span>Tarehe:</span><span>${fmtDate(Date.now())}</span></div>
+      <div class="rc-line"><span>Mteja:</span><span>${customer||'Walk-in'}</span></div>
+      <div class="rc-divider"></div>
+      ${items.map(c=>`<div class="rc-line"><span>${c.name} x${c.qty}</span><span>${fmt(c.price*c.qty)}</span></div>`).join('')}
+      <div class="rc-divider"></div>
+      <div class="rc-line rc-total"><span>JUMLA:</span><span>${fmt(total)}</span></div>
+      <div class="rc-line"><span>Njia:</span><span>${method==='cash'?'Cash':'M-Pesa'}</span></div>
+      <div class="rc-divider"></div>
+      <p style="text-align:center;font-size:10px">Asante kwa kununua!</p>
+    </div>
+  `;
+  document.getElementById('modalActions').innerHTML=`<button class="btn btn-p" onclick="closeModal()"><i class="fas fa-check"></i> Sawa</button>`;
+  document.getElementById('genericModal').classList.add('show');
+}
 
+// ===== EMPLOYEES =====
+function renderEmployees(){
+  const users = (DB.get('users')||[]).filter(u=>u.businessId===currentBiz.id);
+  const roleLabels = {manager:'Meneja',staff:'Mfanyakazi',cashier:'Mhasibu',seller:'Muuzaji'};
+  const roleColors = {manager:'var(--warning)',staff:'var(--info)',cashier:'var(--success)',seller:'var(--primary2)'};
+  document.getElementById('sec-employees').innerHTML = `
+    <div class="sh"><div><h2>Wafanyakazi</h2><p>Simamia wafanyakazi wako (${users.length})</p></div><div class="sh-acts">
+      <button class="btn btn-p" onclick="openOverlayAuth()"><i class="fas fa-user-plus"></i> Ongeza Mfanyakazi</button>
+    </div></div>
+    <div class="emp-grid">${users.map(u=>`
+      <div class="emp-card">
+        <div class="emp-card-head">
+          <div class="emp-av" style="background:${roleColors[u.role]||'var(--primary)'}">${u.name.charAt(0)}</div>
+          <div><h4>${u.name}</h4><p>${u.email}</p></div>
+        </div>
+        <div class="emp-card-body">
+          <span class="emp-tag role">${roleLabels[u.role]||u.role}</span>
+          <span class="emp-tag status${u.status==='suspended'?' inactive':''}">${u.status==='suspended'?'Imefungwa':'Imewezeshwa'}</span>
+          <span class="emp-tag" style="background:var(--bg3);color:var(--text3)">${u.phone||'Brak simu'}</span>
+        </div>
+        <div class="emp-card-foot">
+          ${u.role!=='manager'?`
+            <button class="btn btn-w btn-xs" onclick="suspendEmployee('${u.id}')"><i class="fas fa-${u.status==='suspended'?'lock-open':'lock'}"></i> ${u.status==='suspended'?'Fungua':'Funga'}</button>
+            <button class="btn btn-d btn-xs" onclick="deleteEmployee('${u.id}')"><i class="fas fa-trash"></i></button>
+          `:'<span style="font-size:11px;color:var(--text3)">Mmiliki - Haiwezi kubadilishwa</span>'}
+        </div>
+      </div>
+    `).join('')}</div>
+  `;
+}
+function suspendEmployee(id){
+  const users=DB.get('users')||[]; const u=users.find(x=>x.id===id);
+  pendingConfirm={type:'suspendUser',id};
+  document.getElementById('confirmIcon').className='confirm-icon warning';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-lock"></i>';
+  document.getElementById('confirmTitle').textContent=u&&u.status==='suspended'?'Fungua Akaunti':'Funga Akaunti';
+  document.getElementById('confirmMsg').textContent=u&&u.status==='suspended'?'Mfanyakazi atasikiliza tena kwenye mfumo.':'Mfanyakazi hataweza kuingia kwenye mfumo.';
+  document.getElementById('confirmTarget').textContent=u?u.name:'';
+  document.getElementById('confirmTarget').classList.remove('hidden');
+  document.getElementById('confirmOk').className='btn btn-w';
+  document.getElementById('confirmOk').textContent=u&&u.status==='suspended'?'Fungua':'Funga';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+function deleteEmployee(id){
+  const users=DB.get('users')||[]; const u=users.find(x=>x.id===id);
+  pendingConfirm={type:'deleteEmployee',id};
+  document.getElementById('confirmIcon').className='confirm-icon danger';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-user-slash"></i>';
+  document.getElementById('confirmTitle').textContent='Futa Mfanyakazi';
+  document.getElementById('confirmMsg').textContent='Mfanyakazi huu atafutwa kabisa na data zake.';
+  document.getElementById('confirmTarget').textContent=u?u.name:'';
+  document.getElementById('confirmTarget').classList.remove('hidden');
+  document.getElementById('confirmOk').className='btn btn-d';
+  document.getElementById('confirmOk').textContent='Futa';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+function openOverlayAuth(){ document.getElementById('overlayAuth').classList.add('show'); }
+function closeOverlayAuth(){ document.getElementById('overlayAuth').classList.remove('show'); }
+function switchStaffTab(tab,btn){
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('staffNewForm').classList.toggle('active',tab==='new');
+  document.getElementById('staffExistForm').classList.toggle('active',tab==='existing');
+}
+function handleAddStaff(e){
+  e.preventDefault();
+  const name=document.getElementById('staffName').value.trim(), email=document.getElementById('staffEmail').value.trim().toLowerCase(),
+        phone=document.getElementById('staffPhone').value.trim(), role=document.getElementById('staffRole').value, pw=document.getElementById('staffPw').value;
+  if(!name||!email||!pw){ toast('Jaza sehemu zinazohitajika','e'); return; }
+  if(pw.length<6){ toast('Nenosiri lazima iwe na angalau 6 herufi','e'); return; }
+  const users=DB.get('users')||[];
+  if(users.find(u=>u.email===email)){ toast('Barua pepe imesajiliwa tayari','e'); return; }
+  users.push({id:'u'+uid(),name,email,phone,password:pw,businessId:currentBiz.id,role,status:'active',createdAt:Date.now()});
+  DB.set('users',users);
+  const notifs=DB.get('notifications')||[];
+  notifs.push({id:'n'+uid(),userId:currentUser.id,title:'Mfanyakazi Mpya',message:`${name} ameongezwa kama ${role}`,type:'info',read:false,createdAt:Date.now()});
+  DB.set('notifications',notifs);
+  closeOverlayAuth(); renderEmployees(); updateNotifCnt(); toast('Mfanyakazi ameongezwa','s');
+  e.target.reset();
+}
+function handleAddExistingStaff(e){
+  e.preventDefault();
+  const email=document.getElementById('existStaffEmail').value.trim().toLowerCase(), role=document.getElementById('existStaffRole').value;
+  const users=DB.get('users')||[];
+  const u=users.find(x=>x.email===email);
+  if(!u){ toast('Akaunti haipatikani','e'); return; }
+  if(u.businessId===currentBiz.id){ toast('Mfanyakazi tayari yuko kwenye biashara hii','w'); return; }
+  u.businessId=currentBiz.id; u.role=role; u.status='active';
+  DB.set('users',users);
+  closeOverlayAuth(); renderEmployees(); toast('Mfanyakaji ameunganishwa','s');
+  e.target.reset();
+}
 
+// ===== DEBTS =====
+function renderDebts(){
+  const debts = (DB.get('debts')||[]).filter(d=>d.businessId===currentBiz.id);
+  const unpaid = debts.filter(d=>d.status==='unpaid');
+  const totalUnpaid = unpaid.reduce((a,d)=>a+d.remaining,0);
+  document.getElementById('sec-debts').innerHTML = `
+    ${unpaid.length>0?`<div class="debt-alert"><i class="fas fa-exclamation-triangle"></i> Una madeni ${unpaid.length} yasiyolipwa jumla ya ${fmt(totalUnpaid)}</div>`:''}
+    <div class="sh"><div><h2>Madeni</h2><p>Simamia madeni ya wateja (${debts.length})</p></div><div class="sh-acts">
+      <button class="btn btn-p" onclick="openDebtModal()"><i class="fas fa-plus"></i> Ongeza Deni</button>
+    </div></div>
+    <div class="metrics">
+      <div class="mc r"><div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div><h3>${fmt(totalUnpaid)}</h3><p>Madeni Yasiyolipwa</p></div>
+      <div class="mc g"><div class="mc-icon"><i class="fas fa-check-circle"></i></div><h3>${debts.filter(d=>d.status==='paid').length}</h3><p>Madeni Yaliyolipwa</p></div>
+      <div class="mc b"><div class="mc-icon"><i class="fas fa-clock"></i></div><h3>${unpaid.filter(d=>d.dueDate<Date.now()+86400000*3).length}</h3><p>Inakaribia Muda</p></div>
+    </div>
+    <div class="tw"><div class="ts"><table>
+      <thead><tr><th>Mteja</th><th>Simu</th><th>Kiasi</th><th>Imelipwa</th><th>Imebaki</th><th>Muda</th><th>Hali</th><th>Vitendo</th></tr></thead>
+      <tbody>${debts.map(d=>`<tr>
+        <td><strong>${d.customerName}</strong></td>
+        <td>${d.phone}</td>
+        <td>${fmt(d.amount)}</td>
+        <td style="color:var(--success)">${fmt(d.paid)}</td>
+        <td style="color:${d.remaining>0?'var(--danger)':'var(--success)'};font-weight:600">${fmt(d.remaining)}</td>
+        <td>${fmtDate(d.dueDate)}</td>
+        <td><span class="status-badge ${d.status}">${d.status==='paid'?'Imelipwa':'Haijalipwa'}</span></td>
+        <td>
+          ${d.status==='unpaid'?`<button class="btn btn-s btn-xs" onclick="payDebt('${d.id}')"><i class="fas fa-money-bill"></i></button>`:''}
+          <button class="btn btn-d btn-xs" onclick="deleteDebtAction('${d.id}')"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>`).join('')||'<tr><td colspan="8" class="empty-s"><i class="fas fa-hand-holding-dollar"></i><p>Hakuna madeni bado</p></td></tr>'}</tbody>
+    </table></div></div>
+  `;
+}
+function openDebtModal(){
+  document.getElementById('modalTitle').textContent='Ongeza Deni Mpya';
+  document.getElementById('modalBody').innerHTML=`
+    <div class="fg"><label>Jina la Mteja <span class="req">*</span></label><input class="fi" id="mDebtName" required placeholder="Jina la mteja"/></div>
+    <div class="fg"><label>Simu</label><input class="fi" id="mDebtPhone" placeholder="+255..."/></div>
+    <div class="seller-grid">
+      <div class="seller-field"><label>Kiasi Cha Deni (TSH) <span class="req">*</span></label><input id="mDebtAmount" type="number" required placeholder="0"/></div>
+      <div class="seller-field"><label>Imelipwa (TSH)</label><input id="mDebtPaid" type="number" value="0" placeholder="0"/></div>
+    </div>
+    <div class="fg"><label>Tarehe ya Mwisho <span class="req">*</span></label><input class="fi" id="mDebtDue" type="date" required/></div>
+  `;
+  document.getElementById('modalActions').innerHTML=`
+    <button class="btn btn-o" onclick="closeModal()">Ghairi</button>
+    <button class="btn btn-p" onclick="saveDebt()"><i class="fas fa-save"></i> Hifadhi</button>
+  `;
+  document.getElementById('genericModal').classList.add('show');
+}
+function saveDebt(){
+  const name=document.getElementById('mDebtName').value.trim(), phone=document.getElementById('mDebtPhone').value.trim(),
+        amount=Number(document.getElementById('mDebtAmount').value), paid=Number(document.getElementById('mDebtPaid').value)||0,
+        due=document.getElementById('mDebtDue').value;
+  if(!name||!amount||!due){ toast('Jaza sehemu zinazohitajika','e'); return; }
+  const debts=DB.get('debts')||[];
+  debts.push({id:'d'+uid(),businessId:currentBiz.id,customerName:name,phone,amount,paid,remaining:amount-paid,dueDate:new Date(due).getTime(),status:paid>=amount?'paid':'unpaid',createdAt:Date.now()});
+  DB.set('debts',debts); closeModal(); renderDebts(); toast('Deni limeongezwa','s');
+}
+function payDebt(id){
+  const debts=DB.get('debts')||[]; const d=debts.find(x=>x.id===id);
+  if(!d) return;
+  document.getElementById('modalTitle').textContent='Lipa Deni';
+  document.getElementById('modalBody').innerHTML=`
+    <p style="margin-bottom:12px;color:var(--text2)">Mteja: <strong style="color:var(--text)">${d.customerName}</strong></p>
+    <p style="margin-bottom:12px;color:var(--text2)">Imebaki: <strong style="color:var(--danger)">${fmt(d.remaining)}</strong></p>
+    <div class="fg"><label>Kiasi Cha Kulipa (TSH) <span class="req">*</span></label><input class="fi" id="mPayAmount" type="number" value="${d.remaining}" max="${d.remaining}" required placeholder="0"/></div>
+  `;
+  document.getElementById('modalActions').innerHTML=`
+    <button class="btn btn-o" onclick="closeModal()">Ghairi</button>
+    <button class="btn btn-s" onclick="confirmPayDebt('${id}')"><i class="fas fa-money-bill"></i> Lipa</button>
+  `;
+  document.getElementById('genericModal').classList.add('show');
+}
+function confirmPayDebt(id){
+  const pay=Number(document.getElementById('mPayAmount').value);
+  if(!pay||pay<=0){ toast('Ingiza kiasi sahihi','e'); return; }
+  const debts=DB.get('debts')||[]; const d=debts.find(x=>x.id===id);
+  if(!d) return;
+  d.paid+=pay; d.remaining=Math.max(0,d.amount-d.paid);
+  if(d.remaining<=0) d.status='paid';
+  DB.set('debts',debts); closeModal(); renderDebts(); toast('Malipo yamekamilika','s');
+}
+function deleteDebtAction(id){
+  pendingConfirm={type:'deleteDebt',id};
+  document.getElementById('confirmIcon').className='confirm-icon danger';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-trash"></i>';
+  document.getElementById('confirmTitle').textContent='Futa Deni';
+  document.getElementById('confirmMsg').textContent='Deni hili litafutwa kabisa.';
+  document.getElementById('confirmTarget').classList.add('hidden');
+  document.getElementById('confirmOk').className='btn btn-d';
+  document.getElementById('confirmOk').textContent='Futa';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
 
+// ===== REPORTS =====
+function renderReports(){
+  const sales=(DB.get('sales')||[]).filter(s=>s.businessId===currentBiz.id);
+  const debts=(DB.get('debts')||[]).filter(d=>d.businessId===currentBiz.id);
+  const prods=(DB.get('products')||[]).filter(p=>p.businessId===currentBiz.id);
+  const totalRev=sales.reduce((a,s)=>a+s.total,0);
+  const totalCost=sales.reduce((a,s)=>{return a+s.items.reduce((b,it)=>{const p=prods.find(x=>x.id===it.productId);return b+(p?p.cost*it.qty:0)},0)},0);
+  const profit=totalRev-totalCost;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const thisMonth=new Date(today.getFullYear(),today.getMonth(),1).getTime();
+  const monthSales=sales.filter(s=>s.createdAt>=thisMonth);
+  const monthRev=monthSales.reduce((a,s)=>a+s.total,0);
+  const avgSale=sales.length>0?Math.round(totalRev/sales.length):0;
 
+  document.getElementById('sec-reports').innerHTML=`
+    <div class="sh"><div><h2>Ripoti</h2><p>Maelezo ya kina ya biashara yako</p></div>
+    <div class="sh-acts"><button class="btn btn-o" onclick="toast(&quot;Ripoti imepakua&quot;,&quot;s&quot;)"><i class="fas fa-download"></i> Pakua RIPOTI</button></div>
+    </div>
+    <div class="metrics">
+      <div class="mc g"><div class="mc-icon"><i class="fas fa-money-bill-wave"></i></div><h3>${fmt(totalRev)}</h3><p>Jumla ya Mapato</p></div>
+      <div class="mc a"><div class="mc-icon"><i class="fas fa-calendar-alt"></i></div><h3>${fmt(monthRev)}</h3><p>Mapato ya Mwezi Huu</p></div>
+      <div class="mc pu"><div class="mc-icon"><i class="fas fa-chart-line"></i></div><h3>${fmt(profit)}</h3><p>Faida Halisi</p></div>
+      <div class="mc b"><div class="mc-icon"><i class="fas fa-receipt"></i></div><h3>${sales.length}</h3><p>Jumla ya Mauzo</p></div>
+      <div class="mc r"><div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div><h3>${fmt(debts.filter(d=>d.status==='unpaid').reduce((a,d)=>a+d.remaining,0))}</h3><p>Madeni Yasiyolipwa</p></div>
+      <div class="mc g"><div class="mc-icon"><i class="fas fa-calculator"></i></div><h3>${fmt(avgSale)}</h3><p>Kiwango Cha Muamala</p></div>
+    </div>
+    <div class="ch-g">
+      <div class="ch-c"><h4><i class="fas fa-chart-bar"></i> Mauzo Kwa Wiki</h4><div class="ch-box"><canvas id="reportBarChart"></canvas></div></div>
+      <div class="ch-c"><h4><i class="fas fa-chart-pie"></i> Bidhaa Zinazouzwa Zaidi</h4><div class="ch-box"><canvas id="reportProdChart"></canvas></div></div>
+    </div>
+    <div class="tw">
+      <div class="sh"><h2>Maelezo ya Bidhaa</h2></div>
+      <div class="ts"><table>
+        <thead><tr><th>Bidhaa</th><th>Bei</th><th>Gharama</th><th>Faida %</th><th>Stock</th><th>Imeuza</th></tr></thead>
+        <tbody>${prods.map(p=>{
+          const sold=sales.reduce((a,s)=>a+s.items.filter(it=>it.productId===p.id).reduce((b,it)=>b+it.qty,0),0);
+          const margin=p.cost>0?Math.round(((p.price-p.cost)/p.cost)*100):0;
+          return `<tr><td><strong>${p.name}</strong></td><td>${fmt(p.price)}</td><td>${fmt(p.cost)}</td><td style="color:${margin>30?'var(--success)':'var(--warning)'}">${margin}%</td><td>${p.stock}</td><td>${sold}</td></tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>
+  `;
+  // Bar chart - sales by week
+  if(chartInstances.reportBar) try{chartInstances.reportBar.destroy()}catch(e){}
+  const weekLabels=[];const weekData=[];
+  for(let i=3;i>=0;i--){
+    const start=new Date(); start.setDate(start.getDate()-i*7); start.setHours(0,0,0,0);
+    const end=new Date(start); end.setDate(end.getDate()+7);
+    weekLabels.push('Wiki '+(4-i));
+    weekData.push(sales.filter(s=>s.createdAt>=start.getTime()&&s.createdAt<end.getTime()).reduce((a,s)=>a+s.total,0));
+  }
+  chartInstances.reportBar=new Chart(document.getElementById('reportBarChart'),{
+    type:'bar',data:{labels:weekLabels,datasets:[{label:'Mauzo (TSH)',data:weekData,backgroundColor:'rgba(108,92,231,.6)',borderColor:'#6c5ce7',borderWidth:1,borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#9a9ab0'},grid:{display:false}},y:{ticks:{color:'#9a9ab0',callback:v=>fmt(v)},grid:{color:'rgba(255,255,255,.05)'}}}}
+  });
+  // Product pie chart
+  if(chartInstances.reportProd) try{chartInstances.reportProd.destroy()}catch(e){}
+  const prodSales={};
+  sales.forEach(s=>s.items.forEach(it=>{prodSales[it.name]=(prodSales[it.name]||0)+it.qty}));
+  const pLabels=Object.keys(prodSales).slice(0,6);
+  const pData=Object.values(prodSales).slice(0,6);
+  const pColors=['#6c5ce7','#00b894','#f39c12','#e74c3c','#0984e3','#a29bfe'];
+  chartInstances.reportProd=new Chart(document.getElementById('reportProdChart'),{
+    type:'doughnut',data:{labels:pLabels.length?pLabels:['Hakuna data'],datasets:[{data:pData.length?pData:[1],backgroundColor:pColors.slice(0,pData.length||1),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9a9ab0',padding:12,font:{size:11}}}},cutout:'60%'}
+  });
+}
+
+// ===== NOTIFICATIONS =====
+function renderNotifications(){
+  const notifs=(DB.get('notifications')||[]).filter(n=>n.userId===currentUser.id).sort((a,b)=>b.createdAt-a.createdAt);
+  const typeIcons={success:'fa-check-circle',warning:'fa-exclamation-triangle',danger:'fa-times-circle',info:'fa-info-circle'};
+  const typeColors={success:'var(--success)',warning:'var(--warning)',danger:'var(--danger)',info:'var(--info)'};
+  document.getElementById('sec-notifications').innerHTML=`
+    <div class="sh"><div><h2>Arifa</h2><p>Arifa zako zote (${notifs.length})</p></div><div class="sh-acts">
+      <button class="btn btn-o btn-sm" onclick="markAllRead()"><i class="fas fa-check-double"></i> Soma Zote</button>
+    </div></div>
+    <div id="notifList">${notifs.map(n=>`
+      <div class="notif-item" style="opacity:${n.read?.6:1}">
+        <i class="fas ${typeIcons[n.type]||typeIcons.info}" style="color:${typeColors[n.type]||typeColors.info}"></i>
+        <div>
+          <h5>${n.title}</h5>
+          <p>${n.message}</p>
+          <p style="margin-top:4px;font-size:10px;color:var(--text3)">${fmtDate(n.createdAt)} ${fmtTime(n.createdAt)}</p>
+        </div>
+      </div>
+    `).join('')||'<div class="empty-s"><i class="fas fa-bell-slash"></i><p>Hakuna arifa bado</p></div>'}</div>
+  `;
+  // Also update notification panel
+  document.getElementById('nList').innerHTML=notifs.slice(0,20).map(n=>`
+    <div class="notif-item" style="opacity:${n.read?.6:1}">
+      <i class="fas ${typeIcons[n.type]||typeIcons.info}" style="color:${typeColors[n.type]||typeColors.info}"></i>
+      <div><h5>${n.title}</h5><p>${n.message}</p><p style="margin-top:4px;font-size:10px;color:var(--text3)">${fmtDate(n.createdAt)}</p></div>
+    </div>
+  `).join('')||'<div class="empty-s"><p>Hakuna arifa</p></div>';
+}
+function markAllRead(){
+  const notifs=DB.get('notifications')||[];
+  notifs.forEach(n=>{if(n.userId===currentUser.id) n.read=true});
+  DB.set('notifications',notifs); renderNotifications(); updateNotifCnt(); toast('Arifa zote zimesomwa','s');
+}
+
+// ===== PROFILE =====
+function renderProfile(){
+  const biz=currentBiz;
+  const users=(DB.get('users')||[]).filter(u=>u.businessId===currentBiz.id);
+  document.getElementById('sec-profile').innerHTML=`
+    <div class="sh"><div><h2>Wasifu wa Biashara</h2><p>Maelezo ya biashara yako na akaunti yako</p></div></div>
+    <div class="prof-grid">
+      <div class="prof-left">
+        <div class="logo-card">
+          <div class="logo-prev" id="logoPrev" onclick="document.getElementById('logoInput').click()">
+            ${biz&&biz.logo?`<img src="${biz.logo}"/>`:'<i class="fas fa-image"></i>'}
+          </div>
+          <input type="file" id="logoInput" accept="image/*" style="display:none" onchange="handleLogoUpload(this)"/>
+          <h3 style="font-size:16px;margin-bottom:4px">${biz?biz.name:'Biashara'}</h3>
+          <p style="font-size:12px;color:var(--text2)">${biz?biz.category:''}</p>
+          <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <span class="status-badge ${biz&&biz.status==='active'?'active':'suspended'}">${biz&&biz.status==='active'?'Imewezeshwa':'Imefungwa'}</span>
+            <span class="emp-tag role" style="background:var(--warning-bg);color:var(--warning)">${biz?biz.plan:'Basic'}</span>
+          </div>
+        </div>
+        <div style="margin-top:20px">
+          <h4 style="font-size:14px;margin-bottom:12px"><i class="fas fa-user" style="color:var(--primary2);margin-right:6px"></i>Akaunti Yako</h4>
+          <div style="font-size:13px;color:var(--text2);display:flex;flex-direction:column;gap:8px">
+            <div><strong style="color:var(--text)">Jina:</strong> ${currentUser.name}</div>
+            <div><strong style="color:var(--text)">Barua:</strong> ${currentUser.email}</div>
+            <div><strong style="color:var(--text)">Simu:</strong> ${currentUser.phone||'-'}</div>
+            <div><strong style="color:var(--text)">Jukumu:</strong> ${currentUser.role}</div>
+          </div>
+        </div>
+      </div>
+      <div class="prof-right">
+        <h3><i class="fas fa-edit" style="color:var(--primary2);margin-right:8px"></i>Hariri Maelezo</h3>
+        <div class="fg"><label>Jina la Biashara</label><input class="fi" id="profBizName" value="${biz?biz.name:''}"/></div>
+        <div class="fg"><label>Aina ya Biashara</label><input class="fi" id="profBizCat" value="${biz?biz.category:''}"/></div>
+        <div class="fg"><label>Simu</label><input class="fi" id="profBizPhone" value="${biz?biz.phone:''}"/></div>
+        <div class="fg"><label>Jina Lako</label><input class="fi" id="profName" value="${currentUser.name}"/></div>
+        <div class="fg"><label>Simu Yako</label><input class="fi" id="profPhone" value="${currentUser.phone||''}"/></div>
+        <div class="fg"><label>Nenosiri Mpya (acha wazi kama hutaki kubadilisha)</label><input class="fi" type="password" id="profPw" placeholder="Nenosiri jipya"/></div>
+        <button class="btn btn-p" onclick="saveProfile()"><i class="fas fa-save"></i> Hifadhi Mabadiliko</button>
+        <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
+          <h4 style="font-size:14px;margin-bottom:12px;color:var(--danger)"><i class="fas fa-exclamation-triangle" style="margin-right:6px"></i>Hatari</h4>
+          <button class="btn btn-d btn-sm" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Ondoka kwenye Akaunti</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:24px">
+      <h3 style="font-size:16px;margin-bottom:12px"><i class="fas fa-users" style="color:var(--primary2);margin-right:8px"></i>Wafanyakazi (${users.length})</h3>
+      <div class="ts"><table>
+        <thead><tr><th>Jina</th><th>Barua</th><th>Jukumu</th><th>Hali</th></tr></thead>
+        <tbody>${users.map(u=>`<tr><td>${u.name}</td><td>${u.email}</td><td>${u.role}</td><td><span class="status-badge ${u.status}">${u.status==='active'?'Imewezeshwa':'Imefungwa'}</span></td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+  `;
+}
+function handleLogoUpload(input){
+  if(!input.files||!input.files[0]) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const businesses=DB.get('businesses')||[];
+    const b=businesses.find(x=>x.id===currentBiz.id);
+    if(b){b.logo=e.target.result; DB.set('businesses',businesses); currentBiz=b; renderProfile(); toast('Logo imebadilishwa','s');}
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+function saveProfile(){
+  const bizName=document.getElementById('profBizName').value.trim(), bizCat=document.getElementById('profBizCat').value.trim(),
+        bizPhone=document.getElementById('profBizPhone').value.trim(), profName=document.getElementById('profName').value.trim(),
+        profPhone=document.getElementById('profPhone').value.trim(), profPw=document.getElementById('profPw').value;
+  if(!bizName||!profName){ toast('Jina la biashara na jina lako lazima lijazwe','e'); return; }
+  const businesses=DB.get('businesses')||[];
+  const b=businesses.find(x=>x.id===currentBiz.id);
+  if(b){b.name=bizName;b.category=bizCat;b.phone=bizPhone; DB.set('businesses',businesses); currentBiz=b;}
+  const users=DB.get('users')||[];
+  const u=users.find(x=>x.id===currentUser.id);
+  if(u){u.name=profName;u.phone=profPhone;if(profPw&&profPw.length>=6) u.password=profPw; DB.set('users',users); currentUser=u;}
+  updateTopbar(); renderProfile(); toast('Maelezo yamehifadhiwa','s');
+}
+
+// ===== PUBLIC SHOWCASE =====
+function renderPublicShowcase(){
+  const ads=(DB.get('ads')||[]).filter(a=>a.status==='active'||a.status==='featured').sort((a,b)=>(b.featured?1:0)-(a.featured?1:0));
+  const prods=(DB.get('products')||[]).filter(p=>p.status==='active').slice(0,8);
+  const businesses=DB.get('businesses')||[];
+  document.getElementById('publicShowcase').innerHTML=`
+    <div class="public-section-head">
+      <div><div class="public-kicker">Matangazo</div><h3>Matangazo ya Hivi Karibuni</h3><p>Tangazo kutoka kwa wauzaji wetu</p></div>
+      <button class="public-refresh" onclick="renderPublicShowcase()"><i class="fas fa-sync-alt"></i></button>
+    </div>
+    <div class="public-grid">${ads.map(a=>{
+      const biz=businesses.find(b=>b.id===a.businessId);
+      return `<div class="pub-ad-card">
+        <div class="pub-ad-img-placeholder"><i class="fas fa-bullhorn"></i></div>
+        <div class="pub-ad-body">
+          ${a.featured?'<span class="status-badge featured" style="margin-bottom:6px"><i class="fas fa-star"></i> Featured</span>':''}
+          <h4>${a.title}</h4>
+          <p>${a.description}</p>
+          <p style="font-size:11px;color:var(--text3);margin-top:6px"><i class="fas fa-building" style="margin-right:4px"></i>${biz?biz.name:'Biashara'}</p>
+        </div>
+      </div>`;
+    }).join('')||'<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-bullhorn"></i><p>Hakuna matangazo bado</p></div>'}</div>
+    <div class="public-products-head">
+      <div class="public-section-head">
+        <div><div class="public-kicker">Bidhaa</div><h3>Bidhaa Zinazouzwa</h3><p>Bidhaa kutoka kwa wauzaji wetu</p></div>
+      </div>
+    </div>
+    <div class="public-product-grid">${prods.map(p=>{
+      const biz=businesses.find(b=>b.id===p.businessId);
+      return `<div class="pub-prod-card">
+        <div class="pub-prod-img-placeholder"><i class="fas fa-box"></i></div>
+        <div class="pub-prod-body">
+          <h4>${p.name}</h4>
+          <div class="pub-prod-price">${fmt(p.price)}</div>
+          <div class="pub-prod-seller"><i class="fas fa-store" style="margin-right:4px"></i>${biz?biz.name:'Biashara'}</div>
+        </div>
+      </div>`;
+    }).join('')||'<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p></div>'}</div>
+  `;
+}
+
+// ===== PRICE CALCULATOR =====
+function openPriceCalc(){ document.getElementById('priceCalcModal').classList.remove('hidden'); }
+function closePriceCalc(){ document.getElementById('priceCalcModal').classList.add('hidden'); }
+function calcPrice(){
+  const cost=Number(document.getElementById('pcCost').value)||0;
+  const margin=Number(document.getElementById('pcMargin').value)||0;
+  const ship=Number(document.getElementById('pcShip').value)||0;
+  const other=Number(document.getElementById('pcOther').value)||0;
+  const base=cost*(1+margin/100);
+  const otherAmt=base*(other/100);
+  const total=Math.ceil(base+ship+otherAmt);
+  document.getElementById('pcResult').textContent='TSH '+total.toLocaleString('en-GB');
+}
+
+// ===== MODAL HELPERS =====
+function closeModal(){ document.getElementById('genericModal').classList.remove('show'); }
+function closeSuperModal(){ document.getElementById('superModal').classList.add('hidden'); }
+
+// ===== SUPER ADMIN =====
+function handleSuperLogin(e){
+  e.preventDefault();
+  const email=document.getElementById('superEmail').value.trim().toLowerCase();
+  const pw=document.getElementById('superPw').value;
+  // Simple super admin check (admin@super.com / admin123)
+  if(email==='admin@super.com'&&pw==='admin123'){
+    document.getElementById('superErr').textContent='';
+    showScreen('superPanel');
+    superTab='overview';
+    renderSuperPanel();
+    toast('Karibu Super Admin!','s');
+  } else {
+    document.getElementById('superErr').textContent='Barua pepe au nenosiri si sahihi';
+  }
+}
+function superLogout(){ showScreen('landingScreen'); toast('Umetoka kama Super Admin','i'); }
+
+function renderSuperPanel(){
+  const users=DB.get('users')||[];
+  const businesses=DB.get('businesses')||[];
+  const sales=DB.get('sales')||[];
+  const products=DB.get('products')||[];
+  const ads=DB.get('ads')||[];
+  const totalRev=sales.reduce((a,s)=>a+s.total,0);
+
+  document.getElementById('superBody').innerHTML=`
+    <div class="pf" style="margin-bottom:20px">
+      <button class="pf-btn ${superTab==='overview'?'active':''}" onclick="superTab='overview';renderSuperPanel()">Muhtasari</button>
+      <button class="pf-btn ${superTab==='users'?'active':''}" onclick="superTab='users';renderSuperPanel()">Watumiaji</button>
+      <button class="pf-btn ${superTab==='businesses'?'active':''}" onclick="superTab='businesses';renderSuperPanel()">Biashara</button>
+      <button class="pf-btn ${superTab==='content'?'active':''}" onclick="superTab='content';renderSuperPanel()">Maudhui</button>
+    </div>
+    <div id="superTabContent"></div>
+  `;
+
+  const tc=document.getElementById('superTabContent');
+  if(superTab==='overview'){
+    tc.innerHTML=`
+      <div class="super-metrics">
+        <div class="sm-card"><h4>Watumiaji</h4><div class="sm-val">${users.length}</div><div class="sm-sub">Jumla ya akaunti</div></div>
+        <div class="sm-card"><h4>Biashara</h4><div class="sm-val">${businesses.length}</div><div class="sm-sub">Biashara zilizosajiliwa</div></div>
+        <div class="sm-card"><h4>Mauzo</h4><div class="sm-val">${sales.length}</div><div class="sm-sub">Muamala wote</div></div>
+        <div class="sm-card"><h4>Mapato</h4><div class="sm-val" style="color:var(--success)">${fmt(totalRev)}</div><div class="sm-sub">Jumla ya mauzo</div></div>
+        <div class="sm-card"><h4>Bidhaa</h4><div class="sm-val">${products.length}</div><div class="sm-sub">Bidhaa zote</div></div>
+        <div class="sm-card"><h4>Matangazo</h4><div class="sm-val">${ads.length}</div><div class="sm-sub">Matangazo yote</div></div>
+      </div>
+      <div class="super-chart-grid">
+        <div class="super-card"><div class="super-card-head"><h3><i class="fas fa-chart-line"></i> Mauzo ya Miezi 7</h3><span>Mfumo wote</span></div><div class="super-chart-box"><canvas id="superSalesChart"></canvas></div></div>
+        <div class="super-card"><div class="super-card-head"><h3><i class="fas fa-chart-pie"></i> Biashara kwa Plan</h3><span></span></div><div class="super-chart-box"><canvas id="superBizChart"></canvas></div></div>
+      </div>
+    `;
+    // Super sales chart
+    if(chartInstances.superSales) try{chartInstances.superSales.destroy()}catch(e){}
+    const labels=[];const data=[];
+    for(let i=6;i>=0;i--){
+      const d=new Date();d.setDate(d.getDate()-i);d.setHours(0,0,0,0);
+      const next=new Date(d);next.setDate(next.getDate()+1);
+      labels.push(d.toLocaleDateString('sw-KE',{day:'2-digit',month:'short'}));
+      data.push(sales.filter(s=>s.createdAt>=d.getTime()&&s.createdAt<next.getTime()).reduce((a,s)=>a+s.total,0));
+    }
+    chartInstances.superSales=new Chart(document.getElementById('superSalesChart'),{
+      type:'line',data:{labels,datasets:[{label:'Mauzo',data,borderColor:'#e74c3c',backgroundColor:'rgba(231,76,60,.12)',fill:true,tension:.4,pointRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#9a9ab0',font:{size:10}},grid:{color:'rgba(255,255,255,.05)'}},y:{ticks:{color:'#9a9ab0',font:{size:10},callback:v=>fmt(v)},grid:{color:'rgba(255,255,255,.05)'}}}}
+    });
+    // Biz plan chart
+    if(chartInstances.superBiz) try{chartInstances.superBiz.destroy()}catch(e){}
+    const planCounts={};businesses.forEach(b=>{planCounts[b.plan]=(planCounts[b.plan]||0)+1});
+    chartInstances.superBiz=new Chart(document.getElementById('superBizChart'),{
+      type:'doughnut',data:{labels:Object.keys(planCounts).length?Object.keys(planCounts):['Hakuna data'],datasets:[{data:Object.values(planCounts).length?Object.values(planCounts):[1],backgroundColor:['#e74c3c','#f39c12','#00b894','#0984e3'],borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9a9ab0'}}},cutout:'60%'}
+    });
+  } else if(superTab==='users'){
+    tc.innerHTML=`
+      <div class="super-toolbar">
+        <div><h2>Watumiaji Wote (${users.length})</h2><p>Simamia akaunti zote</p></div>
+        <div class="super-toolbar-actions"><input class="fi" placeholder="Tafuta mtumiaji..." oninput="filterSuperUsers(this.value)"/></div>
+      </div>
+      <div class="tw super-table-card"><div class="ts"><table id="superUsersTable">
+        <thead><tr><th>Jina</th><th>Barua</th><th>Simu</th><th>Jukumu</th><th>Biashara</th><th>Hali</th><th>Tarehe</th><th>Vitendo</th></tr></thead>
+        <tbody>${users.map(u=>{
+          const biz=businesses.find(b=>b.id===u.businessId);
+          return `<tr data-name="${u.name.toLowerCase()} ${u.email.toLowerCase()}">
+            <td><strong>${u.name}</strong></td><td>${u.email}</td><td>${u.phone||'-'}</td>
+            <td>${u.role}</td><td>${biz?biz.name:'-'}</td>
+            <td><span class="status-badge ${u.status}">${u.status==='active'?'Imewezeshwa':'Imefungwa'}</span></td>
+            <td>${fmtDate(u.createdAt)}</td>
+            <td>
+              <button class="btn btn-w btn-xs" onclick="superSuspendUser('${u.id}')"><i class="fas fa-${u.status==='suspended'?'lock-open':'lock'}"></i></button>
+              <button class="btn btn-d btn-xs" onclick="superDeleteUser('${u.id}')"><i class="fas fa-trash"></i></button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div></div>
+    `;
+  } else if(superTab==='businesses'){
+    tc.innerHTML=`
+      <div class="super-toolbar">
+        <div><h2>Biashara Zote (${businesses.length})</h2><p>Simamia biashara zote</p></div>
+      </div>
+      <div class="tw super-table-card"><div class="ts"><table>
+        <thead><tr><th>Biashara</th><th>Aina</th><th>Mmiliki</th><th>Plan</th><th>Hali</th><th>Tarehe</th><th>Vitendo</th></tr></thead>
+        <tbody>${businesses.map(b=>`
+          <tr>
+            <td><strong>${b.name}</strong></td><td>${b.category}</td><td>${b.ownerName}</td>
+            <td><span class="emp-tag role">${b.plan}</span></td>
+            <td><span class="status-badge ${b.status}">${b.status==='active'?'Imewezeshwa':'Imefungwa'}</span></td>
+            <td>${fmtDate(b.createdAt)}</td>
+            <td>
+              <button class="btn btn-w btn-xs" onclick="superSuspendBiz('${b.id}')"><i class="fas fa-${b.status==='suspended'?'lock-open':'lock'}"></i></button>
+              <button class="btn btn-d btn-xs" onclick="superDeleteBiz('${b.id}')"><i class="fas fa-trash"></i></button>
+            </td>
+          </tr>
+        `).join('')}</tbody>
+      </table></div></div>
+    `;
+  } else if(superTab==='content'){
+    tc.innerHTML=`
+      <div class="super-content-grid">
+        <div class="super-card">
+          <div class="super-card-head"><h3><i class="fas fa-boxes-stacked"></i> Bidhaa (${products.length})</h3></div>
+          ${products.slice(0,8).map(p=>{const biz=businesses.find(b=>b.id===p.businessId);return `
+            <div class="super-prod-item">
+              <div class="super-ad-thumb"><i class="fas fa-box" style="color:var(--text3)"></i></div>
+              <div class="super-ad-info"><h5>${p.name}</h5><p>${biz?biz.name:''} &bull; ${fmt(p.price)} &bull; Stock: ${p.stock}</p></div>
+            </div>`;
+          }).join('')||'<div class="empty-s"><p>Hakuna bidhaa</p></div>'}
+        </div>
+        <div class="super-card">
+          <div class="super-card-head"><h3><i class="fas fa-bullhorn"></i> Matangazo (${ads.length})</h3></div>
+          ${ads.slice(0,8).map(a=>{const biz=businesses.find(b=>b.id===a.businessId);return `
+            <div class="super-ad-item">
+              <div class="super-ad-thumb"><i class="fas fa-bullhorn" style="color:var(--text3)"></i></div>
+              <div class="super-ad-info"><h5>${a.title}</h5><p>${biz?biz.name:''} &bull; <span class="status-badge ${a.status==='active'?'active':a.status==='featured'?'featured':'hidden-st'}">${a.status}</span></p></div>
+            </div>`;
+          }).join('')||'<div class="empty-s"><p>Hakuna matangazo</p></div>'}
+        </div>
+      </div>
+    `;
+  }
+}
+function filterSuperUsers(q){
+  q=q.toLowerCase();
+  document.querySelectorAll('#superUsersTable tbody tr').forEach(r=>{
+    r.style.display = r.dataset.name.includes(q)?'':'none';
+  });
+}
+function superSuspendUser(id){
+  const users=DB.get('users')||[]; const u=users.find(x=>x.id===id);
+  pendingConfirm={type:'superSuspendUser',id};
+  document.getElementById('confirmIcon').className='confirm-icon warning';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-lock"></i>';
+  document.getElementById('confirmTitle').textContent=u&&u.status==='suspended'?'Fungua Akaunti':'Funga Akaunti';
+  document.getElementById('confirmMsg').textContent='Badilisha hali ya akaunti hii.';
+  document.getElementById('confirmTarget').textContent=u?u.name:'';
+  document.getElementById('confirmTarget').classList.remove('hidden');
+  document.getElementById('confirmOk').className='btn btn-w';
+  document.getElementById('confirmOk').textContent=u&&u.status==='suspended'?'Fungua':'Funga';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+function superDeleteUser(id){
+  const users=DB.get('users')||[]; const u=users.find(x=>x.id===id);
+  pendingConfirm={type:'superDeleteUser',id};
+  document.getElementById('confirmIcon').className='confirm-icon danger';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-user-slash"></i>';
+  document.getElementById('confirmTitle').textContent='Futa Mtumiaji';
+  document.getElementById('confirmMsg').textContent='Mtumiaji huyu atafutwa kabisa.';
+  document.getElementById('confirmTarget').textContent=u?u.name:'';
+  document.getElementById('confirmTarget').classList.remove('hidden');
+  document.getElementById('confirmOk').className='btn btn-d';
+  document.getElementById('confirmOk').textContent='Futa';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+function superSuspendBiz(id){
+  const bizs=DB.get('businesses')||[]; const b=bizs.find(x=>x.id===id);
+  pendingConfirm={type:'superSuspendBiz',id};
+  document.getElementById('confirmIcon').className='confirm-icon warning';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-building"></i>';
+  document.getElementById('confirmTitle').textContent=b&&b.status==='suspended'?'Fungua Biashara':'Funga Biashara';
+  document.getElementById('confirmMsg').textContent='Badilisha hali ya biashara hii.';
+  document.getElementById('confirmTarget').textContent=b?b.name:'';
+  document.getElementById('confirmTarget').classList.remove('hidden');
+  document.getElementById('confirmOk').className='btn btn-w';
+  document.getElementById('confirmOk').textContent=b&&b.status==='suspended'?'Fungua':'Funga';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+function superDeleteBiz(id){
+  const bizs=DB.get('businesses')||[]; const b=bizs.find(x=>x.id===id);
+  pendingConfirm={type:'superDeleteBiz',id};
+  document.getElementById('confirmIcon').className='confirm-icon danger';
+  document.getElementById('confirmIcon').innerHTML='<i class="fas fa-building"></i>';
+  document.getElementById('confirmTitle').textContent='Futa Biashara';
+  document.getElementById('confirmMsg').textContent='Biashara hii na data zake zote zitafutwa.';
+  document.getElementById('confirmTarget').textContent=b?b.name:'';
+  document.getElementById('confirmTarget').classList.remove('hidden');
+  document.getElementById('confirmOk').className='btn btn-d';
+  document.getElementById('confirmOk').textContent='Futa';
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+
+// ===== SESSION RESTORE =====
+function restoreSession(){
+  const session = DB.get('session');
+  if(!session) return;
+  const users = DB.get('users')||[];
+  const user = users.find(u=>u.id===session.userId);
+  if(!user || user.status==='suspended') return;
+  currentUser = user;
+  currentBiz = (DB.get('businesses')||[]).find(b=>b.id===user.businessId);
+  if(!currentBiz) return;
+  // Auto-enter with default role
+  currentRole = user.role;
+  showScreen('appScreen');
+  buildSidebar();
+  updateTopbar();
+  navTo('dashboard');
+}
+
+// ===== CLOSE DROPDOWNS ON OUTSIDE CLICK =====
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.u-chip')) closeUserDd();
+  if(!e.target.closest('.np')&&!e.target.closest('.tb-btn')) document.getElementById('notifPanel').classList.remove('show');
+});
+
+// ===== INIT =====
+seedData();
+restoreSession();
+if(!currentUser) renderPublicShowcase();
+</script>
+</body>
+</html>
 
 
 
