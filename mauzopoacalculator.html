@@ -712,34 +712,282 @@ tr:hover td{background:var(--bg3)}
 </div>
 
 <script>
-// ============================================================
-// FIREBASE CONFIGURATION - REPLACE WITH YOUR OWN VALUES
-// ============================================================
+/* ================================================================
+   FIREBASE CONFIGURATION & INITIALIZATION
+   ================================================================ */
+
 const firebaseConfig = {
-  apiKey: "REPLACE_WITH_YOUR_API_KEY",
-  authDomain: "REPLACE_WITH_YOUR_PROJECT.firebaseapp.com",
-  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
-  storageBucket: "REPLACE_WITH_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
-  appId: "REPLACE_WITH_YOUR_APP_ID"
+  apiKey: "AIzaSyBrtRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+  authDomain: "ncrs-aeb43.firebaseapp.com",
+  projectId: "ncrs-aeb43",
+  storageBucket: "ncrs-aeb43.firebasestorage.app",
+  messagingSenderId: "786434442929",
+  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+  measurementId: "G-ZYB71RY8J5"
 };
+
+/* ================================================================
+   FIREBASE GLOBALS
+   ================================================================ */
 
 let db = null;
 let auth = null;
 let firebaseReady = false;
 
+/* ================================================================
+   INITIALIZE FIREBASE
+   ================================================================ */
+
 try {
   if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
   }
-  db = firebase.firestore();
+
   auth = firebase.auth();
+  db = firebase.firestore();
+
   firebaseReady = true;
-} catch (err) {
-  console.error('Firebase initialization error:', err);
+
+  console.log("Firebase initialized successfully.");
+  console.log("Firestore:", !!db);
+  console.log("Authentication:", !!auth);
+
+} catch (error) {
   firebaseReady = false;
+  db = null;
+  auth = null;
+
+  console.error("Firebase initialization failed:", error);
+
+  if (typeof toast === "function") {
+    toast(
+      "Firebase imeshindwa kuanzishwa. Hakikisha Firebase SDK na Configuration ni sahihi.",
+      "e"
+    );
+  }
 }
 
+/* ================================================================
+   FIREBASE STATUS CHECK
+   ================================================================ */
+
+function isFirebaseReady() {
+  return (
+    firebaseReady === true &&
+    db !== null &&
+    auth !== null
+  );
+}
+
+/* ================================================================
+   REQUIRE FIREBASE
+   ================================================================ */
+
+function requireFirebase() {
+  if (!isFirebaseReady()) {
+    console.error("Firebase is not ready.");
+
+    if (typeof toast === "function") {
+      toast(
+        "Mfumo wa Firebase haujawa tayari. Tafadhali refresh ukurasa.",
+        "e"
+      );
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+/* ================================================================
+   FIRESTORE SERVER TIMESTAMP
+   ================================================================ */
+
+function serverTimestamp() {
+  if (!requireFirebase()) return null;
+
+  return firebase.firestore.FieldValue.serverTimestamp();
+}
+
+/* ================================================================
+   CURRENT USER
+   ================================================================ */
+
+function getCurrentUser() {
+  if (!auth) return null;
+  return auth.currentUser || null;
+}
+
+/* ================================================================
+   CURRENT USER UID
+   ================================================================ */
+
+function getCurrentUID() {
+  const user = getCurrentUser();
+  return user ? user.uid : null;
+}
+
+/* ================================================================
+   SAFE FIRESTORE WRITE
+   ================================================================ */
+
+async function saveToFirestore(collection, data, documentId) {
+  if (!requireFirebase()) {
+    throw new Error("Firebase haipo tayari.");
+  }
+
+  if (!collection || typeof collection !== "string") {
+    throw new Error("Firestore collection haijawekwa.");
+  }
+
+  if (!data || typeof data !== "object") {
+    throw new Error("Data ya kuhifadhi haipo au si sahihi.");
+  }
+
+  const payload = {
+    ...data,
+    updatedAt: serverTimestamp()
+  };
+
+  if (documentId) {
+    await db
+      .collection(collection)
+      .doc(String(documentId))
+      .set(payload, { merge: true });
+
+    return documentId;
+  }
+
+  payload.createdAt = serverTimestamp();
+
+  const ref = await db
+    .collection(collection)
+    .add(payload);
+
+  return ref.id;
+}
+
+/* ================================================================
+   SAFE FIRESTORE READ
+   ================================================================ */
+
+async function getFromFirestore(collection, documentId) {
+  if (!requireFirebase()) {
+    throw new Error("Firebase haipo tayari.");
+  }
+
+  if (documentId) {
+    const snap = await db
+      .collection(collection)
+      .doc(String(documentId))
+      .get();
+
+    if (!snap.exists) return null;
+
+    return {
+      id: snap.id,
+      ...snap.data()
+    };
+  }
+
+  const snapshot = await db
+    .collection(collection)
+    .get();
+
+  return snapshot.docs.map(function(doc) {
+    return {
+      id: doc.id,
+      ...doc.data()
+    };
+  });
+}
+
+/* ================================================================
+   SAFE FIRESTORE DELETE
+   ================================================================ */
+
+async function deleteFromFirestore(collection, documentId) {
+  if (!requireFirebase()) {
+    throw new Error("Firebase haipo tayari.");
+  }
+
+  if (!collection || !documentId) {
+    throw new Error("Collection au Document ID haipo.");
+  }
+
+  await db
+    .collection(collection)
+    .doc(String(documentId))
+    .delete();
+
+  return true;
+}
+
+/* ================================================================
+   FIREBASE AUTH STATE
+   ================================================================ */
+
+if (auth) {
+  auth.onAuthStateChanged(function(user) {
+
+    window.currentFirebaseUser = user || null;
+
+    if (user) {
+      console.log("Firebase user signed in:", user.uid);
+    } else {
+      console.log("No Firebase user signed in.");
+    }
+
+    /*
+      Kama mfumo wako una function ya ku-load dashboard
+      baada ya login, itaweza kuitumia hapa bila kuvunja app.
+    */
+    if (typeof window.handleFirebaseAuthState === "function") {
+      try {
+        window.handleFirebaseAuthState(user);
+      } catch (error) {
+        console.error(
+          "handleFirebaseAuthState error:",
+          error
+        );
+      }
+    }
+  });
+}
+
+/* ================================================================
+   GLOBAL FIREBASE ACCESS
+   ================================================================ */
+
+window.firebaseConfig = firebaseConfig;
+window.firebaseReady = firebaseReady;
+window.db = db;
+window.auth = auth;
+
+window.isFirebaseReady = isFirebaseReady;
+window.requireFirebase = requireFirebase;
+window.getCurrentUser = getCurrentUser;
+window.getCurrentUID = getCurrentUID;
+window.saveToFirestore = saveToFirestore;
+window.getFromFirestore = getFromFirestore;
+window.deleteFromFirestore = deleteFromFirestore;
+window.serverTimestamp = serverTimestamp;
+
+/* ================================================================
+   FIREBASE READY EVENT
+   ================================================================ */
+
+if (firebaseReady) {
+  window.dispatchEvent(
+    new CustomEvent("firebaseReady", {
+      detail: {
+        db: db,
+        auth: auth
+      }
+    })
+  );
+}
 // ============================================================
 // GLOBAL STATE
 // ============================================================
