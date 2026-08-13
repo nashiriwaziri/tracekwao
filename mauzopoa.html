@@ -1857,115 +1857,223 @@ function closeUserDD() { const dd = document.getElementById('userDD'); if (dd) d
 /* ============================================================
    DASHBOARD
    ============================================================ */
+/* ================================================================
+   DASHBOARD DATA
+   ================================================================ */
 async function loadDashboard() {
-  if (!currentBizId) return;
+  if (!currentBizId) {
+    console.warn("Dashboard: currentBizId haipo.");
+    return;
+  }
+
   try {
-    const [prodSnap, salesSnap, debtSnap] = await Promise.all([
-      db.collection('products').where('businessId', '==', currentBizId).get(),
-      db.collection('sales').where('businessId', '==', currentBizId).orderBy('createdAt', 'desc').limit(50).get(),
-      db.collection('debts').where('businessId', '==', currentBizId).get()
-    ]);
-    allProducts = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    allSales = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    allDebts = debtSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    console.log("Dashboard loading...");
+    console.log("Business ID:", currentBizId);
 
-    const totalRevenue = allSales.reduce((s, x) => s + (Number(x.total) || 0), 0);
+    /* ============================================================
+       LOAD DATA FROM FIRESTORE
+       ============================================================ */
+    const prodSnap = await db
+      .collection('products')
+      .where('businessId', '==', currentBizId)
+      .get();
+
+    console.log("Products loaded:", prodSnap.size);
+
+    const salesSnap = await db
+      .collection('sales')
+      .where('businessId', '==', currentBizId)
+      .limit(100)
+      .get();
+
+    console.log("Sales loaded:", salesSnap.size);
+
+    const debtSnap = await db
+      .collection('debts')
+      .where('businessId', '==', currentBizId)
+      .get();
+
+    console.log("Debts loaded:", debtSnap.size);
+
+    /* ============================================================
+       CONVERT FIRESTORE DATA
+       ============================================================ */
+    allProducts = prodSnap.docs.map(function(d) {
+      return {
+        id: d.id,
+        ...d.data()
+      };
+    });
+
+    allSales = salesSnap.docs.map(function(d) {
+      return {
+        id: d.id,
+        ...d.data()
+      };
+    });
+
+    allDebts = debtSnap.docs.map(function(d) {
+      return {
+        id: d.id,
+        ...d.data()
+      };
+    });
+
+    /* ============================================================
+       SORT SALES BY DATE - NEWEST FIRST
+       ============================================================ */
+    allSales.sort(function(a, b) {
+      function getTime(value) {
+        if (!value) return 0;
+
+        if (value.toDate) {
+          return value.toDate().getTime();
+        }
+
+        if (value.seconds) {
+          return value.seconds * 1000;
+        }
+
+        var date = new Date(value);
+        return isNaN(date.getTime()) ? 0 : date.getTime();
+      }
+
+      return getTime(b.createdAt) - getTime(a.createdAt);
+    });
+
+    /* ============================================================
+       CALCULATE DASHBOARD METRICS
+       ============================================================ */
+    const totalRevenue = allSales.reduce(function(sum, sale) {
+      return sum + (Number(sale.total) || 0);
+    }, 0);
+
     const totalProducts = allProducts.length;
-    const totalDebts = allDebts.filter(d => d.status !== 'paid').reduce((s, d) => s + (Number(d.amount) || 0), 0);
-    const unpaidDebts = allDebts.filter(d => d.status !== 'paid').length;
 
-   document.getElementById('dashMetrics').innerHTML = `
-  <div class="mc pu">
-    <div class="mc-icon"><i class="fas fa-receipt"></i></div>
-    <h3>${allSales.length}</h3>
-    <p>Mauzo Yote</p>
-  </div>
+    const unpaidDebtsList = allDebts.filter(function(debt) {
+      return debt.status !== 'paid';
+    });
 
-  <div class="mc g">
-    <div class="mc-icon"><i class="fas fa-coins"></i></div>
-    <h3>${formatCurrency(totalRevenue)}</h3>
-    <p>Mapato</p>
-  </div>
+    const totalDebts = unpaidDebtsList.reduce(function(sum, debt) {
+      return sum + (Number(debt.amount) || 0);
+    }, 0);
 
-  <div class="mc a">
-    <div class="mc-icon"><i class="fas fa-boxes-stacked"></i></div>
-    <h3>${totalProducts}</h3>
-    <p>Bidhaa</p>
-  </div>
+    const unpaidDebts = unpaidDebtsList.length;
 
-  <div class="mc r">
-    <div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div>
-    <h3>${formatCurrency(totalDebts)}</h3>
-    <p>Madeni (${unpaidDebts})</p>
-  </div>
-`;
-    // Recent sales table
+    /* ============================================================
+       DASHBOARD METRICS
+       ============================================================ */
+    var metrics = document.getElementById('dashMetrics');
+
+    if (metrics) {
+      metrics.innerHTML = `
+        <div class="mc pu">
+          <div class="mc-icon">
+            <i class="fas fa-receipt"></i>
+          </div>
+          <h3>${allSales.length}</h3>
+          <p>Mauzo Yote</p>
+        </div>
+
+        <div class="mc g">
+          <div class="mc-icon">
+            <i class="fas fa-coins"></i>
+          </div>
+          <h3>${formatCurrency(totalRevenue)}</h3>
+          <p>Mapato</p>
+        </div>
+
+        <div class="mc a">
+          <div class="mc-icon">
+            <i class="fas fa-boxes-stacked"></i>
+          </div>
+          <h3>${totalProducts}</h3>
+          <p>Bidhaa</p>
+        </div>
+
+        <div class="mc r">
+          <div class="mc-icon">
+            <i class="fas fa-hand-holding-dollar"></i>
+          </div>
+          <h3>${formatCurrency(totalDebts)}</h3>
+          <p>Madeni (${unpaidDebts})</p>
+        </div>
+      `;
+    }
+
+    /* ============================================================
+       RECENT SALES
+       ============================================================ */
     const recentBody = document.getElementById('dashRecentSales');
-    if (allSales.length === 0) {
-      recentBody.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo bado</p></td></tr>';
-    } else {
-      recentBody.innerHTML = allSales.slice(0, 10).map(s => `<tr><td>${s.id.substr(0,8)}...</td><td>${s.productName || '-'}</td><td>${s.quantity || 0}</td><td style="color:var(--success);font-weight:600">${formatCurrency(s.total)}</td><td>${formatDateTime(s.createdAt)}</td></tr>`).join('');
+
+    if (recentBody) {
+      if (allSales.length === 0) {
+
+        recentBody.innerHTML = `
+          <tr>
+            <td colspan="5" class="empty-s">
+              <i class="fas fa-receipt"></i>
+              <p>Hakuna mauzo bado</p>
+            </td>
+          </tr>
+        `;
+
+      } else {
+
+        recentBody.innerHTML = allSales
+          .slice(0, 10)
+          .map(function(s) {
+
+            var saleId = String(s.id || '');
+
+            return `
+              <tr>
+                <td>${saleId.substring(0, 8)}...</td>
+                <td>${s.productName || '-'}</td>
+                <td>${s.quantity || 0}</td>
+                <td style="color:var(--success);font-weight:600">
+                  ${formatCurrency(s.total)}
+                </td>
+                <td>${formatDateTime(s.createdAt)}</td>
+              </tr>
+            `;
+
+          })
+          .join('');
+      }
     }
 
-    // Charts
+    /* ============================================================
+       RENDER CHARTS
+       ============================================================ */
     renderDashCharts();
+
+    console.log("Dashboard loaded successfully.");
+
   } catch (err) {
-    console.error('Dashboard error:', err);
-    document.getElementById('dashMetrics').innerHTML = '<div class="mc"><div class="mc-icon"><i class="fas fa-exclamation-triangle"></i></div><h3>Hitilafu</h3><p>Imeshindwa kupakua data</p></div>';
-  }
-}
 
-function renderDashCharts() {
-  Object.values(dashChartInstances).forEach(c => { if (c) c.destroy(); });
-  dashChartInstances = {};
+    console.error("=================================");
+    console.error("DASHBOARD ERROR");
+    console.error("Message:", err.message);
+    console.error("Code:", err.code);
+    console.error("Full error:", err);
+    console.error("=================================");
 
-  const chartGrid = document.getElementById('dashCharts');
-  chartGrid.innerHTML = `
-    <div class="ch-c"><h4><i class="fas fa-chart-bar"></i>Mauzo ya Siku 7</h4><div class="ch-box"><canvas id="dashSalesChart"></canvas></div></div>
-    <div class="ch-c"><h4><i class="fas fa-chart-pie"></i>Bidhaa Zinazouzwa Zaidi</h4><div class="ch-box"><canvas id="dashProdChart"></canvas></div></div>`;
+    var metrics = document.getElementById('dashMetrics');
 
-  // Sales chart - last 7 days
-  const ctx1 = document.getElementById('dashSalesChart');
-  if (ctx1) {
-    const labels = [];
-    const data = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      labels.push(d.toLocaleDateString('sw-TZ', { weekday: 'short' }));
-      const dayStr = d.toISOString().split('T')[0];
-      const dayTotal = allSales.filter(s => {
-        if (!s.createdAt) return false;
-        const sd = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
-        return sd.toISOString().split('T')[0] === dayStr;
-      }).reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-      data.push(dayTotal);
+    if (metrics) {
+      metrics.innerHTML = `
+        <div class="mc">
+          <div class="mc-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+          <h3>Hitilafu</h3>
+          <p>Imeshindwa kupakua data</p>
+        </div>
+      `;
     }
-    dashChartInstances.sales = new Chart(ctx1, {
-      type: 'bar',
-      data: { labels, datasets: [{ label: 'Mauzo', data, backgroundColor: 'rgba(108,92,231,0.6)', borderColor: '#6c5ce7', borderWidth: 1, borderRadius: 6 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } } } }
-    });
-  }
-
-  // Top products chart
-  const ctx2 = document.getElementById('dashProdChart');
-  if (ctx2) {
-    const prodSales = {};
-    allSales.forEach(s => {
-      const name = s.productName || 'Isiyojulikana';
-      prodSales[name] = (prodSales[name] || 0) + (Number(s.quantity) || 0);
-    });
-    const sorted = Object.entries(prodSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const colors = ['#6c5ce7', '#00b894', '#f39c12', '#e74c3c', '#0984e3'];
-    dashChartInstances.products = new Chart(ctx2, {
-      type: 'doughnut',
-      data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: colors, borderWidth: 0 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9a9ab0', padding: 12, font: { size: 11 } } } } }
-    });
   }
 }
-
 /* ============================================================
    PRODUCTS
    ============================================================ */
