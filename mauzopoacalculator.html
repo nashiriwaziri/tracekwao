@@ -1650,12 +1650,450 @@ function renderSuperTable() {
   filtered.forEach(function(b){var det=superBizDetails[b.id]||{};var sc=b.status==="active"?"active":(b.status==="suspended"?"suspended":"pending"),st=b.status==="active"?"Nyenye-maana":(b.status==="suspended"?"Imesitishwa":"Inasubiri");html+='<tr><td><strong>'+(b.name||"-")+'</strong></td><td>'+(b.email||"-")+'</td><td>'+(b.phone||"-")+'</td><td>'+(det.products||0)+'</td><td>'+(det.sales||0)+'</td><td><span class="status-badge '+sc+'">'+st+'</span></td><td>'+formatDate(b.createdAt)+'</td><td><button class="btn btn-i btn-xs" onclick="superViewBiz(\''+b.id+'\')"><i class="fas fa-eye"></i></button> '+(b.status==="active"?'<button class="btn btn-w btn-xs" onclick="superSuspendBiz(\''+b.id+'\',\''+(b.name||"").replace(/'/g,"\\'")+'\')"><i class="fas fa-ban"></i></button>':'<button class="btn btn-s btn-xs" onclick="superActivateBiz(\''+b.id+'\')"><i class="fas fa-check"></i></button>')+'</td></tr>';});
   body.innerHTML=html;
 }
-function renderSuperContent() { document.getElementById("superContentGrid").innerHTML='<div class="super-card super-info-card"><h3 style="margin-bottom:8px"><i class="fas fa-info-circle" style="color:var(--info);margin-right:8px"></i>Kuhusu Msimamizi Mkuu</h3><p>Msimamizi Mkuu ana mamlaka ya kusimamia biashara zote kwenye mfumo. Anaweza kuunda akaunti za muuzaji, kusimamisha biashara, na kuona takwimu zote.</p></div><div class="super-card"><h3 style="margin-bottom:12px"><i class="fas fa-bullhorn" style="color:var(--warning);margin-right:8px"></i>Tangazo Za Hivi Karibuni</h3><div id="superRecentAds"><div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna tangazo</p></div></div></div>'; }
-async function superViewBiz(bizId) { var ad=document.getElementById("superRecentAds"); try{var s=await db.collection("ads").where("businessId","==",bizId).limit(5).get();var h="";s.forEach(function(doc){var a=doc.data();var t=a.media?'<img class="super-ad-thumb" src="'+a.media+'" alt=""/>':'<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center"><i class="fas fa-image" style="color:var(--text3)"></i></div>';h+='<div class="super-ad-item">'+t+'<div class="super-ad-info"><h5>'+(a.title||"-")+'</h5><p>'+(a.description||"").substring(0,60)+'</p></div></div>';});ad.innerHTML=h||'<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna tangazo</p></div>';}catch(err){ad.innerHTML='<div class="empty-s"><p>Hitilafu</p></div>';} }
-function superSuspendBiz(bizId,name){showConfirm({title:"Sitisha Biashara",message:"Una uhakika unataka kusitisha biashara hii?",target:name,type:"warning",confirmText:"Sitisha",onConfirm:function(){db.collection("businesses").doc(bizId).update({status:"suspended"}).then(function(){toast("Biashara imesitishwa","w");loadSuperData();}).catch(function(err){toast("Hitilafu: "+err.message,"e");});}});}
-function superActivateBiz(bizId){db.collection("businesses").doc(bizId).update({status:"active"}).then(function(){toast("Biashara imeanzishwa","s");loadSuperData();}).catch(function(err){toast("Hitilafu: "+err.message,"e");});}
-function goToSuperFromApp(){if(!isSuperAdmin)return;destroyAllCharts();cart=[];showScreen("superScreen");document.getElementById("superLogin").classList.add("hidden");document.getElementById("superPanel").classList.remove("hidden");loadSuperData();}
-function switchBusiness(bizId){if(!bizId||!currentUser)return;currentBizId=bizId;db.collection("users").doc(currentUser.uid).update({businessId:bizId}).then(function(){currentUserProfile.businessId=bizId;db.collection("businesses").doc(bizId).get().then(function(doc){if(doc.exists){currentBiz=doc.data();updateTopbar();destroyAllCharts();cart=[];loadAllData().then(function(){navigateTo("dashboard");});}});}).catch(function(err){toast("Hitilafu: "+err.message,"e");});}
+// ===================================================================
+// SUPER ADMIN CONTENT
+// ===================================================================
+
+function renderSuperContent() {
+  var container = document.getElementById("superContentGrid");
+
+  if (!container) {
+    console.error("superContentGrid haipo.");
+    return;
+  }
+
+  container.innerHTML =
+    '<div class="super-card super-info-card">' +
+      '<h3 style="margin-bottom:8px">' +
+        '<i class="fas fa-info-circle" style="color:var(--info);margin-right:8px"></i>' +
+        'Kuhusu Msimamizi Mkuu' +
+      '</h3>' +
+      '<p>Msimamizi Mkuu ana mamlaka ya kusimamia biashara zote kwenye mfumo. Anaweza kuunda akaunti za muuzaji, kusimamisha biashara, na kuona takwimu zote.</p>' +
+    '</div>' +
+
+    '<div class="super-card">' +
+      '<h3 style="margin-bottom:12px">' +
+        '<i class="fas fa-bullhorn" style="color:var(--warning);margin-right:8px"></i>' +
+        'Tangazo Za Hivi Karibuni' +
+      '</h3>' +
+      '<div id="superRecentAds">' +
+        '<div class="empty-s">' +
+          '<i class="fas fa-bullhorn"></i>' +
+          '<p>Hakuna tangazo</p>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+
+// ===================================================================
+// VIEW BUSINESS ADVERTISEMENTS
+// ===================================================================
+
+async function superViewBiz(bizId) {
+
+  var ad = document.getElementById("superRecentAds");
+
+  if (!ad) {
+    console.error("superRecentAds haipo.");
+    return;
+  }
+
+  if (!bizId) {
+    ad.innerHTML =
+      '<div class="empty-s"><p>Business ID haipo.</p></div>';
+    return;
+  }
+
+  if (!db) {
+    ad.innerHTML =
+      '<div class="empty-s"><p>Firestore haipo tayari.</p></div>';
+    return;
+  }
+
+  ad.innerHTML =
+    '<div class="empty-s">' +
+      '<i class="fas fa-spinner fa-spin"></i>' +
+      '<p>Inapakia matangazo...</p>' +
+    '</div>';
+
+  try {
+
+    var snapshot = await db
+      .collection("ads")
+      .where("businessId", "==", bizId)
+      .limit(5)
+      .get();
+
+    var html = "";
+
+    snapshot.forEach(function(doc) {
+
+      var a = doc.data() || {};
+
+      var media = a.media || a.image || "";
+
+      var mediaHTML = media
+        ? '<img class="super-ad-thumb" src="' +
+            String(media).replace(/"/g, '&quot;') +
+            '" alt="Tangazo"/>'
+        : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center">' +
+            '<i class="fas fa-image" style="color:var(--text3)"></i>' +
+          '</div>';
+
+      html +=
+        '<div class="super-ad-item">' +
+          mediaHTML +
+          '<div class="super-ad-info">' +
+            '<h5>' + (a.title || "-") + '</h5>' +
+            '<p>' + String(a.description || "").substring(0, 60) + '</p>' +
+          '</div>' +
+        '</div>';
+    });
+
+    ad.innerHTML =
+      html ||
+      '<div class="empty-s">' +
+        '<i class="fas fa-bullhorn"></i>' +
+        '<p>Hakuna tangazo</p>' +
+      '</div>';
+
+  } catch (err) {
+
+    console.error("superViewBiz error:", err);
+
+    ad.innerHTML =
+      '<div class="empty-s">' +
+        '<i class="fas fa-triangle-exclamation"></i>' +
+        '<p>Imeshindwa kupakia matangazo.</p>' +
+      '</div>';
+  }
+}
+
+
+// ===================================================================
+// SUSPEND BUSINESS
+// ===================================================================
+
+async function superSuspendBiz(bizId, name) {
+
+  if (!bizId) {
+    toast("Business ID haipo.", "e");
+    return;
+  }
+
+  if (!db) {
+    toast("Firestore haipo tayari.", "e");
+    return;
+  }
+
+  /*
+   * Tumia confirm ya kawaida kama showConfirm yako
+   * haitekelezi onConfirm vizuri.
+   */
+  var confirmed = window.confirm(
+    "Sitisha Biashara\n\n" +
+    "Una uhakika unataka kusitisha biashara hii?\n\n" +
+    "Biashara: " + (name || "Haijulikani")
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+
+    toast("Inasitisha biashara...", "w");
+
+    var bizRef = db
+      .collection("businesses")
+      .doc(String(bizId));
+
+    var bizSnap = await bizRef.get();
+
+    if (!bizSnap.exists) {
+      toast("Biashara haikupatikana.", "e");
+      return;
+    }
+
+    /*
+     * Hapa ndipo status halisi inawekwa Firestore.
+     */
+    await bizRef.update({
+      status: "suspended",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    /*
+     * Verify kwamba Firestore imepokea status.
+     */
+    var verifySnap = await bizRef.get();
+    var verifyData = verifySnap.data() || {};
+
+    if (verifyData.status !== "suspended") {
+      throw new Error(
+        "Firestore haikuthibitisha status ya suspended."
+      );
+    }
+
+    toast(
+      "Biashara " +
+      (name ? '"' + name + '"' : "") +
+      " imesitishwa.",
+      "s"
+    );
+
+    /*
+     * Refresh Super Admin data baada ya Firestore
+     * kuthibitisha update.
+     */
+    if (typeof loadSuperData === "function") {
+      await loadSuperData();
+    }
+
+  } catch (err) {
+
+    console.error("superSuspendBiz error:", err);
+
+    toast(
+      "Imeshindikana kusitisha biashara: " +
+      (err.message || "Hitilafu isiyojulikana"),
+      "e"
+    );
+  }
+}
+
+
+// ===================================================================
+// ACTIVATE BUSINESS
+// ===================================================================
+
+async function superActivateBiz(bizId, name) {
+
+  if (!bizId) {
+    toast("Business ID haipo.", "e");
+    return;
+  }
+
+  if (!db) {
+    toast("Firestore haipo tayari.", "e");
+    return;
+  }
+
+  var confirmed = window.confirm(
+    "Anzisha Biashara\n\n" +
+    "Unataka kuanzisha tena biashara hii?\n\n" +
+    "Biashara: " + (name || "Haijulikani")
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+
+    toast("Inaanzisha biashara...", "w");
+
+    var bizRef = db
+      .collection("businesses")
+      .doc(String(bizId));
+
+    var bizSnap = await bizRef.get();
+
+    if (!bizSnap.exists) {
+      toast("Biashara haikupatikana.", "e");
+      return;
+    }
+
+    await bizRef.update({
+      status: "active",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    var verifySnap = await bizRef.get();
+    var verifyData = verifySnap.data() || {};
+
+    if (verifyData.status !== "active") {
+      throw new Error(
+        "Firestore haikuthibitisha status ya active."
+      );
+    }
+
+    toast(
+      "Biashara " +
+      (name ? '"' + name + '"' : "") +
+      " imeanzishwa.",
+      "s"
+    );
+
+    if (typeof loadSuperData === "function") {
+      await loadSuperData();
+    }
+
+  } catch (err) {
+
+    console.error("superActivateBiz error:", err);
+
+    toast(
+      "Imeshindikana kuanzisha biashara: " +
+      (err.message || "Hitilafu isiyojulikana"),
+      "e"
+    );
+  }
+}
+
+
+// ===================================================================
+// GO TO SUPER ADMIN
+// ===================================================================
+
+function goToSuperFromApp() {
+
+  if (!isSuperAdmin) {
+    toast("Huna ruhusa ya kuingia Super Admin.", "e");
+    return;
+  }
+
+  try {
+
+    if (typeof destroyAllCharts === "function") {
+      destroyAllCharts();
+    }
+
+    if (typeof cart !== "undefined") {
+      cart = [];
+    }
+
+    showScreen("superScreen");
+
+    var login = document.getElementById("superLogin");
+    var panel = document.getElementById("superPanel");
+
+    if (login) {
+      login.classList.add("hidden");
+    }
+
+    if (panel) {
+      panel.classList.remove("hidden");
+    }
+
+    if (typeof renderSuperContent === "function") {
+      renderSuperContent();
+    }
+
+    if (typeof loadSuperData === "function") {
+      loadSuperData();
+    }
+
+  } catch (err) {
+
+    console.error("goToSuperFromApp error:", err);
+
+    toast(
+      "Imeshindikana kufungua Super Admin: " +
+      err.message,
+      "e"
+    );
+  }
+}
+
+
+// ===================================================================
+// SWITCH BUSINESS
+// ===================================================================
+
+async function switchBusiness(bizId) {
+
+  if (!bizId) {
+    toast("Chagua biashara kwanza.", "e");
+    return;
+  }
+
+  if (!currentUser) {
+    toast("Tafadhali ingia kwanza.", "e");
+    return;
+  }
+
+  if (!db) {
+    toast("Firestore haipo tayari.", "e");
+    return;
+  }
+
+  try {
+
+    var bizSnap = await db
+      .collection("businesses")
+      .doc(String(bizId))
+      .get();
+
+    if (!bizSnap.exists) {
+      toast("Biashara haikupatikana.", "e");
+      return;
+    }
+
+    var bizData = bizSnap.data() || {};
+
+    if (bizData.status === "suspended") {
+      toast(
+        "Biashara hii imesitishwa na Msimamizi Mkuu.",
+        "e"
+      );
+      return;
+    }
+
+    await db
+      .collection("users")
+      .doc(currentUser.uid)
+      .update({
+        businessId: bizId,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+    currentBizId = bizId;
+
+    if (currentUserProfile) {
+      currentUserProfile.businessId = bizId;
+    }
+
+    currentBiz = bizData;
+
+    if (typeof updateTopbar === "function") {
+      updateTopbar();
+    }
+
+    if (typeof destroyAllCharts === "function") {
+      destroyAllCharts();
+    }
+
+    if (typeof cart !== "undefined") {
+      cart = [];
+    }
+
+    if (typeof loadAllData === "function") {
+      await loadAllData();
+    }
+
+    if (typeof navigateTo === "function") {
+      navigateTo("dashboard");
+    }
+
+    toast(
+      "Umehamia kwenye biashara: " +
+      (bizData.name || bizData.businessName || "Biashara"),
+      "s"
+    );
+
+  } catch (err) {
+
+    console.error("switchBusiness error:", err);
+
+    toast(
+      "Hitilafu: " +
+      (err.message || "Imeshindikana kubadili biashara."),
+      "e"
+    );
+  }
+}
 
 // ===================================================================
 // ===== DOWNLOAD/EXPORT FUNCTIONS - PDF, WORD, EXCEL ================
