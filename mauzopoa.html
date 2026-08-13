@@ -1648,4 +1648,282 @@ async function saveDebt() {
   var client = safeGetEl('debtClient').value.trim();
   var amount = parseFloat(safeGetEl('debtAmount').value);
   if (!client) { showToast('Jina la mteja linahitajika', 'e'); return; }
-  if (isNaN(amount) || amount <= 0) { showToast('Kiasi
+  if (isNaN(amount) || amount <= 0) { showToast('Kiasi sahihi kinahitajika', 'e'); return; }
+try {
+await db.collection('debts').add({
+businessId: APP.bizId,
+client: client,
+product: safeGetEl('debtProduct').value.trim(),
+quantity: parseInt(safeGetEl('debtQty').value) || 0,
+amount: amount,
+status: 'unpaid',
+createdBy: APP.user.name || '',
+createdAt: SERVER_TS()
+});
+closeModal('debtModal');
+['debtClient', 'debtProduct', 'debtQty', 'debtAmount'].forEach(function(id) { safeGetEl(id).value = ''; });
+showToast('Deni limeongezwa', 's');
+loadDebts();
+} catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function payDebt(id) {
+showConfirm({
+icon: 'check-circle', iconClass: 'warning',
+title: 'Lipa Deni',
+message: 'Je, unahakika deni hili limelipwa?',
+confirmText: 'Ndiyo, Limelipwa',
+confirmClass: 'btn-s',
+onConfirm: function() {
+db.collection('debts').doc(id).update({ status: 'paid', paidAt: SERVER_TS() }).then(function() {
+var d = APP.debts.find(function(x) { return x.id === id; });
+if (d) d.status = 'paid';
+renderDebts();
+loadDebts();
+showToast('Deni limeandikwa limeilipwa', 's');
+}).catch(function(err) { showToast('Hitilafu: ' + err.message, 'e'); });
+}
+});
+}
+
+/* ================================================================
+EMPLOYEES
+================================================================ */
+function loadEmployees() {
+if (!APP.bizId) return;
+safeGetEl('empGrid').innerHTML = '<div class="empty-s" style="grid-column:1/-1"><div class="spinner"></div></div>';
+db.collection('employees').where('businessId', '==', APP.bizId).get().then(function(snap) {
+APP.employees = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+renderEmployees();
+}).catch(function(err) {
+console.error('Employees error:', err);
+safeGetEl('empGrid').innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-exclamation-triangle"></i><p>Hitilafu: ' + err.message + '</p><button class="retry-btn" onclick="loadEmployees()">Jaribu Tena</button></div>';
+});
+}
+
+function renderEmployees() {
+var grid = safeGetEl('empGrid');
+if (APP.employees.length === 0) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-users-gear"></i><p>Hakuna wafanyakazi</p></div>'; return; }
+var roleLabels = { manager: 'Meneja', seller: 'Muuzaji', cashier: 'Mhasibu', stockkeeper: 'Mhifadhi' };
+var roleColors = { manager: '#f39c12', seller: '#a29bfe', cashier: '#00b894', stockkeeper: '#0984e3' };
+grid.innerHTML = APP.employees.map(function(e) {
+return '<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:' + (roleColors[e.role] || '#6c5ce7') + '">' + (e.name || 'E').charAt(0).toUpperCase() + '</div><div><h4>' + (e.name || '-') + '</h4><p>' + (e.email || e.phone || '-') + '</p></div></div><div class="emp-card-body"><span class="emp-tag role">' + (roleLabels[e.role] || e.role) + '</span><span class="emp-tag status">Hai</span></div><div class="emp-card-foot"><button class="btn btn-xs btn-ghost" onclick="editEmployee(\'' + e.id + '\')"><i class="fas fa-edit"></i> Hariri</button><button class="btn btn-xs btn-d" onclick="confirmDeleteEmployee(\'' + e.id + '\')"><i class="fas fa-trash"></i> Futa</button></div></div>';
+}).join('');
+}
+
+function openEmployeeModal(editData) {
+safeGetEl('empEditId').value = editData ? editData.id : '';
+safeGetEl('empName').value = editData ? (editData.name || '') : '';
+safeGetEl('empEmail').value = editData ? (editData.email || '') : '';
+safeGetEl('empPhone').value = editData ? (editData.phone || '') : '';
+safeGetEl('empRole').value = editData ? (editData.role || 'seller') : 'seller';
+safeGetEl('empModalTitle').textContent = editData ? 'Hariri Mfanyakazi' : 'Ongeza Mfanyakazi';
+openModal('employeeModal');
+}
+
+function editEmployee(id) { var e = APP.employees.find(function(x) { return x.id === id; }); if (e) openEmployeeModal(e); }
+
+async function saveEmployee() {
+var name = safeGetEl('empName').value.trim();
+if (!name) { showToast('Jina linahitajika', 'e'); return; }
+try {
+var editId = safeGetEl('empEditId').value;
+var data = { name: name, email: safeGetEl('empEmail').value.trim(), phone: safeGetEl('empPhone').value.trim(), role: safeGetEl('empRole').value, businessId: APP.bizId, updatedAt: SERVER_TS() };
+if (editId) { await db.collection('employees').doc(editId).update(data); showToast('Mfanyakazi amehaririwa', 's'); }
+else { data.createdAt = SERVER_TS(); data.status = 'active'; await db.collection('employees').add(data); showToast('Mfanyakazi ameongezwa', 's'); }
+closeModal('employeeModal'); loadEmployees();
+} catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function confirmDeleteEmployee(id) {
+var e = APP.employees.find(function(x) { return x.id === id; });
+showConfirm({ icon: 'user-minus', iconClass: 'danger', title: 'Futa Mfanyakazi', message: 'Je, unahakika unataka kufuta mfanyakazi huu?', target: e ? e.name : '', onConfirm: function() { db.collection('employees').doc(id).delete().then(function() { APP.employees = APP.employees.filter(function(x) { return x.id !== id; }); renderEmployees(); showToast('Mfanyakazi amefutwa', 's'); }).catch(function(err) { showToast('Hitilafu: ' + err.message, 'e'); }); } });
+}
+
+/* ================================================================
+USER ADVERTS
+================================================================ */
+function loadUserAdverts() {
+if (!APP.bizId) return;
+safeGetEl('userAdvertGrid').innerHTML = '<div class="empty-s" style="grid-column:1/-1"><div class="spinner"></div></div>';
+db.collection('adverts').where('businessId', '==', APP.bizId).orderBy('createdAt', 'desc').get().then(function(snap) {
+APP.userAdverts = snap.docs.map(function(d) { return { id: d.id, ...d.data() }; });
+renderUserAdverts();
+}).catch(function(err) { console.error('User adverts error:', err); });
+}
+
+function renderUserAdverts() {
+var grid = safeGetEl('userAdvertGrid');
+if (APP.userAdverts.length === 0) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-bullhorn"></i><p>Hakuna matangazo. Ongeza tangazo lako la kwanza!</p></div>'; return; }
+grid.innerHTML = APP.userAdverts.map(function(a) {
+return '<div class="emp-card">' + (a.imageUrl ? '<img src="' + a.imageUrl + '" style="width:100%;height:140px;object-fit:cover;border-radius:10px 10px 0 0" onerror="this.style.display=\'none\'"/>' : '') + '<div style="padding:14px"><h4 style="font-size:15px;margin-bottom:6px">' + (a.title || '-') + '</h4><p style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">' + (a.description || '') + '</p><div style="display:flex;gap:6px;margin-bottom:10px"><span class="status-badge ' + (a.status === 'active' ? 'active' : 'inactive') + '">' + (a.status === 'active' ? 'Hai' : 'Hali') + '</span>' + (a.featured ? '<span class="status-badge featured"><i class="fas fa-star"></i> Maalum</span>' : '') + '</div><div style="display:flex;gap:6px"><button class="btn btn-xs btn-ghost" onclick="editUserAdvert(\'' + a.id + '\')"><i class="fas fa-edit"></i> Hariri</button><button class="btn btn-xs btn-d" onclick="confirmDeleteUserAdvert(\'' + a.id + '\')"><i class="fas fa-trash"></i> Futa</button></div></div></div>';
+}).join('');
+}
+
+function openUserAdvertModal(editData) {
+safeGetEl('uaEditId').value = editData ? editData.id : '';
+safeGetEl('uaTitle').value = editData ? (editData.title || '') : '';
+safeGetEl('uaDesc').value = editData ? (editData.description || '') : '';
+safeGetEl('uaLink').value = editData ? (editData.link || '') : '';
+APP.uaImageURL = editData ? (editData.imageUrl || '') : '';
+APP.uaImageFile = null;
+var preview = safeGetEl('uaImagePreview');
+if (APP.uaImageURL) { preview.src = APP.uaImageURL; preview.classList.remove('hidden'); } else { preview.classList.add('hidden'); }
+safeGetEl('userAdvertModalTitle').textContent = editData ? 'Hariri Tangazo' : 'Ongeza Tangazo';
+openModal('userAdvertModal');
+}
+
+function editUserAdvert(id) { var a = APP.userAdverts.find(function(x) { return x.id === id; }); if (a) openUserAdvertModal(a); }
+
+function handleUAImage(e) {
+var file = e.target.files[0]; if (!file) return;
+if (file.size > 5 * 1024 * 1024) { showToast('Picha lazima iwe chini ya 5MB', 'e'); return; }
+APP.uaImageFile = file;
+var reader = new FileReader();
+reader.onload = function(ev) { safeGetEl('uaImagePreview').src = ev.target.result; safeGetEl('uaImagePreview').classList.remove('hidden'); };
+reader.readAsDataURL(file);
+}
+
+async function saveUserAdvert() {
+var title = safeGetEl('uaTitle').value.trim();
+if (!title) { showToast('Kichwa kinahitajika', 'e'); return; }
+try {
+var imageUrl = APP.uaImageURL;
+if (APP.uaImageFile) { var path = 'adverts/' + APP.bizId + '/' + Date.now() + '_' + APP.uaImageFile.name; var ref = storage.ref().child(path); await ref.put(APP.uaImageFile); imageUrl = await ref.getDownloadURL(); }
+var editId = safeGetEl('uaEditId').value;
+var data = { title: title, description: safeGetEl('uaDesc').value.trim(), link: safeGetEl('uaLink').value.trim(), imageUrl: imageUrl, status: 'active', featured: false, businessId: APP.bizId, createdBy: APP.user.uid, advertiserName: APP.user.businessName || '', updatedAt: SERVER_TS() };
+if (editId) { await db.collection('adverts').doc(editId).update(data); showToast('Tangazo limehaririwa', 's'); }
+else { data.createdAt = SERVER_TS(); await db.collection('adverts').add(data); showToast('Tangazo limeongezwa', 's'); }
+closeModal('userAdvertModal'); APP.uaImageFile = null; loadUserAdverts();
+} catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function confirmDeleteUserAdvert(id) {
+var a = APP.userAdverts.find(function(x) { return x.id === id; });
+showConfirm({ icon: 'trash-alt', iconClass: 'danger', title: 'Futa Tangazo', message: 'Je, unahakika unataka kufuta tangazo hili?', target: a ? a.title : '', onConfirm: function() { db.collection('adverts').doc(id).delete().then(function() { APP.userAdverts = APP.userAdverts.filter(function(x) { return x.id !== id; }); renderUserAdverts(); showToast('Tangazo limefutwa', 's'); }).catch(function(err) { showToast('Hitilafu: ' + err.message, 'e'); }); } });
+}
+
+/* ================================================================
+REPORTS
+================================================================ */
+function loadReports() {
+Object.keys(APP.charts).forEach(destroyChart);
+var ctx1 = document.getElementById('reportSalesChart');
+if (ctx1) {
+var months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'];
+var monthlyData = new Array(12).fill(0);
+APP.sales.forEach(function(s) {
+if (!s.createdAt) return;
+var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+monthlyData[d.getMonth()] += Number(s.total) || 0;
+});
+APP.charts.reportMonthly = new Chart(ctx1, { type: 'bar', data: { labels: months, datasets: [{ label: 'Mauzo', data: monthlyData, backgroundColor: 'rgba(108,92,231,0.6)', borderColor: '#6c5ce7', borderWidth: 1, borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } } } } });
+}
+var ctx2 = document.getElementById('reportTopProductsChart');
+if (ctx2) {
+var prodSales = {};
+APP.sales.forEach(function(s) { if (s.items) s.items.forEach(function(i) { var nm = i.name || 'Isiyojulikana'; prodSales[nm] = (prodSales[nm] || 0) + (i.quantity || 0); }); });
+var sorted = Object.entries(prodSales).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
+var colors = ['#6c5ce7', '#00b894', '#f39c12', '#e74c3c', '#0984e3', '#a29bfe', '#fd79a8', '#00cec9'];
+APP.charts.reportTop = new Chart(ctx2, { type: 'bar', data: { labels: sorted.map(function(x) { return x[0]; }), datasets: [{ label: 'Kiasi', data: sorted.map(function(x) { return x[1]; }), backgroundColor: colors, borderWidth: 0, borderRadius: 6 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } } } } });
+}
+}
+
+function dlReportPDF() {
+closeDlMenus();
+var doc = new window.jspdf.jsPDF();
+doc.setFontSize(16);
+doc.text((APP.user.businessName || 'BizBook') + ' - Ripoti Kamili', 14, 20);
+doc.setFontSize(10);
+doc.text('Iliyotengenezwa: ' + new Date().toLocaleString('sw-TZ'), 14, 28);
+var totalRevenue = APP.sales.reduce(function(s, x) { return s + (Number(x.total) || 0); }, 0);
+var totalDebts = APP.debts.filter(function(d) { return d.status !== 'paid'; }).reduce(function(s, d) { return s + (Number(d.amount) || 0); }, 0);
+doc.text('Jumla ya Mauzo: ' + formatCurrency(totalRevenue), 14, 38);
+doc.text('Jumla ya Madeni: ' + formatCurrency(totalDebts), 14, 45);
+doc.text('Bidhaa: ' + APP.products.length, 14, 52);
+doc.autoTable({ startY: 60, head: [['Bidhaa', 'Gharama', 'Bei', 'Stock']], body: APP.products.map(function(p) { return [p.name, Number(p.cost) || 0, Number(p.price) || 0, p.stock]; }), theme: 'grid', headStyles: { fillColor: [108, 92, 231] } });
+doc.save('bizbook-ripoti.pdf');
+showToast('Ripoti ya PDF imeshachukua', 's');
+}
+
+function dlReportExcel() {
+closeDlMenus();
+var prodData = APP.products.map(function(p) { return { 'Bidhaa': p.name, 'Category': p.category, 'Gharama': Number(p.cost) || 0, 'Bei': Number(p.price) || 0, 'Stock': p.stock }; });
+var salesData = APP.sales.map(function(s) { return { 'Id': s.id.substr(0, 8), 'Jumla': Number(s.total) || 0, 'Tarehe': formatDateTime(s.createdAt) }; });
+var wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(prodData), 'Bidhaa');
+XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(salesData), 'Mauzo');
+XLSX.writeFile(wb, 'bizbook-ripoti.xlsx');
+showToast('Ripoti ya Excel imeshachukua', 's');
+}
+
+/* ================================================================
+PROFILE
+================================================================ */
+function loadProfile() {
+if (!APP.user) return;
+safeGetEl('profName').value = APP.user.name || '';
+safeGetEl('profEmail').value = APP.user.email || '';
+safeGetEl('profPhone').value = APP.user.phone || '';
+safeGetEl('profBizNameInput').value = APP.user.businessName || '';
+safeGetEl('profLocation').value = APP.user.location || '';
+safeGetEl('profBizName').textContent = APP.user.businessName || 'Biashara';
+safeGetEl('profBizLoc').textContent = APP.user.location || '';
+if (APP.user.logoUrl || APP.bizLogoURL) {
+var prev = safeGetEl('logoPreview');
+prev.innerHTML = '<img src="' + (APP.bizLogoURL || APP.user.logoUrl) + '" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:16px"/>';
+}
+}
+
+async function updateProfile() {
+if (!APP.user) return;
+try {
+var updates = {
+name: safeGetEl('profName').value.trim(),
+phone: safeGetEl('profPhone').value.trim(),
+location: safeGetEl('profLocation').value.trim(),
+businessName: safeGetEl('profBizNameInput').value.trim()
+};
+await db.collection('users').doc(APP.user.uid).update(updates);
+if (APP.bizId) {
+await db.collection('businesses').doc(APP.bizId).update({ name: updates.businessName, ownerName: updates.name, phone: updates.phone, location: updates.location });
+}
+Object.assign(APP.user, updates);
+safeGetEl('tbBizName').textContent = updates.businessName || 'BizBook';
+safeGetEl('tbUserName').textContent = updates.name || 'Mtumiaji';
+safeGetEl('tbUserAv').textContent = (updates.name || 'U').charAt(0).toUpperCase();
+safeGetEl('profBizName').textContent = updates.businessName || 'Biashara';
+safeGetEl('profBizLoc').textContent = updates.location || '';
+showToast('Wasifu umesasishwa', 's');
+} catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+async function handleLogoUpload(e) {
+var file = e.target.files[0];
+if (!file) return;
+if (file.size > 2 * 1024 * 1024) { showToast('Logo lazima iwe chini ya 2MB', 'e'); return; }
+try {
+showToast('Inapakia logo...', 'i');
+var path = 'logos/' + APP.bizId + '/' + Date.now() + '_' + file.name;
+var ref = storage.ref().child(path);
+await ref.put(file);
+APP.bizLogoURL = await ref.getDownloadURL();
+await db.collection('businesses').doc(APP.bizId).update({ logoUrl: APP.bizLogoURL });
+var prev = safeGetEl('logoPreview');
+prev.innerHTML = '<img src="' + APP.bizLogoURL + '" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:16px"/>';
+showToast('Logo imepakiwa', 's');
+} catch (err) { showToast('Hitilafu kupakia logo: ' + err.message, 'e'); }
+}
+
+/* ================================================================
+INIT ON LOAD
+================================================================ */
+document.addEventListener('DOMContentLoaded', function() {
+showScreen('landingScreen');
+loadPublicData();
+});
+</script>
+
+</body>
+</html>
+```
