@@ -1853,7 +1853,869 @@ async function loadDashboard() {
     const totalDebts = allDebts.filter(d => d.status !== 'paid').reduce((s, d) => s + (Number(d.amount) || 0), 0);
     const unpaidDebts = allDebts.filter(d => d.status !== 'paid').length;
 
-    document.getElementById('dashMetrics').innerHTML = `
-      <div class="mc pu"><div class="mc-icon"><i class="fas fa-receipt"></i></div><h3>${allSales.length}</h3><p>Mauzo Yote</p></div>
-      <div class="mc g"><div class="mc-icon"><i class="fas fa-coins"></i></div><h3>${formatCurrency(totalRevenue)}</h3><p>Mapato</p></div>
-      <div class="mc a"><div class="mc-icon"><i class="fas
+   document.getElementById('dashMetrics').innerHTML = `
+  <div class="mc pu">
+    <div class="mc-icon"><i class="fas fa-receipt"></i></div>
+    <h3>${allSales.length}</h3>
+    <p>Mauzo Yote</p>
+  </div>
+
+  <div class="mc g">
+    <div class="mc-icon"><i class="fas fa-coins"></i></div>
+    <h3>${formatCurrency(totalRevenue)}</h3>
+    <p>Mapato</p>
+  </div>
+
+  <div class="mc a">
+    <div class="mc-icon"><i class="fas fa-boxes-stacked"></i></div>
+    <h3>${totalProducts}</h3>
+    <p>Bidhaa</p>
+  </div>
+
+  <div class="mc r">
+    <div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div>
+    <h3>${formatCurrency(totalDebts)}</h3>
+    <p>Madeni (${unpaidDebts})</p>
+  </div>
+`;
+    // Recent sales table
+    const recentBody = document.getElementById('dashRecentSales');
+    if (allSales.length === 0) {
+      recentBody.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo bado</p></td></tr>';
+    } else {
+      recentBody.innerHTML = allSales.slice(0, 10).map(s => `<tr><td>${s.id.substr(0,8)}...</td><td>${s.productName || '-'}</td><td>${s.quantity || 0}</td><td style="color:var(--success);font-weight:600">${formatCurrency(s.total)}</td><td>${formatDateTime(s.createdAt)}</td></tr>`).join('');
+    }
+
+    // Charts
+    renderDashCharts();
+  } catch (err) {
+    console.error('Dashboard error:', err);
+    document.getElementById('dashMetrics').innerHTML = '<div class="mc"><div class="mc-icon"><i class="fas fa-exclamation-triangle"></i></div><h3>Hitilafu</h3><p>Imeshindwa kupakua data</p></div>';
+  }
+}
+
+function renderDashCharts() {
+  Object.values(dashChartInstances).forEach(c => { if (c) c.destroy(); });
+  dashChartInstances = {};
+
+  const chartGrid = document.getElementById('dashCharts');
+  chartGrid.innerHTML = `
+    <div class="ch-c"><h4><i class="fas fa-chart-bar"></i>Mauzo ya Siku 7</h4><div class="ch-box"><canvas id="dashSalesChart"></canvas></div></div>
+    <div class="ch-c"><h4><i class="fas fa-chart-pie"></i>Bidhaa Zinazouzwa Zaidi</h4><div class="ch-box"><canvas id="dashProdChart"></canvas></div></div>`;
+
+  // Sales chart - last 7 days
+  const ctx1 = document.getElementById('dashSalesChart');
+  if (ctx1) {
+    const labels = [];
+    const data = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(d.toLocaleDateString('sw-TZ', { weekday: 'short' }));
+      const dayStr = d.toISOString().split('T')[0];
+      const dayTotal = allSales.filter(s => {
+        if (!s.createdAt) return false;
+        const sd = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+        return sd.toISOString().split('T')[0] === dayStr;
+      }).reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+      data.push(dayTotal);
+    }
+    dashChartInstances.sales = new Chart(ctx1, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Mauzo', data, backgroundColor: 'rgba(108,92,231,0.6)', borderColor: '#6c5ce7', borderWidth: 1, borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } } } }
+    });
+  }
+
+  // Top products chart
+  const ctx2 = document.getElementById('dashProdChart');
+  if (ctx2) {
+    const prodSales = {};
+    allSales.forEach(s => {
+      const name = s.productName || 'Isiyojulikana';
+      prodSales[name] = (prodSales[name] || 0) + (Number(s.quantity) || 0);
+    });
+    const sorted = Object.entries(prodSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const colors = ['#6c5ce7', '#00b894', '#f39c12', '#e74c3c', '#0984e3'];
+    dashChartInstances.products = new Chart(ctx2, {
+      type: 'doughnut',
+      data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: colors, borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9a9ab0', padding: 12, font: { size: 11 } } } } }
+    });
+  }
+}
+
+/* ============================================================
+   PRODUCTS
+   ============================================================ */
+async function loadProducts() {
+  if (!currentBizId) return;
+  try {
+    const snap = await db.collection('products').where('businessId', '==', currentBizId).orderBy('createdAt', 'desc').get();
+    allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderProducts();
+  } catch (err) { console.error('Load products error:', err); }
+}
+
+function renderProducts() {
+  const q = (document.getElementById('prodSearch').value || '').toLowerCase();
+  const filtered = allProducts.filter(p => (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
+  const tbody = document.getElementById('prodTableBody');
+  if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa</p></td></tr>'; return; }
+  tbody.innerHTML = filtered.map(p => `
+    <tr>
+      <td>${p.imageUrl ? `<img src="${p.imageUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:6px" onerror="this.style.display='none'"/>` : '<span style="color:var(--text3)">-</span>'}</td>
+      <td><strong>${p.name || '-'}</strong></td>
+      <td>${p.category || '-'}</td>
+      <td>${formatCurrency(p.cost)}</td>
+      <td style="color:var(--success);font-weight:600">${formatCurrency(p.price)}</td>
+      <td>${p.stock <= 5 ? `<span style="color:var(--danger);font-weight:700">${p.stock}</span>` : p.stock}</td>
+      <td>
+        <button class="btn btn-xs btn-ghost" onclick="editProduct('${p.id}')" style="margin-right:4px"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-xs btn-d" onclick="confirmDeleteProduct('${p.id}','${(p.name||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function openProductModal(editData = null) {
+  document.getElementById('prodEditId').value = editData ? editData.id : '';
+  document.getElementById('prodName').value = editData ? (editData.name || '') : '';
+  document.getElementById('prodCategory').value = editData ? (editData.category || '') : '';
+  document.getElementById('prodCost').value = editData ? (editData.cost || '') : '';
+  document.getElementById('prodPrice').value = editData ? (editData.price || '') : '';
+  document.getElementById('prodStock').value = editData ? (editData.stock || '') : '';
+  prodImageURL = editData ? (editData.imageUrl || '') : '';
+  prodImageFile = null;
+  const preview = document.getElementById('prodImagePreview');
+  if (prodImageURL) { preview.src = prodImageURL; preview.classList.remove('hidden'); }
+  else { preview.classList.add('hidden'); }
+  document.getElementById('productModalTitle').textContent = editData ? 'Hariri Bidhaa' : 'Ongeza Bidhaa';
+  openModal('productModal');
+}
+
+function editProduct(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (p) openProductModal(p);
+}
+
+function handleProdImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { showToast('Picha lazima iwe chini ya 5MB', 'e'); return; }
+  prodImageFile = file;
+  const reader = new FileReader();
+  reader.onload = (ev) => { document.getElementById('prodImagePreview').src = ev.target.result; document.getElementById('prodImagePreview').classList.remove('hidden'); };
+  reader.readAsDataURL(file);
+}
+
+async function saveProduct() {
+  const name = document.getElementById('prodName').value.trim();
+  const price = parseFloat(document.getElementById('prodPrice').value);
+  const stock = parseInt(document.getElementById('prodStock').value);
+  if (!name) { showToast('Jina la bidhaa linahitajika', 'e'); return; }
+  if (isNaN(price) || price < 0) { showToast('Bei sahihi inahitajika', 'e'); return; }
+  if (isNaN(stock) || stock < 0) { showToast('Stock sahihi inahitajika', 'e'); return; }
+
+  try {
+    let imageUrl = prodImageURL;
+    if (prodImageFile) {
+      const path = `products/${currentBizId}/${Date.now()}_${prodImageFile.name}`;
+      const ref = storage.ref().child(path);
+      await ref.put(prodImageFile);
+      imageUrl = await ref.getDownloadURL();
+    }
+
+    const editId = document.getElementById('prodEditId').value;
+    const data = {
+      name,
+      category: document.getElementById('prodCategory').value.trim(),
+      cost: parseFloat(document.getElementById('prodCost').value) || 0,
+      price,
+      stock,
+      imageUrl,
+      businessId: currentBizId,
+      businessName: currentUser.businessName || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (editId) {
+      await db.collection('products').doc(editId).update(data);
+      showToast('Bidhaa imehaririwa', 's');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('products').add(data);
+      showToast('Bidhaa imeongezwa', 's');
+    }
+
+    closeModal('productModal');
+    prodImageFile = null;
+    await loadProducts();
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function confirmDeleteProduct(id, name) {
+  showConfirm({
+    icon: 'trash-alt', iconClass: 'danger',
+    title: 'Futa Bidhaa',
+    message: 'Je, unahakika unataka kufuta bidhaa hii?',
+    target: name,
+    onConfirm: () => deleteProduct(id)
+  });
+}
+
+async function deleteProduct(id) {
+  try {
+    await db.collection('products').doc(id).delete();
+    allProducts = allProducts.filter(x => x.id !== id);
+    renderProducts();
+    showToast('Bidhaa imefutwa', 's');
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   POS
+   ============================================================ */
+function loadPOSProducts() {
+  const grid = document.getElementById('posProductsGrid');
+  const q = (document.getElementById('posSearch').value || '').toLowerCase();
+  const filtered = allProducts.filter(p => (p.name || '').toLowerCase().includes(q) && p.stock > 0);
+  if (filtered.length === 0) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>Hakuna bidhaa za kuonyesha</p></div>'; return; }
+  grid.innerHTML = filtered.map(p => `
+    <div class="pos-p-card" onclick="addToCart('${p.id}')">
+      ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.name}" onerror="this.style.display='none'"/>` : '<div style="height:80px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-box"></i></div>'}
+      <h5>${p.name}</h5>
+      <div class="pos-p-price">${formatCurrency(p.price)}</div>
+      <div class="pos-p-stock">Stock: ${p.stock}</div>
+    </div>`).join('');
+}
+
+function addToCart(prodId) {
+  const p = allProducts.find(x => x.id === prodId);
+  if (!p) return;
+  const existing = cart.find(c => c.productId === prodId);
+  if (existing) {
+    if (existing.quantity >= p.stock) { showToast('Hakuna stock enough', 'w'); return; }
+    existing.quantity++;
+    existing.total = existing.quantity * existing.price;
+  } else {
+    cart.push({ productId: prodId, name: p.name, price: p.price, quantity: 1, total: p.price });
+  }
+  renderCart();
+}
+
+function updateCartQty(prodId, delta) {
+  const item = cart.find(c => c.productId === prodId);
+  if (!item) return;
+  const p = allProducts.find(x => x.id === prodId);
+  item.quantity += delta;
+  if (item.quantity <= 0) { cart = cart.filter(c => c.productId !== prodId); }
+  else {
+    if (p && item.quantity > p.stock) { item.quantity = p.stock; showToast('Hakuna stock enough', 'w'); }
+    item.total = item.quantity * item.price;
+  }
+  renderCart();
+}
+
+function removeFromCart(prodId) {
+  cart = cart.filter(c => c.productId !== prodId);
+  renderCart();
+}
+
+function renderCart() {
+  const body = document.getElementById('cartBody');
+  const total = cart.reduce((s, c) => s + c.total, 0);
+  document.getElementById('cartTotal').textContent = formatCurrency(total);
+  if (cart.length === 0) {
+    body.innerHTML = '<div class="empty-s" style="padding:20px"><i class="fas fa-shopping-cart"></i><p>Gari ni tupu</p></div>';
+    return;
+  }
+  body.innerHTML = cart.map(c => `
+    <div class="cart-item">
+      <div class="cart-item-info"><h6>${c.name}</h6><span>${formatCurrency(c.price)} kila moja</span></div>
+      <div class="cart-qty">
+        <button onclick="updateCartQty('${c.productId}',-1)"><i class="fas fa-minus"></i></button>
+        <span>${c.quantity}</span>
+        <button onclick="updateCartQty('${c.productId}',1)"><i class="fas fa-plus"></i></button>
+      </div>
+      <div class="cart-item-price">${formatCurrency(c.total)}</div>
+      <button class="cart-item-rm" onclick="removeFromCart('${c.productId}')"><i class="fas fa-times"></i></button>
+    </div>`).join('');
+}
+
+async function completeSale() {
+  if (cart.length === 0) { showToast('Gari ni tupu', 'w'); return; }
+  const total = cart.reduce((s, c) => s + c.total, 0);
+  try {
+    const batch = db.batch();
+    const saleRef = db.collection('sales').doc();
+    batch.set(saleRef, {
+      businessId: currentBizId,
+      items: cart,
+      total,
+      saleType: 'cash',
+      createdBy: currentUser.name || currentUser.email,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Update stock
+    for (const item of cart) {
+      const prodRef = db.collection('products').doc(item.productId);
+      const prod = allProducts.find(p => p.id === item.productId);
+      if (prod) {
+        const newStock = Math.max(0, prod.stock - item.quantity);
+        batch.update(prodRef, { stock: newStock, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      }
+    }
+
+    await batch.commit();
+
+    // Show receipt
+    showReceipt(saleRef.id, cart, total);
+
+    cart = [];
+    renderCart();
+    showToast('Mauzo yamekamilika', 's');
+    await loadProducts();
+    loadPOSProducts();
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function showReceipt(saleId, items, total) {
+  const bizName = currentUser.businessName || 'BizBook';
+  const date = new Date().toLocaleString('sw-TZ');
+  let itemsHtml = items.map(i => `<div class="rc-line"><span>${i.name} x${i.quantity}</span><span>${formatCurrency(i.total)}</span></div>`).join('');
+  document.getElementById('receiptContent').innerHTML = `
+    <div class="receipt-content">
+      <h3>${bizName}</h3>
+      <div class="rc-line"><span>Id:</span><span>${saleId.substr(0, 10)}</span></div>
+      <div class="rc-line"><span>Tarehe:</span><span>${date}</span></div>
+      <div class="rc-divider"></div>
+      ${itemsHtml}
+      <div class="rc-divider"></div>
+      <div class="rc-line rc-total"><span>JUMLA</span><span>${formatCurrency(total)}</span></div>
+      <div class="rc-divider"></div>
+      <p style="text-align:center;margin-top:8px;font-size:11px">Asante kwa kununua!</p>
+    </div>`;
+  openModal('receiptModal');
+}
+
+/* ============================================================
+   SALES
+   ============================================================ */
+async function loadSales() {
+  if (!currentBizId) return;
+  try {
+    const snap = await db.collection('sales').where('businessId', '==', currentBizId).orderBy('createdAt', 'desc').get();
+    allSales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderSales();
+  } catch (err) { console.error('Load sales error:', err); }
+}
+
+function renderSales() {
+  const tbody = document.getElementById('salesTableBody');
+  if (allSales.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo</p></td></tr>'; return; }
+  tbody.innerHTML = allSales.map(s => `
+    <tr>
+      <td style="font-size:11px">${s.id.substr(0, 8)}...</td>
+      <td>${(s.items && s.items[0] && s.items[0].name) || '-'}</td>
+      <td>${s.items ? s.items.reduce((sum, i) => sum + (i.quantity || 0), 0) : 0}</td>
+      <td style="color:var(--success);font-weight:600">${formatCurrency(s.total)}</td>
+      <td><span class="status-badge paid">${s.saleType === 'cash' ? 'Fedha' : (s.saleType || '-')}</span></td>
+      <td>${formatDateTime(s.createdAt)}</td>
+    </tr>`).join('');
+}
+
+function dlSalesPDF() {
+  closeDlMenus();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(16);
+  doc.text((currentUser.businessName || 'BizBook') + ' - Ripoti ya Mauzo', 14, 20);
+  doc.setFontSize(10);
+  doc.text('Iliyotengenezwa: ' + new Date().toLocaleString('sw-TZ'), 14, 28);
+  doc.autoTable({
+    startY: 35,
+    head: [['Id', 'Bidhaa', 'Kiasi', 'Jumla', 'Tarehe']],
+    body: allSales.map(s => [
+      s.id.substr(0, 8),
+      (s.items && s.items[0] && s.items[0].name) || '-',
+      s.items ? s.items.reduce((sum, i) => sum + (i.quantity || 0), 0) : 0,
+      formatCurrency(s.total),
+      formatDateTime(s.createdAt)
+    ]),
+    theme: 'grid',
+    headStyles: { fillColor: [108, 92, 231] }
+  });
+  doc.save('bizbook-mauzo.pdf');
+  showToast('PDF imeshachukua', 's');
+}
+
+function dlSalesExcel() {
+  closeDlMenus();
+  const data = allSales.map(s => ({
+    'Id': s.id.substr(0, 8),
+    'Bidhaa': (s.items && s.items[0] && s.items[0].name) || '-',
+    'Kiasi': s.items ? s.items.reduce((sum, i) => sum + (i.quantity || 0), 0) : 0,
+    'Jumla': Number(s.total) || 0,
+    'Tarehe': formatDateTime(s.createdAt)
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Mauzo');
+  XLSX.writeFile(wb, 'bizbook-mauzo.xlsx');
+  showToast('Excel imeshachukua', 's');
+}
+
+/* ============================================================
+   DEBTS
+   ============================================================ */
+async function loadDebts() {
+  if (!currentBizId) return;
+  try {
+    const snap = await db.collection('debts').where('businessId', '==', currentBizId).orderBy('createdAt', 'desc').get();
+    allDebts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderDebts();
+    // Debt alert
+    const unpaid = allDebts.filter(d => d.status !== 'paid');
+    const totalUnpaid = unpaid.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    const alertArea = document.getElementById('debtAlertArea');
+    if (unpaid.length > 0) {
+      alertArea.innerHTML = `<div class="debt-alert"><i class="fas fa-exclamation-triangle"></i><span>Una madeni ${unpaid.length} yasiyolipwa jumla ya <strong>${formatCurrency(totalUnpaid)}</strong></span></div>`;
+    } else { alertArea.innerHTML = ''; }
+    // Badge
+    const badge = document.getElementById('debtBadge');
+    if (unpaid.length > 0) { badge.style.display = 'inline'; badge.textContent = unpaid.length; }
+    else { badge.style.display = 'none'; }
+  } catch (err) { console.error('Load debts error:', err); }
+}
+
+function renderDebts() {
+  const tbody = document.getElementById('debtTableBody');
+  if (allDebts.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-hand-holding-dollar"></i><p>Hakuna madeni</p></td></tr>'; return; }
+  tbody.innerHTML = allDebts.map(d => `
+    <tr>
+      <td><strong>${d.client || '-'}</strong></td>
+      <td>${d.product || '-'}</td>
+      <td>${d.quantity || 0}</td>
+      <td style="color:var(--danger);font-weight:600">${formatCurrency(d.amount)}</td>
+      <td><span class="status-badge ${d.status === 'paid' ? 'paid' : 'unpaid'}">${d.status === 'paid' ? 'Imelipwa' : 'Haijalipwa'}</span></td>
+      <td>${formatDateTime(d.createdAt)}</td>
+      <td>${d.status !== 'paid' ? `<button class="btn btn-xs btn-s" onclick="payDebt('${d.id}')"><i class="fas fa-check"></i> Lipa</button>` : '<span style="color:var(--text3);font-size:11px">Imelipwa</span>'}</td>
+    </tr>`).join('');
+}
+
+function openDebtModal() { openModal('debtModal'); }
+
+async function saveDebt() {
+  const client = document.getElementById('debtClient').value.trim();
+  const amount = parseFloat(document.getElementById('debtAmount').value);
+  if (!client) { showToast('Jina la mteja linahitajika', 'e'); return; }
+  if (isNaN(amount) || amount <= 0) { showToast('Kiasi sahihi kinahitajika', 'e'); return; }
+  try {
+    await db.collection('debts').add({
+      businessId: currentBizId,
+      client,
+      product: document.getElementById('debtProduct').value.trim(),
+      quantity: parseInt(document.getElementById('debtQty').value) || 0,
+      amount,
+      status: 'unpaid',
+      createdBy: currentUser.name || '',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    closeModal('debtModal');
+    ['debtClient', 'debtProduct', 'debtQty', 'debtAmount'].forEach(id => document.getElementById(id).value = '');
+    showToast('Deni limeongezwa', 's');
+    await loadDebts();
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function payDebt(id) {
+  showConfirm({
+    icon: 'check-circle', iconClass: 'warning',
+    title: 'Lipa Deni',
+    message: 'Je, unahakika deni hili limelipwa?',
+    confirmText: 'Ndiyo, Limelipwa',
+    confirmClass: 'btn-s',
+    onConfirm: () => markDebtPaid(id)
+  });
+}
+
+async function markDebtPaid(id) {
+  try {
+    await db.collection('debts').doc(id).update({ status: 'paid', paidAt: firebase.firestore.FieldValue.serverTimestamp() });
+    const d = allDebts.find(x => x.id === id);
+    if (d) d.status = 'paid';
+    renderDebts();
+    loadDebts();
+    showToast('Deni limeandikwa limeilipwa', 's');
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   EMPLOYEES
+   ============================================================ */
+async function loadEmployees() {
+  if (!currentBizId) return;
+  try {
+    const snap = await db.collection('employees').where('businessId', '==', currentBizId).get();
+    allEmployees = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderEmployees();
+  } catch (err) { console.error('Load employees error:', err); }
+}
+
+function renderEmployees() {
+  const grid = document.getElementById('empGrid');
+  if (allEmployees.length === 0) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-users-gear"></i><p>Hakuna wafanyakazi</p></div>'; return; }
+  const roleLabels = { manager: 'Meneja', seller: 'Muuzaji', cashier: 'Mhasibu', stockkeeper: 'Mhifadhi' };
+  const roleColors = { manager: '#f39c12', seller: '#a29bfe', cashier: '#00b894', stockkeeper: '#0984e3' };
+  grid.innerHTML = allEmployees.map(e => `
+    <div class="emp-card">
+      <div class="emp-card-head">
+        <div class="emp-av" style="background:${roleColors[e.role] || '#6c5ce7'}">${(e.name || 'E').charAt(0).toUpperCase()}</div>
+        <div><h4>${e.name || '-'}</h4><p>${e.email || e.phone || '-'}</p></div>
+      </div>
+      <div class="emp-card-body">
+        <span class="emp-tag role">${roleLabels[e.role] || e.role}</span>
+        <span class="emp-tag status">Hai</span>
+      </div>
+      <div class="emp-card-foot">
+        <button class="btn btn-xs btn-ghost" onclick="editEmployee('${e.id}')"><i class="fas fa-edit"></i> Hariri</button>
+        <button class="btn btn-xs btn-d" onclick="confirmDeleteEmployee('${e.id}','${(e.name||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i> Futa</button>
+      </div>
+    </div>`).join('');
+}
+
+function openEmployeeModal(editData = null) {
+  document.getElementById('empEditId').value = editData ? editData.id : '';
+  document.getElementById('empName').value = editData ? (editData.name || '') : '';
+  document.getElementById('empEmail').value = editData ? (editData.email || '') : '';
+  document.getElementById('empPhone').value = editData ? (editData.phone || '') : '';
+  document.getElementById('empRole').value = editData ? (editData.role || 'seller') : 'seller';
+  document.getElementById('empModalTitle').textContent = editData ? 'Hariri Mfanyakazi' : 'Ongeza Mfanyakazi';
+  openModal('employeeModal');
+}
+
+function editEmployee(id) {
+  const e = allEmployees.find(x => x.id === id);
+  if (e) openEmployeeModal(e);
+}
+
+async function saveEmployee() {
+  const name = document.getElementById('empName').value.trim();
+  if (!name) { showToast('Jina linahitajika', 'e'); return; }
+  try {
+    const editId = document.getElementById('empEditId').value;
+    const data = {
+      name,
+      email: document.getElementById('empEmail').value.trim(),
+      phone: document.getElementById('empPhone').value.trim(),
+      role: document.getElementById('empRole').value,
+      businessId: currentBizId,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (editId) {
+      await db.collection('employees').doc(editId).update(data);
+      showToast('Mfanyakazi amehaririwa', 's');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      data.status = 'active';
+      await db.collection('employees').add(data);
+      showToast('Mfanyakazi ameongezwa', 's');
+    }
+    closeModal('employeeModal');
+    await loadEmployees();
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function confirmDeleteEmployee(id, name) {
+  showConfirm({
+    icon: 'user-minus', iconClass: 'danger',
+    title: 'Futa Mfanyakazi',
+    message: 'Je, unahakika unataka kufuta mfanyakazi huu?',
+    target: name,
+    onConfirm: () => deleteEmployee(id)
+  });
+}
+
+async function deleteEmployee(id) {
+  try {
+    await db.collection('employees').doc(id).delete();
+    allEmployees = allEmployees.filter(x => x.id !== id);
+    renderEmployees();
+    showToast('Mfanyakazi amefutwa', 's');
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   USER ADVERTS
+   ============================================================ */
+async function loadUserAdverts() {
+  if (!currentBizId) return;
+  try {
+    const snap = await db.collection('adverts').where('businessId', '==', currentBizId).orderBy('createdAt', 'desc').get();
+    allUserAdverts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderUserAdverts();
+  } catch (err) { console.error('Load user adverts error:', err); }
+}
+
+function renderUserAdverts() {
+  const grid = document.getElementById('userAdvertGrid');
+  if (allUserAdverts.length === 0) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-bullhorn"></i><p>Hakuna matangazo. Ongeza tangazo lako la kwanza!</p></div>'; return; }
+  grid.innerHTML = allUserAdverts.map(a => `
+    <div class="emp-card">
+      ${a.imageUrl ? `<img src="${a.imageUrl}" style="width:100%;height:140px;object-fit:cover;border-radius:10px 10px 0 0" onerror="this.style.display='none'"/>` : ''}
+      <div style="padding:14px">
+        <h4 style="font-size:15px;margin-bottom:6px">${a.title || '-'}</h4>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">${a.description || ''}</p>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <span class="status-badge ${a.status === 'active' ? 'active' : 'inactive'}">${a.status === 'active' ? 'Hai' : 'Hali'}</span>
+          ${a.featured ? '<span class="status-badge featured"><i class="fas fa-star"></i> Maalum</span>' : ''}
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-xs btn-ghost" onclick="editUserAdvert('${a.id}')"><i class="fas fa-edit"></i> Hariri</button>
+          <button class="btn btn-xs btn-d" onclick="confirmDeleteUserAdvert('${a.id}','${(a.title||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i> Futa</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function openUserAdvertModal(editData = null) {
+  document.getElementById('uaEditId').value = editData ? editData.id : '';
+  document.getElementById('uaTitle').value = editData ? (editData.title || '') : '';
+  document.getElementById('uaDesc').value = editData ? (editData.description || '') : '';
+  document.getElementById('uaLink').value = editData ? (editData.link || '') : '';
+  uaImageURL = editData ? (editData.imageUrl || '') : '';
+  uaImageFile = null;
+  const preview = document.getElementById('uaImagePreview');
+  if (uaImageURL) { preview.src = uaImageURL; preview.classList.remove('hidden'); }
+  else { preview.classList.add('hidden'); }
+  document.getElementById('userAdvertModalTitle').textContent = editData ? 'Hariri Tangazo' : 'Ongeza Tangazo';
+  openModal('userAdvertModal');
+}
+
+function editUserAdvert(id) {
+  const a = allUserAdverts.find(x => x.id === id);
+  if (a) openUserAdvertModal(a);
+}
+
+function handleUAImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { showToast('Picha lazima iwe chini ya 5MB', 'e'); return; }
+  uaImageFile = file;
+  const reader = new FileReader();
+  reader.onload = (ev) => { document.getElementById('uaImagePreview').src = ev.target.result; document.getElementById('uaImagePreview').classList.remove('hidden'); };
+  reader.readAsDataURL(file);
+}
+
+async function saveUserAdvert() {
+  const title = document.getElementById('uaTitle').value.trim();
+  if (!title) { showToast('Kichwa kinahitajika', 'e'); return; }
+  try {
+    let imageUrl = uaImageURL;
+    if (uaImageFile) {
+      const path = `adverts/${currentBizId}/${Date.now()}_${uaImageFile.name}`;
+      const ref = storage.ref().child(path);
+      await ref.put(uaImageFile);
+      imageUrl = await ref.getDownloadURL();
+    }
+    const editId = document.getElementById('uaEditId').value;
+    const data = {
+      title,
+      description: document.getElementById('uaDesc').value.trim(),
+      link: document.getElementById('uaLink').value.trim(),
+      imageUrl,
+      status: 'active',
+      featured: false,
+      businessId: currentBizId,
+      createdBy: currentUser.uid,
+      advertiserName: currentUser.businessName || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (editId) {
+      await db.collection('adverts').doc(editId).update(data);
+      showToast('Tangazo limehaririwa', 's');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('adverts').add(data);
+      showToast('Tangazo limeongezwa', 's');
+    }
+    closeModal('userAdvertModal');
+    uaImageFile = null;
+    await loadUserAdverts();
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function confirmDeleteUserAdvert(id, title) {
+  showConfirm({
+    icon: 'trash-alt', iconClass: 'danger',
+    title: 'Futa Tangazo',
+    message: 'Je, unahakika unataka kufuta tangazo hili?',
+    target: title,
+    onConfirm: () => deleteUserAdvert(id)
+  });
+}
+
+async function deleteUserAdvert(id) {
+  try {
+    await db.collection('adverts').doc(id).delete();
+    allUserAdverts = allUserAdverts.filter(x => x.id !== id);
+    renderUserAdverts();
+    showToast('Tangazo limefutwa', 's');
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   REPORTS
+   ============================================================ */
+function loadReports() {
+  Object.values(reportChartInstances).forEach(c => { if (c) c.destroy(); });
+  reportChartInstances = {};
+
+  // Monthly sales chart
+  const ctx1 = document.getElementById('reportSalesChart');
+  if (ctx1) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'];
+    const monthlyData = new Array(12).fill(0);
+    allSales.forEach(s => {
+      if (!s.createdAt) return;
+      const d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+      monthlyData[d.getMonth()] += Number(s.total) || 0;
+    });
+    reportChartInstances.monthly = new Chart(ctx1, {
+      type: 'bar',
+      data: { labels: months, datasets: [{ label: 'Mauzo', data: monthlyData, backgroundColor: 'rgba(108,92,231,0.6)', borderColor: '#6c5ce7', borderWidth: 1, borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } } } }
+    });
+  }
+
+  // Top products chart
+  const ctx2 = document.getElementById('reportTopProductsChart');
+  if (ctx2) {
+    const prodSales = {};
+    allSales.forEach(s => {
+      if (s.items) s.items.forEach(i => {
+        prodSales[i.name || 'Isiyojulikana'] = (prodSales[i.name || 'Isiyojulikana'] || 0) + (i.quantity || 0);
+      });
+    });
+    const sorted = Object.entries(prodSales).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const colors = ['#6c5ce7', '#00b894', '#f39c12', '#e74c3c', '#0984e3', '#a29bfe', '#fd79a8', '#00cec9'];
+    reportChartInstances.topProducts = new Chart(ctx2, {
+      type: 'bar',
+      data: { labels: sorted.map(x => x[0]), datasets: [{ label: 'Kiasi', data: sorted.map(x => x[1]), backgroundColor: colors, borderWidth: 0, borderRadius: 6 }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#9a9ab0' }, grid: { color: '#2a2a3a' } } } }
+    });
+  }
+}
+
+function dlReportPDF() {
+  closeDlMenus();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(16);
+  doc.text((currentUser.businessName || 'BizBook') + ' - Ripoti Kamili', 14, 20);
+  doc.setFontSize(10);
+  doc.text('Iliyotengenezwa: ' + new Date().toLocaleString('sw-TZ'), 14, 28);
+
+  const totalRevenue = allSales.reduce((s, x) => s + (Number(x.total) || 0), 0);
+  const totalDebts = allDebts.filter(d => d.status !== 'paid').reduce((s, d) => s + (Number(d.amount) || 0), 0);
+
+  doc.text(`Jumla ya Mauzo: ${formatCurrency(totalRevenue)}`, 14, 38);
+  doc.text(`Jumla ya Madeni: ${formatCurrency(totalDebts)}`, 14, 45);
+  doc.text(`Bidhaa: ${allProducts.length}`, 14, 52);
+
+  doc.autoTable({
+    startY: 60,
+    head: [['Bidhaa', 'Gharama', 'Bei', 'Stock']],
+    body: allProducts.map(p => [p.name, Number(p.cost) || 0, Number(p.price) || 0, p.stock]),
+    theme: 'grid',
+    headStyles: { fillColor: [108, 92, 231] }
+  });
+  doc.save('bizbook-ripoti.pdf');
+  showToast('Ripoti ya PDF imeshachukua', 's');
+}
+
+function dlReportExcel() {
+  closeDlMenus();
+  const prodData = allProducts.map(p => ({ 'Bidhaa': p.name, 'Category': p.category, 'Gharama': Number(p.cost) || 0, 'Bei': Number(p.price) || 0, 'Stock': p.stock }));
+  const salesData = allSales.map(s => ({ 'Id': s.id.substr(0, 8), 'Jumla': Number(s.total) || 0, 'Tarehe': formatDateTime(s.createdAt) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(prodData), 'Bidhaa');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(salesData), 'Mauzo');
+  XLSX.writeFile(wb, 'bizbook-ripoti.xlsx');
+  showToast('Ripoti ya Excel imeshachukua', 's');
+}
+
+/* ============================================================
+   PROFILE
+   ============================================================ */
+function loadProfile() {
+  if (!currentUser) return;
+  document.getElementById('profName').value = currentUser.name || '';
+  document.getElementById('profEmail').value = currentUser.email || '';
+  document.getElementById('profPhone').value = currentUser.phone || '';
+  document.getElementById('profBizNameInput').value = currentUser.businessName || '';
+  document.getElementById('profLocation').value = currentUser.location || '';
+  document.getElementById('profBizName').textContent = currentUser.businessName || 'Biashara';
+  document.getElementById('profBizLoc').textContent = currentUser.location || '';
+  if (currentUser.logoUrl || bizLogoURL) {
+    const prev = document.getElementById('logoPreview');
+    prev.innerHTML = `<img src="${bizLogoURL || currentUser.logoUrl}" alt="logo"/>`;
+  }
+}
+
+async function updateProfile() {
+  if (!currentUser) return;
+  try {
+    const updates = {
+      name: document.getElementById('profName').value.trim(),
+      phone: document.getElementById('profPhone').value.trim(),
+      location: document.getElementById('profLocation').value.trim(),
+      businessName: document.getElementById('profBizNameInput').value.trim()
+    };
+    await db.collection('users').doc(currentUser.uid).update(updates);
+    if (currentBizId) {
+      await db.collection('businesses').doc(currentBizId).update({
+        name: updates.businessName,
+        ownerName: updates.name,
+        phone: updates.phone,
+        location: updates.location
+      });
+    }
+    Object.assign(currentUser, updates);
+    document.getElementById('tbBizName').textContent = updates.businessName || 'BizBook';
+    document.getElementById('tbUserName').textContent = updates.name || 'Mtumiaji';
+    document.getElementById('tbUserAv').textContent = (updates.name || 'U').charAt(0).toUpperCase();
+    document.getElementById('profBizName').textContent = updates.businessName || 'Biashara';
+    document.getElementById('profBizLoc').textContent = updates.location || '';
+    showToast('Wasifu umesasishwa', 's');
+  } catch (err) { showToast('Hitilafu: ' + err.message, 'e'); }
+}
+
+async function handleLogoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { showToast('Logo lazima iwe chini ya 2MB', 'e'); return; }
+  try {
+    showToast('Inapakia logo...', 'i');
+    const path = `logos/${currentBizId}/${Date.now()}_${file.name}`;
+    const ref = storage.ref().child(path);
+    await ref.put(file);
+    bizLogoURL = await ref.getDownloadURL();
+    await db.collection('businesses').doc(currentBizId).update({ logoUrl: bizLogoURL });
+    const prev = document.getElementById('logoPreview');
+    prev.innerHTML = `<img src="${bizLogoURL}" alt="logo"/>`;
+    showToast('Logo imepakiwa', 's');
+  } catch (err) { showToast('Hitilafu kupakia logo: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   INIT ON LOAD
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  showScreen('landingScreen');
+  loadPublicData();
+});
+</script>
+</body>
+</html>
