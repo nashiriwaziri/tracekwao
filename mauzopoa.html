@@ -1533,58 +1533,129 @@ function handleSuperAdvertImage(e) {
   reader.onload = (ev) => { document.getElementById('saImagePreview').src = ev.target.result; document.getElementById('saImagePreview').classList.remove('hidden'); };
   reader.readAsDataURL(file);
 }
-
 async function saveSuperAdvert() {
   const errEl = document.getElementById('saErr');
-  const title = document.getElementById('saTitle').value.trim();
-  if (!title) { errEl.textContent = 'Kichwa cha tangazo kinahitajika'; return; }
-  errEl.textContent = '';
 
-  let imageUrl = superAdvertImageURL;
   try {
-    // Upload image if new file selected
+    const titleEl = document.getElementById('saTitle');
+    const descEl = document.getElementById('saDesc');
+    const linkEl = document.getElementById('saLink');
+    const statusEl = document.getElementById('saStatus');
+    const startEl = document.getElementById('saStartDate');
+    const endEl = document.getElementById('saEndDate');
+    const advertiserEl = document.getElementById('saAdvertiser');
+    const contactEl = document.getElementById('saContact');
+    const featuredEl = document.getElementById('saFeatured');
+    const editIdEl = document.getElementById('saEditId');
+
+    if (!titleEl) {
+      throw new Error('Sehemu ya Kichwa cha Tangazo (saTitle) haipo.');
+    }
+
+    const title = titleEl.value.trim();
+
+    if (!title) {
+      errEl.textContent = 'Kichwa cha tangazo kinahitajika.';
+      titleEl.focus();
+      return;
+    }
+
+    errEl.textContent = '';
+
+    // ==============================
+    // IMAGE UPLOAD
+    // ==============================
+    let imageUrl = superAdvertImageURL || '';
+
     if (superAdvertImageFile) {
-      const path = `adverts/${Date.now()}_${superAdvertImageFile.name}`;
+
+      if (!storage) {
+        throw new Error('Firebase Storage haijaunganishwa.');
+      }
+
+      const file = superAdvertImageFile;
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `adverts/${Date.now()}_${safeName}`;
+
       const ref = storage.ref().child(path);
-      await ref.put(superAdvertImageFile);
+
+      await ref.put(file);
+
       imageUrl = await ref.getDownloadURL();
     }
 
-    const editId = document.getElementById('saEditId').value;
+    // ==============================
+    // DATA
+    // ==============================
     const data = {
-      title,
-      description: document.getElementById('saDesc').value.trim(),
-      link: document.getElementById('saLink').value.trim(),
-      status: document.getElementById('saStatus').value,
-      startDate: document.getElementById('saStartDate').value,
-      endDate: document.getElementById('saEndDate').value,
-      advertiserName: document.getElementById('saAdvertiser').value.trim(),
-      contact: document.getElementById('saContact').value.trim(),
-      featured: document.getElementById('saFeatured').checked,
-      imageUrl,
+      title: title,
+      description: descEl ? descEl.value.trim() : '',
+      link: linkEl ? linkEl.value.trim() : '',
+      status: statusEl ? statusEl.value : 'active',
+      startDate: startEl ? startEl.value : '',
+      endDate: endEl ? endEl.value : '',
+      advertiserName: advertiserEl ? advertiserEl.value.trim() : '',
+      contact: contactEl ? contactEl.value.trim() : '',
+      featured: featuredEl ? featuredEl.checked : false,
+      imageUrl: imageUrl,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
+    // ==============================
+    // UPDATE / CREATE
+    // ==============================
+    const editId = editIdEl ? editIdEl.value.trim() : '';
+
     if (editId) {
-      await db.collection('adverts').doc(editId).update(data);
+
+      await db
+        .collection('adverts')
+        .doc(editId)
+        .update(data);
+
       showToast('Tangazo limehaririwa kwa mafanikio', 's');
+
     } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+
+      data.createdAt =
+        firebase.firestore.FieldValue.serverTimestamp();
+
       data.createdBy = 'SUPER_ADMIN';
       data.businessId = 'SYSTEM';
-      await db.collection('adverts').add(data);
+
+      await db
+        .collection('adverts')
+        .add(data);
+
       showToast('Tangazo limeongezwa kwa mafanikio', 's');
     }
 
-    closeModal('superAdvertModal');
+    // ==============================
+    // CLEAN UP
+    // ==============================
     superAdvertImageFile = null;
+    superAdvertImageURL = imageUrl;
+
+    closeModal('superAdvertModal');
+
     await loadSuperAdverts();
+
   } catch (err) {
-    errEl.textContent = err.message;
-    showToast('Hitilafu: ' + err.message, 'e');
+
+    console.error('saveSuperAdvert ERROR:', err);
+
+    const message =
+      err && err.message
+        ? err.message
+        : 'Hitilafu isiyojulikana imetokea.';
+
+    if (errEl) {
+      errEl.textContent = message;
+    }
+
+    showToast('Hitilafu: ' + message, 'e');
   }
 }
-
 function confirmDeleteSuperAdvert(id) {
   const a = allSuperAdverts.find(x => x.id === id);
   if (!a) return;
@@ -1854,9 +1925,10 @@ function toggleNotifPanel() { document.getElementById('notifPanel').classList.to
 function toggleUserDD() { document.getElementById('userDD').classList.toggle('show'); }
 function closeUserDD() { const dd = document.getElementById('userDD'); if (dd) dd.classList.remove('show'); }
 
-/* ============================================================
-   DASHBOARD
-   ============================================================ */
+
+/* ================================================================
+   DASHBOARD DATA
+   ================================================================ */
 /* ================================================================
    DASHBOARD DATA
    ================================================================ */
@@ -2074,7 +2146,7 @@ async function loadDashboard() {
     }
   }
 }
-/* ============================================================
+  /* ============================================================
    PRODUCTS
    ============================================================ */
 async function loadProducts() {
