@@ -1702,43 +1702,1257 @@ window.editEmployee=async function(id){const e=allEmployees.find(x=>x.id===id);i
 window.deleteEmployee=function(id,name){showConfirm('Futa Mfanyakazi','Unafuta mfanyakazi huyu.',name,async()=>{try{await deleteDoc(doc(db,'employees',id));toast('Mfanyakazi amefutwa','s');await loadEmployees();renderEmployees();}catch(e){console.error('deleteEmployee:',e);toast(mapErr(e.code,e.message),'e');}});};
 
 // ============================================================
-// MESSAGES
+// MESSAGES SYSTEM — FULL REPLACEMENT
+// Supports:
+// - Business Users
+// - Super Administrator
+// - Real-time messages
+// - Incoming messages
+// - Outgoing messages
+// - Multiple businesses
+// - Messages without businessId
+// - Safe loading
+// - Conversation list
+// - Unread counters
 // ============================================================
-async function loadMessages(){
-  if(!businessId)return;
-  try{
-    const q=query(collection(db,'messages'),where('businessId','==',businessId),orderBy('createdAt','asc'));const s=await getDocs(q);
-    allMessages=s.docs.map(d=>({id:d.id,...d.data()}));
-    const convos={};allMessages.forEach(m=>{const key=m.fromId===currentUser.uid?m.toId:m.fromId;if(!convos[key])convos[key]={id:key,name:m.fromName||m.toName||'Unknown',lastMsg:m.text,lastTime:m.createdAt,unread:0};if(m.toId===currentUser.uid)convos[key].unread++;else{convos[key].lastMsg=m.text;convos[key].lastTime=m.createdAt;}});
-    const list=Object.values(convos).sort((a,b)=>(b.lastTime?.toMillis?.()||0)-(a.lastTime?.toMillis?.()||0));
-    const lb=document.getElementById('msgListBody');
-    if(!list.length){lb.innerHTML='<div class="empty-s"><i class="fas fa-comments"></i><p>Hakuna mazungumzo</p></div>';return;}
-    lb.innerHTML=list.map(c=>{const ini=(c.name||'U')[0].toUpperCase();return`<div class="msg-item${activeChatId===c.id?' active':''}" onclick="openChat('${c.id}','${c.name.replace(/'/g,"\\'")}')"><div class="msg-av">${ini}</div><div class="msg-info"><h5>${c.name}</h5><p>${c.lastMsg||''}</p></div>${c.unread?`<span class="bdg" style="position:static">${c.unread}</span>`:''}</div>`;}).join('');
-  }catch(e){console.error('loadMessages:',e);}
+
+// ------------------------------------------------------------
+// MESSAGE GLOBAL STATE
+// ------------------------------------------------------------
+
+let allMessages = [];
+let activeChatId = null;
+let activeChatName = '';
+let activeChatBusinessId = null;
+let messagesUnsubscribe = null;
+let messagesLoading = false;
+
+
+// ============================================================
+// MESSAGE HELPERS
+// ============================================================
+
+function getCurrentUserId() {
+  return currentUser?.uid || auth?.currentUser?.uid || null;
 }
 
-window.openChat=function(id,name){
-  activeChatId=id;activeChatName=name;
-  document.getElementById('msgChatHead').innerHTML=`<div class="msg-av" style="width:32px;height:32px;font-size:12px">${(name||'U')[0].toUpperCase()}</div><span>${name}</span>`;
-  document.getElementById('msgInput').disabled=false;document.getElementById('msgSendBtn').disabled=false;
-  const msgs=allMessages.filter(m=>(m.fromId===currentUser.uid&&m.toId===id)||(m.fromId===id&&m.toId===currentUser.uid));
-  const cb=document.getElementById('msgChatBody');
-  if(!msgs.length){cb.innerHTML='<div class="empty-s"><i class="fas fa-comment-dots"></i><p>Hakuna ujumbe bado</p></div>';return;}
-  cb.innerHTML=msgs.map(m=>`<div class="msg-bubble ${m.fromId===currentUser.uid?'msg-sent':'msg-recv'}">${m.text}<div class="msg-time">${fmtT(m.createdAt)}</div></div>`).join('');
-  cb.scrollTop=cb.scrollHeight;loadMessages();
+function getCurrentUserName() {
+  const first = currentUserData?.firstName || '';
+  const last = currentUserData?.lastName || '';
+
+  const full = `${first} ${last}`.trim();
+
+  return (
+    full ||
+    currentUser?.displayName ||
+    currentUser?.email ||
+    'User'
+  );
+}
+
+function isSuperAdminUser() {
+  const role = String(
+    currentUserData?.role ||
+    currentUser?.role ||
+    ''
+  ).toLowerCase();
+
+  return [
+    'superuser',
+    'superadmin',
+    'super_admin',
+    'super administrator',
+    'super-administrator'
+  ].includes(role);
+}
+
+function getMessageTime(message) {
+  if (!message) return 0;
+
+  if (
+    message.createdAt &&
+    typeof message.createdAt.toMillis === 'function'
+  ) {
+    return message.createdAt.toMillis();
+  }
+
+  if (
+    message.createdAt &&
+    typeof message.createdAt.seconds === 'number'
+  ) {
+    return message.createdAt.seconds * 1000;
+  }
+
+  if (message.createdAt instanceof Date) {
+    return message.createdAt.getTime();
+  }
+
+  if (typeof message.createdAt === 'number') {
+    return message.createdAt;
+  }
+
+  return 0;
+}
+
+function escapeMessageHtml(value) {
+  const div = document.createElement('div');
+  div.textContent = value ?? '';
+  return div.innerHTML;
+}
+
+function getMessageInitial(name) {
+  return String(name || 'U')
+    .trim()
+    .charAt(0)
+    .toUpperCase() || 'U';
+}
+
+
+// ============================================================
+// LOAD MESSAGES
+// ============================================================
+
+async function loadMessages() {
+
+  const uid = getCurrentUserId();
+
+  if (!uid) {
+    console.warn(
+      'Messages: Hakuna authenticated user.'
+    );
+    return;
+  }
+
+  if (messagesLoading) {
+    console.log(
+      'Messages tayari zinapakiwa.'
+    );
+    return;
+  }
+
+  messagesLoading = true;
+
+  try {
+
+    // --------------------------------------------------------
+    // CANCEL PREVIOUS REAL-TIME LISTENER
+    // --------------------------------------------------------
+
+    if (messagesUnsubscribe) {
+      try {
+        messagesUnsubscribe();
+      } catch (e) {
+        console.warn(
+          'Failed to unsubscribe previous messages listener:',
+          e
+        );
+      }
+
+      messagesUnsubscribe = null;
+    }
+
+    // --------------------------------------------------------
+    // SHOW LOADING STATE
+    // --------------------------------------------------------
+
+    const listBox =
+      document.getElementById('msgListBody');
+
+    if (listBox) {
+      listBox.innerHTML = `
+        <div class="empty-s">
+          <i class="fas fa-spinner fa-spin"></i>
+          <p>Inapakia ujumbe...</p>
+        </div>
+      `;
+    }
+
+    // --------------------------------------------------------
+    // LOAD MESSAGES
+    //
+    // IMPORTANT:
+    // Do NOT depend only on businessId.
+    //
+    // We load:
+    // 1. Messages sent by current user
+    // 2. Messages sent to current user
+    //
+    // This allows Super Admin <-> User communication even
+    // when Super Admin has no businessId.
+    // --------------------------------------------------------
+
+    const sentQuery = query(
+      collection(db, 'messages'),
+      where('fromId', '==', uid)
+    );
+
+    const receivedQuery = query(
+      collection(db, 'messages'),
+      where('toId', '==', uid)
+    );
+
+    const [
+      sentSnap,
+      receivedSnap
+    ] = await Promise.all([
+      getDocs(sentQuery),
+      getDocs(receivedQuery)
+    ]);
+
+    // --------------------------------------------------------
+    // MERGE WITHOUT DUPLICATES
+    // --------------------------------------------------------
+
+    const messageMap = new Map();
+
+    sentSnap.forEach(docSnap => {
+      messageMap.set(
+        docSnap.id,
+        {
+          id: docSnap.id,
+          ...docSnap.data()
+        }
+      );
+    });
+
+    receivedSnap.forEach(docSnap => {
+      messageMap.set(
+        docSnap.id,
+        {
+          id: docSnap.id,
+          ...docSnap.data()
+        }
+      );
+    });
+
+    allMessages = Array.from(
+      messageMap.values()
+    );
+
+    // --------------------------------------------------------
+    // SORT OLDEST -> NEWEST
+    // --------------------------------------------------------
+
+    allMessages.sort(
+      (a, b) =>
+        getMessageTime(a) -
+        getMessageTime(b)
+    );
+
+    console.log(
+      'Messages loaded:',
+      allMessages.length
+    );
+
+    // --------------------------------------------------------
+    // RENDER CONVERSATIONS
+    // --------------------------------------------------------
+
+    renderMessageConversations();
+
+    // --------------------------------------------------------
+    // OPEN ACTIVE CHAT AGAIN
+    // --------------------------------------------------------
+
+    if (activeChatId) {
+
+      const chatStillExists =
+        allMessages.some(
+          m =>
+            m.fromId === activeChatId ||
+            m.toId === activeChatId
+        );
+
+      if (chatStillExists) {
+
+        renderActiveChat();
+
+      }
+    }
+
+    // --------------------------------------------------------
+    // START REAL-TIME LISTENER
+    // --------------------------------------------------------
+
+    startMessagesRealtime(uid);
+
+  } catch (e) {
+
+    console.error(
+      'loadMessages ERROR:',
+      e
+    );
+
+    const listBox =
+      document.getElementById('msgListBody');
+
+    if (listBox) {
+      listBox.innerHTML = `
+        <div class="empty-s">
+          <i class="fas fa-exclamation-triangle"></i>
+          <p>Ujumbe haukuweza kupakiwa</p>
+          <small>${escapeMessageHtml(
+            e?.message || 'Unknown error'
+          )}</small>
+        </div>
+      `;
+    }
+
+    toast(
+      'Imeshindikana kupakia ujumbe.',
+      'e'
+    );
+
+  } finally {
+
+    messagesLoading = false;
+  }
+}
+
+
+// ============================================================
+// REAL-TIME MESSAGE LISTENER
+// ============================================================
+
+function startMessagesRealtime(uid) {
+
+  if (!uid) return;
+
+  try {
+
+    const sentQuery = query(
+      collection(db, 'messages'),
+      where('fromId', '==', uid)
+    );
+
+    const receivedQuery = query(
+      collection(db, 'messages'),
+      where('toId', '==', uid)
+    );
+
+    let sentMessages = [];
+    let receivedMessages = [];
+
+    const rebuildMessages = () => {
+
+      const map = new Map();
+
+      [...sentMessages, ...receivedMessages]
+        .forEach(message => {
+
+          if (message?.id) {
+            map.set(
+              message.id,
+              message
+            );
+          }
+        });
+
+      allMessages = Array.from(
+        map.values()
+      );
+
+      allMessages.sort(
+        (a, b) =>
+          getMessageTime(a) -
+          getMessageTime(b)
+      );
+
+      renderMessageConversations();
+
+      if (activeChatId) {
+        renderActiveChat();
+      }
+    };
+
+    let sentReady = false;
+    let receivedReady = false;
+
+    const unsubSent = onSnapshot(
+      sentQuery,
+      snap => {
+
+        sentMessages = snap.docs.map(
+          d => ({
+            id: d.id,
+            ...d.data()
+          })
+        );
+
+        sentReady = true;
+
+        if (sentReady && receivedReady) {
+          rebuildMessages();
+        }
+
+      },
+      error => {
+
+        console.error(
+          'Messages sent listener error:',
+          error
+        );
+      }
+    );
+
+    const unsubReceived = onSnapshot(
+      receivedQuery,
+      snap => {
+
+        receivedMessages = snap.docs.map(
+          d => ({
+            id: d.id,
+            ...d.data()
+          })
+        );
+
+        receivedReady = true;
+
+        if (sentReady && receivedReady) {
+          rebuildMessages();
+        }
+
+      },
+      error => {
+
+        console.error(
+          'Messages received listener error:',
+          error
+        );
+      }
+    );
+
+    messagesUnsubscribe = () => {
+
+      try {
+        unsubSent?.();
+      } catch (e) {
+        console.warn(e);
+      }
+
+      try {
+        unsubReceived?.();
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+
+  } catch (e) {
+
+    console.error(
+      'startMessagesRealtime ERROR:',
+      e
+    );
+  }
+}
+
+
+// ============================================================
+// RENDER CONVERSATIONS
+// ============================================================
+
+function renderMessageConversations() {
+
+  const lb =
+    document.getElementById('msgListBody');
+
+  if (!lb) {
+    console.warn(
+      'msgListBody haipo kwenye HTML.'
+    );
+    return;
+  }
+
+  const uid = getCurrentUserId();
+
+  if (!uid) {
+    lb.innerHTML = `
+      <div class="empty-s">
+        <i class="fas fa-lock"></i>
+        <p>Ingia kwanza kwenye mfumo</p>
+      </div>
+    `;
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // BUILD CONVERSATIONS
+  // ----------------------------------------------------------
+
+  const convos = {};
+
+  allMessages.forEach(message => {
+
+    if (!message) return;
+
+    const isMine =
+      message.fromId === uid;
+
+    const otherId =
+      isMine
+        ? message.toId
+        : message.fromId;
+
+    if (!otherId) return;
+
+    const otherName =
+      isMine
+        ? (
+            message.toName ||
+            message.toEmail ||
+            'User'
+          )
+        : (
+            message.fromName ||
+            message.fromEmail ||
+            'User'
+          );
+
+    if (!convos[otherId]) {
+
+      convos[otherId] = {
+        id: otherId,
+        name: otherName,
+        lastMsg: message.text || '',
+        lastTime: message.createdAt || null,
+        unread: 0,
+        businessId:
+          message.businessId || null
+      };
+
+    }
+
+    // --------------------------------------------------------
+    // UPDATE LAST MESSAGE
+    // --------------------------------------------------------
+
+    const currentTime =
+      getMessageTime(message);
+
+    const previousTime =
+      getMessageTime(
+        convos[otherId]
+      );
+
+    if (
+      currentTime >= previousTime
+    ) {
+
+      convos[otherId].lastMsg =
+        message.text || '';
+
+      convos[otherId].lastTime =
+        message.createdAt || null;
+
+      convos[otherId].name =
+        otherName || convos[otherId].name;
+
+      if (message.businessId) {
+        convos[otherId].businessId =
+          message.businessId;
+      }
+    }
+
+    // --------------------------------------------------------
+    // UNREAD
+    //
+    // Only messages addressed TO current user are unread.
+    // --------------------------------------------------------
+
+    if (
+      message.toId === uid &&
+      message.fromId !== uid &&
+      message.read !== true
+    ) {
+      convos[otherId].unread++;
+    }
+  });
+
+  const list =
+    Object.values(convos)
+      .sort(
+        (a, b) =>
+          getMessageTime(b.lastTime) -
+          getMessageTime(a.lastTime)
+      );
+
+  // ----------------------------------------------------------
+  // EMPTY
+  // ----------------------------------------------------------
+
+  if (!list.length) {
+
+    lb.innerHTML = `
+      <div class="empty-s">
+        <i class="fas fa-comments"></i>
+        <p>Hakuna mazungumzo</p>
+        <small>Ujumbe mpya utaonekana hapa.</small>
+      </div>
+    `;
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // RENDER
+  // ----------------------------------------------------------
+
+  lb.innerHTML = list.map(c => {
+
+    const ini =
+      getMessageInitial(c.name);
+
+    const safeName =
+      escapeMessageHtml(c.name);
+
+    const safeMsg =
+      escapeMessageHtml(c.lastMsg);
+
+    const safeId =
+      String(c.id)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
+
+    const safeBusinessId =
+      String(c.businessId || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
+
+    return `
+      <div
+        class="msg-item ${activeChatId === c.id ? 'active' : ''}"
+        onclick="openChat('${safeId}','${safeName.replace(/'/g, "\\'")}','${safeBusinessId}')"
+      >
+
+        <div class="msg-av">
+          ${ini}
+        </div>
+
+        <div class="msg-info">
+
+          <h5>${safeName}</h5>
+
+          <p>${safeMsg}</p>
+
+        </div>
+
+        ${
+          c.unread > 0
+            ? `
+              <span
+                class="bdg"
+                style="position:static"
+              >
+                ${c.unread}
+              </span>
+            `
+            : ''
+        }
+
+      </div>
+    `;
+
+  }).join('');
+}
+
+
+// ============================================================
+// OPEN CHAT
+// ============================================================
+
+window.openChat = async function (
+  id,
+  name,
+  chatBusinessId = ''
+) {
+
+  if (!id) {
+    console.warn(
+      'openChat: chat ID missing.'
+    );
+    return;
+  }
+
+  const uid =
+    getCurrentUserId();
+
+  if (!uid) {
+    toast(
+      'Ingia kwanza kwenye mfumo.',
+      'w'
+    );
+    return;
+  }
+
+  activeChatId = id;
+  activeChatName =
+    name || 'User';
+
+  activeChatBusinessId =
+    chatBusinessId || null;
+
+  // ----------------------------------------------------------
+  // UPDATE HEADER
+  // ----------------------------------------------------------
+
+  const head =
+    document.getElementById('msgChatHead');
+
+  if (head) {
+
+    head.innerHTML = `
+      <div
+        class="msg-av"
+        style="
+          width:32px;
+          height:32px;
+          font-size:12px
+        "
+      >
+        ${getMessageInitial(name)}
+      </div>
+
+      <span>
+        ${escapeMessageHtml(name || 'User')}
+      </span>
+    `;
+  }
+
+  // ----------------------------------------------------------
+  // ENABLE INPUT
+  // ----------------------------------------------------------
+
+  const input =
+    document.getElementById('msgInput');
+
+  const sendBtn =
+    document.getElementById('msgSendBtn');
+
+  if (input) {
+    input.disabled = false;
+    input.focus();
+  }
+
+  if (sendBtn) {
+    sendBtn.disabled = false;
+  }
+
+  // ----------------------------------------------------------
+  // RENDER CHAT
+  // ----------------------------------------------------------
+
+  renderActiveChat();
+
+  // ----------------------------------------------------------
+  // MARK RECEIVED MESSAGES AS READ
+  // ----------------------------------------------------------
+
+  await markChatAsRead(id);
+
+  // ----------------------------------------------------------
+  // REFRESH CONVERSATION BADGES
+  // ----------------------------------------------------------
+
+  renderMessageConversations();
 };
 
-window.sendMessage=async function(){
-  const inp=document.getElementById('msgInput'),text=inp.value.trim();if(!text||!activeChatId)return;
-  inp.value='';document.getElementById('msgSendBtn').disabled=true;
-  try{
-    if(!businessId)return;
-    await addDoc(collection(db,'messages'),{fromId:currentUser.uid,fromName:(currentUserData?.firstName||'')+' '+(currentUserData?.lastName||''),toId:activeChatId,toName:activeChatName,text,businessId,createdAt:serverTimestamp()});
-    openChat(activeChatId,activeChatName);
-  }catch(e){console.error('sendMessage:',e);toast('Hitilafu katika kutuma ujumbe','e');}
-  finally{document.getElementById('msgSendBtn').disabled=false;}
+
+// ============================================================
+// RENDER ACTIVE CHAT
+// ============================================================
+
+function renderActiveChat() {
+
+  const cb =
+    document.getElementById('msgChatBody');
+
+  if (!cb) return;
+
+  const uid =
+    getCurrentUserId();
+
+  if (!uid || !activeChatId) {
+
+    cb.innerHTML = `
+      <div class="empty-s">
+        <i class="fas fa-comment-dots"></i>
+        <p>Chagua mazungumzo</p>
+      </div>
+    `;
+
+    return;
+  }
+
+  const msgs =
+    allMessages
+      .filter(message => {
+
+        return (
+          (
+            message.fromId === uid &&
+            message.toId === activeChatId
+          ) ||
+          (
+            message.fromId === activeChatId &&
+            message.toId === uid
+          )
+        );
+
+      })
+      .sort(
+        (a, b) =>
+          getMessageTime(a) -
+          getMessageTime(b)
+      );
+
+  // ----------------------------------------------------------
+  // EMPTY CHAT
+  // ----------------------------------------------------------
+
+  if (!msgs.length) {
+
+    cb.innerHTML = `
+      <div class="empty-s">
+        <i class="fas fa-comment-dots"></i>
+        <p>Hakuna ujumbe bado</p>
+        <small>Anza mazungumzo hapa.</small>
+      </div>
+    `;
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // RENDER MESSAGES
+  // ----------------------------------------------------------
+
+  cb.innerHTML =
+    msgs.map(message => {
+
+      const mine =
+        message.fromId === uid;
+
+      const text =
+        escapeMessageHtml(
+          message.text || ''
+        );
+
+      let time = '';
+
+      try {
+
+        if (
+          typeof fmtT === 'function'
+        ) {
+          time = fmtT(
+            message.createdAt
+          );
+        } else {
+
+          const ms =
+            getMessageTime(message);
+
+          time =
+            ms
+              ? new Date(ms).toLocaleString()
+              : '';
+        }
+
+      } catch (e) {
+
+        time = '';
+      }
+
+      return `
+        <div
+          class="msg-bubble ${
+            mine
+              ? 'msg-sent'
+              : 'msg-recv'
+          }"
+        >
+
+          ${text}
+
+          <div class="msg-time">
+            ${escapeMessageHtml(time)}
+          </div>
+
+        </div>
+      `;
+
+    }).join('');
+
+  // ----------------------------------------------------------
+  // SCROLL TO BOTTOM
+  // ----------------------------------------------------------
+
+  cb.scrollTop =
+    cb.scrollHeight;
+}
+
+
+// ============================================================
+// SEND MESSAGE
+// ============================================================
+
+window.sendMessage = async function () {
+
+  const uid =
+    getCurrentUserId();
+
+  if (!uid) {
+
+    toast(
+      'Hujaingia kwenye mfumo.',
+      'e'
+    );
+
+    return;
+  }
+
+  if (!activeChatId) {
+
+    toast(
+      'Chagua mtu wa kuzungumza naye kwanza.',
+      'w'
+    );
+
+    return;
+  }
+
+  const input =
+    document.getElementById('msgInput');
+
+  const sendBtn =
+    document.getElementById('msgSendBtn');
+
+  if (!input) {
+
+    console.error(
+      'msgInput haipo kwenye HTML.'
+    );
+
+    return;
+  }
+
+  const text =
+    input.value.trim();
+
+  if (!text) return;
+
+  // ----------------------------------------------------------
+  // DISABLE BUTTON
+  // ----------------------------------------------------------
+
+  if (sendBtn) {
+    sendBtn.disabled = true;
+  }
+
+  try {
+
+    // --------------------------------------------------------
+    // BUSINESS ID
+    //
+    // For normal business users:
+    // use current businessId.
+    //
+    // For Super Admin:
+    // use activeChatBusinessId if available.
+    // --------------------------------------------------------
+
+    let messageBusinessId =
+      businessId || null;
+
+    if (
+      isSuperAdminUser() &&
+      activeChatBusinessId
+    ) {
+      messageBusinessId =
+        activeChatBusinessId;
+    }
+
+    // --------------------------------------------------------
+    // GET MESSAGE RECIPIENT NAME
+    // --------------------------------------------------------
+
+    const toName =
+      activeChatName ||
+      'User';
+
+    // --------------------------------------------------------
+    // MESSAGE DATA
+    // --------------------------------------------------------
+
+    const messageData = {
+
+      fromId: uid,
+
+      fromName:
+        getCurrentUserName(),
+
+      fromEmail:
+        currentUser?.email || '',
+
+      toId:
+        activeChatId,
+
+      toName:
+        toName,
+
+      text:
+        text,
+
+      createdAt:
+        serverTimestamp(),
+
+      read:
+        false,
+
+      type:
+        'direct',
+
+      senderRole:
+        currentUserData?.role || '',
+
+      receiverBusinessId:
+        messageBusinessId || null
+    };
+
+    // --------------------------------------------------------
+    // IMPORTANT:
+    // Add businessId when available.
+    // --------------------------------------------------------
+
+    if (messageBusinessId) {
+
+      messageData.businessId =
+        messageBusinessId;
+    }
+
+    console.log(
+      'Sending message:',
+      messageData
+    );
+
+    // --------------------------------------------------------
+    // WRITE MESSAGE
+    // --------------------------------------------------------
+
+    const messageRef =
+      await addDoc(
+        collection(db, 'messages'),
+        messageData
+      );
+
+    console.log(
+      'Message sent successfully:',
+      messageRef.id
+    );
+
+    // --------------------------------------------------------
+    // CLEAR INPUT
+    // --------------------------------------------------------
+
+    input.value = '';
+
+    // --------------------------------------------------------
+    // SUCCESS
+    // --------------------------------------------------------
+
+    toast(
+      'Ujumbe umetumwa.',
+      's'
+    );
+
+    // --------------------------------------------------------
+    // RELOAD IMMEDIATELY
+    // --------------------------------------------------------
+
+    await loadMessages();
+
+    // --------------------------------------------------------
+    // KEEP CHAT OPEN
+    // --------------------------------------------------------
+
+    if (activeChatId) {
+      renderActiveChat();
+    }
+
+  } catch (e) {
+
+    console.error(
+      'sendMessage ERROR:',
+      e
+    );
+
+    toast(
+      e?.message
+        ? `Imeshindikana kutuma ujumbe: ${e.message}`
+        : 'Hitilafu katika kutuma ujumbe.',
+      'e'
+    );
+
+  } finally {
+
+    if (sendBtn) {
+      sendBtn.disabled = false;
+    }
+  }
 };
 
+
+// ============================================================
+// MARK CHAT AS READ
+// ============================================================
+
+async function markChatAsRead(chatId) {
+
+  const uid =
+    getCurrentUserId();
+
+  if (!uid || !chatId) return;
+
+  try {
+
+    const q =
+      query(
+        collection(db, 'messages'),
+        where('fromId', '==', chatId),
+        where('toId', '==', uid)
+      );
+
+    const snap =
+      await getDocs(q);
+
+    if (snap.empty) return;
+
+    const updates =
+      snap.docs
+        .filter(d =>
+          d.data()?.read !== true
+        )
+        .map(d =>
+          updateDoc(
+            d.ref,
+            {
+              read: true,
+              readAt: serverTimestamp()
+            }
+          )
+        );
+
+    if (updates.length) {
+      await Promise.all(updates);
+    }
+
+  } catch (e) {
+
+    console.error(
+      'markChatAsRead ERROR:',
+      e
+    );
+  }
+}
+
+
+// ============================================================
+// CLOSE MESSAGE CHAT
+// ============================================================
+
+window.closeMessageChat = function () {
+
+  activeChatId = null;
+  activeChatName = '';
+  activeChatBusinessId = null;
+
+  const input =
+    document.getElementById('msgInput');
+
+  const sendBtn =
+    document.getElementById('msgSendBtn');
+
+  const head =
+    document.getElementById('msgChatHead');
+
+  const body =
+    document.getElementById('msgChatBody');
+
+  if (input) {
+    input.value = '';
+    input.disabled = true;
+  }
+
+  if (sendBtn) {
+    sendBtn.disabled = true;
+  }
+
+  if (head) {
+    head.innerHTML = `
+      <i class="fas fa-comments"></i>
+      <span>Chagua mazungumzo</span>
+    `;
+  }
+
+  if (body) {
+
+    body.innerHTML = `
+      <div class="empty-s">
+        <i class="fas fa-comment-dots"></i>
+        <p>Chagua mazungumzo</p>
+      </div>
+    `;
+  }
+
+  renderMessageConversations();
+};
+
+
+// ============================================================
+// CLEANUP MESSAGE LISTENER
+// ============================================================
+
+window.stopMessagesRealtime = function () {
+
+  if (messagesUnsubscribe) {
+
+    try {
+      messagesUnsubscribe();
+    } catch (e) {
+      console.warn(e);
+    }
+
+    messagesUnsubscribe = null;
+  }
+};
+
+
+// ============================================================
+// OPTIONAL: REFRESH MESSAGES
+// ============================================================
+
+window.refreshMessages = async function () {
+
+  stopMessagesRealtime();
+
+  messagesLoading = false;
+
+  await loadMessages();
+};
+
+
+// ============================================================
+// AUTO REFRESH WHEN MESSAGES SECTION OPENS
+// ============================================================
+
+window.initMessages = async function () {
+
+  console.log(
+    'Initializing Messages...'
+  );
+
+  await loadMessages();
+};
 // ============================================================
 // PROFILE
 // ============================================================
