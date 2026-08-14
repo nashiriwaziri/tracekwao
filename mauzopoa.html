@@ -1974,34 +1974,35 @@ function deleteCustomer(id, name) {
 // ===== RECEIPTS =====
 async function loadReceipts() {
   if (!businessId) return;
+
   try {
-    const snap = await db.collection('receipts').where('businessId', '==', businessId).orderBy('createdAt', 'desc').get();
+    const snap = await db.collection('receipts')
+      .where('businessId', '==', businessId)
+      .orderBy('createdAt', 'desc')
+      .get();
+
     allReceipts = [];
-    snap.forEach(function(doc) { allReceipts.push({ id: doc.id, ...doc.data() }); });
-  } catch (err) { console.error('Load receipts error:', err); }
-}
 
-function renderReceipts() {
-  const search = (document.getElementById('receiptSearch').value || '').toLowerCase();
-  const filtered = allReceipts.filter(function(r) {
-    return (r.receiptNum && r.receiptNum.toLowerCase().includes(search)) || (r.customerName && r.customerName.toLowerCase().includes(search));
-  });
-  const tb = document.getElementById('receiptsTable');
-  if (filtered.length === 0) {
-    tb.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna risiti bado</p></td></tr>';
-    return;
+    snap.forEach(function(doc) {
+      const data = doc.data();
+
+      allReceipts.push({
+        id: doc.id,
+        ...data
+      });
+    });
+
+    console.log('Receipts loaded:', allReceipts.length);
+    console.log('Latest receipt:', allReceipts[0]);
+
+    // Muhimu: refresh dashboard baada ya receipts ku-load
+    if (typeof loadDailyReport === 'function') {
+      loadDailyReport();
+    }
+
+  } catch (err) {
+    console.error('Load receipts error:', err);
   }
-  tb.innerHTML = filtered.map(function(r) {
-    const statusClass = r.status === 'paid' ? 'paid' : 'unpaid';
-    const statusText = r.status === 'paid' ? 'Imelipwa' : 'Hajalipa';
-    return '<tr><td>' + (r.receiptNum || '-') + '</td><td>' + (r.customerName || '-') + '</td><td>' + formatCurrency(r.total) + '</td><td>' + (r.payMethod || '-') + '</td><td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td><td>' + formatDateTime(r.createdAt) + '</td><td><button class="btn btn-xs btn-o" onclick="viewReceipt(\'' + r.id + '\')"><i class="fas fa-eye"></i></button></td></tr>';
-  }).join('');
-}
-
-function viewReceipt(id) {
-  const r = allReceipts.find(function(x) { return x.id === id; });
-  if (!r) return;
-  showReceiptModal(r.receiptNum, r.customerName, r.items || [], r.total, r.payMethod);
 }
 
 // ===== COSTS =====
@@ -2680,12 +2681,31 @@ function renderCategoriesChart() {
 // ===== DAILY REPORT =====
 async function loadDailyReport() {
   if (!businessId) return;
-  const today = getToday();
-  const dayReceipts = allReceipts.filter(function(r) {
-    if (!r.createdAt) return false;
-    const d = r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
-    return d.getTime() >= today;
-  });
+  const now = new Date();
+
+const startOfDay = new Date(
+  now.getFullYear(),
+  now.getMonth(),
+  now.getDate(),
+  0, 0, 0, 0
+);
+
+const endOfDay = new Date(
+  now.getFullYear(),
+  now.getMonth(),
+  now.getDate() + 1,
+  0, 0, 0, 0
+);
+
+const dayReceipts = allReceipts.filter(function(r) {
+  if (!r.createdAt) return false;
+
+  const d = r.createdAt.toDate
+    ? r.createdAt.toDate()
+    : new Date(r.createdAt);
+
+  return d >= startOfDay && d < endOfDay;
+});
   const dayCosts = allCosts.filter(function(c) {
     if (!c.createdAt) return false;
     const d = c.createdAt.toDate ? c.createdAt.toDate() : new Date(c.createdAt);
