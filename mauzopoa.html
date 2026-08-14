@@ -1270,110 +1270,71 @@ function regNext(step) {
 // ============================================================
 // LOGIN
 // ============================================================
+// ============================================================
+// LOGIN
+// ============================================================
 window.handleLogin = async function () {
 
-  const emailEl =
-    document.getElementById('loginEmail');
+  const emailEl = document.getElementById('loginEmail');
+  const passEl = document.getElementById('loginPassword');
+  const btn = document.getElementById('loginBtn');
 
-  const passEl =
-    document.getElementById('loginPassword');
+  const email = emailEl?.value.trim() || '';
+  const pass = passEl?.value || '';
 
-  const emailErr =
-    document.getElementById('loginEmailErr');
+  document
+    .getElementById('loginEmailErr')
+    ?.classList.remove('show');
 
-  const passErr =
-    document.getElementById('loginPassErr');
-
-  const btn =
-    document.getElementById('loginBtn');
-
-  const email =
-    emailEl?.value.trim() || '';
-
-  const pass =
-    passEl?.value || '';
+  document
+    .getElementById('loginPassErr')
+    ?.classList.remove('show');
 
   // ----------------------------------------------------------
-  // CLEAR ERRORS
+  // VALIDATION
   // ----------------------------------------------------------
-  emailErr?.classList.remove('show');
-  passErr?.classList.remove('show');
-
-  // ----------------------------------------------------------
-  // VALIDATE EMAIL
-  // ----------------------------------------------------------
-  if (
-    !email ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  ) {
-
-    emailErr?.classList.add('show');
-
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    document
+      .getElementById('loginEmailErr')
+      ?.classList.add('show');
     return;
   }
 
-  // ----------------------------------------------------------
-  // VALIDATE PASSWORD
-  // ----------------------------------------------------------
   if (!pass || pass.length < 6) {
-
-    passErr?.classList.add('show');
-
+    document
+      .getElementById('loginPassErr')
+      ?.classList.add('show');
     return;
   }
 
-  // ----------------------------------------------------------
-  // CHECK FIREBASE AUTH
-  // ----------------------------------------------------------
   if (!auth) {
-
-    console.error(
-      'Firebase Auth haijapatikana.'
+    console.error('[LOGIN] Firebase Auth haipo.');
+    Utils.toast(
+      'Mfumo wa login haujaandaliwa vizuri.',
+      'e'
     );
-
-    if (
-      typeof toast === 'function'
-    ) {
-      toast(
-        'Mfumo wa kuingia haujaandaliwa vizuri.',
-        'e'
-      );
-    }
-
     return;
-  }
-
-  // ----------------------------------------------------------
-  // BUTTON LOADING
-  // ----------------------------------------------------------
-  if (btn) {
-
-    btn.disabled = true;
-
-    btn.dataset.originalHtml =
-      btn.innerHTML;
-
-    btn.innerHTML =
-      '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div> Inaingia...';
-  }
-
-  // ----------------------------------------------------------
-  // AUTH PROCESS
-  // ----------------------------------------------------------
-  if (typeof State !== 'undefined') {
-    State.isProcessingAuth = true;
   }
 
   try {
 
-    console.log(
-      '[LOGIN] Attempting login:',
-      email
-    );
+    if (btn) {
+      btn.disabled = true;
+      btn.dataset.oldHtml = btn.innerHTML;
+      btn.innerHTML =
+        '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div> Inaingia...';
+    }
+
+    // IMPORTANT:
+    // Usiiweke true kabla ya signIn.
+    if (typeof State !== 'undefined') {
+      State.isProcessingAuth = false;
+    }
+
+    console.log('[LOGIN] Signing in:', email);
 
     // ========================================================
-    // IMPORTANT:
-    // MODULAR FIREBASE SDK
+    // MODULAR FIREBASE AUTH
     // ========================================================
     const credential =
       await signInWithEmailAndPassword(
@@ -1383,53 +1344,25 @@ window.handleLogin = async function () {
       );
 
     console.log(
-      '[LOGIN] Firebase Authentication successful:',
+      '[LOGIN] Firebase login successful:',
       credential.user.uid
     );
 
-    // --------------------------------------------------------
-    // IMPORTANT:
-    // DO NOT LOAD USER HERE IF onAuthStateChanged
-    // ALREADY DOES IT.
-    //
-    // Firebase will trigger:
-    //
-    // onAuthStateChanged(auth, user => {...})
-    //
-    // --------------------------------------------------------
-
-    if (
-      typeof toast === 'function'
-    ) {
-
-      toast(
-        'Umefanikiwa kuingia!',
-        's'
-      );
-    }
+    // onAuthStateChanged itafuata automatically.
 
   } catch (err) {
 
     console.error(
-      '[LOGIN] Firebase Login Error:',
+      '[LOGIN] ERROR:',
       err
     );
 
     console.error(
-      '[LOGIN] Error Code:',
+      '[LOGIN] CODE:',
       err?.code
     );
 
-    if (
-      typeof State !== 'undefined'
-    ) {
-      State.isProcessingAuth = false;
-    }
-
-    // --------------------------------------------------------
-    // FIREBASE ERROR MESSAGES
-    // --------------------------------------------------------
-    const msgs = {
+    const messages = {
 
       'auth/user-not-found':
         'Akaunti haipo kwenye mfumo.',
@@ -1440,72 +1373,50 @@ window.handleLogin = async function () {
       'auth/invalid-password':
         'Nenosiri sio sahihi.',
 
-      'auth/invalid-email':
-        'Barua pepe sio sahihi.',
-
-      'auth/too-many-requests':
-        'Majaribio mengi sana. Jaribu tena baada ya muda.',
-
       'auth/invalid-credential':
         'Barua pepe au nenosiri sio sahihi.',
+
+      'auth/invalid-email':
+        'Barua pepe sio sahihi.',
 
       'auth/user-disabled':
         'Akaunti hii imezuiwa.',
 
+      'auth/too-many-requests':
+        'Majaribio mengi sana. Jaribu tena baada ya muda.',
+
       'auth/network-request-failed':
-        'Hakuna muunganisho wa internet. Angalia internet yako.',
+        'Tatizo la internet. Angalia muunganisho wako.',
 
       'auth/operation-not-allowed':
-        'Email/Password login haijawezeshwa kwenye Firebase.',
+        'Email/Password login haijawezeshwa Firebase.',
 
-      'auth/internal-error':
-        'Firebase imepata hitilafu ya ndani. Jaribu tena.',
+      'auth/api-key-not-valid':
+        'Firebase API Key si sahihi.',
 
       'auth/configuration-not-found':
-        'Firebase Authentication configuration haijakamilika.'
+        'Firebase Authentication haijaandaliwa vizuri.'
     };
 
-    const message =
-      msgs[err?.code] ||
-      'Hitilafu ya kuingia. Tafadhali jaribu tena.';
-
-    if (
-      typeof toast === 'function'
-    ) {
-
-      toast(
-        message,
-        'e'
-      );
-
-    } else if (
-      typeof Utils !== 'undefined' &&
-      typeof Utils.toast === 'function'
-    ) {
-
-      Utils.toast(
-        message,
-        'e'
-      );
-    }
+    Utils.toast(
+      messages[err?.code] ||
+      `Hitilafu ya Kuingia: ${err?.message || 'Tafadhali jaribu tena.'}`,
+      'e'
+    );
 
   } finally {
 
-    // --------------------------------------------------------
-    // RESTORE BUTTON
-    // --------------------------------------------------------
     if (btn) {
 
       btn.disabled = false;
 
       btn.innerHTML =
-        btn.dataset.originalHtml ||
+        btn.dataset.oldHtml ||
         '<i class="fas fa-sign-in-alt"></i> Ingia kwenye Mfumo';
     }
   }
 };
-
-async function handleRegister() {
+   async function handleRegister() {
   const fname = document.getElementById('regFname').value.trim();
   const lname = document.getElementById('regLname').value.trim();
   const email = document.getElementById('regEmail').value.trim();
