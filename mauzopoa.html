@@ -838,23 +838,127 @@ window.handleLogout = async function() {
 // AUTH STATE — MODULAR
 // ============================================================
 onAuthStateChanged(auth, async user => {
-  if(user){
-    currentUser=user;
-    try{
-      const us=await getDoc(doc(db,'users',user.uid));
-      if(us.exists()){
-        currentUserData=us.data();businessId=currentUserData.businessId;
-        if(businessId){const bs=await getDoc(doc(db,'businesses',businessId));if(bs.exists())businessData=bs.data();}
-        document.getElementById('loginPage').classList.add('hidden');document.getElementById('mainApp').classList.remove('hidden');
-        updateTopbar();
-        if(currentUserData.role==='superuser'){document.getElementById('adminLbl').style.display='';document.getElementById('navSuperAdmin').classList.remove('hidden');}
-        else{document.getElementById('adminLbl').style.display='none';document.getElementById('navSuperAdmin').classList.add('hidden');}
-        await loadDashboard();navTo('dashboard');
-      }else{await signOut(auth);toast('Akaunti yako haipo kwenye mfumo','e');}
-    }catch(e){console.error('AuthState:',e);toast('Hitilafu katika kupakua data','e');}
-  }else{currentUser=null;currentUserData=null;businessId=null;businessData=null;document.getElementById('mainApp').classList.add('hidden');document.getElementById('loginPage').classList.remove('hidden');showLoginForm();}
-});
+  if (!user) {
+    // ============================================================
+    // USER NOT AUTHENTICATED
+    // ============================================================
+    currentUser = null;
+    currentUserData = null;
+    businessId = null;
+    businessData = null;
 
+    document.getElementById('mainApp')?.classList.add('hidden');
+    document.getElementById('loginPage')?.classList.remove('hidden');
+
+    showLoginForm();
+    return;
+  }
+
+  // ============================================================
+  // USER AUTHENTICATED
+  // ============================================================
+  currentUser = user;
+
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    const us = await getDoc(userRef);
+
+    // ------------------------------------------------------------
+    // USER DOCUMENT NOT FOUND
+    // ------------------------------------------------------------
+    if (!us.exists()) {
+      await signOut(auth);
+      toast('Akaunti yako haipo kwenye mfumo', 'e');
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // LOAD USER DATA
+    // ------------------------------------------------------------
+    currentUserData = {
+      id: us.id,
+      ...us.data()
+    };
+
+    businessId = currentUserData.businessId || null;
+    businessData = null;
+
+    // ------------------------------------------------------------
+    // LOAD BUSINESS DATA
+    // ------------------------------------------------------------
+    if (businessId) {
+      const businessRef = doc(db, 'businesses', businessId);
+      const bs = await getDoc(businessRef);
+
+      if (bs.exists()) {
+        businessData = {
+          id: bs.id,
+          ...bs.data()
+        };
+      } else {
+        console.warn(
+          'Business document haijapatikana:',
+          businessId
+        );
+      }
+    }
+
+    // ------------------------------------------------------------
+    // SHOW MAIN APPLICATION
+    // ------------------------------------------------------------
+    document.getElementById('loginPage')?.classList.add('hidden');
+    document.getElementById('mainApp')?.classList.remove('hidden');
+
+    // ------------------------------------------------------------
+    // UPDATE TOPBAR
+    // ------------------------------------------------------------
+    updateTopbar();
+
+    // ------------------------------------------------------------
+    // SUPER USER ACCESS
+    // ------------------------------------------------------------
+    const adminLbl = document.getElementById('adminLbl');
+    const navSuperAdmin = document.getElementById('navSuperAdmin');
+
+    if (currentUserData.role === 'superuser') {
+      if (adminLbl) {
+        adminLbl.style.display = '';
+      }
+
+      if (navSuperAdmin) {
+        navSuperAdmin.classList.remove('hidden');
+      }
+    } else {
+      if (adminLbl) {
+        adminLbl.style.display = 'none';
+      }
+
+      if (navSuperAdmin) {
+        navSuperAdmin.classList.add('hidden');
+      }
+    }
+
+    // ------------------------------------------------------------
+    // LOAD DASHBOARD
+    // ------------------------------------------------------------
+    await loadDashboard();
+
+    // ------------------------------------------------------------
+    // OPEN DEFAULT PAGE
+    // ------------------------------------------------------------
+    navTo('dashboard');
+
+  } catch (e) {
+    console.error('AuthState Error:', e);
+
+    toast(
+      e?.message
+        ? `Hitilafu: ${e.message}`
+        : 'Hitilafu katika kupakua data',
+      'e'
+    );
+  }
+});
 function updateTopbar(){
   if(!currentUserData)return;
   const ini=(currentUserData.firstName||'U')[0]+(currentUserData.lastName||'')[0];
@@ -886,19 +990,205 @@ window.navTo=function(sec){
   loadSection(sec);
 };
 
-async function loadSection(sec){
-  try{switch(sec){
-    case'dashboard':await loadDashboard();break;case'products':await loadProducts();renderProducts();break;
-    case'sell-product':await loadProducts();renderPosProducts();break;case'suppliers':await loadSuppliers();renderSuppliers();break;
-    case'customers':await loadCustomers();renderCustomers();break;case'receipts':await loadReceipts();renderReceipts();break;
-    case'costs':await loadCosts();renderCosts();break;case'debts':await loadDebts();renderDebts();break;
-    case'ads':await loadAds();renderAds();break;case'employees':await loadEmployees();renderEmployees();break;
-    case'messages':await loadMessages();break;case'profile':loadProfileForm();break;case'business-profile':loadBusinessForm();break;
-    case'profit-sharing':await loadProfitSharing();renderProfitSharing();break;case'compensation':await loadCompensations();renderCompensations();break;
-    case'daily-report':await loadDailyReport();break;case'monthly-report':await loadMonthlyReport();break;case'annual-report':await loadAnnualReport();break;
-  }}catch(e){console.error(`Load ${sec}:`,e);toast('Hitilafu katika kupakua data','e');}
-}
+// ============================================================
+// LOAD SECTION
+// ============================================================
+async function loadSection(sec) {
+  if (!sec) {
+    console.warn('loadSection: section haijaainishwa');
+    return;
+  }
 
+  console.log(`Loading section: ${sec}`);
+
+  try {
+
+    // --------------------------------------------------------
+    // DASHBOARD
+    // --------------------------------------------------------
+    if (sec === 'dashboard') {
+      await loadDashboard();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // PRODUCTS
+    // --------------------------------------------------------
+    if (sec === 'products') {
+      await loadProducts();
+      renderProducts();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // SELL / POS
+    // --------------------------------------------------------
+    if (sec === 'sell-product') {
+      await loadProducts();
+      renderPosProducts();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // SUPPLIERS
+    // --------------------------------------------------------
+    if (sec === 'suppliers') {
+      await loadSuppliers();
+      renderSuppliers();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // CUSTOMERS
+    // --------------------------------------------------------
+    if (sec === 'customers') {
+      await loadCustomers();
+      renderCustomers();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // RECEIPTS
+    // --------------------------------------------------------
+    if (sec === 'receipts') {
+      await loadReceipts();
+      renderReceipts();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // COSTS
+    // --------------------------------------------------------
+    if (sec === 'costs') {
+      await loadCosts();
+      renderCosts();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // DEBTS
+    // --------------------------------------------------------
+    if (sec === 'debts') {
+      await loadDebts();
+      renderDebts();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // ADS
+    // --------------------------------------------------------
+    if (sec === 'ads') {
+      await loadAds();
+      renderAds();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // EMPLOYEES
+    // --------------------------------------------------------
+    if (sec === 'employees') {
+      await loadEmployees();
+      renderEmployees();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // MESSAGES
+    // --------------------------------------------------------
+    if (sec === 'messages') {
+      await loadMessages();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // PROFILE
+    // --------------------------------------------------------
+    if (sec === 'profile') {
+      loadProfileForm();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // BUSINESS PROFILE
+    // --------------------------------------------------------
+    if (sec === 'business-profile') {
+      loadBusinessForm();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // PROFIT SHARING
+    // --------------------------------------------------------
+    if (sec === 'profit-sharing') {
+      await loadProfitSharing();
+      renderProfitSharing();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // COMPENSATION
+    // --------------------------------------------------------
+    if (sec === 'compensation') {
+      await loadCompensations();
+      renderCompensations();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // REPORTS
+    // --------------------------------------------------------
+    if (sec === 'daily-report') {
+      await loadDailyReport();
+      return;
+    }
+
+    if (sec === 'monthly-report') {
+      await loadMonthlyReport();
+      return;
+    }
+
+    if (sec === 'annual-report') {
+      await loadAnnualReport();
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // UNKNOWN SECTION
+    // --------------------------------------------------------
+    console.warn(`loadSection: Section haijulikani: ${sec}`);
+
+  } catch (e) {
+
+    console.error(`Load Section Error [${sec}]:`, e);
+
+    // Onyesha kosa halisi kwenye console
+    if (e?.code) {
+      console.error('Firebase Error Code:', e.code);
+    }
+
+    if (e?.message) {
+      console.error('Firebase Error Message:', e.message);
+    }
+
+    toast(`Hitilafu katika kupakua ${sec}`, 'e');
+  }
+}
 // ============================================================
 // DASHBOARD
 // ============================================================
