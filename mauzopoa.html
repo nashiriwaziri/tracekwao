@@ -929,42 +929,267 @@ const Utils = {
 /* ============================================================
    AUTH MODULE - SINGLE AUTH CONTROLLER
    ============================================================ */
+   // ============================================================
+// AUTHENTICATION INITIALIZATION
+// ============================================================
 const Auth = {
+
   init() {
-    auth.onAuthStateChanged(async (user) => {
-      if (State.isProcessingAuth) return;
-      if (user) {
-        try {
-          const doc = await db.collection('users').doc(user.uid).get();
-          if (!doc.exists) {
-            console.warn('[AUTH] No profile for UID:', user.uid, ' - signing out orphaned account');
-            await auth.signOut();
-            return;
-          }
-          const data = doc.data();
-          if (data.status === 'suspended') {
-            await auth.signOut();
-            Utils.toast('Akaunti yako imesimamishwa. Wasiliana na msimamizi.', 'e');
-            return;
-          }
-          State.currentUserId = user.uid;
-          State.currentUserData = data;
-          State.currentBizId = data.businessId || null;
-          if (State.currentBizId) {
-            try {
-              const bizDoc = await db.collection('businesses').doc(State.currentBizId).get();
-              State.currentBizData = bizDoc.exists ? bizDoc.data() : null;
-            } catch (e) { console.warn('[AUTH] Could not load business:', e.message); State.currentBizData = null; }
-          }
-          Auth.onAuthSuccess();
-        } catch (err) {
-          console.error('[AUTH] Error loading user profile:', err.message);
-          await auth.signOut();
-        }
-      } else {
-        Auth.showLogin();
+
+    onAuthStateChanged(auth, async (user) => {
+
+      // --------------------------------------------------------
+      // PREVENT DUPLICATE AUTH PROCESS
+      // --------------------------------------------------------
+      if (
+        typeof State !== 'undefined' &&
+        State.isProcessingAuth
+      ) {
+        return;
       }
+
+      // --------------------------------------------------------
+      // NO USER
+      // --------------------------------------------------------
+      if (!user) {
+
+        console.log(
+          '[AUTH] No authenticated user.'
+        );
+
+        State.currentUserId = null;
+        State.currentUserData = null;
+        State.currentBizId = null;
+        State.currentBizData = null;
+
+        Auth.showLogin();
+
+        return;
+      }
+
+      try {
+
+        console.log(
+          '[AUTH] Authenticated UID:',
+          user.uid
+        );
+
+        // ------------------------------------------------------
+        // LOAD USER PROFILE
+        // ------------------------------------------------------
+        const userRef =
+          doc(
+            db,
+            'users',
+            user.uid
+          );
+
+        const userSnap =
+          await getDoc(userRef);
+
+        // ------------------------------------------------------
+        // USER PROFILE NOT FOUND
+        // ------------------------------------------------------
+        if (!userSnap.exists()) {
+
+          console.warn(
+            '[AUTH] User profile not found:',
+            user.uid
+          );
+
+          await signOut(auth);
+
+          Utils.toast(
+            'Akaunti yako haipo kwenye mfumo.',
+            'e'
+          );
+
+          return;
+        }
+
+        // ------------------------------------------------------
+        // USER DATA
+        // ------------------------------------------------------
+        const data =
+          userSnap.data();
+
+        console.log(
+          '[AUTH] User profile:',
+          data
+        );
+
+        // ------------------------------------------------------
+        // SUSPENDED ACCOUNT
+        // ------------------------------------------------------
+        if (
+          data.status === 'suspended'
+        ) {
+
+          await signOut(auth);
+
+          Utils.toast(
+            'Akaunti yako imesimamishwa. Wasiliana na msimamizi.',
+            'e'
+          );
+
+          return;
+        }
+
+        // ------------------------------------------------------
+        // SAVE USER TO STATE
+        // ------------------------------------------------------
+        State.currentUserId =
+          user.uid;
+
+        State.currentUserData = {
+          id: userSnap.id,
+          uid: user.uid,
+          ...data
+        };
+
+        // ------------------------------------------------------
+        // BUSINESS ID
+        // ------------------------------------------------------
+        const bizId =
+          data.businessId ||
+          data.bizId ||
+          null;
+
+        State.currentBizId =
+          bizId;
+
+        console.log(
+          '[AUTH] Business ID:',
+          State.currentBizId
+        );
+
+        // ------------------------------------------------------
+        // BUSINESS DATA
+        // ------------------------------------------------------
+        State.currentBizData = null;
+
+        if (bizId) {
+
+          try {
+
+            const businessRef =
+              doc(
+                db,
+                'businesses',
+                bizId
+              );
+
+            const businessSnap =
+              await getDoc(
+                businessRef
+              );
+
+            if (
+              businessSnap.exists()
+            ) {
+
+              State.currentBizData = {
+                id: businessSnap.id,
+                ...businessSnap.data()
+              };
+
+              console.log(
+                '[AUTH] Business loaded:',
+                State.currentBizData
+              );
+
+            } else {
+
+              console.warn(
+                '[AUTH] Business document not found:',
+                bizId
+              );
+            }
+
+          } catch (businessError) {
+
+            console.error(
+              '[AUTH] Business loading error:',
+              businessError
+            );
+
+            State.currentBizData = null;
+          }
+
+        } else {
+
+          console.warn(
+            '[AUTH] User has no businessId:',
+            user.uid
+          );
+        }
+
+        // ------------------------------------------------------
+        // OPTIONAL GLOBAL COMPATIBILITY VARIABLES
+        // ------------------------------------------------------
+        if (
+          typeof currentUserData !== 'undefined'
+        ) {
+          currentUserData =
+            State.currentUserData;
+        }
+
+        if (
+          typeof businessId !== 'undefined'
+        ) {
+          businessId =
+            State.currentBizId;
+        }
+
+        if (
+          typeof businessData !== 'undefined'
+        ) {
+          businessData =
+            State.currentBizData;
+        }
+
+        // ------------------------------------------------------
+        // AUTH SUCCESS
+        // ------------------------------------------------------
+        console.log(
+          '[AUTH] Authentication completed successfully.',
+          {
+            uid: State.currentUserId,
+            businessId: State.currentBizId
+          }
+        );
+
+        await Auth.onAuthSuccess();
+
+      } catch (err) {
+
+        console.error(
+          '[AUTH] Error loading user profile:',
+          err
+        );
+
+        State.currentUserId = null;
+        State.currentUserData = null;
+        State.currentBizId = null;
+        State.currentBizData = null;
+
+        try {
+          await signOut(auth);
+        } catch (logoutError) {
+          console.error(
+            '[AUTH] Signout error:',
+            logoutError
+          );
+        }
+
+        Utils.toast(
+          'Hitilafu katika kupakia akaunti yako.',
+          'e'
+        );
+      }
+
     });
+
   },
 
   async onAuthSuccess() {
