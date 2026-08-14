@@ -902,23 +902,201 @@ async function loadSection(sec){
 // ============================================================
 // DASHBOARD
 // ============================================================
-async function loadDashboard(){
-  if(!businessId)return;
-  try{
-    const pq=query(collection(db,'products'),where('businessId','==',businessId));const ps=await getDocs(pq);allProducts=ps.docs.map(d=>({id:d.id,...d.data()}));document.getElementById('mProducts').textContent=allProducts.length;
-    const rq=query(collection(db,'receipts'),where('businessId','==',businessId),orderBy('createdAt','desc'));const rs=await getDocs(rq);allReceipts=rs.docs.map(d=>({id:d.id,...d.data()}));
-    const ts=todayS(),te=todayE();const tr=allReceipts.filter(r=>inRange(r.createdAt,ts,te));document.getElementById('mSales').textContent=tr.length;document.getElementById('mRevenue').textContent=fmt(tr.reduce((s,r)=>s+(r.total||0),0));
-    const cq=query(collection(db,'customers'),where('businessId','==',businessId));const cs=await getDocs(cq);allCustomers=cs.docs.map(d=>({id:d.id,...d.data()}));document.getElementById('mCustomers').textContent=allCustomers.length;
-    const dq=query(collection(db,'debts'),where('businessId','==',businessId));const ds=await getDocs(dq);allDebts=ds.docs.map(d=>({id:d.id,...d.data()}));document.getElementById('mDebts').textContent=allDebts.filter(d=>d.status!=='paid').length;
-    const cxq=query(collection(db,'costs'),where('businessId','==',businessId));const cxs=await getDocs(cxq);allCosts=cxs.docs.map(d=>({id:d.id,...d.data()}));document.getElementById('mExpenses').textContent=fmt(allCosts.filter(c=>inRange(c.createdAt,ts,te)).reduce((s,c)=>s+(c.amount||0),0));
-    renderRecentSales();renderDashCharts();
-  }catch(e){console.error('Dashboard:',e);toast('Hitilafu katika kupakua dashibodi','e');}
-}
+// ============================================================
+// DASHBOARD
+// ============================================================
+async function loadDashboard() {
+  if (!businessId) {
+    console.warn('Dashboard: businessId haipo');
+    return;
+  }
 
-function renderRecentSales(){
-  const tb=document.getElementById('dashRecentSales'),r=allReceipts.slice(0,8);
-  if(!r.length){tb.innerHTML='<tr><td colspan="6" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo bado</p></td></tr>';return;}
-  tb.innerHTML=r.map(x=>{const ic=(x.items||[]).reduce((s,i)=>s+(i.qty||0),0);return`<tr><td>${x.receiptNumber||'-'}</td><td>${x.customerName||'Mteja wa Kawaida'}</td><td>${ic}</td><td>${fmt(x.total)}</td><td>${fmtDT(x.createdAt)}</td></tr>`;}).join('');
+  try {
+    console.log('Dashboard loading...', businessId);
+
+    // --------------------------------------------------------
+    // PRODUCTS
+    // --------------------------------------------------------
+    try {
+      const pq = query(
+        collection(db, 'products'),
+        where('businessId', '==', businessId)
+      );
+
+      const ps = await getDocs(pq);
+
+      allProducts = ps.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      const el = document.getElementById('mProducts');
+      if (el) el.textContent = allProducts.length;
+
+    } catch (e) {
+      console.error('Dashboard PRODUCTS error:', e);
+    }
+
+
+    // --------------------------------------------------------
+    // RECEIPTS / SALES
+    // --------------------------------------------------------
+    try {
+      const rq = query(
+        collection(db, 'receipts'),
+        where('businessId', '==', businessId),
+        orderBy('createdAt', 'desc')
+      );
+
+      const rs = await getDocs(rq);
+
+      allReceipts = rs.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      const ts = todayS();
+      const te = todayE();
+
+      const tr = allReceipts.filter(r =>
+        inRange(r.createdAt, ts, te)
+      );
+
+      const salesEl = document.getElementById('mSales');
+      if (salesEl) salesEl.textContent = tr.length;
+
+      const revenue = tr.reduce(
+        (sum, r) => sum + Number(r.total || 0),
+        0
+      );
+
+      const revenueEl = document.getElementById('mRevenue');
+      if (revenueEl) revenueEl.textContent = fmt(revenue);
+
+    } catch (e) {
+      console.error('Dashboard RECEIPTS error:', e);
+
+      // Kama tatizo ni index, usiache Dashboard nzima isimame
+      allReceipts = [];
+
+      const salesEl = document.getElementById('mSales');
+      if (salesEl) salesEl.textContent = '0';
+
+      const revenueEl = document.getElementById('mRevenue');
+      if (revenueEl) revenueEl.textContent = fmt(0);
+    }
+
+
+    // --------------------------------------------------------
+    // CUSTOMERS
+    // --------------------------------------------------------
+    try {
+      const cq = query(
+        collection(db, 'customers'),
+        where('businessId', '==', businessId)
+      );
+
+      const cs = await getDocs(cq);
+
+      allCustomers = cs.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      const el = document.getElementById('mCustomers');
+      if (el) el.textContent = allCustomers.length;
+
+    } catch (e) {
+      console.error('Dashboard CUSTOMERS error:', e);
+      allCustomers = [];
+    }
+
+
+    // --------------------------------------------------------
+    // DEBTS
+    // --------------------------------------------------------
+    try {
+      const dq = query(
+        collection(db, 'debts'),
+        where('businessId', '==', businessId)
+      );
+
+      const ds = await getDocs(dq);
+
+      allDebts = ds.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      const unpaid = allDebts.filter(
+        d => d.status !== 'paid'
+      ).length;
+
+      const el = document.getElementById('mDebts');
+      if (el) el.textContent = unpaid;
+
+    } catch (e) {
+      console.error('Dashboard DEBTS error:', e);
+      allDebts = [];
+    }
+
+
+    // --------------------------------------------------------
+    // COSTS / EXPENSES
+    // --------------------------------------------------------
+    try {
+      const cxq = query(
+        collection(db, 'costs'),
+        where('businessId', '==', businessId)
+      );
+
+      const cxs = await getDocs(cxq);
+
+      allCosts = cxs.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      const ts = todayS();
+      const te = todayE();
+
+      const expenses = allCosts
+        .filter(c => inRange(c.createdAt, ts, te))
+        .reduce(
+          (sum, c) => sum + Number(c.amount || 0),
+          0
+        );
+
+      const el = document.getElementById('mExpenses');
+      if (el) el.textContent = fmt(expenses);
+
+    } catch (e) {
+      console.error('Dashboard COSTS error:', e);
+      allCosts = [];
+    }
+
+
+    // --------------------------------------------------------
+    // RENDER
+    // --------------------------------------------------------
+    try {
+      renderRecentSales();
+    } catch (e) {
+      console.error('renderRecentSales error:', e);
+    }
+
+    try {
+      renderDashCharts();
+    } catch (e) {
+      console.error('renderDashCharts error:', e);
+    }
+
+    console.log('Dashboard loaded successfully');
+
+  } catch (e) {
+    console.error('Dashboard GENERAL ERROR:', e);
+    toast('Hitilafu katika kupakua dashibodi', 'e');
+  }
 }
 
 function chartOpts(){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#5a5a72'}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#5a5a72'}}}};}
