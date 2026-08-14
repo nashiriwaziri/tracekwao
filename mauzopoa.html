@@ -1584,38 +1584,107 @@ function renderProducts() {
   }).join('');
 }
 
+// ===== SAVE PRODUCT =====
 async function saveProduct() {
-  const name = document.getElementById('apName').value.trim();
-  const category = document.getElementById('apCategory').value;
-  const sku = document.getElementById('apSku').value.trim();
-  const costPrice = parseFloat(document.getElementById('apCostPrice').value) || 0;
-  const sellPrice = parseFloat(document.getElementById('apSellPrice').value) || 0;
-  const stock = parseInt(document.getElementById('apStock').value) || 0;
-  const desc = document.getElementById('apDesc').value.trim();
-  if (!name || !category || !costPrice || !sellPrice) { toast('Jaza sehemu zote zinazohitajika', 'w'); return; }
   try {
-    await db.collection('products').add({
+    const nameEl = document.getElementById('apName');
+    const categoryEl = document.getElementById('apCategory');
+    const skuEl = document.getElementById('apSku');
+    const costPriceEl = document.getElementById('apCostPrice');
+    const sellPriceEl = document.getElementById('apSellPrice');
+    const stockEl = document.getElementById('apStock');
+    const descEl = document.getElementById('apDesc');
+
+    if (
+      !nameEl ||
+      !categoryEl ||
+      !skuEl ||
+      !costPriceEl ||
+      !sellPriceEl ||
+      !stockEl ||
+      !descEl
+    ) {
+      toast('Sehemu za bidhaa hazijapatikana', 'e');
+      return;
+    }
+
+    const name = nameEl.value.trim();
+    const category = categoryEl.value;
+    const sku = skuEl.value.trim();
+    const costPrice = parseFloat(costPriceEl.value) || 0;
+    const sellPrice = parseFloat(sellPriceEl.value) || 0;
+    const stock = parseInt(stockEl.value) || 0;
+    const description = descEl.value.trim();
+
+    // ===== VALIDATION =====
+    if (!name || !category || costPrice <= 0 || sellPrice <= 0) {
+      toast('Jaza sehemu zote zinazohitajika', 'w');
+      return;
+    }
+
+    if (!businessId) {
+      toast('Akaunti ya biashara haijapatikana', 'e');
+      console.error('businessId haipo:', businessId);
+      return;
+    }
+
+    if (!db) {
+      toast('Firestore haijaunganishwa', 'e');
+      console.error('db haipo');
+      return;
+    }
+
+    // ===== DATA YA BIDHAA =====
+    const productData = {
       name: name,
       category: category,
       sku: sku,
       costPrice: costPrice,
       sellPrice: sellPrice,
       stock: stock,
-      description: desc,
+      description: description,
+      status: 'active',
       businessId: businessId,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+
+    console.log('Saving product:', productData);
+
+    // ===== SAVE MOJA KWA MOJA FIRESTORE =====
+    const docRef = await db
+      .collection('products')
+      .add(productData);
+
+    console.log('PRODUCT SAVED SUCCESSFULLY:', docRef.id);
+
+    // ===== SUCCESS MESSAGE =====
     toast('Bidhaa imehifadhiwa!', 's');
-    document.getElementById('apName').value = '';
-    document.getElementById('apCategory').value = '';
-    document.getElementById('apSku').value = '';
-    document.getElementById('apCostPrice').value = '';
-    document.getElementById('apSellPrice').value = '';
-    document.getElementById('apStock').value = '';
-    document.getElementById('apDesc').value = '';
+
+    // ===== CLEAR FORM =====
+    nameEl.value = '';
+    categoryEl.value = '';
+    skuEl.value = '';
+    costPriceEl.value = '';
+    sellPriceEl.value = '';
+    stockEl.value = '';
+    descEl.value = '';
+
+    // ===== RELOAD DATA =====
     await loadProducts();
     renderProducts();
-  } catch (err) { toast('Hitilafu: ' + err.message, 'e'); }
+
+  } catch (err) {
+    console.error('SAVE PRODUCT ERROR:', err);
+    console.error('Error code:', err.code);
+    console.error('Error message:', err.message);
+
+    toast(
+      'Hitilafu ya kuhifadhi: ' +
+      (err.code ? err.code + ' - ' : '') +
+      (err.message || 'Imeshindikana kuhifadhi bidhaa'),
+      'e'
+    );
+  }
 }
 
 async function editProduct(id) {
@@ -2195,10 +2264,18 @@ async function saveAd() {
     renderAds();
     navTo('ads');
 
-  } catch (err) {
-    console.error('saveAd error:', err);
-    toast('Hitilafu: ' + (err.message || 'Imeshindikana kuhifadhi tangazo'), 'e');
-  }
+} catch (err) {
+  console.error('saveAd FULL ERROR:', err);
+  console.error('Code:', err.code);
+  console.error('Message:', err.message);
+  console.error('businessId:', businessId);
+
+  toast(
+    'Imeshindikana kuhifadhi: ' +
+    (err.code ? err.code + ' - ' : '') +
+    (err.message || 'Unknown error'),
+    'e'
+  );
 }
 
 async function toggleAdStatus(id) {
