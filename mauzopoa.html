@@ -1559,25 +1559,304 @@ const Products = {
 
 function renderProducts() { Products.render(); }
 
-async function saveProduct() {
-  const name = document.getElementById('apName').value.trim();
-  const category = document.getElementById('apCategory').value;
-  const sku = document.getElementById('apSku').value.trim();
-  const costPrice = parseFloat(document.getElementById('apCostPrice').value) || 0;
-  const sellPrice = parseFloat(document.getElementById('apSellPrice').value) || 0;
-  const stock = parseInt(document.getElementById('apStock').value) || 0;
-  const desc = document.getElementById('apDesc').value.trim();
-  if (!name || !category || !sellPrice) { Utils.toast('Jaza sehemu zinazohitajika', 'w'); return; }
-  const btn = document.getElementById('saveProductBtn');
-  btn.disabled = true;
+// ============================================================
+// SAVE PRODUCT — MODULAR FIREBASE
+// ============================================================
+window.saveProduct = async function () {
+
+  const btn =
+    document.getElementById('saveProductBtn');
+
   try {
-    await db.collection('products').add({ name, category, sku, costPrice, sellPrice, stock, description: desc, businessId: State.currentBizId, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-    Utils.toast('Bidhaa imehifadhiwa', 's');
-    document.getElementById('apName').value = ''; document.getElementById('apCategory').value = ''; document.getElementById('apSku').value = ''; document.getElementById('apCostPrice').value = ''; document.getElementById('apSellPrice').value = ''; document.getElementById('apStock').value = ''; document.getElementById('apDesc').value = '';
-    navTo('products');
-  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
-  btn.disabled = false;
-}
+
+    // ----------------------------------------------------------
+    // AUTH USER
+    // ----------------------------------------------------------
+    const uid =
+      currentUser?.uid ||
+      auth?.currentUser?.uid ||
+      null;
+
+    if (!uid) {
+      Utils.toast(
+        'Tafadhali ingia kwanza kwenye mfumo.',
+        'e'
+      );
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // RESOLVE BUSINESS ID
+    // ----------------------------------------------------------
+    let bizId =
+      State?.currentBizId ||
+      currentUserData?.businessId ||
+      businessId ||
+      null;
+
+    if (!bizId) {
+
+      // Try loading user profile directly
+      const userSnap = await getDoc(
+        doc(db, 'users', uid)
+      );
+
+      if (userSnap.exists()) {
+
+        const ud = userSnap.data();
+
+        bizId =
+          ud.businessId ||
+          ud.bizId ||
+          null;
+
+        currentUserData = {
+          id: userSnap.id,
+          ...ud
+        };
+      }
+    }
+
+    if (!bizId) {
+
+      console.error(
+        '[PRODUCT] Business ID missing',
+        {
+          uid,
+          StateBizId: State?.currentBizId,
+          currentUserData
+        }
+      );
+
+      Utils.toast(
+        'Akaunti ya biashara haijapatikana.',
+        'e'
+      );
+
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // SYNCHRONIZE BUSINESS ID EVERYWHERE
+    // ----------------------------------------------------------
+    if (State) {
+      State.currentBizId = bizId;
+    }
+
+    businessId = bizId;
+
+    // ----------------------------------------------------------
+    // FORM DATA
+    // ----------------------------------------------------------
+    const name =
+      document
+        .getElementById('apName')
+        ?.value
+        .trim() || '';
+
+    const category =
+      document
+        .getElementById('apCategory')
+        ?.value || '';
+
+    const sku =
+      document
+        .getElementById('apSku')
+        ?.value
+        .trim() || '';
+
+    const costPrice =
+      parseFloat(
+        document
+          .getElementById('apCostPrice')
+          ?.value
+      ) || 0;
+
+    const sellPrice =
+      parseFloat(
+        document
+          .getElementById('apSellPrice')
+          ?.value
+      ) || 0;
+
+    const stock =
+      parseInt(
+        document
+          .getElementById('apStock')
+          ?.value
+      ) || 0;
+
+    const description =
+      document
+        .getElementById('apDesc')
+        ?.value
+        .trim() || '';
+
+    // ----------------------------------------------------------
+    // VALIDATION
+    // ----------------------------------------------------------
+    if (!name) {
+      Utils.toast(
+        'Ingiza jina la bidhaa.',
+        'w'
+      );
+      return;
+    }
+
+    if (!category) {
+      Utils.toast(
+        'Chagua category ya bidhaa.',
+        'w'
+      );
+      return;
+    }
+
+    if (sellPrice <= 0) {
+      Utils.toast(
+        'Ingiza bei ya kuuza.',
+        'w'
+      );
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // BUTTON
+    // ----------------------------------------------------------
+    if (btn) {
+      btn.disabled = true;
+
+      btn.dataset.originalHtml =
+        btn.innerHTML;
+
+      btn.innerHTML =
+        '<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
+    }
+
+    // ----------------------------------------------------------
+    // PRODUCT DATA
+    // ----------------------------------------------------------
+    const productData = {
+
+      name,
+      category,
+      sku,
+
+      costPrice,
+      sellPrice,
+      stock,
+
+      description,
+
+      businessId: bizId,
+
+      createdBy: uid,
+
+      status: 'active',
+
+      createdAt:
+        serverTimestamp(),
+
+      updatedAt:
+        serverTimestamp()
+    };
+
+    console.log(
+      '[PRODUCT] Saving:',
+      productData
+    );
+
+    // ----------------------------------------------------------
+    // SAVE USING MODULAR FIREBASE
+    // ----------------------------------------------------------
+    const productRef =
+      await addDoc(
+        collection(db, 'products'),
+        productData
+      );
+
+    console.log(
+      '[PRODUCT] SAVED:',
+      productRef.id
+    );
+
+    // ----------------------------------------------------------
+    // SUCCESS
+    // ----------------------------------------------------------
+    Utils.toast(
+      'Bidhaa imehifadhiwa!',
+      's'
+    );
+
+    // ----------------------------------------------------------
+    // CLEAR FORM
+    // ----------------------------------------------------------
+    [
+      'apName',
+      'apCategory',
+      'apSku',
+      'apCostPrice',
+      'apSellPrice',
+      'apStock',
+      'apDesc'
+    ].forEach(id => {
+
+      const el =
+        document.getElementById(id);
+
+      if (el) {
+        el.value = '';
+      }
+    });
+
+    // ----------------------------------------------------------
+    // RELOAD PRODUCTS
+    // ----------------------------------------------------------
+    if (
+      typeof loadProducts === 'function'
+    ) {
+      await loadProducts();
+    }
+
+    if (
+      typeof renderProducts === 'function'
+    ) {
+      renderProducts();
+    }
+
+    // ----------------------------------------------------------
+    // OPEN PRODUCTS
+    // ----------------------------------------------------------
+    if (
+      typeof navTo === 'function'
+    ) {
+      navTo('products');
+    }
+
+  } catch (err) {
+
+    console.error(
+      '[PRODUCT] SAVE ERROR:',
+      err
+    );
+
+    Utils.toast(
+      err?.message ||
+      'Hitilafu katika kuhifadhi bidhaa.',
+      'e'
+    );
+
+  } finally {
+
+    if (btn) {
+
+      btn.disabled = false;
+
+      btn.innerHTML =
+        btn.dataset.originalHtml ||
+        '<i class="fas fa-save"></i> Hifadhi Bidhaa';
+    }
+  }
+};
 
 function editProduct(id) {
   const p = Products.cache.find(x => x.id === id);
