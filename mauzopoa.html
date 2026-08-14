@@ -799,146 +799,19 @@ const mapErr = (code,msg) => {
   return m[code]||msg||'Hitilafu imetokea.';
 };
 
-window.handleLogin = async function () {
-  const btn = document.getElementById('loginBtn');
-  const email = document.getElementById('loginEmail').value.trim();
-  const pw = document.getElementById('loginPassword').value;
-  const role = document.getElementById('loginRole').value;
-
-  hideErr('loginEmailErr');
-  hideErr('loginPassErr');
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    showErr('loginEmailErr');
-    return;
-  }
-
-  if (!pw) {
-    showErr('loginPassErr');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inaingia...';
-
-  try {
-    // 1. Login Firebase Authentication
-    const cred = await signInWithEmailAndPassword(auth, email, pw);
-    const uid = cred.user.uid;
-
-    console.log('AUTH SUCCESS:', {
-      uid,
-      email: cred.user.email
-    });
-
-    // 2. Tafuta account kwenye Firestore
-    const userRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userRef);
-
-    console.log('USER DOCUMENT:', {
-      exists: userSnap.exists(),
-      path: `users/${uid}`
-    });
-
-    // 3. Kama document haipo, usiendelee
-    if (!userSnap.exists()) {
-      await signOut(auth);
-
-      toast(
-        'Account yako ipo Firebase Authentication lakini haipo kwenye Firestore users. Wasiliana na Administrator.',
-        'e'
-      );
-
-      console.error(
-        `ACCOUNT MISSING: users/${uid}`
-      );
-
-      return;
-    }
-
-    // 4. Pata taarifa za account
-    const userData = userSnap.data();
-
-    console.log('USER DATA:', userData);
-
-    // 5. Hakikisha role ipo
-    if (!userData.role) {
-      await signOut(auth);
-
-      toast(
-        'Account yako haina Jukumu (Role) lililowekwa.',
-        'e'
-      );
-
-      console.error('ROLE MISSING:', userData);
-      return;
-    }
-
-    // 6. Hakikisha role iliyochaguliwa inalingana
-    if (userData.role !== role) {
-      await signOut(auth);
-
-      toast(
-        `Jukumu halilingani. Akaunti yako ni "${userData.role}", umechagua "${role}".`,
-        'e'
-      );
-
-      console.error('ROLE MISMATCH:', {
-        firestoreRole: userData.role,
-        selectedRole: role
-      });
-
-      return;
-    }
-
-    // 7. Hifadhi current user data
-    currentUser = cred.user;
-    currentUserData = userData;
-
-    // Kama mfumo wako unatumia businessId
-    if (userData.businessId) {
-      businessId = userData.businessId;
-      currentBizId = userData.businessId;
-
-      console.log('BUSINESS ID:', userData.businessId);
-    }
-
-    // 8. Login imekamilika
-    toast('Umefanikiwa kuingia!', 's');
-
-    console.log('LOGIN COMPLETE:', {
-      uid,
-      email,
-      role: userData.role,
-      businessId: userData.businessId || null
-    });
-
-  } catch (e) {
-    console.error('Login Error:', e);
-
-    let msg = mapErr(e.code, e.message);
-
-    // Firebase errors
-    if (e.code === 'auth/user-not-found') {
-      msg = 'Account hii haipo kwenye Firebase Authentication.';
-    }
-
-    if (e.code === 'auth/wrong-password' ||
-        e.code === 'auth/invalid-credential') {
-      msg = 'Email au Password si sahihi.';
-    }
-
-    if (e.code === 'auth/invalid-email') {
-      msg = 'Email uliyoingiza si sahihi.';
-    }
-
-    toast(msg, 'e');
-
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML =
-      '<i class="fas fa-sign-in-alt"></i> Ingia kwenye Mfumo';
-  }
+window.handleLogin = async function() {
+  const btn=document.getElementById('loginBtn'),email=document.getElementById('loginEmail').value.trim(),pw=document.getElementById('loginPassword').value,role=document.getElementById('loginRole').value;
+  hideErr('loginEmailErr');hideErr('loginPassErr');
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showErr('loginEmailErr');return;}
+  if(!pw){showErr('loginPassErr');return;}
+  btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Inaingia...';
+  try{
+    const cred=await signInWithEmailAndPassword(auth,email,pw);
+    const us=await getDoc(doc(db,'users',cred.user.uid));
+    if(us.exists()){const ud=us.data();if(ud.role!==role){await signOut(auth);toast('Jukumu halilingani na akaunti yako','e');return;}}
+    toast('Umefanikiwa kuingia!','s');
+  }catch(e){console.error('Login:',e);toast(mapErr(e.code,e.message),'e');}
+  finally{btn.disabled=false;btn.innerHTML='<i class="fas fa-sign-in-alt"></i> Ingia kwenye Mfumo';}
 };
 
 window.handleRegister = async function() {
@@ -981,270 +854,73 @@ onAuthStateChanged(auth, async user => {
     return;
   }
 
- // ============================================================
-// AUTH STATE CONTROLLER
-// ============================================================
-
-let authStateProcessing = false;
-
-onAuthStateChanged(auth, async user => {
-
-  // ----------------------------------------------------------
-  // PREVENT DUPLICATE AUTH PROCESSING
-  // ----------------------------------------------------------
-  if (authStateProcessing) {
-    console.warn('AuthState tayari inashughulikiwa.');
-    return;
-  }
-
-  // ----------------------------------------------------------
-  // USER NOT AUTHENTICATED
-  // ----------------------------------------------------------
-  if (!user) {
-
-    currentUser = null;
-    currentUserData = null;
-    businessId = null;
-    businessData = null;
-
-    document.getElementById('loginPage')?.classList.remove('hidden');
-    document.getElementById('mainApp')?.classList.add('hidden');
-
-    return;
-  }
-
-  authStateProcessing = true;
-
+  // ============================================================
+  // USER AUTHENTICATED
+  // ============================================================
   currentUser = user;
 
   try {
-
-    console.log('AUTH USER:', {
-      uid: user.uid,
-      email: user.email
-    });
-
-    // ========================================================
-    // 1. LOAD USER DOCUMENT
-    // ========================================================
-
     const userRef = doc(db, 'users', user.uid);
     const us = await getDoc(userRef);
 
-    // --------------------------------------------------------
+    // ------------------------------------------------------------
     // USER DOCUMENT NOT FOUND
-    // --------------------------------------------------------
-
+    // ------------------------------------------------------------
     if (!us.exists()) {
-
-      console.error(
-        'USER DOCUMENT NOT FOUND:',
-        `users/${user.uid}`
-      );
-
-      /*
-       * Safisha state kwanza.
-       */
-      currentUserData = null;
-      businessId = null;
-      businessData = null;
-
-      /*
-       * Ondoa Firebase Auth kwa sababu account haijakamilika
-       * kwenye Firestore.
-       */
       await signOut(auth);
-
-      /*
-       * Ujumbe mmoja tu.
-       */
-      toast(
-        'Akaunti yako haipo kwenye mfumo. Tafadhali wasiliana na Administrator.',
-        'e'
-      );
-
+      toast('Akaunti yako haipo kwenye mfumo', 'e');
       return;
     }
 
-    // ========================================================
-    // 2. LOAD USER DATA
-    // ========================================================
-
+    // ------------------------------------------------------------
+    // LOAD USER DATA
+    // ------------------------------------------------------------
     currentUserData = {
       id: us.id,
       ...us.data()
     };
 
-    console.log('USER DATA:', currentUserData);
-
-    // ========================================================
-    // 3. VALIDATE USER ROLE
-    // ========================================================
-
-    if (!currentUserData.role) {
-
-      console.error(
-        'USER ROLE MISSING:',
-        currentUserData
-      );
-
-      await signOut(auth);
-
-      currentUserData = null;
-      businessId = null;
-      businessData = null;
-
-      toast(
-        'Akaunti yako haina Jukumu (Role) lililowekwa. Wasiliana na Administrator.',
-        'e'
-      );
-
-      return;
-    }
-
-    // ========================================================
-    // 4. LOAD BUSINESS ID
-    // ========================================================
-
-    businessId =
-      currentUserData.businessId ||
-      currentUserData.bizId ||
-      null;
-
+    businessId = currentUserData.businessId || null;
     businessData = null;
 
-    // ========================================================
-    // 5. BUSINESS VALIDATION
-    // ========================================================
-
-    /*
-     * Superuser anaweza kuwa hana businessId.
-     * Kwa hiyo tusimlazimishe kuwa nayo.
-     */
-
-    if (
-      currentUserData.role !== 'superuser' &&
-      !businessId
-    ) {
-
-      console.error(
-        'BUSINESS ID MISSING:',
-        currentUserData
-      );
-
-      await signOut(auth);
-
-      currentUserData = null;
-      businessId = null;
-      businessData = null;
-
-      toast(
-        'Akaunti yako haijaunganishwa na biashara yoyote. Wasiliana na Administrator.',
-        'e'
-      );
-
-      return;
-    }
-
-    // ========================================================
-    // 6. LOAD BUSINESS
-    // ========================================================
-
+    // ------------------------------------------------------------
+    // LOAD BUSINESS DATA
+    // ------------------------------------------------------------
     if (businessId) {
-
-      const businessRef = doc(
-        db,
-        'businesses',
-        businessId
-      );
-
+      const businessRef = doc(db, 'businesses', businessId);
       const bs = await getDoc(businessRef);
 
-      if (!bs.exists()) {
-
-        console.error(
-          'BUSINESS NOT FOUND:',
-          businessId
-        );
-
-        /*
-         * Superuser anaweza kutokuwa na business.
-         * Kwa users wengine hii ni error.
-         */
-
-        if (currentUserData.role !== 'superuser') {
-
-          await signOut(auth);
-
-          currentUserData = null;
-          businessId = null;
-          businessData = null;
-
-          toast(
-            'Biashara inayohusishwa na akaunti yako haipo kwenye mfumo.',
-            'e'
-          );
-
-          return;
-        }
-
-      } else {
-
+      if (bs.exists()) {
         businessData = {
           id: bs.id,
           ...bs.data()
         };
-
-        console.log(
-          'BUSINESS DATA:',
-          businessData
+      } else {
+        console.warn(
+          'Business document haijapatikana:',
+          businessId
         );
       }
     }
 
-    // ========================================================
-    // 7. SAVE GLOBAL BUSINESS REFERENCES
-    // ========================================================
+    // ------------------------------------------------------------
+    // SHOW MAIN APPLICATION
+    // ------------------------------------------------------------
+    document.getElementById('loginPage')?.classList.add('hidden');
+    document.getElementById('mainApp')?.classList.remove('hidden');
 
-    /*
-     * Mfumo wako unaweza kutumia currentBizId sehemu nyingine.
-     * Hivyo ziweke sawa kila login.
-     */
-
-    if (typeof currentBizId !== 'undefined') {
-      currentBizId = businessId;
-    }
-
-    // ========================================================
-    // 8. SHOW MAIN APPLICATION
-    // ========================================================
-
-    document
-      .getElementById('loginPage')
-      ?.classList.add('hidden');
-
-    document
-      .getElementById('mainApp')
-      ?.classList.remove('hidden');
-
-    // ========================================================
-    // 9. UPDATE TOPBAR
-    // ========================================================
-
+    // ------------------------------------------------------------
+    // UPDATE TOPBAR
+    // ------------------------------------------------------------
     updateTopbar();
 
-    // ========================================================
-    // 10. SUPER USER ACCESS
-    // ========================================================
-
-    const adminLbl =
-      document.getElementById('adminLbl');
-
-    const navSuperAdmin =
-      document.getElementById('navSuperAdmin');
+    // ------------------------------------------------------------
+    // SUPER USER ACCESS
+    // ------------------------------------------------------------
+    const adminLbl = document.getElementById('adminLbl');
+    const navSuperAdmin = document.getElementById('navSuperAdmin');
 
     if (currentUserData.role === 'superuser') {
-
       if (adminLbl) {
         adminLbl.style.display = '';
       }
@@ -1252,9 +928,7 @@ onAuthStateChanged(auth, async user => {
       if (navSuperAdmin) {
         navSuperAdmin.classList.remove('hidden');
       }
-
     } else {
-
       if (adminLbl) {
         adminLbl.style.display = 'none';
       }
@@ -1264,105 +938,25 @@ onAuthStateChanged(auth, async user => {
       }
     }
 
-    // ========================================================
-    // 11. LOAD DASHBOARD SAFELY
-    // ========================================================
+    // ------------------------------------------------------------
+    // LOAD DASHBOARD
+    // ------------------------------------------------------------
+    await loadDashboard();
 
-    try {
-
-      await loadDashboard();
-
-    } catch (dashboardError) {
-
-      console.error(
-        'Dashboard Load Error:',
-        dashboardError
-      );
-
-      toast(
-        'Umeingia kwenye mfumo lakini Dashboard haikuweza kupakiwa.',
-        'w'
-      );
-    }
-
-    // ========================================================
-    // 12. OPEN DEFAULT PAGE
-    // ========================================================
-
-    try {
-
-      navTo('dashboard');
-
-    } catch (navError) {
-
-      console.error(
-        'Navigation Error:',
-        navError
-      );
-    }
-
-    // ========================================================
-    // 13. LOGIN SUCCESS — ONE PLACE ONLY
-    // ========================================================
-
-    toast(
-      `Karibu ${currentUserData.firstName || currentUser.displayName || 'kwenye mfumo'}!`,
-      's'
-    );
-
-    console.log(
-      'LOGIN COMPLETED SUCCESSFULLY:',
-      {
-        uid: currentUser.uid,
-        email: currentUser.email,
-        role: currentUserData.role,
-        businessId: businessId
-      }
-    );
+    // ------------------------------------------------------------
+    // OPEN DEFAULT PAGE
+    // ------------------------------------------------------------
+    navTo('dashboard');
 
   } catch (e) {
-
-    console.error(
-      'AuthState Error:',
-      e
-    );
-
-    /*
-     * Usimwache user akiwa authenticated ikiwa
-     * application imeshindwa kupakia profile yake.
-     */
-
-    currentUserData = null;
-    businessId = null;
-    businessData = null;
-
-    try {
-      await signOut(auth);
-    } catch (logoutError) {
-      console.error(
-        'Automatic signOut failed:',
-        logoutError
-      );
-    }
-
-    document
-      .getElementById('loginPage')
-      ?.classList.remove('hidden');
-
-    document
-      .getElementById('mainApp')
-      ?.classList.add('hidden');
+    console.error('AuthState Error:', e);
 
     toast(
       e?.message
-        ? `Hitilafu katika kuingia: ${e.message}`
-        : 'Hitilafu katika kupakia akaunti yako.',
+        ? `Hitilafu: ${e.message}`
+        : 'Hitilafu katika kupakua data',
       'e'
     );
-
-  } finally {
-
-    authStateProcessing = false;
   }
 });
 function updateTopbar(){
@@ -2515,5 +2109,3 @@ document.addEventListener('keydown',e=>{
 </script>
 </body>
 </html>
-
-
