@@ -1671,17 +1671,1101 @@ function printReceipt() {
 }
 
 /* ============================================================
+/* ============================================================
    DEBTS MODULE
    ============================================================ */
+
 const Debts = {
+
+  cache: [],
+
+  // ----------------------------------------------------------
+  // LOAD DEBTS
+  // ----------------------------------------------------------
+  async load() {
+
+    try {
+
+      // --------------------------------------------------------
+      // RESOLVE BUSINESS ID SAFELY
+      // --------------------------------------------------------
+      const bizId =
+        State?.currentBizId ||
+        (typeof businessId !== 'undefined' ? businessId : null) ||
+        currentUserData?.businessId ||
+        null;
+
+      if (!bizId) {
+
+        console.warn(
+          '[DEBTS] Business ID haijapatikana.'
+        );
+
+        this.cache = [];
+        this.render();
+
+        return;
+      }
+
+      // Keep state synchronized
+      if (State) {
+        State.currentBizId = bizId;
+      }
+
+      if (
+        typeof businessId !== 'undefined'
+      ) {
+        businessId = bizId;
+      }
+
+      // --------------------------------------------------------
+      // FIRESTORE QUERY — MODULAR SDK
+      // --------------------------------------------------------
+      const q = query(
+        collection(db, 'debts'),
+        where('businessId', '==', bizId),
+        orderBy('createdAt', 'desc')
+      );
+
+      const snap = await getDocs(q);
+
+      this.cache = snap.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+
+      console.log(
+        '[DEBTS] Loaded:',
+        this.cache.length
+      );
+
+      this.render();
+
+    } catch (err) {
+
+      console.error(
+        '[DEBTS] Fetch error:',
+        err
+      );
+
+      this.cache = [];
+
+      this.render();
+
+      if (
+        typeof toast === 'function'
+      ) {
+        toast(
+          'Imeshindikana kupakia madeni.',
+          'e'
+        );
+      }
+    }
+  },
+
+
+  // ----------------------------------------------------------
+  // RENDER DEBTS
+  // ----------------------------------------------------------
+  render() {
+
+    const tb =
+      document.getElementById('debtsTable');
+
+    if (!tb) {
+
+      console.warn(
+        '[DEBTS] debtsTable haipo kwenye HTML.'
+      );
+
+      return;
+    }
+
+    // --------------------------------------------------------
+    // SEARCH
+    // --------------------------------------------------------
+    const search =
+      (
+        document.getElementById('debtSearch')
+          ?.value || ''
+      )
+        .trim()
+        .toLowerCase();
+
+    // --------------------------------------------------------
+    // FILTER
+    // --------------------------------------------------------
+    const filtered =
+      this.cache.filter(debt => {
+
+        const customerName =
+          String(
+            debt.customerName || ''
+          ).toLowerCase();
+
+        const customerPhone =
+          String(
+            debt.customerPhone || ''
+          ).toLowerCase();
+
+        return (
+          customerName.includes(search) ||
+          customerPhone.includes(search)
+        );
+      });
+
+    // --------------------------------------------------------
+    // EMPTY STATE
+    // --------------------------------------------------------
+    if (!filtered.length) {
+
+      tb.innerHTML = `
+        <tr>
+          <td
+            colspan="7"
+            class="empty-s"
+          >
+            <i class="fas fa-hand-holding-dollar"></i>
+            <p>Hakuna madeni bado</p>
+          </td>
+        </tr>
+      `;
+
+      return;
+    }
+
+    // --------------------------------------------------------
+    // RENDER ROWS
+    // --------------------------------------------------------
+    tb.innerHTML =
+      filtered.map(debt => {
+
+        const customerName =
+          escapeHtmlSafe(
+            debt.customerName || '-'
+          );
+
+        const amount =
+          Number(debt.amount) || 0;
+
+        const paid =
+          Number(debt.paid) || 0;
+
+        /*
+         * Do NOT use:
+         *
+         * debt.remaining || debt.amount
+         *
+         * because remaining = 0 is valid.
+         */
+        const remaining =
+          debt.remaining !== undefined &&
+          debt.remaining !== null
+            ? Number(debt.remaining) || 0
+            : Math.max(
+                amount - paid,
+                0
+              );
+
+        const status =
+          debt.status || (
+            remaining <= 0
+              ? 'paid'
+              : 'unpaid'
+          );
+
+        const id =
+          String(debt.id)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'");
+
+        let statusBadge = status;
+
+        try {
+
+          if (
+            typeof Utils !== 'undefined' &&
+            typeof Utils.statusBadge === 'function'
+          ) {
+            statusBadge =
+              Utils.statusBadge(status);
+          }
+
+        } catch (e) {
+
+          statusBadge =
+            `<span class="badge">${escapeHtmlSafe(status)}</span>`;
+        }
+
+        let formattedAmount =
+          amount.toLocaleString();
+
+        let formattedPaid =
+          paid.toLocaleString();
+
+        let formattedRemaining =
+          remaining.toLocaleString();
+
+        try {
+
+          if (
+            typeof Utils !== 'undefined' &&
+            typeof Utils.formatCurrency === 'function'
+          ) {
+
+            formattedAmount =
+              Utils.formatCurrency(amount);
+
+            formattedPaid =
+              Utils.formatCurrency(paid);
+
+            formattedRemaining =
+              Utils.formatCurrency(remaining);
+          }
+
+        } catch (e) {
+          // fallback above
+        }
+
+        let formattedDate =
+          '-';
+
+        try {
+
+          if (
+            typeof Utils !== 'undefined' &&
+            typeof Utils.formatDate === 'function'
+          ) {
+
+            formattedDate =
+              Utils.formatDate(
+                debt.createdAt
+              );
+          }
+
+        } catch (e) {
+          formattedDate = '-';
+        }
+
+        const payButton =
+          status !== 'paid'
+            ? `
+              <button
+                type="button"
+                class="btn btn-xs btn-s"
+                onclick="payDebt('${id}')"
+                title="Lipa deni"
+              >
+                <i class="fas fa-check"></i>
+              </button>
+            `
+            : '';
+
+        return `
+          <tr>
+
+            <td>
+              ${customerName}
+            </td>
+
+            <td>
+              ${formattedAmount}
+            </td>
+
+            <td>
+              ${formattedPaid}
+            </td>
+
+            <td
+              style="
+                color:var(--danger);
+                font-weight:600
+              "
+            >
+              ${formattedRemaining}
+            </td>
+
+            <td>
+              ${formattedDate}
+            </td>
+
+            <td>
+              ${statusBadge}
+            </td>
+
+            <td class="actions-cell">
+
+              ${payButton}
+
+              <button
+                type="button"
+                class="btn btn-xs btn-d"
+                onclick="deleteDebt('${id}')"
+                title="Futa deni"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+
+            </td>
+
+          </tr>
+        `;
+
+      }).join('');
+  }
+};
+
+
+// ============================================================
+// SAFE HTML ESCAPE
+// ============================================================
+
+function escapeHtmlSafe(value) {
+
+  const div =
+    document.createElement('div');
+
+  div.textContent =
+    value == null ? '' : String(value);
+
+  return div.innerHTML;
+}
+
+
+// ============================================================
+// SEARCH DEBTS
+// ============================================================
+
+window.searchDebts = function () {
+
+  try {
+
+    Debts.render();
+
+  } catch (e) {
+
+    console.error(
+      '[DEBTS] Search error:',
+      e
+    );
+  }
+};
+
+
+// ============================================================
+// INITIALIZE DEBTS
+// ============================================================
+
+window.loadDebts = async function () {
+
+  try {
+
+    await Debts.load();
+
+  } catch (e) {
+
+    console.error(
+      '[DEBTS] loadDebts error:',
+      e
+    );
+  }
+};
+
+function renderDebts() { Debts.render(); }
+
+function openDebtModal() {
+  const sel = document.getElementById('debtCustomer');
+  sel.innerHTML = '';
+  Customers.cache.forEach(c => { sel.innerHTML += '<option value="' + c.id + '">' + c.name + '</option>'; });
+  if (!sel.innerHTML) { Utils.toast('Ongeza wateja kwanza', 'w'); return; }
+  document.getElementById('debtAmount').value = '';
+  document.getElementById('debtNote').value = '';
+  openModal('debtModal');
+}
+
+async function saveDebt() {
+  const custId = document.getElementById('debtCustomer').value;
+  const amount = parseFloat(document.getElementById('debtAmount').value) || 0;
+  const note = document.getElementById('debtNote').value.trim();
+  if (!amount) { Utils.toast('Kiasi kinahitajika', 'w'); return; }
+  const cust = Customers.cache.find(c => c.id === custId);
+  try {
+    await db.collection('debts').add({ customerId: custId, customerName: cust?.name || '-', amount, paid: 0, remaining: amount, note, status: 'unpaid', businessId: State.currentBizId, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    Utils.toast('Deni limehifadhiwa', 's');
+    closeModal('debtModal');
+    Debts.load();
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+async function payDebt(id) {
+  const d = Debts.cache.find(x => x.id === id);
+  if (!d) return;
+  const remaining = d.remaining || d.amount;
+  const amtStr = prompt('Ingiza kiasi cha malipo (kiasi chote: ' + remaining + '):');
+  if (!amtStr) return;
+  const payAmt = parseFloat(amtStr);
+  if (!payAmt || payAmt <= 0) { Utils.toast('Kiasi sio sahihi', 'w'); return; }
+  try {
+    const newPaid = (d.paid || 0) + payAmt;
+    const newRemaining = d.amount - newPaid;
+    await db.collection('debts').doc(id).update({ paid: newPaid, remaining: Math.max(0, newRemaining), status: newRemaining <= 0 ? 'paid' : 'unpaid' });
+    Utils.toast('Malipo yamehifadhiwa', 's');
+    Debts.load();
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function deleteDebt(id) {
+  Utils.confirm('Futa Deni', 'Je, unataka kufuta deni hili?', async () => { try { await db.collection('debts').doc(id).delete(); Utils.toast('Deni limefutwa', 's'); Debts.load(); } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); } });
+}
+
+/* ============================================================
+   EXPENSES MODULE
+   ============================================================ */
+const Expenses = {
   cache: [],
   async load() {
     if (!State.currentBizId) return;
-    try { const snap = await db.collection('debts').where('businessId', '==', State.currentBizId).orderBy('createdAt', 'desc').get(); Debts.cache = snap.docs.map(d => ({ id: d.id, ...d.data() })); this.render(); } catch (err) { console.error('[DEBTS] Fetch error:', err.message); }
+    try { const snap = await db.collection('expenses').where('businessId', '==', State.currentBizId).orderBy('createdAt', 'desc').get(); Expenses.cache = snap.docs.map(d => ({ id: d.id, ...d.data() })); this.render(); } catch (err) { console.error('[EXPENSES] Fetch error:', err.message); }
   },
   render() {
-    const search = (document.getElementById('debtSearch')?.value || '').toLowerCase();
-    const filtered = Debts.cache.filter(d => (d.customerName || '').toLowerCase().includes(search));
-    const tb = document.getElementById('debtsTable');
-    if (!filtered.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-hand-holding-dollar"></i><p>Hakuna madeni bado</p></td></tr>'; return; }
-    tb.innerHTML = filtered.map(d => '<tr><td>' + (d.customerName || '-') + '</td><td>' + Utils.formatCurrency(d.amount) + '</td><td>' + Utils.formatCurrency(d.paid || 0) + '</td><td style="color:var(--danger);font-weight:600">' + Utils.formatCurrency(d.remaining || d.amount) + '</td><td>' + Utils.formatDate(d.createdAt) + '</td><td>' + Utils.statusBadge(d.status || 'unpaid') + '</td><td class="actions-cell">' + (d.status !== 'paid' ? '<button class="btn
+    const search = (document.getElementById('expSearch')?.value || '').toLowerCase();
+    const filtered = Expenses.cache.filter(e => (e.description || '').toLowerCase().includes(search));
+    const tb = document.getElementById('expensesTable');
+    if (!filtered.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-money-bill-trend-up"></i><p>Hakuna matumizi bado</p></td></tr>'; return; }
+    const catLabels = { rent: 'Kodi', salary: 'Mshahara', utilities: 'Huduma', transport: 'Usafiri', other: 'Nyingine' };
+    tb.innerHTML = filtered.map(e => '<tr><td>' + (e.description || '-') + '</td><td style="color:var(--danger);font-weight:600">' + Utils.formatCurrency(e.amount) + '</td><td>' + (catLabels[e.category] || e.category || '-') + '</td><td>' + Utils.formatDate(e.createdAt) + '</td><td class="actions-cell"><button class="btn btn-xs btn-o" onclick="editExpense(\'' + e.id + '\')"><i class="fas fa-edit"></i></button><button class="btn btn-xs btn-d" onclick="deleteExpense(\'' + e.id + '\')"><i class="fas fa-trash"></i></button></td></tr>').join('');
+  }
+};
+
+function renderExpenses() { Expenses.render(); }
+
+function openExpenseModal() {
+  document.getElementById('editExpId').value = '';
+  document.getElementById('expDesc').value = '';
+  document.getElementById('expAmount').value = '';
+  document.getElementById('expCategory').value = 'other';
+  document.getElementById('expenseModalTitle').textContent = 'Ongeza Matumizi';
+  openModal('expenseModal');
+}
+
+function editExpense(id) {
+  const e = Expenses.cache.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('editExpId').value = id;
+  document.getElementById('expDesc').value = e.description || '';
+  document.getElementById('expAmount').value = e.amount || 0;
+  document.getElementById('expCategory').value = e.category || 'other';
+  document.getElementById('expenseModalTitle').textContent = 'Hariri Matumizi';
+  openModal('expenseModal');
+}
+
+async function saveExpense() {
+  const id = document.getElementById('editExpId').value;
+  const data = { description: document.getElementById('expDesc').value.trim(), amount: parseFloat(document.getElementById('expAmount').value) || 0, category: document.getElementById('expCategory').value };
+  if (!data.description || !data.amount) { Utils.toast('Jaza sehemu zinazohitajika', 'w'); return; }
+  try {
+    if (id) { await db.collection('expenses').doc(id).update(data); Utils.toast('Matumizi yamesasishwa', 's'); }
+    else { data.businessId = State.currentBizId; data.createdAt = firebase.firestore.FieldValue.serverTimestamp(); await db.collection('expenses').add(data); Utils.toast('Matumizi yamehifadhiwa', 's'); }
+    closeModal('expenseModal'); Expenses.load();
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function deleteExpense(id) {
+  Utils.confirm('Futa Matumizi', 'Je, unataka kufuta matumizi haya?', async () => { try { await db.collection('expenses').doc(id).delete(); Utils.toast('Matumizi yamefutwa', 's'); Expenses.load(); } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); } });
+}
+
+/* ============================================================
+   REPORTS MODULE
+   ============================================================ */
+const Reports = {
+  async daily() {
+    if (!State.currentBizId) return;
+    try {
+      const [salesSnap, expSnap] = await Promise.all([
+        db.collection('sales').where('businessId', '==', State.currentBizId).where('createdAt', '>=', Utils.todayStart()).orderBy('createdAt', 'desc').get(),
+        db.collection('expenses').where('businessId', '==', State.currentBizId).where('createdAt', '>=', Utils.todayStart()).get()
+      ]);
+      let totalSales = 0, totalProfit = 0, totalExpenses = 0, count = 0;
+      const rows = [];
+      salesSnap.forEach(d => { const s = d.data(); totalSales += s.total; totalProfit += s.profit || 0; count++; rows.push(s); });
+      expSnap.forEach(d => { totalExpenses += d.data().amount || 0; });
+      document.getElementById('dailyReportSummary').innerHTML = [
+        { val: count, lbl: 'Mauzo' }, { val: Utils.formatCurrency(totalSales), lbl: 'Mapato' }, { val: Utils.formatCurrency(totalProfit), lbl: 'Faida' }, { val: Utils.formatCurrency(totalExpenses), lbl: 'Matumizi' }, { val: Utils.formatCurrency(totalProfit - totalExpenses), lbl: 'Faida Safi' }
+      ].map(r => '<div class="rs-card"><h4>' + r.lbl + '</h4><div class="rs-val">' + r.val + '</div></div>').join('');
+      const tb = document.getElementById('dailyReportTable');
+      if (!rows.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-calendar-day"></i><p>Hakuna data ya leo</p></td></tr>'; return; }
+      tb.innerHTML = rows.map(s => '<tr><td>' + (s.receiptNumber || '-') + '</td><td>' + (s.customerName || '-') + '</td><td style="color:var(--success)">' + Utils.formatCurrency(s.total) + '</td><td>' + Utils.formatCurrency(s.profit || 0) + '</td><td>' + Utils.formatDateTime(s.createdAt) + '</td></tr>').join('');
+    } catch (err) { console.error('[REPORTS] Daily error:', err.message); }
+  },
+
+  async monthly() {
+    if (!State.currentBizId) return;
+    try {
+      const [salesSnap, expSnap] = await Promise.all([
+        db.collection('sales').where('businessId', '==', State.currentBizId).where('createdAt', '>=', Utils.monthStart()).get(),
+        db.collection('expenses').where('businessId', '==', State.currentBizId).where('createdAt', '>=', Utils.monthStart()).get()
+      ]);
+      let totalSales = 0, totalProfit = 0, totalExpenses = 0, count = 0;
+      const dailyData = {};
+      salesSnap.forEach(d => { const s = d.data(); totalSales += s.total; totalProfit += s.profit || 0; count++; const key = s.createdAt.toDate().toISOString().split('T')[0]; dailyData[key] = (dailyData[key] || 0) + s.total; });
+      expSnap.forEach(d => { totalExpenses += d.data().amount || 0; });
+      document.getElementById('monthlyReportSummary').innerHTML = [
+        { val: count, lbl: 'Mauzo' }, { val: Utils.formatCurrency(totalSales), lbl: 'Mapato' }, { val: Utils.formatCurrency(totalProfit), lbl: 'Faida' }, { val: Utils.formatCurrency(totalExpenses), lbl: 'Matumizi' }, { val: Utils.formatCurrency(totalProfit - totalExpenses), lbl: 'Faida Safi' }
+      ].map(r => '<div class="rs-card"><h4>' + r.lbl + '</h4><div class="rs-val">' + r.val + '</div></div>').join('');
+      const labels = Object.keys(dailyData).sort().map(k => { const d = new Date(k); return d.getDate() + '/' + (d.getMonth() + 1); });
+      const data = labels.map((_, i) => Object.values(dailyData).sort((a, b) => a.key - b.key)[i] || 0);
+      const sortedEntries = Object.entries(dailyData).sort((a, b) => a[0].localeCompare(b[0]));
+      const chartData = sortedEntries.map(e => e[1]);
+      const chartLabels = sortedEntries.map(e => { const d = new Date(e[0]); return d.getDate() + '/' + (d.getMonth() + 1); });
+      if (State.charts.monthly) State.charts.monthly.destroy();
+      State.charts.monthly = new Chart(document.getElementById('chartMonthly'), { type: 'bar', data: { labels: chartLabels, datasets: [{ label: 'Mauzo', data: chartData, backgroundColor: 'rgba(108,92,231,0.6)', borderColor: '#6c5ce7', borderWidth: 1, borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.05)' } } } } });
+    } catch (err) { console.error('[REPORTS] Monthly error:', err.message); }
+  },
+
+  async annual() {
+    if (!State.currentBizId) return;
+    try {
+      const [salesSnap, expSnap] = await Promise.all([
+        db.collection('sales').where('businessId', '==', State.currentBizId).where('createdAt', '>=', Utils.yearStart()).get(),
+        db.collection('expenses').where('businessId', '==', State.currentBizId).where('createdAt', '>=', Utils.yearStart()).get()
+      ]);
+      let totalSales = 0, totalProfit = 0, totalExpenses = 0, count = 0;
+      const monthlyData = {};
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'];
+      for (let i = 0; i < 12; i++) monthlyData[i] = 0;
+      salesSnap.forEach(d => { const s = d.data(); totalSales += s.total; totalProfit += s.profit || 0; count++; const m = s.createdAt.toDate().getMonth(); monthlyData[m] += s.total; });
+      expSnap.forEach(d => { totalExpenses += d.data().amount || 0; });
+      document.getElementById('annualReportSummary').innerHTML = [
+        { val: count, lbl: 'Mauzo' }, { val: Utils.formatCurrency(totalSales), lbl: 'Mapato' }, { val: Utils.formatCurrency(totalProfit), lbl: 'Faida' }, { val: Utils.formatCurrency(totalExpenses), lbl: 'Matumizi' }, { val: Utils.formatCurrency(totalProfit - totalExpenses), lbl: 'Faida Safi' }
+      ].map(r => '<div class="rs-card"><h4>' + r.lbl + '</h4><div class="rs-val">' + r.val + '</div></div>').join('');
+      if (State.charts.annual) State.charts.annual.destroy();
+      State.charts.annual = new Chart(document.getElementById('chartAnnual'), { type: 'line', data: { labels: monthNames, datasets: [{ label: 'Mauzo', data: Object.values(monthlyData), borderColor: '#00b894', backgroundColor: 'rgba(0,184,148,0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.05)' } } } } });
+    } catch (err) { console.error('[REPORTS] Annual error:', err.message); }
+  }
+};
+
+/* ============================================================
+   ADS MODULE
+   ============================================================ */
+const Ads = {
+  cache: [],
+  async load() {
+    if (!State.currentBizId) return;
+    try { const snap = await db.collection('advertisements').where('businessId', '==', State.currentBizId).orderBy('createdAt', 'desc').get(); Ads.cache = snap.docs.map(d => ({ id: d.id, ...d.data() })); this.render(); } catch (err) { console.error('[ADS] Fetch error:', err.message); }
+  },
+  render() {
+    const tb = document.getElementById('adsTable');
+    if (!Ads.cache.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-rectangle-ad"></i><p>Hakuna matangazo bado</p></td></tr>'; return; }
+    tb.innerHTML = Ads.cache.map(a => '<tr><td>' + (a.title || '-') + '</td><td>' + (a.type || '-') + '</td><td>' + Utils.statusBadge('active') + '</td><td>' + Utils.formatDate(a.createdAt) + '</td><td class="actions-cell"><button class="btn btn-xs btn-d" onclick="deleteAd(\'' + a.id + '\')"><i class="fas fa-trash"></i></button></td></tr>').join('');
+  }
+};
+
+async function saveAd() {
+  const title = document.getElementById('adTitle').value.trim();
+  const type = document.getElementById('adType').value;
+  const content = document.getElementById('adContent').value.trim();
+  if (!title) { Utils.toast('Kichwa kinahitajika', 'w'); return; }
+  try {
+    await db.collection('advertisements').add({ title, type, content, businessId: State.currentBizId, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    Utils.toast('Tangazo limehifadhiwa', 's');
+    document.getElementById('adTitle').value = '';
+    document.getElementById('adContent').value = '';
+    navTo('ads');
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function deleteAd(id) {
+  Utils.confirm('Futa Tangazo', 'Je, unataka kufuta tangazo hili?', async () => { try { await db.collection('advertisements').doc(id).delete(); Utils.toast('Tangazo limefutwa', 's'); Ads.load(); } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); } });
+}
+
+/* ============================================================
+   EMPLOYEES / STAFF MODULE
+   ============================================================ */
+const Employees = {
+  cache: [],
+  async load() {
+    if (!State.currentBizId) return;
+    try { const snap = await db.collection('users').where('businessId', '==', State.currentBizId).get(); Employees.cache = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.id !== State.currentUserId); this.render(); } catch (err) { console.error('[EMPLOYEES] Fetch error:', err.message); }
+  },
+  render() {
+    const grid = document.getElementById('employeesGrid');
+    if (!Employees.cache.length) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-id-badge"></i><p>Hakuna wafanyakazi bado</p></div>'; return; }
+    const colors = ['#6c5ce7', '#00b894', '#e74c3c', '#f39c12', '#0984e3'];
+    grid.innerHTML = Employees.cache.map((e, i) => '<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:' + colors[i % colors.length] + '">' + Utils.getInitials(e.firstName + ' ' + e.lastName) + '</div><div><h4>' + (e.firstName || '') + ' ' + (e.lastName || '') + '</h4><p>' + (e.email || '-') + '</p></div></div><div><span class="emp-tag role">' + Utils.roleLabel(e.role) + '</span> <span class="emp-tag status">' + Utils.statusBadge(e.status || 'active') + '</span></div><div style="margin-top:12px;display:flex;gap:6px"><button class="btn btn-xs btn-d" onclick="removeEmployee(\'' + e.id + '\',\'' + (e.firstName || '').replace(/'/g, "\\'") + '\')"><i class="fas fa-user-minus"></i> Ondoa</button></div></div>').join('');
+  }
+};
+
+async function saveEmployee() {
+  const fname = document.getElementById('empFname').value.trim();
+  const lname = document.getElementById('empLname').value.trim();
+  const email = document.getElementById('empEmail').value.trim();
+  const phone = document.getElementById('empPhone').value.trim();
+  const role = document.getElementById('empRole').value;
+  const pass = document.getElementById('empPass').value;
+  if (!fname || !email || !pass) { Utils.toast('Jaza sehemu zinazohitajika', 'w'); return; }
+  if (pass.length < 6) { Utils.toast('Nenosiri lazima iwe na herufi 6 au zaidi', 'w'); return; }
+  const btn = document.getElementById('saveEmpBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Inaongeza...';
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    await db.collection('users').doc(cred.user.uid).set({ firstName: fname, lastName: lname, email, phone, role, businessId: State.currentBizId, status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    Utils.toast('Mfanyakazi ameongezwa', 's');
+    document.getElementById('empFname').value = '';
+    document.getElementById('empLname').value = '';
+    document.getElementById('empEmail').value = '';
+    document.getElementById('empPhone').value = '';
+    document.getElementById('empPass').value = '';
+    navTo('employees');
+  } catch (err) {
+    if (err.code === 'auth/email-already-in-use') Utils.toast('Barua pepe tayari inatumika', 'e');
+    else Utils.toast('Hitilafu: ' + err.message, 'e');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-save"></i> Ongeza Mfanyakazi';
+}
+
+function removeEmployee(uid, name) {
+  Utils.confirm('Ondoa Mfanyakazi', 'Je, unataka kuondoa mfanyakazi huyu? Akaunti yao itasimamishwa.', async () => {
+    try {
+      await db.collection('users').doc(uid).update({ status: 'suspended' });
+      Utils.toast('Mfanyakazi amesimamishwa', 's');
+      Employees.load();
+    } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+  }, name);
+}
+
+/* ============================================================
+   MESSAGES MODULE
+   ============================================================ */
+const Messages = {
+  cache: [],
+  async load() {
+    if (!State.currentBizId) return;
+    try {
+      const snap = await db.collection('messages').where('businessId', '==', State.currentBizId).orderBy('updatedAt', 'desc').get();
+      Messages.cache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      Messages.renderList();
+    } catch (err) { console.error('[MESSAGES] Load error:', err.message); }
+  },
+  renderList() {
+    const body = document.getElementById('msgListBody');
+    if (!Messages.cache.length) { body.innerHTML = '<div class="empty-s"><i class="fas fa-comments"></i><p>Hakuna mazungumzo</p></div>'; return; }
+    body.innerHTML = Messages.cache.map((m, i) => '<div class="msg-item" onclick="Messages.openChat(' + i + ')"><div class="msg-av">' + Utils.getInitials(m.participantName || 'M') + '</div><div class="msg-info"><h5>' + (m.participantName || 'Mazungumzo') + '</h5><p>' + (m.lastMessage || 'Bado hakuna ujumbe') + '</p></div></div>').join('');
+  },
+  openChat(index) {
+    const m = Messages.cache[index];
+    if (!m) return;
+    document.querySelectorAll('.msg-item').forEach((el, i) => el.classList.toggle('active', i === index));
+    document.getElementById('msgChatHead').innerHTML = '<div class="msg-av" style="width:28px;height:28px;font-size:11px">' + Utils.getInitials(m.participantName || 'M') + '</div> ' + (m.participantName || 'Mazungumzo');
+    document.getElementById('msgChatBody').innerHTML = '<div class="empty-s"><i class="fas fa-comments"></i><p>Mazungumzo yanaonekana hapa</p></div>';
+    Messages.currentChatId = m.id;
+  },
+  currentChatId: null
+};
+
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  Utils.toast('Ujumbe umetumwa', 's');
+}
+
+/* ============================================================
+   PROFILE MODULE
+   ============================================================ */
+const Profile = {
+  load() {
+    const u = State.currentUserData;
+    if (!u) return;
+    document.getElementById('profName').textContent = (u.firstName || '') + ' ' + (u.lastName || '');
+    document.getElementById('profRole').textContent = Utils.roleLabel(u.role);
+    document.getElementById('profEmail').value = u.email || '';
+    document.getElementById('profPhone').value = u.phone || '';
+    document.getElementById('profRoleField').value = Utils.roleLabel(u.role);
+    document.getElementById('profileAvPrev').innerHTML = '<span style="font-size:32px;color:var(--text3)">' + Utils.getInitials(u.firstName + ' ' + u.lastName) + '</span>';
+  }
+};
+
+async function updateProfile() {
+  const phone = document.getElementById('profPhone').value.trim();
+  try {
+    await db.collection('users').doc(State.currentUserId).update({ phone });
+    State.currentUserData.phone = phone;
+    Utils.toast('Wasifu umesasishwa', 's');
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   BUSINESS PROFILE MODULE
+   ============================================================ */
+const BizProfile = {
+  load() {
+    const b = State.currentBizData;
+    if (!b) return;
+    document.getElementById('bizName').value = b.name || '';
+    document.getElementById('bizEmail').value = b.email || '';
+    document.getElementById('bizPhone').value = b.phone || '';
+    document.getElementById('bizAddress').value = b.address || '';
+    document.getElementById('bizType').value = b.type || '';
+    if (b.logoUrl) {
+      document.getElementById('bizLogoPrev').innerHTML = '<img src="' + b.logoUrl + '" alt="Logo">';
+    }
+  }
+};
+
+function handleBizLogo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => { document.getElementById('bizLogoPrev').innerHTML = '<img src="' + e.target.result + '" alt="Logo">'; };
+  reader.readAsDataURL(file);
+  Utils.toast('Logo imepakia (hifadhi inahitaji storage)', 'i');
+}
+
+async function updateBusinessProfile() {
+  const data = {
+    name: document.getElementById('bizName').value.trim(),
+    email: document.getElementById('bizEmail').value.trim(),
+    phone: document.getElementById('bizPhone').value.trim(),
+    address: document.getElementById('bizAddress').value.trim(),
+    type: document.getElementById('bizType').value.trim()
+  };
+  if (!data.name) { Utils.toast('Jina la biashara linahitajika', 'w'); return; }
+  try {
+    await db.collection('businesses').doc(State.currentBizId).update(data);
+    State.currentBizData = { ...State.currentBizData, ...data };
+    Utils.toast('Wasifu wa biashara umesasishwa', 's');
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   PROFIT SHARING MODULE
+   ============================================================ */
+const ProfitSharing = {
+  async load() {
+    if (!State.currentBizId) return;
+    try {
+      const doc = await db.collection('businessSettings').doc(State.currentBizId).get();
+      const data = doc.exists ? doc.data() : {};
+      document.getElementById('profitSharePercent').value = data.profitSharePercent || '';
+      document.getElementById('profitShareDesc').value = data.profitShareDesc || '';
+    } catch (err) { console.error('[PROFIT] Load error:', err.message); }
+  }
+};
+
+async function saveProfitSharing() {
+  try {
+    await db.collection('businessSettings').doc(State.currentBizId).set({
+      profitSharePercent: parseFloat(document.getElementById('profitSharePercent').value) || 0,
+      profitShareDesc: document.getElementById('profitShareDesc').value.trim()
+    }, { merge: true });
+    Utils.toast('Mipangilio ya ushiriki imehifadhiwa', 's');
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   COMPENSATION MODULE
+   ============================================================ */
+const Compensation = {
+  async load() {
+    if (!State.currentBizId) return;
+    try {
+      const doc = await db.collection('businessSettings').doc(State.currentBizId).get();
+      const data = doc.exists ? doc.data() : {};
+      document.getElementById('compRate').value = data.compRate || '';
+      document.getElementById('compType').value = data.compType || 'fixed';
+    } catch (err) { console.error('[COMP] Load error:', err.message); }
+  }
+};
+
+async function saveCompensation() {
+  try {
+    await db.collection('businessSettings').doc(State.currentBizId).set({
+      compRate: parseFloat(document.getElementById('compRate').value) || 0,
+      compType: document.getElementById('compType').value
+    }, { merge: true });
+    Utils.toast('Mipangilio ya ujumuishaji imehifadhiwa', 's');
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   SUPER ADMIN MODULE
+   ============================================================ */
+const SuperAdmin = {
+  isOpen: false,
+
+  async open() {
+    if (State.currentUserData?.role !== 'superuser') { Utils.toast('Huna ruhusa ya kufikia Super Admin', 'e'); return; }
+    SuperAdmin.isOpen = true;
+    document.getElementById('superOverlay').classList.add('show');
+    await SuperAdmin.loadMetrics();
+    SuperAdmin.tab('overview');
+  },
+
+  close() {
+    SuperAdmin.isOpen = false;
+    document.getElementById('superOverlay').classList.remove('show');
+  },
+
+  async loadMetrics() {
+    try {
+      const [usersSnap, bizSnap] = await Promise.all([
+        db.collection('users').get(),
+        db.collection('businesses').get()
+      ]);
+      State.superAllUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      State.superAllBusinesses = bizSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const totalUsers = State.superAllUsers.length;
+      const totalBiz = State.superAllBusinesses.length;
+      const activeUsers = State.superAllUsers.filter(u => u.status === 'active').length;
+      const suspendedUsers = State.superAllUsers.filter(u => u.status === 'suspended').length;
+      const superCount = State.superAllUsers.filter(u => u.role === 'superuser').length;
+      document.getElementById('superMetrics').innerHTML = [
+        { val: totalUsers, sub: 'wote', lbl: 'Watumiaji' },
+        { val: totalBiz, sub: 'zilizosajiliwa', lbl: 'Biashara' },
+        { val: activeUsers, sub: 'wanaotumika', lbl: 'Watumiaji Amilifu' },
+        { val: suspendedUsers, sub: 'zilizozuiliwa', lbl: 'Akaunti Zilizosimamishwa' },
+        { val: superCount, sub: 'wanaounda mfumo', lbl: 'Super Admin' }
+      ].map(m => '<div class="sm-card"><h4>' + m.lbl + '</h4><div class="sm-val">' + m.val + '</div><div class="sm-sub">' + m.sub + '</div></div>').join('');
+    } catch (err) { console.error('[SUPER] Metrics error:', err.message); }
+  },
+
+  tab(tabName) {
+    document.querySelectorAll('.super-tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase().includes(tabName === 'overview' ? 'muhtasari' : tabName === 'users' ? 'watumiaji' : tabName === 'businesses' ? 'biashara' : 'mipangilio')));
+    document.querySelectorAll('.super-section').forEach(s => s.classList.remove('active'));
+    const sec = document.getElementById('superSec-' + tabName);
+    if (sec) sec.classList.add('active');
+    if (tabName === 'users') { renderSuperUsers(); }
+    else if (tabName === 'businesses') { renderSuperBusinesses(); }
+    else if (tabName === 'settings') { SuperAdmin.loadSettings(); }
+    else if (tabName === 'overview') { SuperAdmin.loadCharts(); }
+  },
+
+  async loadCharts() {
+    try {
+      const monthlyCounts = {};
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        monthlyCounts[d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')] = 0;
+      }
+      State.superAllUsers.forEach(u => {
+        if (u.createdAt) {
+          const d = u.createdAt.toDate();
+          const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+          if (monthlyCounts[key] !== undefined) monthlyCounts[key]++;
+        }
+      });
+      const labels = Object.keys(monthlyCounts).map(k => { const [y, m] = k.split('-'); const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des']; return monthNames[parseInt(m) - 1]; });
+      if (State.charts.superUsers) State.charts.superUsers.destroy();
+      State.charts.superUsers = new Chart(document.getElementById('chartSuperUsers'), { type: 'line', data: { labels, datasets: [{ label: 'Watumiaji', data: Object.values(monthlyCounts), borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: '#5a5a72', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' } } } } });
+      const bizSales = {};
+      for (const biz of State.superAllBusinesses.slice(0, 8)) {
+        try {
+          const salesSnap = await db.collection('sales').where('businessId', '==', biz.id).get();
+          let total = 0;
+          salesSnap.forEach(d => { total += d.data().total || 0; });
+          bizSales[biz.name || 'Biashara'] = total;
+        } catch (e) { bizSales[biz.name || '?'] = 0; }
+      }
+      if (State.charts.superSales) State.charts.superSales.destroy();
+      State.charts.superSales = new Chart(document.getElementById('chartSuperSales'), { type: 'bar', data: { labels: Object.keys(bizSales), datasets: [{ label: 'Mapato', data: Object.values(bizSales), backgroundColor: 'rgba(108,92,231,0.6)', borderColor: '#6c5ce7', borderWidth: 1, borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: '#9a9ab0' }, grid: { display: false } } } } });
+    } catch (err) { console.error('[SUPER] Charts error:', err.message); }
+  },
+
+  async loadSettings() {
+    try {
+      const doc = await db.collection('systemSettings').doc('global').get();
+      const data = doc.exists ? doc.data() : {};
+      document.getElementById('sysSettingName').value = data.systemName || 'BizBook Pro';
+      document.getElementById('sysSettingPhone').value = data.supportPhone || '';
+      document.getElementById('sysSettingEmail').value = data.supportEmail || '';
+      document.getElementById('sysSettingAnnounce').value = data.announcement || '';
+    } catch (err) { console.error('[SUPER] Settings error:', err.message); }
+  }
+};
+
+function openSuperAdmin() { SuperAdmin.open(); }
+function closeSuperAdmin() { SuperAdmin.close(); }
+function superTab(name) { SuperAdmin.tab(name); }
+
+/* Super Admin Users Table */
+function renderSuperUsers() {
+  const search = (document.getElementById('superUserSearch')?.value || '').toLowerCase();
+  const filter = document.getElementById('superUserFilter')?.value || '';
+  let filtered = State.superAllUsers;
+  if (search) filtered = filtered.filter(u => ((u.firstName || '') + ' ' + (u.lastName || '')).toLowerCase().includes(search) || (u.email || '').toLowerCase().includes(search));
+  if (filter) filtered = filtered.filter(u => u.role === filter);
+  document.getElementById('superUserCount').textContent = filtered.length + ' watumiaji';
+  const tb = document.getElementById('superUsersTable');
+  if (!filtered.length) { tb.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fas fa-users"></i><p>Hakuna watumiaji</p></td></tr>'; return; }
+  tb.innerHTML = filtered.map(u => {
+    const isSuper = u.role === 'superuser';
+    return '<tr><td>' + (u.firstName || '') + ' ' + (u.lastName || '') + '</td><td>' + (u.email || '-') + '</td><td>' + (u.phone || '-') + '</td><td><span class="emp-tag role">' + Utils.roleLabel(u.role) + '</span></td><td>' + (u.businessId ? '<button class="btn btn-xs btn-o" onclick="superViewBiz(\'' + u.businessId + '\')">Tazama</button>' : '-') + '</td><td>' + Utils.statusBadge(u.status || 'active') + '</td><td>' + Utils.formatDate(u.createdAt) + '</td><td class="actions-cell"><button class="btn btn-xs btn-o" onclick="superEditUser(\'' + u.id + '\')"><i class="fas fa-edit"></i></button>' + (!isSuper ? '<button class="btn btn-xs btn-' + (u.status === 'suspended' ? 's' : 'w') + '" onclick="superToggleStatus(\'' + u.id + '\',\'' + (u.status || 'active') + '\')"><i class="fas fa-' + (u.status === 'suspended' ? 'check' : 'ban') + '"></i></button>' : '') + (!isSuper ? '<button class="btn btn-xs btn-d" onclick="superDeleteUser(\'' + u.id + '\',\'' + ((u.firstName || '') + ' ' + (u.lastName || '')).replace(/'/g, "\\'") + '\')"><i class="fas fa-trash"></i></button>' : '') + '</td></tr>';
+  }).join('');
+}
+
+function superEditUser(uid) {
+  const u = State.superAllUsers.find(x => x.id === uid);
+  if (!u) return;
+  document.getElementById('suEditUid').value = uid;
+  document.getElementById('suEditFname').value = u.firstName || '';
+  document.getElementById('suEditLname').value = u.lastName || '';
+  document.getElementById('suEditEmail').value = u.email || '';
+  document.getElementById('suEditPhone').value = u.phone || '';
+  document.getElementById('suEditRole').value = u.role || 'user';
+  document.getElementById('suEditStatus').value = u.status || 'active';
+  openModal('superEditUserModal');
+}
+
+async function superUpdateUser() {
+  const uid = document.getElementById('suEditUid').value;
+  const updates = {
+    firstName: document.getElementById('suEditFname').value.trim(),
+    lastName: document.getElementById('suEditLname').value.trim(),
+    phone: document.getElementById('suEditPhone').value.trim(),
+    role: document.getElementById('suEditRole').value,
+    status: document.getElementById('suEditStatus').value
+  };
+  if (!updates.firstName) { Utils.toast('Jina linahitajika', 'w'); return; }
+  try {
+    await db.collection('users').doc(uid).update(updates);
+    const idx = State.superAllUsers.findIndex(u => u.id === uid);
+    if (idx >= 0) State.superAllUsers[idx] = { ...State.superAllUsers[idx], ...updates };
+    Utils.toast('Mtumiaji amesasishwa', 's');
+    closeModal('superEditUserModal');
+    renderSuperUsers();
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+function superToggleStatus(uid, currentStatus) {
+  const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
+  const action = newStatus === 'suspended' ? 'simamisha' : 'amilisha';
+  Utils.confirm(action.charAt(0).toUpperCase() + action.slice(1) + ' Mtumiaji', 'Je, unataka ku' + action + ' mtumiaji huyu?', async () => {
+    try {
+      await db.collection('users').doc(uid).update({ status: newStatus });
+      const idx = State.superAllUsers.findIndex(u => u.id === uid);
+      if (idx >= 0) State.superAllUsers[idx].status = newStatus;
+      Utils.toast('Mtumiaji ame' + (newStatus === 'suspended' ? 'simamishwa' : 'amilishwa'), 's');
+      renderSuperUsers();
+    } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+  });
+}
+
+function superDeleteUser(uid, name) {
+  Utils.confirm('Futa Mtumiaji', 'Hatua hii itafuta wasifu wa mtumiaji. Firebase Auth inahitaji Admin SDK kufuta akaunti ya kweli. Endelea?', async () => {
+    try {
+      await db.collection('users').doc(uid).delete();
+      State.superAllUsers = State.superAllUsers.filter(u => u.id !== uid);
+      Utils.toast('Wasifu wa mtumiaji umefutwa (Firebase Auth haijafutwa - hitaji Admin SDK)', 'w');
+      renderSuperUsers();
+    } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+  }, name);
+}
+
+function superViewBiz(bizId) {
+  const biz = State.superAllBusinesses.find(b => b.id === bizId);
+  if (!biz) { Utils.toast('Biashara haipo', 'w'); return; }
+  const content = document.getElementById('superBizDetailContent');
+  content.innerHTML = '<div class="prof-grid"><div class="prof-left"><h3 style="margin-bottom:12px">' + (biz.name || '-') + '</h3><p style="color:var(--text2);font-size:13px;margin-bottom:8px"><i class="fas fa-envelope" style="width:20px"></i> ' + (biz.email || '-') + '</p><p style="color:var(--text2);font-size:13px;margin-bottom:8px"><i class="fas fa-phone" style="width:20px"></i> ' + (biz.phone || '-') + '</p><p style="color:var(--text2);font-size:13px;margin-bottom:8px"><i class="fas fa-map-marker-alt" style="width:20px"></i> ' + (biz.address || '-') + '</p><p style="color:var(--text2);font-size:13px;margin-bottom:8px"><i class="fas fa-tag" style="width:20px"></i> ' + (biz.type || '-') + '</p><p style="color:var(--text2);font-size:13px"><i class="fas fa-calendar" style="width:20px"></i> ' + Utils.formatDate(biz.createdAt) + '</p></div><div class="prof-right"><h4 style="margin-bottom:12px">Takwimu</h4><div id="superBizStats" style="color:var(--text2);font-size:13px"><div class="spinner" style="margin:20px auto"></div></div></div></div>';
+  openModal('superBizDetailModal');
+  (async () => {
+    try {
+      const [usersSnap, prodSnap, salesSnap] = await Promise.all([
+        db.collection('users').where('businessId', '==', bizId).get(),
+        db.collection('products').where('businessId', '==', bizId).get(),
+        db.collection('sales').where('businessId', '==', bizId).get()
+      ]);
+      let revenue = 0;
+      salesSnap.forEach(d => { revenue += d.data().total || 0; });
+      document.getElementById('superBizStats').innerHTML = [
+        { icon: 'fa-users', lbl: 'Wafanyakazi', val: usersSnap.size },
+        { icon: 'fa-boxes-stacked', lbl: 'Bidhaa', val: prodSnap.size },
+        { icon: 'fa-cash-register', lbl: 'Mauzo', val: salesSnap.size },
+        { icon: 'fa-coins', lbl: 'Mapato', val: Utils.formatCurrency(revenue) }
+      ].map(s => '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span><i class="fas ' + s.icon + '" style="width:20px;color:var(--primary2)"></i> ' + s.lbl + '</span><strong>' + s.val + '</strong></div>').join('');
+    } catch (err) { document.getElementById('superBizStats').innerHTML = '<p style="color:var(--danger)">Hitilafu ya kupakia takwimu</p>'; }
+  })();
+}
+
+/* Super Admin Businesses Table */
+function renderSuperBusinesses() {
+  const search = (document.getElementById('superBizSearch')?.value || '').toLowerCase();
+  let filtered = State.superAllBusinesses;
+  if (search) filtered = filtered.filter(b => (b.name || '').toLowerCase().includes(search));
+  document.getElementById('superBizCount').textContent = filtered.length + ' biashara';
+  const tb = document.getElementById('superBizTable');
+  if (!filtered.length) { tb.innerHTML = '<tr><td colspan="9" class="empty-s"><i class="fas fa-building"></i><p>Hakuna biashara</p></td></tr>'; return; }
+  (async () => {
+    const rows = [];
+    for (const biz of filtered) {
+      let staffCount = 0, prodCount = 0, salesCount = 0, revenue = 0;
+      try {
+        const [uSnap, pSnap, sSnap] = await Promise.all([
+          db.collection('users').where('businessId', '==', biz.id).get(),
+          db.collection('products').where('businessId', '==', biz.id).get(),
+          db.collection('sales').where('businessId', '==', biz.id).get()
+        ]);
+        staffCount = uSnap.size;
+        prodCount = pSnap.size;
+        sSnap.forEach(d => { salesCount++; revenue += d.data().total || 0; });
+      } catch (e) { /* skip */ }
+      const owner = State.superAllUsers.find(u => u.id === biz.ownerId);
+      rows.push('<tr><td>' + (biz.name || '-') + '</td><td>' + ((owner?.firstName || '') + ' ' + (owner?.lastName || '')) + '</td><td>' + (biz.phone || '-') + '</td><td>' + staffCount + '</td><td>' + prodCount + '</td><td>' + salesCount + '</td><td style="color:var(--success)">' + Utils.formatCurrency(revenue) + '</td><td>' + Utils.formatDate(biz.createdAt) + '</td><td class="actions-cell"><button class="btn btn-xs btn-o" onclick="superViewBiz(\'' + biz.id + '\')"><i class="fas fa-eye"></i></button></td></tr>');
+    }
+    tb.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="9" class="empty-s"><i class="fas fa-building"></i><p>Hakuna biashara</p></td></tr>';
+  })();
+}
+
+/* Super Admin System Settings */
+async function saveSystemSettings() {
+  try {
+    await db.collection('systemSettings').doc('global').set({
+      systemName: document.getElementById('sysSettingName').value.trim(),
+      supportPhone: document.getElementById('sysSettingPhone').value.trim(),
+      supportEmail: document.getElementById('sysSettingEmail').value.trim(),
+      announcement: document.getElementById('sysSettingAnnounce').value.trim(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    Utils.toast('Mipangilio ya mfumo imehifadhiwa', 's');
+  } catch (err) { Utils.toast('Hitilafu: ' + err.message, 'e'); }
+}
+
+/* ============================================================
+   OFFLINE DETECTION
+   ============================================================ */
+window.addEventListener('online', () => {
+  document.body.classList.remove('is-offline');
+  document.getElementById('onlineDot').style.background = 'var(--success)';
+  document.getElementById('onlineText').textContent = 'Wako mtandaoni';
+  Utils.toast('Muunganiko umerekodiwa', 's');
+});
+
+window.addEventListener('offline', () => {
+  document.body.classList.add('is-offline');
+  document.getElementById('onlineDot').style.background = 'var(--danger)';
+  document.getElementById('onlineText').textContent = 'Hakuna mtandao';
+  Utils.toast('Hakuna muunganisho wa mtandao', 'w');
+});
+
+/* ============================================================
+   ENTER KEY ON LOGIN
+   ============================================================ */
+document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleLogin();
+});
+document.getElementById('loginEmail').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleLogin();
+});
+
+/* ============================================================
+   INITIALIZATION
+   ============================================================ */
+Auth.init();
+</script>
+</body>
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                           
+                                                                                                                                                                                                                                                                                                                                                                                                                                 
+                                                                                                                                                                                                                                                                                                                                                                                                                                 
