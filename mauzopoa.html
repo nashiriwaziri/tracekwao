@@ -1411,256 +1411,95 @@ function renderProducts(){
   const f=allProducts.filter(p=>!sr||p.name?.toLowerCase().includes(sr)||p.category?.toLowerCase().includes(sr)||p.sku?.toLowerCase().includes(sr));
   if(!f.length){tb.innerHTML='<tr><td colspan="6" class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p></td></tr>';return;}
   tb.innerHTML=f.map(p=>`<tr><td><strong>${p.name}</strong>${p.sku?`<br><span style="font-size:11px;color:var(--text3)">SKU: ${p.sku}</span>`:''}</td><td>${p.category||'-'}</td><td>${fmt(p.costPrice)}</td><td style="color:var(--success);font-weight:600">${fmt(p.sellPrice)}</td><td style="color:${(p.stock||0)<=5?'var(--danger)':'var(--text)'}">${p.stock||0}</td><td><button class="btn btn-xs btn-o" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button> <button class="btn btn-xs btn-d" onclick="deleteProduct('${p.id}','${(p.name||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button></td></tr>`).join('');
-}
-// ============================================================
-// SAVE PRODUCT
-// ============================================================
-window.saveProduct = async function () {
-
+}window.saveProduct = async function () {
   const btn = document.getElementById('saveProductBtn');
 
   try {
-
-    // ----------------------------------------------------------
-    // 1. CHECK LOGIN
-    // ----------------------------------------------------------
-    const uid = currentUser?.uid || auth?.currentUser?.uid;
+    const uid = currentUser?.uid;
 
     if (!uid) {
       toast('Tafadhali ingia kwanza kwenye mfumo.', 'e');
       return;
     }
 
-    // ----------------------------------------------------------
-    // 2. GET USER PROFILE
-    // ----------------------------------------------------------
-    let userData = currentUserData;
+    let bizId = businessId;
 
-    if (!userData) {
-      const userSnap = await getDoc(
-        doc(db, 'users', uid)
-      );
-
-      if (!userSnap.exists()) {
-        toast('Taarifa za akaunti hazijapatikana.', 'e');
-        console.error('User document missing:', uid);
-        return;
-      }
-
-      userData = {
-        id: userSnap.id,
-        ...userSnap.data()
-      };
-
-      currentUserData = userData;
+    if (!bizId && currentUserData?.businessId) {
+      bizId = currentUserData.businessId;
     }
 
-    // ----------------------------------------------------------
-    // 3. GET BUSINESS ID
-    // ----------------------------------------------------------
-    const productBusinessId =
-      userData.businessId ||
-      businessId ||
-      null;
-
-    if (!productBusinessId) {
-      console.error('Business ID missing:', {
-        uid: uid,
-        userData: userData,
-        globalBusinessId: businessId
+    if (!bizId) {
+      toast('Akaunti ya biashara haijapatikana.', 'e');
+      console.error('SAVE PRODUCT: businessId missing', {
+        uid,
+        currentUserData
       });
-
-      toast(
-        'Akaunti ya biashara haijapatikana. Tafadhali ingia tena.',
-        'e'
-      );
-
       return;
     }
 
-    // ----------------------------------------------------------
-    // 4. SYNC GLOBAL BUSINESS ID
-    // ----------------------------------------------------------
-    businessId = productBusinessId;
-
-    // ----------------------------------------------------------
-    // 5. CHECK BUSINESS EXISTS
-    // ----------------------------------------------------------
-    const businessRef = doc(
-      db,
-      'businesses',
-      productBusinessId
-    );
-
-    const businessSnap = await getDoc(businessRef);
-
-    if (!businessSnap.exists()) {
-
-      console.error(
-        'Business not found:',
-        productBusinessId
-      );
-
-      toast(
-        'Akaunti ya biashara haijapatikana kwenye mfumo.',
-        'e'
-      );
-
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // 6. SAVE BUSINESS DATA
-    // ----------------------------------------------------------
-    businessData = {
-      id: businessSnap.id,
-      ...businessSnap.data()
-    };
-
-    // ----------------------------------------------------------
-    // 7. GET PRODUCT FORM VALUES
-    // ----------------------------------------------------------
     const name =
-      document.getElementById('apName')?.value.trim() || '';
+      document.getElementById('apName')?.value.trim();
 
     const category =
-      document.getElementById('apCategory')?.value || '';
+      document.getElementById('apCategory')?.value;
 
     const sku =
-      document.getElementById('apSku')?.value.trim() || '';
+      document.getElementById('apSku')?.value.trim();
 
     const costPrice =
-      Number(
-        document.getElementById('apCostPrice')?.value
-      ) || 0;
+      Number(document.getElementById('apCostPrice')?.value) || 0;
 
     const sellPrice =
-      Number(
-        document.getElementById('apSellPrice')?.value
-      ) || 0;
+      Number(document.getElementById('apSellPrice')?.value) || 0;
 
     const stock =
-      Number(
-        document.getElementById('apStock')?.value
-      ) || 0;
+      Number(document.getElementById('apStock')?.value) || 0;
 
     const description =
       document.getElementById('apDesc')?.value.trim() || '';
 
-    // ----------------------------------------------------------
-    // 8. VALIDATE
-    // ----------------------------------------------------------
-    if (!name) {
-      toast('Ingiza jina la bidhaa.', 'w');
+    if (!name || !category || costPrice <= 0 || sellPrice <= 0) {
+      toast('Jaza sehemu zote zinazohitajika.', 'w');
       return;
     }
 
-    if (!category) {
-      toast('Chagua category ya bidhaa.', 'w');
-      return;
-    }
-
-    if (costPrice <= 0) {
-      toast('Ingiza bei ya kununua.', 'w');
-      return;
-    }
-
-    if (sellPrice <= 0) {
-      toast('Ingiza bei ya kuuza.', 'w');
-      return;
-    }
-
-    // ----------------------------------------------------------
-    // 9. BUTTON LOADING
-    // ----------------------------------------------------------
     if (btn) {
       btn.disabled = true;
-
-      if (!btn.dataset.orig) {
-        btn.dataset.orig = btn.innerHTML;
-      }
-
       btn.innerHTML =
         '<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
     }
 
-    // ----------------------------------------------------------
-    // 10. PRODUCT DATA
-    // ----------------------------------------------------------
-    const productData = {
-      name: name,
-      category: category,
-      sku: sku,
-      costPrice: costPrice,
-      sellPrice: sellPrice,
-      stock: stock,
-      description: description,
-
+    await addDoc(collection(db, 'products'), {
+      name,
+      category,
+      sku,
+      costPrice,
+      sellPrice,
+      stock,
+      description,
       status: 'active',
-
-      businessId: productBusinessId,
-
+      businessId: bizId,
       createdBy: uid,
-
       createdAt: serverTimestamp()
-    };
+    });
 
-    console.log(
-      'Saving product:',
-      productData
-    );
+    toast('Bidhaa imehifadhiwa!', 's');
 
-    // ----------------------------------------------------------
-    // 11. SAVE TO FIRESTORE
-    // ----------------------------------------------------------
-    const productRef = await addDoc(
-      collection(db, 'products'),
-      productData
-    );
-
-    console.log(
-      'Product saved:',
-      productRef.id
-    );
-
-    // ----------------------------------------------------------
-    // 12. SUCCESS
-    // ----------------------------------------------------------
-    toast(
-      'Bidhaa imehifadhiwa!',
-      's'
-    );
-
-    // ----------------------------------------------------------
-    // 13. CLEAR FORM
-    // ----------------------------------------------------------
-    const fieldsToClear = [
+    [
       'apName',
       'apSku',
       'apDesc',
       'apCostPrice',
       'apSellPrice',
       'apStock'
-    ];
-
-    fieldsToClear.forEach(id => {
+    ].forEach(id => {
       const el = document.getElementById(id);
-
-      if (el) {
-        el.value = '';
-      }
+      if (el) el.value = '';
     });
 
-    const categoryEl =
-      document.getElementById('apCategory');
+    const cat = document.getElementById('apCategory');
+    if (cat) cat.value = '';
 
-    if (categoryEl) {
-      categoryEl.value = '';
-    }
-
-    // ----------------------------------------------------------
-    // 14. REFRESH PRODUCTS
-    // ----------------------------------------------------------
     if (typeof loadProducts === 'function') {
       await loadProducts();
     }
@@ -1669,67 +1508,18 @@ window.saveProduct = async function () {
       renderProducts();
     }
 
-    // ----------------------------------------------------------
-    // 15. GO TO PRODUCTS
-    // ----------------------------------------------------------
-    if (typeof navTo === 'function') {
-      navTo('products');
-    }
-
   } catch (e) {
+    console.error('SAVE PRODUCT ERROR:', e);
 
-    console.error(
-      'saveProduct ERROR:',
-      e
+    toast(
+      e?.message || 'Hitilafu katika kuhifadhi bidhaa.',
+      'e'
     );
-
-    console.error(
-      'saveProduct details:',
-      {
-        code: e?.code,
-        message: e?.message,
-        uid: currentUser?.uid || null,
-        businessId: businessId || null
-      }
-    );
-
-    // --------------------------------------------------------
-    // FIREBASE ERRORS
-    // --------------------------------------------------------
-    if (e?.code === 'permission-denied') {
-
-      toast(
-        'Huna ruhusa ya kuhifadhi bidhaa kwenye biashara hii.',
-        'e'
-      );
-
-    } else if (
-      e?.code === 'unavailable'
-    ) {
-
-      toast(
-        'Firebase haipatikani kwa sasa. Angalia internet yako.',
-        'e'
-      );
-
-    } else {
-
-      toast(
-        e?.message
-          ? `Hitilafu: ${e.message}`
-          : 'Hitilafu katika kuhifadhi bidhaa.',
-        'e'
-      );
-    }
 
   } finally {
-
     if (btn) {
-
       btn.disabled = false;
-
       btn.innerHTML =
-        btn.dataset.orig ||
         '<i class="fas fa-save"></i> Hifadhi Bidhaa';
     }
   }
