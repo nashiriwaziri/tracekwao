@@ -1569,7 +1569,7 @@ window.saveProduct = async function () {
   try {
 
     // ----------------------------------------------------------
-    // 1. GET AUTHENTICATED USER DIRECTLY FROM FIREBASE
+    // 1. CHECK LOGIN
     // ----------------------------------------------------------
     const user = auth.currentUser;
 
@@ -1582,39 +1582,19 @@ window.saveProduct = async function () {
     }
 
     // ----------------------------------------------------------
-    // 2. GET BUSINESS ID
+    // 2. BUSINESS ID
     // ----------------------------------------------------------
-    let bizId =
-      State?.currentBizId ||
-      null;
-
-    // If State doesn't have business ID, get it from user document
-    if (!bizId) {
-
-      const userSnap = await getDoc(
-        doc(db, 'users', user.uid)
-      );
-
-      if (userSnap.exists()) {
-
-        const userData = userSnap.data();
-
-        bizId =
-          userData.businessId ||
-          userData.bizId ||
-          null;
-
-      }
-    }
+    const bizId =
+      State &&
+      State.currentBizId
+        ? State.currentBizId
+        : null;
 
     if (!bizId) {
 
       console.error(
-        '[PRODUCT] Business ID not found',
-        {
-          uid: user.uid,
-          state: State
-        }
+        '[PRODUCT] State.currentBizId haipo.',
+        State
       );
 
       Utils.toast(
@@ -1625,13 +1605,8 @@ window.saveProduct = async function () {
       return;
     }
 
-    // Keep State synchronized
-    if (State) {
-      State.currentBizId = bizId;
-    }
-
     // ----------------------------------------------------------
-    // 3. READ FORM
+    // 3. FORM DATA
     // ----------------------------------------------------------
     const name =
       document.getElementById('apName')?.value.trim() || '';
@@ -1661,7 +1636,7 @@ window.saveProduct = async function () {
       document.getElementById('apDesc')?.value.trim() || '';
 
     // ----------------------------------------------------------
-    // 4. VALIDATE
+    // 4. VALIDATION
     // ----------------------------------------------------------
     if (!name) {
       Utils.toast('Ingiza jina la bidhaa.', 'w');
@@ -1679,7 +1654,7 @@ window.saveProduct = async function () {
     }
 
     // ----------------------------------------------------------
-    // 5. BUTTON LOADING
+    // 5. BUTTON
     // ----------------------------------------------------------
     if (btn) {
 
@@ -1693,51 +1668,36 @@ window.saveProduct = async function () {
     }
 
     // ----------------------------------------------------------
-    // 6. PRODUCT DATA
+    // 6. SAVE
     // ----------------------------------------------------------
-    const productData = {
+    await db
+      .collection('products')
+      .add({
 
-      name,
-      category,
-      sku,
+        name: name,
 
-      costPrice,
-      sellPrice,
-      stock,
+        category: category,
 
-      description,
+        sku: sku,
 
-      businessId: bizId,
+        costPrice: costPrice,
 
-      createdBy: user.uid,
+        sellPrice: sellPrice,
 
-      status: 'active',
+        stock: stock,
 
-      createdAt: serverTimestamp(),
+        description: description,
 
-      updatedAt: serverTimestamp()
-    };
+        businessId: bizId,
 
-    console.log(
-      '[PRODUCT] Saving:',
-      productData
-    );
+        status: 'active',
+
+        createdAt:
+          firebase.firestore.FieldValue.serverTimestamp()
+      });
 
     // ----------------------------------------------------------
-    // 7. SAVE TO FIRESTORE
-    // ----------------------------------------------------------
-    const productRef = await addDoc(
-      collection(db, 'products'),
-      productData
-    );
-
-    console.log(
-      '[PRODUCT] Saved successfully:',
-      productRef.id
-    );
-
-    // ----------------------------------------------------------
-    // 8. SUCCESS
+    // 7. SUCCESS
     // ----------------------------------------------------------
     Utils.toast(
       'Bidhaa imehifadhiwa!',
@@ -1745,7 +1705,7 @@ window.saveProduct = async function () {
     );
 
     // ----------------------------------------------------------
-    // 9. CLEAR FORM
+    // 8. CLEAR FORM
     // ----------------------------------------------------------
     [
       'apName',
@@ -1763,11 +1723,10 @@ window.saveProduct = async function () {
       if (el) {
         el.value = '';
       }
-
     });
 
     // ----------------------------------------------------------
-    // 10. RELOAD PRODUCTS
+    // 9. RELOAD
     // ----------------------------------------------------------
     if (
       typeof loadProducts === 'function'
@@ -1781,9 +1740,6 @@ window.saveProduct = async function () {
       renderProducts();
     }
 
-    // ----------------------------------------------------------
-    // 11. OPEN PRODUCTS
-    // ----------------------------------------------------------
     if (
       typeof navTo === 'function'
     ) {
@@ -1814,8 +1770,7 @@ window.saveProduct = async function () {
         '<i class="fas fa-save"></i> Hifadhi Bidhaa';
     }
   }
-};
-function editProduct(id) {
+};function editProduct(id) {
   const p = Products.cache.find(x => x.id === id);
   if (!p) return;
   document.getElementById('editProdId').value = id;
