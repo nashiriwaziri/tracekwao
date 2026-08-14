@@ -1413,19 +1413,494 @@ function renderProducts(){
   tb.innerHTML=f.map(p=>`<tr><td><strong>${p.name}</strong>${p.sku?`<br><span style="font-size:11px;color:var(--text3)">SKU: ${p.sku}</span>`:''}</td><td>${p.category||'-'}</td><td>${fmt(p.costPrice)}</td><td style="color:var(--success);font-weight:600">${fmt(p.sellPrice)}</td><td style="color:${(p.stock||0)<=5?'var(--danger)':'var(--text)'}">${p.stock||0}</td><td><button class="btn btn-xs btn-o" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button> <button class="btn btn-xs btn-d" onclick="deleteProduct('${p.id}','${(p.name||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button></td></tr>`).join('');
 }
 
-window.saveProduct=async function(){
-  const btn=document.getElementById('saveProductBtn');
-  try{
-    if(!businessId){toast('Akaunti ya biashara haijapatikana','e');return;}
-    const name=document.getElementById('apName').value.trim(),category=document.getElementById('apCategory').value,sku=document.getElementById('apSku').value.trim(),costPrice=Number(document.getElementById('apCostPrice').value)||0,sellPrice=Number(document.getElementById('apSellPrice').value)||0,stock=Number(document.getElementById('apStock').value)||0,description=document.getElementById('apDesc').value.trim();
-    if(!name||!category||costPrice<=0||sellPrice<=0){toast('Jaza sehemu zote zinazohitajika','w');return;}
-    btn.disabled=true;btn.dataset.orig=btn.innerHTML;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
-    await addDoc(collection(db,'products'),{name,category,sku,costPrice,sellPrice,stock,description,status:'active',businessId,createdAt:serverTimestamp()});
-    toast('Bidhaa imehifadhiwa!','s');
-    ['apName','apSku','apDesc'].forEach(id=>document.getElementById(id).value='');document.getElementById('apCategory').value='';['apCostPrice','apSellPrice','apStock'].forEach(id=>document.getElementById(id).value='');
-    await loadProducts();renderProducts();navTo('products');
-  }catch(e){console.error('saveProduct:',e);toast(mapErr(e.code,e.message),'e');}
-  finally{btn.disabled=false;btn.innerHTML=btn.dataset.orig||'<i class="fas fa-save"></i> Hifadhi Bidhaa';}
+// ============================================================
+// SAVE PRODUCT — SAFE BUSINESS VALIDATION
+// ============================================================
+
+window.saveProduct = async function () {
+
+  const btn =
+    document.getElementById('saveProductBtn');
+
+  try {
+
+    // ========================================================
+    // 1. VERIFY AUTHENTICATED USER
+    // ========================================================
+
+    const uid =
+      currentUser?.uid ||
+      auth?.currentUser?.uid ||
+      null;
+
+    if (!uid) {
+
+      toast(
+        'Hujaingia kwenye mfumo. Tafadhali ingia kwanza.',
+        'e'
+      );
+
+      return;
+    }
+
+    // ========================================================
+    // 2. GET USER PROFILE
+    // ========================================================
+
+    let userData =
+      currentUserData || null;
+
+    /*
+     * Kama currentUserData haipo, ipakue moja kwa moja
+     * kutoka Firestore.
+     */
+
+    if (!userData) {
+
+      const userSnap =
+        await getDoc(
+          doc(db, 'users', uid)
+        );
+
+      if (!userSnap.exists()) {
+
+        toast(
+          'Taarifa za akaunti yako hazijapatikana kwenye mfumo.',
+          'e'
+        );
+
+        console.error(
+          'USER PROFILE NOT FOUND:',
+          `users/${uid}`
+        );
+
+        return;
+      }
+
+      userData = {
+        id: userSnap.id,
+        ...userSnap.data()
+      };
+
+      currentUserData = userData;
+    }
+
+    // ========================================================
+    // 3. RESOLVE BUSINESS ID
+    // ========================================================
+
+    /*
+     * Tumia sources zote zinazoweza kuwa na business ID.
+     *
+     * Priority:
+     * 1. user profile
+     * 2. global businessId
+     * 3. currentBizId
+     */
+
+    const resolvedBusinessId =
+      userData.businessId ||
+      userData.bizId ||
+      businessId ||
+      currentBizId ||
+      null;
+
+    console.log(
+      'Resolved Business ID:',
+      resolvedBusinessId
+    );
+
+    // ========================================================
+    // 4. BUSINESS ID NOT FOUND
+    // ========================================================
+
+    if (!resolvedBusinessId) {
+
+      console.error(
+        'BUSINESS ID MISSING',
+        {
+          uid,
+          userData,
+          businessId,
+          currentBizId
+        }
+      );
+
+      toast(
+        'Akaunti ya biashara haijaunganishwa na akaunti hii. Wasiliana na Administrator.',
+        'e'
+      );
+
+      return;
+    }
+
+    // ========================================================
+    // 5. KEEP GLOBAL IDs SYNCHRONIZED
+    // ========================================================
+
+    businessId =
+      resolvedBusinessId;
+
+    if (
+      typeof currentBizId !== 'undefined'
+    ) {
+      currentBizId =
+        resolvedBusinessId;
+    }
+
+    // ========================================================
+    // 6. VERIFY BUSINESS EXISTS
+    // ========================================================
+
+    const businessRef =
+      doc(
+        db,
+        'businesses',
+        resolvedBusinessId
+      );
+
+    const businessSnap =
+      await getDoc(
+        businessRef
+      );
+
+    if (!businessSnap.exists()) {
+
+      console.error(
+        'BUSINESS DOCUMENT NOT FOUND:',
+        `businesses/${resolvedBusinessId}`
+      );
+
+      toast(
+        'Akaunti ya biashara haipo kwenye mfumo. Wasiliana na Administrator.',
+        'e'
+      );
+
+      return;
+    }
+
+    // ========================================================
+    // 7. SAVE BUSINESS DATA GLOBALLY
+    // ========================================================
+
+    businessData = {
+      id: businessSnap.id,
+      ...businessSnap.data()
+    };
+
+    console.log(
+      'Business verified:',
+      businessData
+    );
+
+    // ========================================================
+    // 8. READ PRODUCT FORM
+    // ========================================================
+
+    const name =
+      document
+        .getElementById('apName')
+        ?.value
+        .trim() || '';
+
+    const category =
+      document
+        .getElementById('apCategory')
+        ?.value
+        .trim() || '';
+
+    const sku =
+      document
+        .getElementById('apSku')
+        ?.value
+        .trim() || '';
+
+    const costPrice =
+      Number(
+        document
+          .getElementById('apCostPrice')
+          ?.value
+      ) || 0;
+
+    const sellPrice =
+      Number(
+        document
+          .getElementById('apSellPrice')
+          ?.value
+      ) || 0;
+
+    const stock =
+      Number(
+        document
+          .getElementById('apStock')
+          ?.value
+      ) || 0;
+
+    const description =
+      document
+        .getElementById('apDesc')
+        ?.value
+        .trim() || '';
+
+    // ========================================================
+    // 9. VALIDATE PRODUCT
+    // ========================================================
+
+    if (!name) {
+
+      toast(
+        'Ingiza jina la bidhaa.',
+        'w'
+      );
+
+      return;
+    }
+
+    if (!category) {
+
+      toast(
+        'Chagua category ya bidhaa.',
+        'w'
+      );
+
+      return;
+    }
+
+    if (costPrice <= 0) {
+
+      toast(
+        'Ingiza bei ya kununua iliyo sahihi.',
+        'w'
+      );
+
+      return;
+    }
+
+    if (sellPrice <= 0) {
+
+      toast(
+        'Ingiza bei ya kuuza iliyo sahihi.',
+        'w'
+      );
+
+      return;
+    }
+
+    if (stock < 0) {
+
+      toast(
+        'Stock haiwezi kuwa chini ya sifuri.',
+        'w'
+      );
+
+      return;
+    }
+
+    // ========================================================
+    // 10. BUTTON LOADING
+    // ========================================================
+
+    if (btn) {
+
+      btn.disabled = true;
+
+      btn.dataset.orig =
+        btn.innerHTML;
+
+      btn.innerHTML =
+        '<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
+    }
+
+    // ========================================================
+    // 11. PRODUCT DATA
+    // ========================================================
+
+    const productData = {
+
+      name,
+
+      category,
+
+      sku,
+
+      costPrice,
+
+      sellPrice,
+
+      stock,
+
+      description,
+
+      status: 'active',
+
+      businessId:
+        resolvedBusinessId,
+
+      createdBy:
+        uid,
+
+      createdByRole:
+        userData.role || '',
+
+      createdAt:
+        serverTimestamp(),
+
+      updatedAt:
+        serverTimestamp()
+    };
+
+    console.log(
+      'Saving product:',
+      productData
+    );
+
+    // ========================================================
+    // 12. SAVE PRODUCT
+    // ========================================================
+
+    const productRef =
+      await addDoc(
+        collection(db, 'products'),
+        productData
+      );
+
+    console.log(
+      'Product saved successfully:',
+      productRef.id
+    );
+
+    // ========================================================
+    // 13. SUCCESS
+    // ========================================================
+
+    toast(
+      'Bidhaa imehifadhiwa kikamilifu!',
+      's'
+    );
+
+    // ========================================================
+    // 14. CLEAR FORM
+    // ========================================================
+
+    [
+      'apName',
+      'apSku',
+      'apDesc'
+    ].forEach(id => {
+
+      const el =
+        document.getElementById(id);
+
+      if (el) {
+        el.value = '';
+      }
+    });
+
+    const categoryEl =
+      document.getElementById('apCategory');
+
+    if (categoryEl) {
+      categoryEl.value = '';
+    }
+
+    [
+      'apCostPrice',
+      'apSellPrice',
+      'apStock'
+    ].forEach(id => {
+
+      const el =
+        document.getElementById(id);
+
+      if (el) {
+        el.value = '';
+      }
+    });
+
+    // ========================================================
+    // 15. REFRESH PRODUCTS
+    // ========================================================
+
+    await loadProducts();
+
+    renderProducts();
+
+    // ========================================================
+    // 16. RETURN TO PRODUCTS
+    // ========================================================
+
+    navTo('products');
+
+  } catch (e) {
+
+    console.error(
+      'saveProduct ERROR:',
+      e
+    );
+
+    console.error(
+      'saveProduct details:',
+      {
+        code: e?.code,
+        message: e?.message,
+        userId:
+          currentUser?.uid ||
+          auth?.currentUser?.uid ||
+          null,
+        businessId:
+          businessId ||
+          currentBizId ||
+          currentUserData?.businessId ||
+          null
+      }
+    );
+
+    let message =
+      'Imeshindikana kuhifadhi bidhaa.';
+
+    if (
+      e?.code ===
+      'permission-denied'
+    ) {
+
+      message =
+        'Huna ruhusa ya kuhifadhi bidhaa kwenye biashara hii.';
+
+    } else if (
+      e?.code ===
+      'failed-precondition'
+    ) {
+
+      message =
+        'Firebase inahitaji index au kuna hitilafu ya Firestore configuration.';
+
+    } else if (
+      e?.message
+    ) {
+
+      message =
+        mapErr(
+          e.code,
+          e.message
+        );
+    }
+
+    toast(
+      message,
+      'e'
+    );
+
+  } finally {
+
+    if (btn) {
+
+      btn.disabled = false;
+
+      btn.innerHTML =
+        btn.dataset.orig ||
+        '<i class="fas fa-save"></i> Hifadhi Bidhaa';
+    }
+  }
 };
 
 window.editProduct=async function(id){const p=allProducts.find(x=>x.id===id);if(!p)return;document.getElementById('epEditId').value=id;document.getElementById('epName').value=p.name||'';document.getElementById('epCategory').value=p.category||'';document.getElementById('epSku').value=p.sku||'';document.getElementById('epCostPrice').value=p.costPrice||0;document.getElementById('epSellPrice').value=p.sellPrice||0;document.getElementById('epStock').value=p.stock||0;document.getElementById('epDesc').value=p.description||'';openModal('editProductModal');};
