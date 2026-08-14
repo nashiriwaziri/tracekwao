@@ -1560,24 +1560,20 @@ const Products = {
 function renderProducts() { Products.render(); }
 
 // ============================================================
-// SAVE PRODUCT — MODULAR FIREBASE
+// SAVE PRODUCT
 // ============================================================
 window.saveProduct = async function () {
 
-  const btn =
-    document.getElementById('saveProductBtn');
+  const btn = document.getElementById('saveProductBtn');
 
   try {
 
     // ----------------------------------------------------------
-    // AUTH USER
+    // 1. GET AUTHENTICATED USER DIRECTLY FROM FIREBASE
     // ----------------------------------------------------------
-    const uid =
-      currentUser?.uid ||
-      auth?.currentUser?.uid ||
-      null;
+    const user = auth.currentUser;
 
-    if (!uid) {
+    if (!user) {
       Utils.toast(
         'Tafadhali ingia kwanza kwenye mfumo.',
         'e'
@@ -1586,45 +1582,38 @@ window.saveProduct = async function () {
     }
 
     // ----------------------------------------------------------
-    // RESOLVE BUSINESS ID
+    // 2. GET BUSINESS ID
     // ----------------------------------------------------------
     let bizId =
       State?.currentBizId ||
-      currentUserData?.businessId ||
-      businessId ||
       null;
 
+    // If State doesn't have business ID, get it from user document
     if (!bizId) {
 
-      // Try loading user profile directly
       const userSnap = await getDoc(
-        doc(db, 'users', uid)
+        doc(db, 'users', user.uid)
       );
 
       if (userSnap.exists()) {
 
-        const ud = userSnap.data();
+        const userData = userSnap.data();
 
         bizId =
-          ud.businessId ||
-          ud.bizId ||
+          userData.businessId ||
+          userData.bizId ||
           null;
 
-        currentUserData = {
-          id: userSnap.id,
-          ...ud
-        };
       }
     }
 
     if (!bizId) {
 
       console.error(
-        '[PRODUCT] Business ID missing',
+        '[PRODUCT] Business ID not found',
         {
-          uid,
-          StateBizId: State?.currentBizId,
-          currentUserData
+          uid: user.uid,
+          state: State
         }
       );
 
@@ -1636,93 +1625,64 @@ window.saveProduct = async function () {
       return;
     }
 
-    // ----------------------------------------------------------
-    // SYNCHRONIZE BUSINESS ID EVERYWHERE
-    // ----------------------------------------------------------
+    // Keep State synchronized
     if (State) {
       State.currentBizId = bizId;
     }
 
-    businessId = bizId;
-
     // ----------------------------------------------------------
-    // FORM DATA
+    // 3. READ FORM
     // ----------------------------------------------------------
     const name =
-      document
-        .getElementById('apName')
-        ?.value
-        .trim() || '';
+      document.getElementById('apName')?.value.trim() || '';
 
     const category =
-      document
-        .getElementById('apCategory')
-        ?.value || '';
+      document.getElementById('apCategory')?.value || '';
 
     const sku =
-      document
-        .getElementById('apSku')
-        ?.value
-        .trim() || '';
+      document.getElementById('apSku')?.value.trim() || '';
 
     const costPrice =
       parseFloat(
-        document
-          .getElementById('apCostPrice')
-          ?.value
+        document.getElementById('apCostPrice')?.value
       ) || 0;
 
     const sellPrice =
       parseFloat(
-        document
-          .getElementById('apSellPrice')
-          ?.value
+        document.getElementById('apSellPrice')?.value
       ) || 0;
 
     const stock =
       parseInt(
-        document
-          .getElementById('apStock')
-          ?.value
+        document.getElementById('apStock')?.value
       ) || 0;
 
     const description =
-      document
-        .getElementById('apDesc')
-        ?.value
-        .trim() || '';
+      document.getElementById('apDesc')?.value.trim() || '';
 
     // ----------------------------------------------------------
-    // VALIDATION
+    // 4. VALIDATE
     // ----------------------------------------------------------
     if (!name) {
-      Utils.toast(
-        'Ingiza jina la bidhaa.',
-        'w'
-      );
+      Utils.toast('Ingiza jina la bidhaa.', 'w');
       return;
     }
 
     if (!category) {
-      Utils.toast(
-        'Chagua category ya bidhaa.',
-        'w'
-      );
+      Utils.toast('Chagua category ya bidhaa.', 'w');
       return;
     }
 
     if (sellPrice <= 0) {
-      Utils.toast(
-        'Ingiza bei ya kuuza.',
-        'w'
-      );
+      Utils.toast('Ingiza bei ya kuuza.', 'w');
       return;
     }
 
     // ----------------------------------------------------------
-    // BUTTON
+    // 5. BUTTON LOADING
     // ----------------------------------------------------------
     if (btn) {
+
       btn.disabled = true;
 
       btn.dataset.originalHtml =
@@ -1733,7 +1693,7 @@ window.saveProduct = async function () {
     }
 
     // ----------------------------------------------------------
-    // PRODUCT DATA
+    // 6. PRODUCT DATA
     // ----------------------------------------------------------
     const productData = {
 
@@ -1749,15 +1709,13 @@ window.saveProduct = async function () {
 
       businessId: bizId,
 
-      createdBy: uid,
+      createdBy: user.uid,
 
       status: 'active',
 
-      createdAt:
-        serverTimestamp(),
+      createdAt: serverTimestamp(),
 
-      updatedAt:
-        serverTimestamp()
+      updatedAt: serverTimestamp()
     };
 
     console.log(
@@ -1766,21 +1724,20 @@ window.saveProduct = async function () {
     );
 
     // ----------------------------------------------------------
-    // SAVE USING MODULAR FIREBASE
+    // 7. SAVE TO FIRESTORE
     // ----------------------------------------------------------
-    const productRef =
-      await addDoc(
-        collection(db, 'products'),
-        productData
-      );
+    const productRef = await addDoc(
+      collection(db, 'products'),
+      productData
+    );
 
     console.log(
-      '[PRODUCT] SAVED:',
+      '[PRODUCT] Saved successfully:',
       productRef.id
     );
 
     // ----------------------------------------------------------
-    // SUCCESS
+    // 8. SUCCESS
     // ----------------------------------------------------------
     Utils.toast(
       'Bidhaa imehifadhiwa!',
@@ -1788,7 +1745,7 @@ window.saveProduct = async function () {
     );
 
     // ----------------------------------------------------------
-    // CLEAR FORM
+    // 9. CLEAR FORM
     // ----------------------------------------------------------
     [
       'apName',
@@ -1806,10 +1763,11 @@ window.saveProduct = async function () {
       if (el) {
         el.value = '';
       }
+
     });
 
     // ----------------------------------------------------------
-    // RELOAD PRODUCTS
+    // 10. RELOAD PRODUCTS
     // ----------------------------------------------------------
     if (
       typeof loadProducts === 'function'
@@ -1824,7 +1782,7 @@ window.saveProduct = async function () {
     }
 
     // ----------------------------------------------------------
-    // OPEN PRODUCTS
+    // 11. OPEN PRODUCTS
     // ----------------------------------------------------------
     if (
       typeof navTo === 'function'
@@ -1857,7 +1815,6 @@ window.saveProduct = async function () {
     }
   }
 };
-
 function editProduct(id) {
   const p = Products.cache.find(x => x.id === id);
   if (!p) return;
