@@ -1412,120 +1412,20 @@ function renderProducts(){
   if(!f.length){tb.innerHTML='<tr><td colspan="6" class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p></td></tr>';return;}
   tb.innerHTML=f.map(p=>`<tr><td><strong>${p.name}</strong>${p.sku?`<br><span style="font-size:11px;color:var(--text3)">SKU: ${p.sku}</span>`:''}</td><td>${p.category||'-'}</td><td>${fmt(p.costPrice)}</td><td style="color:var(--success);font-weight:600">${fmt(p.sellPrice)}</td><td style="color:${(p.stock||0)<=5?'var(--danger)':'var(--text)'}">${p.stock||0}</td><td><button class="btn btn-xs btn-o" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button> <button class="btn btn-xs btn-d" onclick="deleteProduct('${p.id}','${(p.name||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button></td></tr>`).join('');
 }
-  window.saveProduct = async function () {
-  const btn = document.getElementById('saveProductBtn');
-
-  try {
-    const uid = currentUser?.uid;
-
-    if (!uid) {
-      toast('Tafadhali ingia kwanza kwenye mfumo.', 'e');
-      return;
-    }
-
-    let bizId = businessId;
-
-    if (!bizId && currentUserData?.businessId) {
-      bizId = currentUserData.businessId;
-    }
-
-    if (!bizId) {
-      toast('Akaunti ya biashara haijapatikana.', 'e');
-      console.error('SAVE PRODUCT: businessId missing', {
-        uid,
-        currentUserData
-      });
-      return;
-    }
-
-    const name =
-      document.getElementById('apName')?.value.trim();
-
-    const category =
-      document.getElementById('apCategory')?.value;
-
-    const sku =
-      document.getElementById('apSku')?.value.trim();
-
-    const costPrice =
-      Number(document.getElementById('apCostPrice')?.value) || 0;
-
-    const sellPrice =
-      Number(document.getElementById('apSellPrice')?.value) || 0;
-
-    const stock =
-      Number(document.getElementById('apStock')?.value) || 0;
-
-    const description =
-      document.getElementById('apDesc')?.value.trim() || '';
-
-    if (!name || !category || costPrice <= 0 || sellPrice <= 0) {
-      toast('Jaza sehemu zote zinazohitajika.', 'w');
-      return;
-    }
-
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML =
-        '<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
-    }
-
-    await addDoc(collection(db, 'products'), {
-      name,
-      category,
-      sku,
-      costPrice,
-      sellPrice,
-      stock,
-      description,
-      status: 'active',
-      businessId: bizId,
-      createdBy: uid,
-      createdAt: serverTimestamp()
-    });
-
-    toast('Bidhaa imehifadhiwa!', 's');
-
-    [
-      'apName',
-      'apSku',
-      'apDesc',
-      'apCostPrice',
-      'apSellPrice',
-      'apStock'
-    ].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
-
-    const cat = document.getElementById('apCategory');
-    if (cat) cat.value = '';
-
-    if (typeof loadProducts === 'function') {
-      await loadProducts();
-    }
-
-    if (typeof renderProducts === 'function') {
-      renderProducts();
-    }
-
-  } catch (e) {
-    console.error('SAVE PRODUCT ERROR:', e);
-
-    toast(
-      e?.message || 'Hitilafu katika kuhifadhi bidhaa.',
-      'e'
-    );
-
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML =
-        '<i class="fas fa-save"></i> Hifadhi Bidhaa';
-    }
-  }
+window.saveProduct=async function(){
+  const btn=document.getElementById('saveProductBtn');
+  try{
+    if(!businessId){toast('Akaunti ya biashara haijapatikana','e');return;}
+    const name=document.getElementById('apName').value.trim(),category=document.getElementById('apCategory').value,sku=document.getElementById('apSku').value.trim(),costPrice=Number(document.getElementById('apCostPrice').value)||0,sellPrice=Number(document.getElementById('apSellPrice').value)||0,stock=Number(document.getElementById('apStock').value)||0,description=document.getElementById('apDesc').value.trim();
+    if(!name||!category||costPrice<=0||sellPrice<=0){toast('Jaza sehemu zote zinazohitajika','w');return;}
+    btn.disabled=true;btn.dataset.orig=btn.innerHTML;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
+    await addDoc(collection(db,'products'),{name,category,sku,costPrice,sellPrice,stock,description,status:'active',businessId,createdAt:serverTimestamp()});
+    toast('Bidhaa imehifadhiwa!','s');
+    ['apName','apSku','apDesc'].forEach(id=>document.getElementById(id).value='');document.getElementById('apCategory').value='';['apCostPrice','apSellPrice','apStock'].forEach(id=>document.getElementById(id).value='');
+    await loadProducts();renderProducts();navTo('products');
+  }catch(e){console.error('saveProduct:',e);toast(mapErr(e.code,e.message),'e');}
+  finally{btn.disabled=false;btn.innerHTML=btn.dataset.orig||'<i class="fas fa-save"></i> Hifadhi Bidhaa';}
 };
-
 window.editProduct=async function(id){const p=allProducts.find(x=>x.id===id);if(!p)return;document.getElementById('epEditId').value=id;document.getElementById('epName').value=p.name||'';document.getElementById('epCategory').value=p.category||'';document.getElementById('epSku').value=p.sku||'';document.getElementById('epCostPrice').value=p.costPrice||0;document.getElementById('epSellPrice').value=p.sellPrice||0;document.getElementById('epStock').value=p.stock||0;document.getElementById('epDesc').value=p.description||'';openModal('editProductModal');};
 
 window.updateProduct=async function(){
