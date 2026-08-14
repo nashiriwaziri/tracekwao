@@ -1192,57 +1192,163 @@ function regNext(step) {
     document.getElementById('regStep1').classList.add('active');
   }
 }
-
 // ===== HANDLE REGISTER =====
 async function handleRegister() {
-  const agree = document.getElementById('regAgree').checked;
-  if (!agree) { toast('Lazima ukubali masharti ya matumizi', 'w'); return; }
-  const fname = document.getElementById('regFname').value.trim();
-  const lname = document.getElementById('regLname').value.trim();
-  const email = document.getElementById('regEmail').value.trim();
-  const phone = document.getElementById('regPhone').value.trim();
-  const pass = document.getElementById('regPass').value;
-  const role = document.getElementById('regRole').value;
-  if (!fname || !lname || !email || !pass) { toast('Jaza sehemu zote zinazohitajika', 'w'); return; }
-  const btn = document.querySelector('#regForm .login-btn:last-child');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div> Inasajili...';
   try {
+    const agreeEl = document.getElementById('regAgree');
+    const fnameEl = document.getElementById('regFname');
+    const lnameEl = document.getElementById('regLname');
+    const emailEl = document.getElementById('regEmail');
+    const phoneEl = document.getElementById('regPhone');
+    const passEl = document.getElementById('regPass');
+    const roleEl = document.getElementById('regRole');
+
+    // Hakikisha fields zote muhimu zipo
+    if (!agreeEl || !fnameEl || !lnameEl || !emailEl || !passEl || !roleEl) {
+      console.error('Registration fields hazijapatikana:', {
+        regAgree: !!agreeEl,
+        regFname: !!fnameEl,
+        regLname: !!lnameEl,
+        regEmail: !!emailEl,
+        regPhone: !!phoneEl,
+        regPass: !!passEl,
+        regRole: !!roleEl
+      });
+
+      toast('Kuna tatizo kwenye fomu ya usajili', 'e');
+      return;
+    }
+
+    // Masharti
+    if (!agreeEl.checked) {
+      toast('Lazima ukubali masharti ya matumizi', 'w');
+      return;
+    }
+
+    const fname = fnameEl.value.trim();
+    const lname = lnameEl.value.trim();
+    const email = emailEl.value.trim().toLowerCase();
+    const phone = phoneEl ? phoneEl.value.trim() : '';
+    const pass = passEl.value;
+    const role = roleEl.value;
+
+    // Validation
+    if (!fname || !lname || !email || !pass) {
+      toast('Jaza sehemu zote zinazohitajika', 'w');
+      return;
+    }
+
+    if (pass.length < 6) {
+      toast('Nenosiri lazima liwe na angalau herufi 6', 'w');
+      return;
+    }
+
+    // Tafuta button kwa usalama
+    const btn =
+      document.querySelector('#regForm .login-btn') ||
+      document.querySelector('[onclick*="handleRegister"]');
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML =
+        '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div> Inasajili...';
+    }
+
+    // Hakikisha Firebase ipo
+    if (!auth || !db) {
+      throw new Error('Firebase haijaandaliwa vizuri.');
+    }
+
+    // Tengeneza Firebase Authentication Account
     const cred = await auth.createUserWithEmailAndPassword(email, pass);
+
+    if (!cred || !cred.user) {
+      throw new Error('Account haikuweza kuundwa.');
+    }
+
     const bizId = genId();
+
+    if (!bizId) {
+      throw new Error('Business ID haikuweza kutengenezwa.');
+    }
+
+    // Hifadhi User
     await db.collection('users').doc(cred.user.uid).set({
       firstName: fname,
       lastName: lname,
       email: email,
       phone: phone,
-      role: role,
+      role: role || 'owner',
       businessId: bizId,
       status: 'active',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+
+    // Hifadhi Business
     await db.collection('businesses').doc(bizId).set({
       name: '',
       ownerId: cred.user.uid,
-      phone: '',
-      email: '',
+      phone: phone,
+      email: email,
       address: '',
       tin: '',
       logo: '',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+
+    console.log('Registration successful:', {
+      uid: cred.user.uid,
+      businessId: bizId,
+      email: email
+    });
+
     toast('Usajili umefanikiwa!', 's');
+
     showLoginForm();
+
   } catch (err) {
+    console.error('HANDLE REGISTER ERROR:', err);
+
     if (err.code === 'auth/email-already-in-use') {
-      document.getElementById('regEmailErr').classList.add('show');
+      const emailErr = document.getElementById('regEmailErr');
+
+      if (emailErr) {
+        emailErr.classList.add('show');
+      }
+
+      toast('Barua pepe hii tayari imesajiliwa', 'w');
+
+    } else if (err.code === 'auth/invalid-email') {
+      toast('Barua pepe si sahihi', 'w');
+
+    } else if (err.code === 'auth/weak-password') {
+      toast('Nenosiri ni dhaifu. Tumia angalau herufi 6', 'w');
+
+    } else if (err.code === 'auth/network-request-failed') {
+      toast('Tatizo la mtandao. Jaribu tena', 'e');
+
+    } else if (err.code === 'permission-denied') {
+      toast('Huna ruhusa ya kuhifadhi taarifa hizi', 'e');
+
     } else {
-      toast('Hitilafu: ' + err.message, 'e');
+      toast(
+        'Hitilafu: ' + (err.message || 'Usajili umeshindikana'),
+        'e'
+      );
+    }
+
+  } finally {
+    const btn =
+      document.querySelector('#regForm .login-btn') ||
+      document.querySelector('[onclick*="handleRegister"]');
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML =
+        '<i class="fas fa-user-plus"></i> Jisajili Sasa';
     }
   }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fas fa-user-plus"></i> Jisajili Sasa';
 }
-
 // ===== HANDLE LOGIN =====
 async function handleLogin() {
   const email = document.getElementById('loginEmail').value.trim();
