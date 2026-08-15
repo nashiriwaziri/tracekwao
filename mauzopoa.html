@@ -584,7 +584,30 @@ tr:hover td{background:var(--bg3)}
       </div>
       <div class="fg"><label>Price (TZS)</label><input class="fi" id="superProdPrice" type="number" min="0" step="0.01" required/></div>
       <div class="fg"><label>Description</label><textarea class="fi" id="superProdDesc" rows="3"></textarea></div>
-      <div class="fg"><label>Image URL</label><input class="fi" id="superProdImageUrl"/></div>
+      <div class="fg">
+  <label for="superProdImage">
+    Picha ya Bidhaa
+  </label>
+
+  <input
+    class="fi"
+    type="file"
+    id="superProdImage"
+    accept="image/*"
+  />
+
+  <small
+    style="
+      display:block;
+      margin-top:6px;
+      color:var(--muted);
+      font-size:11px;
+    "
+  >
+    Chagua picha ya size yoyote. Mfumo uta-compress
+    automatically hadi isizidi 500KB kabla ya kui-upload.
+  </small>
+</div>
       <div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeSuperModal('superProductModal')">Cancel</button><button class="btn btn-p" type="submit">Publish Product</button></div>
     </form>
   </div>
@@ -596,6 +619,43 @@ tr:hover td{background:var(--bg3)}
   </div>
 </div>
 <div class="super-modal" id="superNotifModal" style="display:none" onclick="if(event.target===this)closeSuperModal('superNotifModal')">
+  <!-- ============================================================
+     SUPER ADMIN USER ACCOUNT MODAL
+     ============================================================ -->
+<div
+  class="super-modal"
+  id="superUserManageModal"
+  style="display:none"
+  onclick="if(event.target===this)closeSuperModal('superUserManageModal')"
+>
+  <div
+    class="super-modal-card"
+    style="max-width:520px"
+  >
+
+    <div class="super-modal-head">
+
+      <h3>
+        User Account Management
+      </h3>
+
+      <button
+        type="button"
+        onclick="closeSuperModal('superUserManageModal')"
+      >
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+    </div>
+
+    <div id="superUserManageContent">
+
+      <!-- User information will be inserted here -->
+
+    </div>
+
+  </div>
+</div>
   <div class="super-modal-card">
     <div class="super-modal-head"><h3>Send Notification</h3><button onclick="closeSuperModal('superNotifModal')"><i class="fa-solid fa-xmark"></i></button></div>
     <form onsubmit="sendSuperNotif(event)">
@@ -909,7 +969,30 @@ tr:hover td{background:var(--bg3)}
         <div class="fg"><label>Kipimo</label><input class="fi" id="prodUnit" placeholder="Kg, Pc, Ltr..." value="Pc"/></div>
       </div>
       <div class="fg"><label>Maelezo</label><textarea class="fi" id="prodDesc" rows="2"></textarea></div>
-      <div class="fg"><label>URL ya Picha</label><input class="fi" id="prodImgUrl" placeholder="https://..."/></div>
+      <div class="fg">
+  <label for="prodImage">
+    Picha ya Bidhaa
+  </label>
+
+  <input
+    class="fi"
+    type="file"
+    id="prodImage"
+    accept="image/*"
+  />
+
+  <small
+    style="
+      display:block;
+      margin-top:6px;
+      color:var(--muted);
+      font-size:11px;
+    "
+  >
+    Chagua picha ya size yoyote. Mfumo uta-compress
+    automatically hadi isizidi 500KB kabla ya kuihifadhi.
+  </small>
+</div>
       <div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeModal('productModal')">Ghairi</button><button class="btn btn-p" type="submit">Hifadhi</button></div>
     </form>
   </div>
@@ -1721,18 +1804,147 @@ async function loadPOS() {
 
 function renderPOSProducts(filter) {
   const grid = document.getElementById('posProductsGrid');
-  let items = S.allProducts;
-  if (filter) {
-    const f = filter.toLowerCase();
-    items = items.filter(function(p){ return (p.name||'').toLowerCase().indexOf(f) >= 0 || (p.category||'').toLowerCase().indexOf(f) >= 0; });
+
+  if (!grid) {
+    console.error('[POS] #posProductsGrid haipo.');
+    return;
   }
-  if (!items.length) { grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa</p></div>'; return; }
-  grid.innerHTML = items.map(function(p){
-    const stock = Number(p.stock) || 0;
-    const inStock = stock > 0;
-    return '<div class="pos-p-card" ' + (inStock ? 'onclick="addToCart(\'' + p.id + '\')"' : 'style="opacity:.5;cursor:not-allowed"') + '>' +
-      (p.imageUrl ? '<img src="' + escHtml(p.imageUrl) + '" alt=""/>' : '<div style="width:100%;height:80px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:24px"><i class="fa-solid fa-box"></i></div>') +
-      '<h5>' + escHtml(p.name) + '</h5><div class="pos-p-price">' + fmtCur(p.sellPrice) + '</div><div class="pos-p-stock">Stock: ' + stock + '</div></div>';
+
+  let items = Array.isArray(S.allProducts)
+    ? S.allProducts
+    : [];
+
+  // ----------------------------------------------------------
+  // SEARCH / FILTER
+  // ----------------------------------------------------------
+  if (filter) {
+    const f = String(filter)
+      .trim()
+      .toLowerCase();
+
+    items = items.filter(function(p) {
+      return (
+        String(p.name || '')
+          .toLowerCase()
+          .includes(f)
+        ||
+        String(p.category || '')
+          .toLowerCase()
+          .includes(f)
+        ||
+        String(p.barcode || '')
+          .toLowerCase()
+          .includes(f)
+        ||
+        String(p.productCode || '')
+          .toLowerCase()
+          .includes(f)
+      );
+    });
+  }
+
+  // ----------------------------------------------------------
+  // EMPTY
+  // ----------------------------------------------------------
+  if (!items.length) {
+    grid.innerHTML = `
+      <div
+        class="empty-s"
+        style="grid-column:1/-1"
+      >
+        <i class="fa-solid fa-box-open"></i>
+        <p>Hakuna bidhaa</p>
+      </div>
+    `;
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // PRODUCTS
+  // ----------------------------------------------------------
+  grid.innerHTML = items.map(function(p) {
+
+    const stock =
+      Number(p.stock) || 0;
+
+    const inStock =
+      stock > 0;
+
+    const imageUrl =
+      String(p.imageUrl || '').trim();
+
+    const imageHtml =
+      imageUrl
+        ? `
+          <img
+            src="${escHtml(imageUrl)}"
+            alt="${escHtml(p.name || 'Bidhaa')}"
+            loading="lazy"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+          >
+
+          <div
+            style="
+              width:100%;
+              height:80px;
+              background:var(--bg3);
+              border-radius:6px;
+              display:none;
+              align-items:center;
+              justify-content:center;
+              color:var(--text3);
+              font-size:24px;
+            "
+          >
+            <i class="fa-solid fa-box"></i>
+          </div>
+        `
+        : `
+          <div
+            style="
+              width:100%;
+              height:80px;
+              background:var(--bg3);
+              border-radius:6px;
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              color:var(--text3);
+              font-size:24px;
+            "
+          >
+            <i class="fa-solid fa-box"></i>
+          </div>
+        `;
+
+    return `
+      <div
+        class="pos-p-card"
+        ${
+          inStock
+            ? `onclick="addToCart('${p.id}')"`
+            : `style="opacity:.5;cursor:not-allowed"`
+        }
+      >
+
+        ${imageHtml}
+
+        <h5>
+          ${escHtml(p.name || 'Bidhaa')}
+        </h5>
+
+        <div class="pos-p-price">
+          ${fmtCur(Number(p.sellPrice) || 0)}
+        </div>
+
+        <div class="pos-p-stock">
+          Stock: ${stock}
+        </div>
+
+      </div>
+    `;
+
   }).join('');
 }
 
@@ -1895,73 +2107,780 @@ function openProductModal() {
   document.getElementById('prodStock').value = '';
   document.getElementById('prodUnit').value = 'Pc';
   document.getElementById('prodDesc').value = '';
-  document.getElementById('prodImgUrl').value = '';
+const prodImage = document.getElementById('prodImage');
+
+if (prodImage) {
+  prodImage.value = '';
+}
   openModal('productModal');
 }
 
+/* ============================================================
+   EDIT PRODUCT
+   ============================================================ */
 function editProduct(id) {
-  const p = S.allProducts.find(function(x){ return x.id === id; });
-  if (!p) return;
-  document.getElementById('productModalTitle').textContent = 'Hariri Bidhaa';
-  document.getElementById('prodEditId').value = p.id;
-  document.getElementById('prodName').value = p.name || '';
-  document.getElementById('prodCategory').value = p.category || '';
-  document.getElementById('prodCost').value = p.costPrice || 0;
-  document.getElementById('prodPrice').value = p.sellPrice || '';
-  document.getElementById('prodStock').value = p.stock || 0;
-  document.getElementById('prodUnit').value = p.unit || 'Pc';
-  document.getElementById('prodDesc').value = p.description || '';
-  document.getElementById('prodImgUrl').value = p.imageUrl || '';
-  openModal('productModal');
-}
 
-async function saveProduct(e) {
-  e.preventDefault();
-  if (!S.bizId) { toast('Biashara haijapatikana.','e'); return; }
-  const editId = document.getElementById('prodEditId').value;
-  const data = {
-    businessId: S.bizId,
-    name: document.getElementById('prodName').value.trim(),
-    category: document.getElementById('prodCategory').value.trim(),
-    costPrice: Number(document.getElementById('prodCost').value) || 0,
-    sellPrice: Number(document.getElementById('prodPrice').value) || 0,
-    stock: Number(document.getElementById('prodStock').value) || 0,
-    unit: document.getElementById('prodUnit').value.trim() || 'Pc',
-    description: document.getElementById('prodDesc').value.trim(),
-    imageUrl: document.getElementById('prodImgUrl').value.trim(),
-    status: 'active',
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  if (!data.name) { toast('Jina la bidhaa linahitajika.','w'); return; }
-  if (data.sellPrice <= 0) { toast('Bei ya kuuza lazima iwe zaidi ya 0.','w'); return; }
   try {
-    if (editId) {
-      await db.collection('products').doc(editId).update(data);
-      toast('Bidhaa imesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('products').add(data);
-      toast('Bidhaa imeongezwa.','s');
+
+    // ----------------------------------------------------------
+    // FIND PRODUCT
+    // ----------------------------------------------------------
+    const p = Array.isArray(S.allProducts)
+      ? S.allProducts.find(function (x) {
+          return x.id === id;
+        })
+      : null;
+
+    if (!p) {
+      console.warn(
+        '[EDIT PRODUCT] Product haijapatikana:',
+        id
+      );
+
+      if (typeof toast === 'function') {
+        toast('Bidhaa haijapatikana.', 'w');
+      }
+
+      return;
     }
-    closeModal('productModal');
-    loadProducts();
-  } catch(err) {
-    console.error("Save product error:", err);
-    toast('Imeshindwa kuhifadhi bidhaa.','e');
+
+    // ----------------------------------------------------------
+    // MODAL TITLE
+    // ----------------------------------------------------------
+    const modalTitle =
+      document.getElementById('productModalTitle');
+
+    if (modalTitle) {
+      modalTitle.textContent = 'Hariri Bidhaa';
+    }
+
+    // ----------------------------------------------------------
+    // PRODUCT ID
+    // ----------------------------------------------------------
+    const editId =
+      document.getElementById('prodEditId');
+
+    if (editId) {
+      editId.value = p.id || '';
+    }
+
+    // ----------------------------------------------------------
+    // BASIC INFORMATION
+    // ----------------------------------------------------------
+    const prodName =
+      document.getElementById('prodName');
+
+    if (prodName) {
+      prodName.value = p.name || '';
+    }
+
+    const prodCategory =
+      document.getElementById('prodCategory');
+
+    if (prodCategory) {
+      prodCategory.value = p.category || '';
+    }
+
+    // ----------------------------------------------------------
+    // PRICES
+    // ----------------------------------------------------------
+    const prodCost =
+      document.getElementById('prodCost');
+
+    if (prodCost) {
+      prodCost.value =
+        Number(p.costPrice) || 0;
+    }
+
+    const prodPrice =
+      document.getElementById('prodPrice');
+
+    if (prodPrice) {
+      prodPrice.value =
+        Number(p.sellPrice) || '';
+    }
+
+    // ----------------------------------------------------------
+    // STOCK
+    // ----------------------------------------------------------
+    const prodStock =
+      document.getElementById('prodStock');
+
+    if (prodStock) {
+      prodStock.value =
+        Number(p.stock) || 0;
+    }
+
+    // ----------------------------------------------------------
+    // UNIT
+    // ----------------------------------------------------------
+    const prodUnit =
+      document.getElementById('prodUnit');
+
+    if (prodUnit) {
+      prodUnit.value =
+        p.unit || 'Pc';
+    }
+
+    // ----------------------------------------------------------
+    // DESCRIPTION
+    // ----------------------------------------------------------
+    const prodDesc =
+      document.getElementById('prodDesc');
+
+    if (prodDesc) {
+      prodDesc.value =
+        p.description || '';
+    }
+
+    // ----------------------------------------------------------
+    // FILE INPUT
+    // ----------------------------------------------------------
+    // Browser hairuhusu kuweka existing image
+    // kwenye <input type="file">.
+    //
+    // Kwa hiyo tuna-clear input na kuonyesha
+    // picha iliyopo kupitia preview.
+    // ----------------------------------------------------------
+    const prodImage =
+      document.getElementById('prodImage');
+
+    if (prodImage) {
+      prodImage.value = '';
+    }
+
+    // ----------------------------------------------------------
+    // EXISTING IMAGE PREVIEW
+    // ----------------------------------------------------------
+    const prodImagePreview =
+      document.getElementById('prodImagePreview');
+
+    if (prodImagePreview) {
+
+      if (p.imageUrl) {
+
+        prodImagePreview.src =
+          p.imageUrl;
+
+        prodImagePreview.style.display =
+          'block';
+
+      } else {
+
+        prodImagePreview.removeAttribute(
+          'src'
+        );
+
+        prodImagePreview.style.display =
+          'none';
+      }
+    }
+
+    // ----------------------------------------------------------
+    // OPEN MODAL
+    // ----------------------------------------------------------
+    if (typeof openModal === 'function') {
+
+      openModal('productModal');
+
+    } else {
+
+      const modal =
+        document.getElementById('productModal');
+
+      if (modal) {
+        modal.style.display = 'flex';
+      } else {
+        console.error(
+          '[EDIT PRODUCT] productModal haipo.'
+        );
+      }
+    }
+
+    console.log(
+      '[EDIT PRODUCT] Editing:',
+      p
+    );
+
+  } catch (error) {
+
+    console.error(
+      '[EDIT PRODUCT] Error:',
+      error
+    );
+
+    if (typeof toast === 'function') {
+      toast(
+        'Imeshindikana kufungua bidhaa.',
+        'e'
+      );
+    }
   }
 }
+/* ============================================================
+   SAVE PRODUCT
+   Upload Image → Compress to ≤500KB → Firebase Storage
+   Works for BOTH Add and Edit
+   ============================================================ */
+async function saveProduct(e) {
+  e.preventDefault();
 
-function deleteProduct(id) {
-  const p = S.allProducts.find(function(x){ return x.id === id; });
-  requestDelete('Je, unahakika unataka kufuta bidhaa "' + (p ? p.name : '') + '"?', function(){
-    db.collection('products').doc(id).delete().then(function(){
-      toast('Bidhaa imefutwa.','s');
-      loadProducts();
-    }).catch(function(err){
-      console.error("Delete product error:", err);
-      toast('Imeshindwa kufuta bidhaa.','e');
-    });
-  });
+  // ----------------------------------------------------------
+  // BASIC CHECKS
+  // ----------------------------------------------------------
+  if (!S.bizId) {
+    toast('Biashara haijapatikana.', 'e');
+    return;
+  }
+
+  if (!db) {
+    toast('Firebase haijawaunganishwa.', 'e');
+    return;
+  }
+
+  const editId =
+    document.getElementById('prodEditId')?.value?.trim() || '';
+
+  // ----------------------------------------------------------
+  // GET IMAGE FILE
+  // ----------------------------------------------------------
+  const imageInput =
+    document.getElementById('prodImage');
+
+  const imageFile =
+    imageInput?.files?.[0] || null;
+
+  // ----------------------------------------------------------
+  // PRODUCT DATA
+  // ----------------------------------------------------------
+  const data = {
+    businessId: S.bizId,
+
+    name:
+      document.getElementById('prodName')?.value?.trim() || '',
+
+    category:
+      document.getElementById('prodCategory')?.value?.trim() || '',
+
+    costPrice:
+      Number(
+        document.getElementById('prodCost')?.value
+      ) || 0,
+
+    sellPrice:
+      Number(
+        document.getElementById('prodPrice')?.value
+      ) || 0,
+
+    stock:
+      Number(
+        document.getElementById('prodStock')?.value
+      ) || 0,
+
+    unit:
+      document.getElementById('prodUnit')?.value?.trim() || 'Pc',
+
+    description:
+      document.getElementById('prodDesc')?.value?.trim() || '',
+
+    status: 'active',
+
+    updatedAt:
+      firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  // ----------------------------------------------------------
+  // VALIDATION
+  // ----------------------------------------------------------
+  if (!data.name) {
+    toast('Jina la bidhaa linahitajika.', 'w');
+    return;
+  }
+
+  if (data.sellPrice <= 0) {
+    toast(
+      'Bei ya kuuza lazima iwe zaidi ya 0.',
+      'w'
+    );
+    return;
+  }
+
+  if (data.stock < 0) {
+    toast(
+      'Stock haiwezi kuwa chini ya 0.',
+      'w'
+    );
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // GET EXISTING PRODUCT WHEN EDITING
+  // ----------------------------------------------------------
+  let existingProduct = null;
+
+  if (editId) {
+
+    existingProduct =
+      Array.isArray(S.allProducts)
+        ? S.allProducts.find(function (p) {
+            return p.id === editId;
+          })
+        : null;
+
+    /*
+      Kama product haipo kwenye S.allProducts,
+      jaribu kuipata moja kwa moja Firestore.
+    */
+    if (!existingProduct) {
+
+      try {
+
+        const oldSnap =
+          await db
+            .collection('products')
+            .doc(editId)
+            .get();
+
+        if (oldSnap.exists) {
+
+          existingProduct = {
+            id: oldSnap.id,
+            ...oldSnap.data()
+          };
+
+        }
+
+      } catch (readErr) {
+
+        console.warn(
+          '[PRODUCT] Failed to read existing product:',
+          readErr
+        );
+      }
+    }
+  }
+
+  // ----------------------------------------------------------
+  // IMAGE UPLOAD
+  // ----------------------------------------------------------
+  try {
+
+    /*
+      Kama ni EDIT na hakuna picha mpya,
+      tunabaki na imageUrl ya zamani.
+    */
+    if (
+      editId &&
+      !imageFile &&
+      existingProduct?.imageUrl
+    ) {
+
+      data.imageUrl =
+        existingProduct.imageUrl;
+    }
+
+    /*
+      Kama user amechagua picha mpya,
+      compress + upload.
+    */
+    if (imageFile) {
+
+      // ------------------------------------------------------
+      // IMAGE TYPE CHECK
+      // ------------------------------------------------------
+      if (!imageFile.type.startsWith('image/')) {
+
+        toast(
+          'Tafadhali chagua faili la picha.',
+          'w'
+        );
+
+        return;
+      }
+
+      // ------------------------------------------------------
+      // OPTIONAL SIZE CHECK
+      // ------------------------------------------------------
+      // Tunakubali size yoyote, hata kubwa.
+      // Compression ndiyo itakayopunguza size.
+      console.log(
+        '[PRODUCT IMAGE] Original size:',
+        (imageFile.size / 1024 / 1024).toFixed(2),
+        'MB'
+      );
+
+      // ------------------------------------------------------
+      // COMPRESS IMAGE TO ≤500KB
+      // ------------------------------------------------------
+      const compressedFile =
+        await compressImageTo500KB(imageFile);
+
+      if (!compressedFile) {
+
+        toast(
+          'Imeshindikana ku-compress picha.',
+          'e'
+        );
+
+        return;
+      }
+
+      console.log(
+        '[PRODUCT IMAGE] Compressed size:',
+        (compressedFile.size / 1024).toFixed(2),
+        'KB'
+      );
+
+      // ------------------------------------------------------
+      // FIREBASE STORAGE CHECK
+      // ------------------------------------------------------
+      if (
+        typeof firebase === 'undefined' ||
+        typeof firebase.storage !== 'function'
+      ) {
+
+        console.error(
+          '[PRODUCT IMAGE] Firebase Storage haipo.'
+        );
+
+        toast(
+          'Firebase Storage haijawezeshwa.',
+          'e'
+        );
+
+        return;
+      }
+
+      // ------------------------------------------------------
+      // CREATE UNIQUE STORAGE PATH
+      // ------------------------------------------------------
+      const extension =
+        compressedFile.type === 'image/png'
+          ? 'png'
+          : 'jpg';
+
+      const fileName =
+        'product_' +
+        Date.now() +
+        '_' +
+        Math.random()
+          .toString(36)
+          .substring(2, 9) +
+        '.' +
+        extension;
+
+      const storagePath =
+        'products/' +
+        S.bizId +
+        '/' +
+        fileName;
+
+      // ------------------------------------------------------
+      // UPLOAD TO FIREBASE STORAGE
+      // ------------------------------------------------------
+      const storageRef =
+        firebase
+          .storage()
+          .ref()
+          .child(storagePath);
+
+      toast(
+        'Picha inapakiwa...',
+        's'
+      );
+
+      await storageRef.put(
+        compressedFile,
+        {
+          contentType:
+            compressedFile.type || 'image/jpeg'
+        }
+      );
+
+      // ------------------------------------------------------
+      // GET DOWNLOAD URL
+      // ------------------------------------------------------
+      const downloadURL =
+        await storageRef.getDownloadURL();
+
+      if (!downloadURL) {
+
+        toast(
+          'Picha imepakiwa lakini URL haikupatikana.',
+          'e'
+        );
+
+        return;
+      }
+
+      // ------------------------------------------------------
+      // SAVE IMAGE URL
+      // ------------------------------------------------------
+      data.imageUrl =
+        downloadURL;
+
+      console.log(
+        '[PRODUCT IMAGE] Uploaded successfully.'
+      );
+    }
+
+    // --------------------------------------------------------
+    // SAVE TO FIRESTORE
+    // --------------------------------------------------------
+    if (editId) {
+
+      await db
+        .collection('products')
+        .doc(editId)
+        .update(data);
+
+      toast(
+        'Bidhaa imesasishwa.',
+        's'
+      );
+
+    } else {
+
+      data.createdAt =
+        firebase.firestore.FieldValue.serverTimestamp();
+
+      await db
+        .collection('products')
+        .add(data);
+
+      toast(
+        'Bidhaa imeongezwa.',
+        's'
+      );
+    }
+
+    // --------------------------------------------------------
+    // CLOSE MODAL
+    // --------------------------------------------------------
+    if (typeof closeModal === 'function') {
+      closeModal('productModal');
+    }
+
+    // --------------------------------------------------------
+    // CLEAR IMAGE INPUT
+    // --------------------------------------------------------
+    if (imageInput) {
+      imageInput.value = '';
+    }
+
+    // --------------------------------------------------------
+    // HIDE PREVIEW
+    // --------------------------------------------------------
+    const preview =
+      document.getElementById('prodImagePreview');
+
+    if (preview) {
+
+      preview.removeAttribute('src');
+
+      preview.style.display =
+        'none';
+    }
+
+    // --------------------------------------------------------
+    // RELOAD PRODUCTS
+    // --------------------------------------------------------
+    if (typeof loadProducts === 'function') {
+      await loadProducts();
+    }
+
+    if (typeof renderProducts === 'function') {
+      renderProducts();
+    }
+
+    if (typeof renderPOSProducts === 'function') {
+      renderPOSProducts();
+    }
+
+  } catch (err) {
+
+    console.error(
+      '[SAVE PRODUCT] ERROR:',
+      err
+    );
+
+    console.error(
+      '[SAVE PRODUCT] MESSAGE:',
+      err?.message
+    );
+
+    toast(
+      'Imeshindikana kuhifadhi bidhaa: ' +
+      (err?.message || 'Hitilafu isiyojulikana'),
+      'e'
+    );
+  }
+}
+/* ============================================================
+   DELETE PRODUCT
+   Deletes:
+   1. Product document from Firestore
+   2. Product image from Firebase Storage (if exists)
+   ============================================================ */
+async function deleteProduct(id) {
+
+  // ----------------------------------------------------------
+  // CHECK PRODUCT
+  // ----------------------------------------------------------
+  const p =
+    Array.isArray(S.allProducts)
+      ? S.allProducts.find(function (x) {
+          return x.id === id;
+        })
+      : null;
+
+  if (!id) {
+    toast(
+      'Bidhaa haijapatikana.',
+      'e'
+    );
+    return;
+  }
+
+  const productName =
+    p?.name || 'Bidhaa hii';
+
+  // ----------------------------------------------------------
+  // CONFIRM DELETE
+  // ----------------------------------------------------------
+  requestDelete(
+    'Je, unahakika unataka kufuta bidhaa "' +
+      productName +
+      '"?',
+    async function () {
+
+      try {
+
+        // ----------------------------------------------------
+        // CHECK FIREBASE
+        // ----------------------------------------------------
+        if (!db) {
+          toast(
+            'Firebase haijawaunganishwa.',
+            'e'
+          );
+          return;
+        }
+
+        // ----------------------------------------------------
+        // DELETE IMAGE FROM STORAGE
+        // ----------------------------------------------------
+        if (
+          p?.imageUrl &&
+          typeof firebase !== 'undefined' &&
+          typeof firebase.storage === 'function'
+        ) {
+
+          try {
+
+            /*
+              refFromURL() inapata Firebase Storage reference
+              moja kwa moja kutoka kwenye download URL.
+            */
+            const imageRef =
+              firebase
+                .storage()
+                .refFromURL(p.imageUrl);
+
+            await imageRef.delete();
+
+            console.log(
+              '[DELETE PRODUCT] Image deleted from Storage.'
+            );
+
+          } catch (imageError) {
+
+            /*
+              Kama picha tayari haipo Storage,
+              hatutazuia deletion ya product.
+            */
+            console.warn(
+              '[DELETE PRODUCT] Image deletion skipped:',
+              imageError
+            );
+          }
+        }
+
+        // ----------------------------------------------------
+        // DELETE PRODUCT FROM FIRESTORE
+        // ----------------------------------------------------
+        await db
+          .collection('products')
+          .doc(id)
+          .delete();
+
+        // ----------------------------------------------------
+        // REMOVE FROM LOCAL STATE
+        // ----------------------------------------------------
+        if (Array.isArray(S.allProducts)) {
+
+          S.allProducts =
+            S.allProducts.filter(function (x) {
+              return x.id !== id;
+            });
+        }
+
+        // ----------------------------------------------------
+        // SUCCESS
+        // ----------------------------------------------------
+        toast(
+          'Bidhaa imefutwa.',
+          's'
+        );
+
+        // ----------------------------------------------------
+        // RELOAD PRODUCTS
+        // ----------------------------------------------------
+        if (
+          typeof loadProducts === 'function'
+        ) {
+          await loadProducts();
+        }
+
+        // ----------------------------------------------------
+        // REFRESH PRODUCT LIST
+        // ----------------------------------------------------
+        if (
+          typeof renderProducts === 'function'
+        ) {
+          renderProducts();
+        }
+
+        // ----------------------------------------------------
+        // REFRESH POS
+        // ----------------------------------------------------
+        if (
+          typeof renderPOSProducts === 'function'
+        ) {
+          renderPOSProducts();
+        }
+
+      } catch (err) {
+
+        console.error(
+          '[DELETE PRODUCT] ERROR:',
+          err
+        );
+
+        console.error(
+          '[DELETE PRODUCT] MESSAGE:',
+          err?.message
+        );
+
+        toast(
+          'Imeshindwa kufuta bidhaa: ' +
+            (err?.message ||
+              'Hitilafu isiyojulikana'),
+          'e'
+        );
+      }
+    }
+  );
 }
 
 /* ================================================================
@@ -2952,17 +3871,279 @@ async function loadSuperAdmin() {
   }
 }
 
+/* ============================================================
+   SUPER ADMIN - RENDER USERS
+   View / Notification / Suspend / Activate / Delete
+   ============================================================ */
 function renderSuperUsers() {
-  const tb = document.getElementById('superUsersBody');
-  const q = (document.getElementById('superUserSearch').value || '').toLowerCase();
-  let items = S.superUsers;
-  if (q) items = items.filter(function(u){ return (u.name||'').toLowerCase().indexOf(q)>=0 || (u.email||'').toLowerCase().indexOf(q)>=0; });
-  if (!items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-s"><p>Hakuna watumiaji</p></td></tr>'; return; }
-  const bizMap = {};
-  S.superUsers.forEach(function(u){ if (u.businessId) bizMap[u.businessId] = u; });
-  tb.innerHTML = items.map(function(u){
-    const stCls = 'active';
-    return '<tr><td>' + escHtml(u.name||'—') + '</td><td>' + escHtml(u.email||'—') + '</td><td>' + escHtml(u.businessName||'—') + '</td><td>' + escHtml(u.businessCategory||'—') + '</td><td><span class="status-badge ' + stCls + '">Active</span></td><td>' + fmtDate(u.createdAt) + '</td><td><button class="btn btn-i btn-xs" onclick="viewSuperUser(\'' + u.id + '\')"><i class="fa-solid fa-eye"></i></button> <button class="btn btn-w btn-xs" onclick="openSuperNotifModal(\'' + u.id + '\')"><i class="fa-solid fa-bell"></i></button></td></tr>';
+
+  const tb =
+    document.getElementById('superUsersBody');
+
+  if (!tb) {
+    console.error(
+      '[SUPER USERS] #superUsersBody haipo.'
+    );
+    return;
+  }
+
+  const searchInput =
+    document.getElementById('superUserSearch');
+
+  const q =
+    (searchInput?.value || '')
+      .trim()
+      .toLowerCase();
+
+  // ----------------------------------------------------------
+  // GET USERS
+  // ----------------------------------------------------------
+  let items =
+    Array.isArray(S.superUsers)
+      ? S.superUsers
+      : [];
+
+  // ----------------------------------------------------------
+  // SEARCH USERS
+  // ----------------------------------------------------------
+  if (q) {
+
+    items = items.filter(function (u) {
+
+      return (
+        (u.name || '')
+          .toLowerCase()
+          .includes(q)
+
+        ||
+
+        (u.email || '')
+          .toLowerCase()
+          .includes(q)
+
+        ||
+
+        (u.businessName || '')
+          .toLowerCase()
+          .includes(q)
+
+        ||
+
+        (u.businessCategory || '')
+          .toLowerCase()
+          .includes(q)
+      );
+
+    });
+  }
+
+  // ----------------------------------------------------------
+  // EMPTY STATE
+  // ----------------------------------------------------------
+  if (!items.length) {
+
+    tb.innerHTML = `
+      <tr>
+        <td
+          colspan="7"
+          class="empty-s"
+        >
+          <p>
+            Hakuna watumiaji
+          </p>
+        </td>
+      </tr>
+    `;
+
+    return;
+  }
+
+  // ----------------------------------------------------------
+  // RENDER USERS
+  // ----------------------------------------------------------
+  tb.innerHTML = items.map(function (u) {
+
+    // --------------------------------------------------------
+    // USER STATUS
+    // --------------------------------------------------------
+    const isSuspended =
+      u.status === 'suspended' ||
+      u.accountStatus === 'suspended' ||
+      u.suspended === true;
+
+    const isDeleted =
+      u.status === 'deleted' ||
+      u.accountStatus === 'deleted' ||
+      u.deleted === true;
+
+    // --------------------------------------------------------
+    // STATUS BADGE
+    // --------------------------------------------------------
+    let statusHtml = '';
+
+    if (isDeleted) {
+
+      statusHtml = `
+        <span
+          class="status-badge"
+          style="
+            background:#fee2e2;
+            color:#b91c1c;
+          "
+        >
+          Deleted
+        </span>
+      `;
+
+    } else if (isSuspended) {
+
+      statusHtml = `
+        <span
+          class="status-badge"
+          style="
+            background:#fff7ed;
+            color:#c2410c;
+          "
+        >
+          Suspended
+        </span>
+      `;
+
+    } else {
+
+      statusHtml = `
+        <span
+          class="status-badge active"
+        >
+          Active
+        </span>
+      `;
+    }
+
+    // --------------------------------------------------------
+    // USER ACTIONS
+    // --------------------------------------------------------
+    let statusAction = '';
+
+    if (isSuspended) {
+
+      statusAction = `
+        <button
+          type="button"
+          class="btn btn-s btn-xs"
+          onclick="activateSuperUser('${u.id}')"
+          title="Activate Account"
+        >
+          <i class="fa-solid fa-user-check"></i>
+        </button>
+      `;
+
+    } else if (!isDeleted) {
+
+      statusAction = `
+        <button
+          type="button"
+          class="btn btn-w btn-xs"
+          onclick="suspendSuperUser('${u.id}')"
+          title="Suspend Account"
+        >
+          <i class="fa-solid fa-ban"></i>
+        </button>
+      `;
+
+    }
+
+    // --------------------------------------------------------
+    // DELETE BUTTON
+    // --------------------------------------------------------
+    const deleteAction =
+      !isDeleted
+        ? `
+          <button
+            type="button"
+            class="btn btn-d btn-xs"
+            onclick="deleteSuperUser('${u.id}')"
+            title="Delete Account"
+          >
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        `
+        : '';
+
+    // --------------------------------------------------------
+    // RETURN TABLE ROW
+    // --------------------------------------------------------
+    return `
+      <tr>
+
+        <td>
+          ${escHtml(u.name || '—')}
+        </td>
+
+        <td>
+          ${escHtml(u.email || '—')}
+        </td>
+
+        <td>
+          ${escHtml(u.businessName || '—')}
+        </td>
+
+        <td>
+          ${escHtml(u.businessCategory || '—')}
+        </td>
+
+        <td>
+          ${statusHtml}
+        </td>
+
+        <td>
+          ${fmtDate(u.createdAt)}
+        </td>
+
+        <td>
+
+          <div
+            style="
+              display:flex;
+              gap:5px;
+              align-items:center;
+              flex-wrap:wrap;
+            "
+          >
+
+            <!-- VIEW -->
+            <button
+              type="button"
+              class="btn btn-i btn-xs"
+              onclick="viewSuperUser('${u.id}')"
+              title="View User"
+            >
+              <i class="fa-solid fa-eye"></i>
+            </button>
+
+            <!-- NOTIFICATION -->
+            <button
+              type="button"
+              class="btn btn-w btn-xs"
+              onclick="openSuperNotifModal('${u.id}')"
+              title="Send Notification"
+            >
+              <i class="fa-solid fa-bell"></i>
+            </button>
+
+            <!-- ACTIVATE / SUSPEND -->
+            ${statusAction}
+
+            <!-- DELETE -->
+            ${deleteAction}
+
+          </div>
+
+        </td>
+
+      </tr>
+    `;
+
   }).join('');
 }
 
@@ -3711,7 +4892,13 @@ async function saveSuperProduct(e) {
     location: document.getElementById('superProdLocation').value.trim(),
     price: Number(document.getElementById('superProdPrice').value) || 0,
     description: document.getElementById('superProdDesc').value.trim(),
-    imageUrl: document.getElementById('superProdImageUrl').value.trim()
+ const imageInput =
+  document.getElementById('superProdImage');
+
+const imageFile =
+  imageInput?.files?.length
+    ? imageInput.files[0]
+    : null;
   };
   if (!data.name) { toast('Jina la bidhaa linahitajika.','w'); return; }
   if (data.price <= 0) { toast('Bei lazima iwe zaidi ya 0.','w'); return; }
