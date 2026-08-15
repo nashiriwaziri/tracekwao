@@ -4146,105 +4146,429 @@ function renderSuperUsers() {
 
   }).join('');
 }
-
+/* ============================================================
+   SUPER ADMIN — VIEW USER
+   ============================================================ */
 async function viewSuperUser(uid) {
-  const user = S.superUsers.find(function(u){ return u.id === uid; });
-  if (!user) return;
-  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
-  html += '<div><strong>Jina:</strong> ' + escHtml(user.name||'—') + '</div>';
-  html += '<div><strong>Barua:</strong> ' + escHtml(user.email||'—') + '</div>';
-  html += '<div><strong>Simu:</strong> ' + escHtml(user.phone||'—') + '</div>';
-  html += '<div><strong>Jukumu:</strong> ' + escHtml(ROLE_LABELS[user.role]||user.role||'—') + '</div>';
-  html += '<div><strong>Biashara:</strong> ' + escHtml(user.businessName||'—') + '</div>';
-  html += '<div><strong>Category:</strong> ' + escHtml(user.businessCategory||'—') + '</div>';
-  html += '<div><strong>Imejiunga:</strong> ' + fmtDate(user.createdAt) + '</div>';
-  html += '</div>';
+  const user = S.superUsers.find(function (u) {
+    return u.id === uid;
+  });
+
+  if (!user) {
+    toast('Mtumiaji hakupatikana.', 'w');
+    return;
+  }
+
+  let html = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <strong>Jina:</strong>
+        ${escHtml(user.name || '—')}
+      </div>
+
+      <div>
+        <strong>Barua:</strong>
+        ${escHtml(user.email || '—')}
+      </div>
+
+      <div>
+        <strong>Simu:</strong>
+        ${escHtml(user.phone || '—')}
+      </div>
+
+      <div>
+        <strong>Jukumu:</strong>
+        ${escHtml(
+          ROLE_LABELS[user.role] ||
+          user.role ||
+          '—'
+        )}
+      </div>
+
+      <div>
+        <strong>Biashara:</strong>
+        ${escHtml(user.businessName || '—')}
+      </div>
+
+      <div>
+        <strong>Category:</strong>
+        ${escHtml(user.businessCategory || '—')}
+      </div>
+
+      <div>
+        <strong>Imejiunga:</strong>
+        ${fmtDate(user.createdAt)}
+      </div>
+
+      <div>
+        <strong>Hali:</strong>
+        <span class="status-badge ${
+          user.status === 'suspended'
+            ? 'suspended'
+            : 'active'
+        }">
+          ${
+            user.status === 'suspended'
+              ? 'Suspended'
+              : 'Active'
+          }
+        </span>
+      </div>
+    </div>
+  `;
+
+  /* ==========================================================
+     BUSINESS INFORMATION
+     ========================================================== */
   if (user.businessId && db) {
     try {
-      const bizDoc = await db.collection('businesses').doc(user.businessId).get();
+      const bizDoc = await db
+        .collection('businesses')
+        .doc(user.businessId)
+        .get();
+
       if (bizDoc.exists) {
         const b = bizDoc.data();
-        html += '<div style="margin-top:16px;padding:12px;background:var(--bg3);border-radius:8px"><h4 style="margin-bottom:8px"><i class="fa-solid fa-store" style="color:var(--primary2);margin-right:6px"></i> Taarifa za Biashara</h4>';
-        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">';
-        html += '<div><strong>Jina:</strong> ' + escHtml(b.name) + '</div>';
-        html += '<div><strong>Category:</strong> ' + escHtml(b.category) + '</div>';
-        html += '<div><strong>Eneo:</strong> ' + escHtml(b.location||'—') + '</div>';
-        html += '<div><strong>Hatua:</strong> <span class="status-badge ' + (b.status==='active'?'active':'suspended') + '">' + escHtml(b.status||'active') + '</span></div>';
-        html += '</div></div>';
+
+        html += `
+          <div
+            style="
+              margin-top:16px;
+              padding:12px;
+              background:var(--bg3);
+              border-radius:8px
+            "
+          >
+            <h4 style="margin-bottom:8px">
+              <i
+                class="fa-solid fa-store"
+                style="
+                  color:var(--primary2);
+                  margin-right:6px
+                "
+              ></i>
+              Taarifa za Biashara
+            </h4>
+
+            <div
+              style="
+                display:grid;
+                grid-template-columns:1fr 1fr;
+                gap:8px;
+                font-size:13px
+              "
+            >
+              <div>
+                <strong>Jina:</strong>
+                ${escHtml(b.name || '—')}
+              </div>
+
+              <div>
+                <strong>Category:</strong>
+                ${escHtml(b.category || '—')}
+              </div>
+
+              <div>
+                <strong>Eneo:</strong>
+                ${escHtml(b.location || '—')}
+              </div>
+
+              <div>
+                <strong>Hatua:</strong>
+                <span
+                  class="status-badge ${
+                    b.status === 'suspended'
+                      ? 'suspended'
+                      : 'active'
+                  }"
+                >
+                  ${
+                    b.status === 'suspended'
+                      ? 'Suspended'
+                      : 'Active'
+                  }
+                </span>
+              </div>
+            </div>
+          </div>
+        `;
       }
-    } catch(err) { console.error("View biz error:", err); }
-  }
-  document.getElementById('superViewTitle').textContent = 'Taarifa za Mtumiaji';
-  document.getElementById('superViewContent').innerHTML = html;
-  document.getElementById('superViewModal').style.display = 'flex';
-}
-
-function renderSuperAds() {
-  const el = document.getElementById('superAdsList');
-  if (!S.superAds.length) { el.innerHTML = '<div class="empty-s"><p>Hakuna matangazo</p></div>'; return; }
-  el.innerHTML = S.superAds.map(function(a){
-    return '<div class="super-ad-item"><div class="super-ad-thumb">' + (a.imageUrl ? '<img src="' + escHtml(a.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>') + '</div><div class="super-ad-info"><h5>' + escHtml(a.title) + '</h5><p>' + escHtml(a.description||'').substr(0,60) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperAd(\'' + a.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperAd(\'' + a.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
-  }).join('');
-}
-async function saToggleUser(targetUid, status) {
-  try {
-    await db.collection('users').doc(targetUid).update({ status: status });
-    await logAction('sa_toggle_user', 'Mtumiaji ' + targetUid + ' -> ' + status);
-    toast('Hali imebadilishwa: ' + status, 'success');
-    await loadSAData();
-  } catch (e) { console.error('SA toggle error:', e); toast('Hitilafu', 'error'); }
-}
-
-function saDeleteUser(targetUid) {
-  confirm2('Futa Mtumiaji', 'Hili litafuta akaunti hii milele. Una hakika?', async function() {
-    try {
-      // Delete user's subcollections
-      const collections = ['products', 'sales', 'suppliers', 'customers', 'costs', 'profitShares', 'compensations', 'messages', 'auditLogs'];
-      for (let i = 0; i < collections.length; i++) {
-        const snap = await db.collection(collections[i]).where('userId', '==', targetUid).get();
-        const batch = db.batch();
-        snap.docs.forEach(function(d) { batch.delete(d.ref); });
-        if (snap.size > 0) await batch.commit();
-      }
-      await db.collection('users').doc(targetUid).delete();
-      await logAction('sa_delete_user', 'Mtumiaji aliyefutwa: ' + targetUid);
-      toast('Mtumiaji amefutwa', 'success');
-      await loadSAData();
-    } catch (e) { console.error('SA delete error:', e); toast('Hitilafu kufuta mtumiaji', 'error'); }
-  });
-}
-
-async function buildSAChart() {
-  try {
-    const salesSnap = await db.collection('sales').get();
-    const allSalesList = salesSnap.docs.map(function(d) { return d.data(); });
-    const months = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'];
-    const monthData = new Array(12).fill(0);
-    allSalesList.forEach(function(s) {
-      if (!s.createdAt) return;
-      const d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
-      monthData[d.getMonth()] += (s.total || 0);
-    });
-    if (saChart) saChart.destroy();
-    const ctx = document.getElementById('saChart');
-    if (ctx) {
-      saChart = new Chart(ctx, {
-        type: 'line',
-        data: { labels: months, datasets: [{ label: 'Mauzo (TZS)', data: monthData, borderColor: '#f59207', backgroundColor: 'rgba(245,146,7,0.1)', fill: true, tension: 0.4, pointBackgroundColor: '#f59207', pointRadius: 4 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#a8a29e' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#a8a29e' } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#a8a29e' } } } }
-      });
+    } catch (err) {
+      console.error(
+        '[SUPER ADMIN] View business error:',
+        err
+      );
     }
-  } catch (e) { console.error('SA chart error:', e); }
+  }
+
+  /* ==========================================================
+     USER ACTIONS
+     ========================================================== */
+  html += `
+    <div
+      style="
+        margin-top:18px;
+        padding-top:14px;
+        border-top:1px solid var(--border);
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap
+      "
+    >
+
+      ${
+        user.status === 'suspended'
+          ? `
+            <button
+              class="btn btn-s"
+              onclick="activateSuperUser('${uid}')"
+            >
+              <i class="fas fa-user-check"></i>
+              Activate
+            </button>
+          `
+          : `
+            <button
+              class="btn btn-w"
+              onclick="suspendSuperUser('${uid}')"
+            >
+              <i class="fas fa-ban"></i>
+              Suspend
+            </button>
+          `
+      }
+
+      <button
+        class="btn btn-d"
+        onclick="deleteSuperUser('${uid}')"
+      >
+        <i class="fas fa-trash"></i>
+        Delete Account
+      </button>
+
+      <button
+        class="btn btn-p"
+        onclick="openSuperNotifModal('${uid}')"
+      >
+        <i class="fas fa-bell"></i>
+        Send Notification
+      </button>
+
+    </div>
+  `;
+
+  const title =
+    document.getElementById('superViewTitle');
+
+  const content =
+    document.getElementById('superViewContent');
+
+  const modal =
+    document.getElementById('superViewModal');
+
+  if (title) {
+    title.textContent = 'Taarifa za Mtumiaji';
+  }
+
+  if (content) {
+    content.innerHTML = html;
+  }
+
+  if (modal) {
+    modal.style.display = 'flex';
+  }
 }
 
-function renderSuperProducts() {
-  const el = document.getElementById('superProductsList');
-  if (!S.superProducts.length) { el.innerHTML = '<div class="empty-s"><p>Hakuna bidhaa hadharani</p></div>'; return; }
-  el.innerHTML = S.superProducts.map(function(p){
-    return '<div class="super-prod-item"><div class="super-ad-thumb">' + (p.imageUrl ? '<img src="' + escHtml(p.imageUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:8px"/>' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-box"></i></div>') + '</div><div class="super-ad-info"><h5>' + escHtml(p.name) + '</h5><p>' + escHtml(p.seller||'') + ' — ' + fmtCur(p.price) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+
+/* ============================================================
+   SUPER ADMIN — RENDER ADVERTISEMENTS
+   ============================================================ */
+function renderSuperAds() {
+  const el =
+    document.getElementById('superAdsList');
+
+  if (!el) return;
+
+  if (!Array.isArray(S.superAds) || !S.superAds.length) {
+    el.innerHTML = `
+      <div class="empty-s">
+        <p>Hakuna matangazo</p>
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML = S.superAds.map(function (a) {
+
+    const image = a.imageUrl
+      ? `
+        <img
+          src="${escHtml(a.imageUrl)}"
+          alt="${escHtml(a.title || 'Advertisement')}"
+          style="
+            width:100%;
+            height:100%;
+            object-fit:cover;
+            border-radius:8px
+          "
+        />
+      `
+      : `
+        <div
+          style="
+            width:100%;
+            height:100%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            color:var(--text3)
+          "
+        >
+          <i class="fa-solid fa-image"></i>
+        </div>
+      `;
+
+    return `
+      <div class="super-ad-item">
+
+        <div class="super-ad-thumb">
+          ${image}
+        </div>
+
+        <div class="super-ad-info">
+          <h5>
+            ${escHtml(a.title || '—')}
+          </h5>
+
+          <p>
+            ${escHtml(
+              (a.description || '').substring(0, 60)
+            )}
+          </p>
+        </div>
+
+        <div class="super-ad-actions">
+
+          <button
+            class="btn btn-o btn-xs"
+            onclick="editSuperAd('${a.id}')"
+            title="Edit Advertisement"
+          >
+            <i class="fa-solid fa-pen"></i>
+          </button>
+
+          <button
+            class="btn btn-d btn-xs"
+            onclick="deleteSuperAd('${a.id}')"
+            title="Delete Advertisement"
+          >
+            <i class="fa-solid fa-trash"></i>
+          </button>
+
+        </div>
+
+      </div>
+    `;
   }).join('');
 }
 
+
+/* ============================================================
+   SUPER ADMIN — RENDER PUBLIC PRODUCTS
+   ============================================================ */
+function renderSuperProducts() {
+  const el =
+    document.getElementById('superProductsList');
+
+  if (!el) return;
+
+  if (
+    !Array.isArray(S.superProducts) ||
+    !S.superProducts.length
+  ) {
+    el.innerHTML = `
+      <div class="empty-s">
+        <p>Hakuna bidhaa hadharani</p>
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML = S.superProducts.map(function (p) {
+
+    const image = p.imageUrl
+      ? `
+        <img
+          src="${escHtml(p.imageUrl)}"
+          alt="${escHtml(p.name || 'Product')}"
+          style="
+            width:100%;
+            height:100%;
+            object-fit:cover;
+            border-radius:8px
+          "
+        />
+      `
+      : `
+        <div
+          style="
+            width:100%;
+            height:100%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            color:var(--text3)
+          "
+        >
+          <i class="fa-solid fa-box"></i>
+        </div>
+      `;
+
+    return `
+      <div class="super-prod-item">
+
+        <div class="super-ad-thumb">
+          ${image}
+        </div>
+
+        <div class="super-ad-info">
+
+          <h5>
+            ${escHtml(p.name || '—')}
+          </h5>
+
+          <p>
+            ${escHtml(p.seller || '—')}
+            —
+            ${fmtCur(Number(p.price) || 0)}
+          </p>
+
+        </div>
+
+        <div class="super-ad-actions">
+
+          <button
+            class="btn btn-o btn-xs"
+            onclick="editSuperProduct('${p.id}')"
+            title="Edit Product"
+          >
+            <i class="fa-solid fa-pen"></i>
+          </button>
+
+          <button
+            class="btn btn-d btn-xs"
+            onclick="deleteSuperProduct('${p.id}')"
+            title="Delete Product"
+          >
+            <i class="fa-solid fa-trash"></i>
+          </button>
+
+        </div>
+
+      </div>
+    `;
+  }).join('');
+}
 function renderSuperCharts() {
   destroyChart('superUsersTrendC');
   destroyChart('superCatC');
