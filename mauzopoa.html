@@ -1025,14 +1025,204 @@ function toast(msg,type='s'){
 }
 
 /* ============================================================
-   CONFIRM
+   CONFIRM - SAFE VERSION
    ============================================================ */
-function confirm2(msg,onYes){
-  const c=document.getElementById('cfmBox');
-  c.innerHTML=`<div class="cfm-ov" onclick="if(event.target===this)this.remove()"><div class="cfm-card"><div style="width:56px;height:56px;border-radius:50%;background:var(--danger-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px;color:var(--danger)"><i class="fas fa-exclamation-triangle"></i></div><h3 style="font-size:17px;font-weight:800;margin-bottom:6px">Uhakika?</h3><p style="font-size:13px;color:var(--muted);margin-bottom:18px">${msg}</p><div style="display:flex;gap:10px;justify-content:center"><button class="btn btn-g" onclick="this.closest('.cfm-ov').remove()">Ghairi</button><button class="btn btn-d" id="cfmYes">Ndio, Endelea</button></div></div></div>`;
-  c.querySelector('#cfmYes').onclick=()=>{c.innerHTML='';onYes()};
-}
+function confirm2(msg, onYes) {
+  try {
+    const c = document.getElementById('cfmBox');
 
+    if (!c) {
+      console.error('[CONFIRM] Element #cfmBox haipo kwenye HTML');
+      return;
+    }
+
+    if (typeof onYes !== 'function') {
+      console.error(
+        '[CONFIRM] onYes si function:',
+        onYes
+      );
+
+      if (typeof toast === 'function') {
+        toast(
+          'Kitendo hiki hakijaunganishwa vizuri.',
+          'error'
+        );
+      }
+
+      return;
+    }
+
+    c.innerHTML = `
+      <div
+        class="cfm-ov"
+        onclick="if(event.target===this)this.remove()"
+      >
+        <div class="cfm-card">
+
+          <div
+            style="
+              width:56px;
+              height:56px;
+              border-radius:50%;
+              background:var(--danger-bg);
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              margin:0 auto 12px;
+              font-size:24px;
+              color:var(--danger)
+            "
+          >
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+
+          <h3
+            style="
+              font-size:17px;
+              font-weight:800;
+              margin-bottom:6px
+            "
+          >
+            Uhakika?
+          </h3>
+
+          <p
+            style="
+              font-size:13px;
+              color:var(--muted);
+              margin-bottom:18px
+            "
+          >
+            ${typeof escHtml === 'function'
+              ? escHtml(msg)
+              : String(msg || '')}
+          </p>
+
+          <div
+            style="
+              display:flex;
+              gap:10px;
+              justify-content:center
+            "
+          >
+
+            <button
+              type="button"
+              class="btn btn-g"
+              id="cfmCancel"
+            >
+              Ghairi
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-d"
+              id="cfmYes"
+            >
+              Ndio, Endelea
+            </button>
+
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    const yesBtn = c.querySelector('#cfmYes');
+    const cancelBtn = c.querySelector('#cfmCancel');
+
+    if (!yesBtn) {
+      console.error('[CONFIRM] #cfmYes haijapatikana');
+      return;
+    }
+
+    // --------------------------------------------------------
+    // CANCEL
+    // --------------------------------------------------------
+    if (cancelBtn) {
+      cancelBtn.onclick = function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        c.innerHTML = '';
+      };
+    }
+
+    // --------------------------------------------------------
+    // YES / CONTINUE
+    // --------------------------------------------------------
+    yesBtn.onclick = async function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      console.log('[CONFIRM] Ndio, Endelea imebonyezwa');
+
+      // Zuia double click
+      yesBtn.disabled = true;
+      yesBtn.innerHTML = `
+        <i class="fas fa-spinner fa-spin"></i>
+        Inachakata...
+      `;
+
+      try {
+
+        // Funga confirmation kwanza
+        c.innerHTML = '';
+
+        // Execute action
+        const result = onYes();
+
+        // Support async functions
+        if (result && typeof result.then === 'function') {
+          await result;
+        }
+
+        console.log(
+          '[CONFIRM] Action completed successfully'
+        );
+
+      } catch (error) {
+
+        console.error(
+          '[CONFIRM] Action failed:',
+          error
+        );
+
+        console.error(
+          '[CONFIRM] Error message:',
+          error?.message
+        );
+
+        console.error(
+          '[CONFIRM] Error stack:',
+          error?.stack
+        );
+
+        if (typeof toast === 'function') {
+          toast(
+            error?.message ||
+            'Kitendo kimeshindwa kutekelezwa.',
+            'error'
+          );
+        }
+      }
+    };
+
+  } catch (error) {
+
+    console.error(
+      '[CONFIRM] CONFIRM DIALOG ERROR:',
+      error
+    );
+
+    if (typeof toast === 'function') {
+      toast(
+        'Imeshindikana kufungua uthibitisho.',
+        'error'
+      );
+    }
+  }
+}
 /* ============================================================
    SCREEN MANAGEMENT
    ============================================================ */
