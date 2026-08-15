@@ -3277,112 +3277,624 @@ async function sendMessage() {
 }
 
 /* =========================================================
-   DASHBOARD
+   DASHBOARD — SAFE MODULAR FIREBASE
    ========================================================= */
 async function loadDashboard() {
-    const bizId = State.currentBizId;
-    if (!bizId) return;
+
     const metricsEl = document.getElementById('dashMetrics');
     const recentEl = document.getElementById('dashRecentSales');
-    if (!metricsEl) return;
-    metricsEl.innerHTML = '<div class="mc"><div class="spinner" style="margin:20px auto"></div></div>'.repeat(4);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTs = today;
-    let totalRevenue = 0, todayRevenue = 0, totalExpenses = 0, totalDebt = 0, lowStock = 0;
-    const results = await Promise.allSettled([
-        (async () => {
-            const q = query(collection(db, 'sales'), where('businessId', '==', bizId));
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => {
-                const s = d.data();
-                totalRevenue += (s.total || 0);
-                if (s.createdAt && s.createdAt.toDate && s.createdAt.toDate() >= todayTs) todayRevenue += (s.total || 0);
-            });
-        })(),
-        (async () => {
-            const q = query(collection(db, 'expenses'), where('businessId', '==', bizId));
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => { totalExpenses += (d.data().amount || 0); });
-        })(),
-        (async () => {
-            const q = query(collection(db, 'debts'), where('businessId', '==', bizId));
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => { totalDebt += Math.max(0, (d.data().amount || 0) - (d.data().paid || 0)); });
-        })()
-    ]);
-    results.forEach(r => { if (r.status === 'rejected') console.error('[DASH LOAD]', r.reason); });
-    lowStock = State.allProducts.filter(p => (p.stock || 0) <= 5).length;
-    const profit = totalRevenue - totalExpenses;
-    metricsEl.innerHTML = '' +
-        '<div class="mc g" onclick="navTo(\'products\')"><div class="mc-icon"><i class="fas fa-boxes-stacked"></i></div><h3>' + State.allProducts.length + '</h3><p>Bidhaa</p></div>' +
-        '<div class="mc a" onclick="navTo(\'sell-product\')"><div class="mc-icon"><i class="fas fa-cash-register"></i></div><h3>' + fmt(todayRevenue) + '</h3><p>Mauzo ya Leo</p></div>' +
-        '<div class="mc pu"><div class="mc-icon"><i class="fas fa-coins"></i></div><h3>' + fmt(totalRevenue) + '</h3><p>Jumla ya Mauzo</p></div>' +
-        '<div class="mc r"><div class="mc-icon"><i class="fas fa-money-bill-trend-up"></i></div><h3>' + fmt(totalExpenses) + '</h3><p>Matumizi</p></div>' +
-        '<div class="mc ' + (profit >= 0 ? 'g' : 'r') + '"><div class="mc-icon"><i class="fas fa-chart-line"></i></div><h3>' + fmt(profit) + '</h3><p>Faida</p></div>' +
-        '<div class="mc b" onclick="navTo(\'debts\')"><div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div><h3>' + fmt(totalDebt) + '</h3><p>Madeni</p></div>' +
-        '<div class="mc a" onclick="navTo(\'customers\')"><div class="mc-icon"><i class="fas fa-user-group"></i></div><h3>' + State.allCustomers.length + '</h3><p>Wateja</p></div>' +
-        (lowStock > 0 ? '<div class="mc r" onclick="navTo(\'products\')"><div class="mc-icon"><i class="fas fa-exclamation-triangle"></i></div><h3>' + lowStock + '</h3><p>Stock Chini</p></div>' : '');
-    renderDashCharts();
-    renderDashRecentSales();
-}
 
-function renderDashRecentSales() {
-    const tbody = document.getElementById('dashRecentSales');
-    if (!tbody) return;
-    const recent = State.allSales.slice(0, 8);
-    if (recent.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo bado</p></td></tr>';
+    if (!metricsEl) {
+        console.warn('[DASHBOARD] #dashMetrics haijapatikana.');
         return;
     }
-    tbody.innerHTML = recent.map((s, i) => {
-        const cust = State.allCustomers.find(c => c.id === s.customerId);
-        const itemCount = (s.items || []).reduce((sum, item) => sum + (item.qty || 0), 0);
-        return '<tr><td>' + s.id.substring(0, 8).toUpperCase() + '</td><td>' + (cust?.name || 'Mteja wa Kawaida') + '</td><td>' + itemCount + '</td><td style="color:var(--success);font-weight:600">' + fmt(s.total) + '</td><td>' + fmtDate(s.createdAt) + '</td></tr>';
-    }).join('');
-}
 
-function renderDashCharts() {
-    if (typeof Chart === 'undefined') return;
-    const chartColors = ['#6c5ce7', '#a29bfe', '#00b894', '#0984e3', '#f39c12', '#e74c3c', '#fd79a8', '#00cec9'];
-    if (State.chartSales) State.chartSales.destroy();
-    const ctx1 = document.getElementById('chartSales')?.getContext('2d');
-    if (ctx1) {
-        const days = ['Jumatatu', 'Jumanne', 'Jumatano', 'Alhamisi', 'Ijumaa', 'Jumamosi', 'Jumapili'];
-        const now = new Date();
-        const dayOfWeek = (now.getDay() + 6) % 7;
-        const weekData = new Array(7).fill(0);
-        State.allSales.forEach(s => {
-            if (s.createdAt && s.createdAt.toDate) {
-                const d = s.createdAt.toDate();
-                const diff = Math.floor((now - d) / 86400000);
-                if (diff >= 0 && diff < 7) {
-                    const idx = (dayOfWeek - diff + 7) % 7;
-                    weekData[idx] += (s.total || 0);
+    /* =====================================================
+       1. SHOW LOADING
+       ===================================================== */
+
+    metricsEl.innerHTML =
+        '<div class="mc">' +
+            '<div class="spinner" style="margin:20px auto"></div>' +
+        '</div>'.repeat(4);
+
+
+    try {
+
+        /* =================================================
+           2. FIREBASE CHECK
+           ================================================= */
+
+        if (!db) {
+            throw new Error(
+                'Firestore haijaandaliwa.'
+            );
+        }
+
+        if (!auth) {
+            throw new Error(
+                'Firebase Auth haijaandaliwa.'
+            );
+        }
+
+
+        /* =================================================
+           3. WAIT FOR AUTH + USER DATA + BUSINESS
+           ================================================= */
+
+        await waitForFirebaseReady(true);
+
+
+        /* =================================================
+           4. GET VALID BUSINESS ID
+           ================================================= */
+
+        const bizId = getBusinessId();
+
+        if (!isValidId(bizId)) {
+            throw new Error(
+                'Business ID haijapatikana kwenye akaunti yako.'
+            );
+        }
+
+
+        console.log(
+            '[DASHBOARD] Loading business:',
+            bizId
+        );
+
+
+        /* =================================================
+           5. ENSURE STATE OBJECT EXISTS
+           ================================================= */
+
+        if (
+            typeof State === 'undefined' ||
+            !State
+        ) {
+            throw new Error(
+                'Application State haijaandaliwa.'
+            );
+        }
+
+
+        /* =================================================
+           6. KEEP ALL BUSINESS ID VARIABLES IN SYNC
+           ================================================= */
+
+        State.currentBizId = bizId;
+        State.currentBusinessId = bizId;
+
+
+        /* =================================================
+           7. LOAD REQUIRED DATA FIRST
+           ================================================= */
+
+        /*
+         * Dashboard inategemea:
+         *
+         * State.allProducts
+         * State.allSales
+         * State.allCustomers
+         *
+         * Hivyo lazima zipakwe kabla ya rendering.
+         */
+
+        const loaders = [];
+
+
+        if (
+            typeof loadProducts === 'function'
+        ) {
+            loaders.push(
+                Promise.resolve(
+                    loadProducts()
+                )
+            );
+        }
+
+
+        if (
+            typeof loadSales === 'function'
+        ) {
+            loaders.push(
+                Promise.resolve(
+                    loadSales()
+                )
+            );
+        }
+
+
+        if (
+            typeof loadCustomers === 'function'
+        ) {
+            loaders.push(
+                Promise.resolve(
+                    loadCustomers()
+                )
+            );
+        }
+
+
+        /*
+         * Usiruhusu failure ya loader moja
+         * kuzuia dashboard yote.
+         */
+
+        const loaderResults =
+            await Promise.allSettled(
+                loaders
+            );
+
+
+        loaderResults.forEach(
+            result => {
+
+                if (
+                    result.status === 'rejected'
+                ) {
+
+                    console.error(
+                        '[DASHBOARD] Data loader failed:',
+                        result.reason
+                    );
                 }
             }
-        });
-        State.chartSales = new Chart(ctx1, {
-            type: 'line',
-            data: { labels: days, datasets: [{ label: 'Mauzo', data: weekData, borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,0.1)', fill: true, tension: 0.4 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(255,255,255,0.04)' } } } }
-        });
-    }
-    if (State.chartCategories) State.chartCategories.destroy();
-    const ctx2 = document.getElementById('chartCategories')?.getContext('2d');
-    if (ctx2) {
-        const cats = {};
-        State.allProducts.forEach(p => { const c = p.category || 'Nyingine'; cats[c] = (cats[c] || 0) + 1; });
-        const labels = Object.keys(cats);
-        const data = Object.values(cats);
-        State.chartCategories = new Chart(ctx2, {
-            type: 'doughnut',
-            data: { labels, datasets: [{ data, backgroundColor: chartColors.slice(0, labels.length), borderWidth: 0 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9a9ab0', padding: 12 } } } }
-        });
+        );
+
+
+        /* =================================================
+           8. GUARANTEE ARRAYS EXIST
+           ================================================= */
+
+        if (!Array.isArray(State.allProducts)) {
+            State.allProducts = [];
+        }
+
+        if (!Array.isArray(State.allSales)) {
+            State.allSales = [];
+        }
+
+        if (!Array.isArray(State.allCustomers)) {
+            State.allCustomers = [];
+        }
+
+
+        console.log(
+            '[DASHBOARD] State loaded:',
+            {
+                businessId: bizId,
+                products: State.allProducts.length,
+                sales: State.allSales.length,
+                customers: State.allCustomers.length
+            }
+        );
+
+
+        /* =================================================
+           9. CALCULATE METRICS
+           ================================================= */
+
+        let totalRevenue = 0;
+        let todayRevenue = 0;
+        let totalExpenses = 0;
+        let totalDebt = 0;
+        let lowStock = 0;
+
+
+        /* =================================================
+           10. TODAY START
+           ================================================= */
+
+        const today = new Date();
+
+        today.setHours(
+            0,
+            0,
+            0,
+            0
+        );
+
+
+        /* =================================================
+           11. SALES
+           ================================================= */
+
+        State.allSales.forEach(
+            sale => {
+
+                if (!sale) return;
+
+                const total =
+                    Number(sale.total) || 0;
+
+                totalRevenue += total;
+
+
+                if (
+                    sale.createdAt &&
+                    typeof sale.createdAt.toDate === 'function'
+                ) {
+
+                    const saleDate =
+                        sale.createdAt.toDate();
+
+                    if (
+                        saleDate >= today
+                    ) {
+
+                        todayRevenue += total;
+                    }
+
+                } else if (
+                    sale.createdAt instanceof Date
+                ) {
+
+                    if (
+                        sale.createdAt >= today
+                    ) {
+
+                        todayRevenue += total;
+                    }
+                }
+            }
+        );
+
+
+        /* =================================================
+           12. EXPENSES
+           ================================================= */
+
+        try {
+
+            const expensesQuery =
+                query(
+                    collection(
+                        db,
+                        'expenses'
+                    ),
+                    where(
+                        'businessId',
+                        '==',
+                        bizId
+                    )
+                );
+
+            const expensesSnap =
+                await getDocs(
+                    expensesQuery
+                );
+
+
+            expensesSnap.forEach(
+                expenseDoc => {
+
+                    const expense =
+                        expenseDoc.data();
+
+                    totalExpenses +=
+                        Number(
+                            expense.amount
+                        ) || 0;
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                '[DASHBOARD] Expenses failed:',
+                error
+            );
+        }
+
+
+        /* =================================================
+           13. DEBTS
+           ================================================= */
+
+        try {
+
+            const debtsQuery =
+                query(
+                    collection(
+                        db,
+                        'debts'
+                    ),
+                    where(
+                        'businessId',
+                        '==',
+                        bizId
+                    )
+                );
+
+            const debtsSnap =
+                await getDocs(
+                    debtsQuery
+                );
+
+
+            debtsSnap.forEach(
+                debtDoc => {
+
+                    const debt =
+                        debtDoc.data();
+
+                    const amount =
+                        Number(
+                            debt.amount
+                        ) || 0;
+
+                    const paid =
+                        Number(
+                            debt.paid
+                        ) || 0;
+
+                    totalDebt +=
+                        Math.max(
+                            0,
+                            amount - paid
+                        );
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                '[DASHBOARD] Debts failed:',
+                error
+            );
+        }
+
+
+        /* =================================================
+           14. LOW STOCK
+           ================================================= */
+
+        lowStock =
+            State.allProducts.filter(
+                product =>
+                    (Number(product.stock) || 0) <= 5
+            ).length;
+
+
+        /* =================================================
+           15. PROFIT
+           ================================================= */
+
+        const profit =
+            totalRevenue -
+            totalExpenses;
+
+
+        /* =================================================
+           16. FORMAT NUMBERS SAFELY
+           ================================================= */
+
+        const formatMoney =
+            typeof fmt === 'function'
+                ? fmt
+                : value =>
+                    Number(value || 0)
+                        .toLocaleString();
+
+
+        /* =================================================
+           17. RENDER DASHBOARD METRICS
+           ================================================= */
+
+        metricsEl.innerHTML =
+
+            '<div class="mc g" onclick="navTo(\'products\')">' +
+                '<div class="mc-icon">' +
+                    '<i class="fas fa-boxes-stacked"></i>' +
+                '</div>' +
+                '<h3>' +
+                    State.allProducts.length +
+                '</h3>' +
+                '<p>Bidhaa</p>' +
+            '</div>' +
+
+            '<div class="mc a" onclick="navTo(\'sell-product\')">' +
+                '<div class="mc-icon">' +
+                    '<i class="fas fa-cash-register"></i>' +
+                '</div>' +
+                '<h3>' +
+                    formatMoney(todayRevenue) +
+                '</h3>' +
+                '<p>Mauzo ya Leo</p>' +
+            '</div>' +
+
+            '<div class="mc pu">' +
+                '<div class="mc-icon">' +
+                    '<i class="fas fa-coins"></i>' +
+                '</div>' +
+                '<h3>' +
+                    formatMoney(totalRevenue) +
+                '</h3>' +
+                '<p>Jumla ya Mauzo</p>' +
+            '</div>' +
+
+            '<div class="mc r">' +
+                '<div class="mc-icon">' +
+                    '<i class="fas fa-money-bill-trend-up"></i>' +
+                '</div>' +
+                '<h3>' +
+                    formatMoney(totalExpenses) +
+                '</h3>' +
+                '<p>Matumizi</p>' +
+            '</div>' +
+
+            '<div class="mc ' +
+                (
+                    profit >= 0
+                        ? 'g'
+                        : 'r'
+                ) +
+            '">' +
+                '<div class="mc-icon">' +
+                    '<i class="fas fa-chart-line"></i>' +
+                '</div>' +
+                '<h3>' +
+                    formatMoney(profit) +
+                '</h3>' +
+                '<p>Faida</p>' +
+            '</div>' +
+
+            '<div class="mc b" onclick="navTo(\'debts\')">' +
+                '<div class="mc-icon">' +
+                    '<i class="fas fa-hand-holding-dollar"></i>' +
+                '</div>' +
+                '<h3>' +
+                    formatMoney(totalDebt) +
+                '</h3>' +
+                '<p>Madeni</p>' +
+            '</div>' +
+
+            '<div class="mc a" onclick="navTo(\'customers\')">' +
+                '<div class="mc-icon">' +
+                    '<i class="fas fa-user-group"></i>' +
+                '</div>' +
+                '<h3>' +
+                    State.allCustomers.length +
+                '</h3>' +
+                '<p>Wateja</p>' +
+            '</div>' +
+
+            (
+                lowStock > 0
+                    ?
+                    '<div class="mc r" onclick="navTo(\'products\')">' +
+                        '<div class="mc-icon">' +
+                            '<i class="fas fa-exclamation-triangle"></i>' +
+                        '</div>' +
+                        '<h3>' +
+                            lowStock +
+                        '</h3>' +
+                        '<p>Stock Chini</p>' +
+                    '</div>'
+                    :
+                    ''
+            );
+
+
+        /* =================================================
+           18. RECENT SALES
+           ================================================= */
+
+        renderDashRecentSales();
+
+
+        /* =================================================
+           19. CHARTS
+           ================================================= */
+
+        renderDashCharts();
+
+
+        /* =================================================
+           20. FINAL LOG
+           ================================================= */
+
+        console.log(
+            '[DASHBOARD] Loaded successfully.',
+            {
+                businessId: bizId,
+                revenue: totalRevenue,
+                todayRevenue,
+                expenses: totalExpenses,
+                debt: totalDebt,
+                profit,
+                products:
+                    State.allProducts.length,
+                customers:
+                    State.allCustomers.length,
+                sales:
+                    State.allSales.length
+            }
+        );
+
+    } catch (error) {
+
+        /* =================================================
+           REAL ERROR — DO NOT HIDE IT
+           ================================================= */
+
+        console.error(
+            '[DASHBOARD] FAILED:',
+            error
+        );
+
+        console.error(
+            '[DASHBOARD] Code:',
+            error?.code || 'NO_CODE'
+        );
+
+        console.error(
+            '[DASHBOARD] Message:',
+            error?.message || error
+        );
+
+
+        /* =================================================
+           USER MESSAGE
+           ================================================= */
+
+        let message =
+            'Imeshindikana kupakia dashboard.';
+
+        if (
+            error?.message?.includes(
+                'Business ID'
+            )
+        ) {
+
+            message =
+                'Business ID haijapatikana kwenye akaunti yako. Tafadhali ingia tena.';
+        }
+
+        else if (
+            error?.code ===
+            'permission-denied'
+        ) {
+
+            message =
+                'Huna ruhusa ya kuona taarifa za biashara hii.';
+        }
+
+        else if (
+            error?.code ===
+            'unavailable'
+        ) {
+
+            message =
+                'Firebase haipatikani kwa sasa. Angalia internet yako.';
+        }
+
+
+        if (
+            typeof toast === 'function'
+        ) {
+
+            toast(
+                message,
+                'e'
+            );
+        }
+
+
+        /* =================================================
+           SHOW SAFE EMPTY STATE
+           ================================================= */
+
+        metricsEl.innerHTML =
+            '<div class="empty-s" style="grid-column:1/-1">' +
+                '<i class="fas fa-chart-line"></i>' +
+                '<p>' +
+                    message +
+                '</p>' +
+            '</div>';
     }
 }
-
 /* =========================================================
    REPORTS - DAILY
    ========================================================= */
