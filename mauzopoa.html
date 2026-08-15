@@ -1418,32 +1418,368 @@ function regNext(step) {
 }
 
 // ============================================================
-// AUTHENTICATION
+// AUTHENTICATION — FIREBASE MODULAR SDK
+// LOGIN
 // ============================================================
 async function handleLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const errEl = document.getElementById('authErr');
-  const btn = document.getElementById('loginBtn');
-  if (!email || !password) { errEl.textContent = 'Jaza barua pepe na nenosiri'; errEl.classList.add('show'); return; }
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div>';
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-    errEl.classList.remove('show');
-  } catch (error) {
-    console.error('[AUTH LOGIN]', error);
-    errEl.textContent = error.code === 'auth/invalid-credential' ? 'Barua pepe au nenosiri sio sahihi' :
-                       error.code === 'auth/user-not-found' ? 'Akaunti haipo kwenye mfumo' :
-                       error.code === 'auth/too-many-requests' ? 'Jaribu tena baadaye' :
-                       'Hitilafu: ' + (error.message || '');
-    errEl.classList.add('show');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Ingia';
-  }
-}
 
+    const emailEl =
+        document.getElementById('loginEmail');
+
+    const passwordEl =
+        document.getElementById('loginPassword');
+
+    const errEl =
+        document.getElementById('authErr');
+
+    const btn =
+        document.getElementById('loginBtn');
+
+
+    /* ========================================================
+       ELEMENT CHECK
+       ======================================================== */
+
+    if (!emailEl || !passwordEl || !btn) {
+
+        console.error(
+            '[AUTH LOGIN] Login HTML elements hazijapatikana.',
+            {
+                emailEl: !!emailEl,
+                passwordEl: !!passwordEl,
+                btn: !!btn
+            }
+        );
+
+        if (typeof toast === 'function') {
+
+            toast(
+                'Mfumo wa kuingia haujaandaliwa vizuri.',
+                'e'
+            );
+        }
+
+        return;
+    }
+
+
+    const email =
+        emailEl.value.trim().toLowerCase();
+
+    const password =
+        passwordEl.value;
+
+
+    /* ========================================================
+       CLEAR PREVIOUS ERROR
+       ======================================================== */
+
+    if (errEl) {
+
+        errEl.textContent = '';
+
+        errEl.classList.remove('show');
+    }
+
+
+    /* ========================================================
+       VALIDATION
+       ======================================================== */
+
+    if (!email) {
+
+        if (errEl) {
+
+            errEl.textContent =
+                'Ingiza barua pepe yako.';
+
+            errEl.classList.add('show');
+        }
+
+        return;
+    }
+
+
+    if (!password) {
+
+        if (errEl) {
+
+            errEl.textContent =
+                'Ingiza nenosiri lako.';
+
+            errEl.classList.add('show');
+        }
+
+        return;
+    }
+
+
+    /* ========================================================
+       FIREBASE AUTH CHECK
+       ======================================================== */
+
+    if (
+        typeof auth === 'undefined' ||
+        !auth
+    ) {
+
+        console.error(
+            '[AUTH LOGIN] Firebase Auth haijaandaliwa.'
+        );
+
+        if (errEl) {
+
+            errEl.textContent =
+                'Firebase Auth haijaandaliwa. Refresh ukurasa kisha ujaribu tena.';
+
+            errEl.classList.add('show');
+        }
+
+        return;
+    }
+
+
+    /* ========================================================
+       LOADING
+       ======================================================== */
+
+    btn.disabled = true;
+
+    btn.innerHTML =
+        '<div class="spinner" ' +
+        'style="width:18px;height:18px;border-width:2px"></div>';
+
+
+    try {
+
+        console.log(
+            '[AUTH LOGIN] Attempting login:',
+            email
+        );
+
+
+        /* ====================================================
+           FIREBASE MODULAR SIGN IN
+           ==================================================== */
+
+        const credential =
+            await signInWithEmailAndPassword(
+                auth,
+                email,
+                password
+            );
+
+
+        /* ====================================================
+           VERIFY AUTH USER
+           ==================================================== */
+
+        const user =
+            credential?.user;
+
+
+        if (
+            !user ||
+            !user.uid
+        ) {
+
+            throw new Error(
+                'Firebase haikutoa taarifa za mtumiaji baada ya login.'
+            );
+        }
+
+
+        console.log(
+            '[AUTH LOGIN] Firebase Authentication successful.',
+            {
+                uid:
+                    user.uid,
+
+                email:
+                    user.email
+            }
+        );
+
+
+        /* ====================================================
+           CLEAR LOGIN ERROR
+           ==================================================== */
+
+        if (errEl) {
+
+            errEl.textContent = '';
+
+            errEl.classList.remove('show');
+        }
+
+
+        /*
+         * IMPORTANT:
+         *
+         * HATUITI loadDashboard() hapa.
+         *
+         * onAuthStateChanged() ndiyo itashughulikia
+         * user initialization.
+         */
+
+    } catch (error) {
+
+        console.error(
+            '[AUTH LOGIN ERROR]',
+            {
+                code:
+                    error?.code || null,
+
+                message:
+                    error?.message || null,
+
+                error:
+                    error
+            }
+        );
+
+
+        let message =
+            'Imeshindikana kuingia kwenye mfumo.';
+
+
+        /* ====================================================
+           FIREBASE AUTH ERRORS
+           ==================================================== */
+
+        switch (
+            error?.code
+        ) {
+
+            case 'auth/invalid-credential':
+
+                /*
+                 * Firebase versions mpya mara nyingi
+                 * hutumia invalid-credential badala ya
+                 * user-not-found / wrong-password.
+                 */
+
+                message =
+                    'Barua pepe au nenosiri sio sahihi.';
+
+                break;
+
+
+            case 'auth/user-not-found':
+
+                message =
+                    'Akaunti hii haipo kwenye Firebase Authentication.';
+
+                break;
+
+
+            case 'auth/wrong-password':
+
+                message =
+                    'Nenosiri sio sahihi.';
+
+                break;
+
+
+            case 'auth/invalid-email':
+
+                message =
+                    'Barua pepe uliyoingiza sio sahihi.';
+
+                break;
+
+
+            case 'auth/user-disabled':
+
+                message =
+                    'Akaunti hii imezuiwa. Wasiliana na Administrator.';
+
+                break;
+
+
+            case 'auth/too-many-requests':
+
+                message =
+                    'Majaribio ya kuingia yamekuwa mengi. Jaribu tena baadaye.';
+
+                break;
+
+
+            case 'auth/network-request-failed':
+
+                message =
+                    'Hakuna muunganisho wa internet. Angalia internet kisha ujaribu tena.';
+
+                break;
+
+
+            case 'auth/operation-not-allowed':
+
+                message =
+                    'Email/Password Authentication haijawezeshwa kwenye Firebase.';
+
+                break;
+
+
+            case 'auth/invalid-api-key':
+
+                message =
+                    'Firebase API Key sio sahihi.';
+
+                break;
+
+
+            case 'auth/app-not-authorized':
+
+                message =
+                    'Mfumo huu haujaidhinishwa kwenye Firebase.';
+
+                break;
+
+
+            default:
+
+                message =
+                    error?.message ||
+                    'Imeshindikana kuingia kwenye mfumo.';
+
+                break;
+        }
+
+
+        /* ====================================================
+           SHOW ERROR
+           ==================================================== */
+
+        if (errEl) {
+
+            errEl.textContent =
+                message;
+
+            errEl.classList.add('show');
+
+        } else if (
+            typeof toast === 'function'
+        ) {
+
+            toast(
+                message,
+                'e'
+            );
+        }
+
+    } finally {
+
+        /* ====================================================
+           RESTORE BUTTON
+           ==================================================== */
+
+        btn.disabled = false;
+
+        btn.innerHTML =
+            '<i class="fas fa-sign-in-alt"></i> Ingia';
+    }
+}
 async function handleRegister() {
   const fname = document.getElementById('regFname').value.trim();
   const lname = document.getElementById('regLname').value.trim();
