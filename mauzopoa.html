@@ -3813,7 +3813,387 @@ function sharePublicCatalogue() {
     prompt('Copy catalogue link:', url);
   }
 }
+/* ============================================================
+   SUPER ADMIN - USER ACCOUNT MANAGEMENT
+   Suspend / Activate / Delete User
+   ============================================================ */
 
+/* ------------------------------------------------------------
+   GET USER
+   ------------------------------------------------------------ */
+async function getSuperUser(userId) {
+  if (!db) {
+    throw new Error('Firebase haijawaunganishwa.');
+  }
+
+  if (!userId) {
+    throw new Error('User ID haijapatikana.');
+  }
+
+  const snap = await db
+    .collection('users')
+    .doc(userId)
+    .get();
+
+  if (!snap.exists) {
+    throw new Error('Akaunti ya user haijapatikana.');
+  }
+
+  return {
+    id: snap.id,
+    ...snap.data()
+  };
+}
+
+
+/* ------------------------------------------------------------
+   SUSPEND USER
+   ------------------------------------------------------------ */
+async function suspendSuperUser(userId) {
+
+  requestDelete(
+    'Una uhakika unataka kususpend akaunti hii? User hataweza kutumia mfumo mpaka akaunti iwe activated tena.',
+    async function () {
+
+      try {
+
+        if (!db) {
+          toast(
+            'Firebase haijawaunganishwa.',
+            'e'
+          );
+          return;
+        }
+
+        const user = await getSuperUser(userId);
+
+        // -----------------------------------------------
+        // Prevent accidental Super Admin suspension
+        // -----------------------------------------------
+        const role =
+          String(user.role || '')
+            .toLowerCase();
+
+        if (
+          role === 'superadmin' ||
+          role === 'super_admin' ||
+          role === 'super administrator'
+        ) {
+          toast(
+            'Super Administrator hawezi kususpendiwa hapa.',
+            'w'
+          );
+          return;
+        }
+
+        await db
+          .collection('users')
+          .doc(userId)
+          .update({
+            status: 'suspended',
+            accountStatus: 'suspended',
+            suspended: true,
+            suspendedAt:
+              firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt:
+              firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+        // -----------------------------------------------
+        // Send notification to user
+        // -----------------------------------------------
+        try {
+
+          await db
+            .collection('notifications')
+            .add({
+              userId: userId,
+              businessId: user.businessId || null,
+              title: 'Akaunti Imesimamishwa',
+              message:
+                'Akaunti yako imesimamishwa na Super Administrator. Wasiliana na usimamizi kwa maelezo zaidi.',
+              type: 'warning',
+              fromSuper: true,
+              read: false,
+              createdAt:
+                firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+        } catch (notificationError) {
+
+          console.warn(
+            '[SUPER USER] Notification failed:',
+            notificationError
+          );
+        }
+
+        toast(
+          'Akaunti imesimamishwa kikamilifu.',
+          's'
+        );
+
+        if (
+          typeof loadSuperAdmin === 'function'
+        ) {
+          await loadSuperAdmin();
+        }
+
+      } catch (err) {
+
+        console.error(
+          '[SUPER USER] Suspend error:',
+          err
+        );
+
+        toast(
+          err?.message ||
+          'Imeshindikana kususpend akaunti.',
+          'e'
+        );
+      }
+    }
+  );
+}
+
+
+/* ------------------------------------------------------------
+   ACTIVATE USER
+   ------------------------------------------------------------ */
+async function activateSuperUser(userId) {
+
+  try {
+
+    if (!db) {
+      toast(
+        'Firebase haijawaunganishwa.',
+        'e'
+      );
+      return;
+    }
+
+    const user = await getSuperUser(userId);
+
+    await db
+      .collection('users')
+      .doc(userId)
+      .update({
+        status: 'active',
+        accountStatus: 'active',
+        suspended: false,
+        activatedAt:
+          firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:
+          firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+    // -----------------------------------------------
+    // Notify user
+    // -----------------------------------------------
+    try {
+
+      await db
+        .collection('notifications')
+        .add({
+          userId: userId,
+          businessId: user.businessId || null,
+          title: 'Akaunti Imewashwa',
+          message:
+            'Akaunti yako imewashwa tena. Unaweza kutumia mfumo kama kawaida.',
+          type: 'success',
+          fromSuper: true,
+          read: false,
+          createdAt:
+            firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+    } catch (notificationError) {
+
+      console.warn(
+        '[SUPER USER] Activation notification failed:',
+        notificationError
+      );
+    }
+
+    toast(
+      'Akaunti imewashwa tena.',
+      's'
+    );
+
+    if (
+      typeof loadSuperAdmin === 'function'
+    ) {
+      await loadSuperAdmin();
+    }
+
+  } catch (err) {
+
+    console.error(
+      '[SUPER USER] Activate error:',
+      err
+    );
+
+    toast(
+      err?.message ||
+      'Imeshindikana ku-activate akaunti.',
+      'e'
+    );
+  }
+}
+
+
+/* ------------------------------------------------------------
+   DELETE USER FIRESTORE DATA
+   ------------------------------------------------------------ */
+async function deleteSuperUserData(userId) {
+
+  const collections = [
+    'users',
+    'products',
+    'sales',
+    'customers',
+    'costs',
+    'notifications',
+    'receipts',
+    'suppliers',
+    'expenses'
+  ];
+
+  for (const collectionName of collections) {
+
+    try {
+
+      const snap = await db
+        .collection(collectionName)
+        .where('userId', '==', userId)
+        .get();
+
+      if (snap.empty) {
+        continue;
+      }
+
+      const batch =
+        db.batch();
+
+      snap.docs.forEach(function(docSnap) {
+        batch.delete(docSnap.ref);
+      });
+
+      await batch.commit();
+
+      console.log(
+        '[SUPER USER] Deleted:',
+        collectionName,
+        snap.size
+      );
+
+    } catch (err) {
+
+      console.warn(
+        '[SUPER USER] Could not delete:',
+        collectionName,
+        err
+      );
+    }
+  }
+
+  // Delete main user document
+  await db
+    .collection('users')
+    .doc(userId)
+    .delete();
+}
+
+
+/* ------------------------------------------------------------
+   DELETE USER ACCOUNT
+   ------------------------------------------------------------ */
+async function deleteSuperUser(userId) {
+
+  requestDelete(
+    'TAHADHARI! Ukifuta akaunti hii, taarifa za user huyo kwenye Firestore zitafutwa. Kitendo hiki hakiwezi kurudishwa. Una uhakika unataka kuendelea?',
+    async function () {
+
+      try {
+
+        if (!db) {
+          toast(
+            'Firebase haijawaunganishwa.',
+            'e'
+          );
+          return;
+        }
+
+        const user =
+          await getSuperUser(userId);
+
+        // -----------------------------------------------
+        // NEVER DELETE SUPER ADMIN
+        // -----------------------------------------------
+        const role =
+          String(user.role || '')
+            .toLowerCase();
+
+        if (
+          role === 'superadmin' ||
+          role === 'super_admin' ||
+          role === 'super administrator'
+        ) {
+          toast(
+            'Super Administrator hawezi kufutwa hapa.',
+            'w'
+          );
+          return;
+        }
+
+        // -----------------------------------------------
+        // First suspend account
+        // -----------------------------------------------
+        await db
+          .collection('users')
+          .doc(userId)
+          .update({
+            status: 'deleted',
+            accountStatus: 'deleted',
+            suspended: true,
+            deleted: true,
+            deletedAt:
+              firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+        // -----------------------------------------------
+        // Delete Firestore data
+        // -----------------------------------------------
+        await deleteSuperUserData(
+          userId
+        );
+
+        toast(
+          'Akaunti na taarifa zake za Firestore zimefutwa.',
+          's'
+        );
+
+        if (
+          typeof loadSuperAdmin === 'function'
+        ) {
+          await loadSuperAdmin();
+        }
+
+      } catch (err) {
+
+        console.error(
+          '[SUPER USER] Delete error:',
+          err
+        );
+
+        toast(
+          err?.message ||
+          'Imeshindikana kufuta akaunti.',
+          'e'
+        );
+      }
+    }
+  );
+}
 /* ================================================================
    PUBLIC SHOWCASE
    ================================================================ */
