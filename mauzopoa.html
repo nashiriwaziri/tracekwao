@@ -1275,14 +1275,14 @@ tr:hover td{background:var(--bg3)}
    Replace with your own Firebase config values
 =========================================================== */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
-
+  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+        authDomain: "ncrs-aeb43.firebaseapp.com",
+        projectId: "ncrs-aeb43",
+        storageBucket: "ncrs-aeb43.firebasestorage.app",
+        messagingSenderId: "786434442929",
+        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+        measurementId: "G-ZYB71RY8J5",
+      };
 /* Initialize Firebase */
 let firebaseApp, auth, db;
 try {
@@ -2221,22 +2221,1451 @@ App.renderCart = function() {
   clearBtn.style.display = 'inline-flex';
   completeBtn.disabled = false;
 
-  body.innerHTML = App.cart.map(item=>`
-    <div class="cart-item">
-      <div class="cart-item-info"><h6>${escHtml(item.name)}</h6><span>${fmt(item.price)} each</span></div>
-      <div class="cart-qty">
-        <button onclick="App.updateCartQty('${item.productId}',-1)"><i class="fas fa-minus"></i></button>
-        <span>${item.qty}</span>
-        <button onclick="App.updateCartQty('${item.productId}',1)"><i class="fas fa-plus"></i></button>
+ App.renderCart = function() {
+  var body = document.getElementById('cartBody');
+  var clearBtn = document.getElementById('clearCartBtn');
+  var completeBtn = document.getElementById('completeSaleBtn');
+  var totalEl = document.getElementById('cartTotal');
+
+  if (!body) {
+    console.warn('[CART] cartBody element not found');
+    return;
+  }
+
+  var cart = Array.isArray(App.cart) ? App.cart : [];
+
+  // ==============================
+  // EMPTY CART
+  // ==============================
+  if (cart.length === 0) {
+    body.innerHTML = `
+      <div class="cart-empty">
+        <i class="fas fa-shopping-cart"></i>
+        <p>Cart iko tupu</p>
+        <small>Ongeza bidhaa ili kuendelea na mauzo</small>
       </div>
-      <div class="cart-item-price">${fmt(item.subtotal)}</div>
-      <button class="cart-item-rm" onclick="App.removeFromCart('${item
+    `;
 
+    if (totalEl) {
+      totalEl.textContent = fmt(0);
+    }
 
+    if (clearBtn) {
+      clearBtn.disabled = true;
+    }
 
+    if (completeBtn) {
+      completeBtn.disabled = true;
+    }
 
+    return;
+  }
 
+  // ==============================
+  // RENDER CART ITEMS
+  // ==============================
+  body.innerHTML = cart.map(function(item) {
 
+    var productId = String(item.productId || item.id || '');
+    var name = item.name || 'Bidhaa';
+    var price = Number(item.price) || 0;
+    var qty = Number(item.qty) || 1;
+    var subtotal = Number(item.subtotal);
+
+    if (!Number.isFinite(subtotal)) {
+      subtotal = price * qty;
+    }
+
+    return `
+      <div class="cart-item">
+
+        <div class="cart-item-info">
+          <h6>${escHtml(name)}</h6>
+          <span>${fmt(price)} each</span>
+        </div>
+
+        <div class="cart-qty">
+          <button
+            type="button"
+            onclick="App.updateCartQty('${escHtml(productId)}', -1)"
+            aria-label="Punguza"
+          >
+            <i class="fas fa-minus"></i>
+          </button>
+
+          <span>${qty}</span>
+
+          <button
+            type="button"
+            onclick="App.updateCartQty('${escHtml(productId)}', 1)"
+            aria-label="Ongeza"
+          >
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+
+        <div class="cart-item-price">
+          ${fmt(subtotal)}
+        </div>
+
+        <button
+          type="button"
+          class="cart-item-rm"
+          onclick="App.removeFromCart('${escHtml(productId)}')"
+          aria-label="Ondoa bidhaa"
+        >
+          <i class="fas fa-trash"></i>
+        </button>
+
+      </div>
+    `;
+  }).join('');
+
+  // ==============================
+  // CALCULATE TOTAL
+  // ==============================
+  var total = cart.reduce(function(sum, item) {
+
+    var subtotal = Number(item.subtotal);
+
+    if (!Number.isFinite(subtotal)) {
+      subtotal =
+        (Number(item.price) || 0) *
+        (Number(item.qty) || 0);
+    }
+
+    return sum + subtotal;
+
+  }, 0);
+
+  // ==============================
+  // UPDATE TOTAL
+  // ==============================
+  if (totalEl) {
+    totalEl.textContent = fmt(total);
+  }
+
+  // ==============================
+  // BUTTON STATES
+  // ==============================
+  if (clearBtn) {
+    clearBtn.disabled = false;
+  }
+
+  if (completeBtn) {
+    completeBtn.disabled = false;
+  }
+};
+  
+  if (!body) { console.error('[Cart] cartBody element not found'); return; }
+
+  if (App.cart.length === 0) {
+    body.innerHTML = '<div class="empty-s" style="padding:30px 10px"><i class="fas fa-shopping-cart"></i><p>Cart is empty</p></div>';
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (completeBtn) completeBtn.disabled = true;
+    if (totalEl) totalEl.textContent = fmt(0);
+    return;
+  }
+
+  if (clearBtn) clearBtn.style.display = 'inline-flex';
+  if (completeBtn) completeBtn.disabled = false;
+
+  // Using index for inline handlers to prevent ID injection/broken quotes
+  body.innerHTML = App.cart.map(function(item, idx) {
+    var price = Number(item.price) || 0;
+    var qty = Number(item.qty) || 0;
+    var subtotal = price * qty;
+    item.subtotal = subtotal; // keep state synced
+
+    return '<div class="cart-item">' +
+      '<div class="cart-item-info"><h6>' + escHtml(item.name) + '</h6><span>' + fmt(price) + ' each</span></div>' +
+      '<div class="cart-qty">' +
+        '<button onclick="App.updateCartQty(' + idx + ',-1)"><i class="fas fa-minus"></i></button>' +
+        '<span>' + qty + '</span>' +
+        '<button onclick="App.updateCartQty(' + idx + ',1)"><i class="fas fa-plus"></i></button>' +
+      '</div>' +
+      '<div class="cart-item-price">' + fmt(subtotal) + '</div>' +
+      '<button class="cart-item-rm" onclick="App.removeFromCart(' + idx + ')"><i class="fas fa-times"></i></button>' +
+    '</div>';
+  }).join('');
+
+  var total = App.cart.reduce(function(sum, i) { return sum + (Number(i.subtotal) || 0); }, 0);
+  if (totalEl) totalEl.textContent = fmt(total);
+};
+
+/* ============================================================
+   COMPLETE SALE
+=========================================================== */
+App.completeSale = async function() {
+  if (App.cart.length === 0) return toast('Cart is empty', 'e');
+
+  var customerIdEl = document.getElementById('posCustomer');
+  var paymentEl = document.getElementById('posPayment');
+  var customerId = customerIdEl ? customerIdEl.value : '';
+  var paymentMethod = paymentEl ? paymentEl.value : 'cash';
+  
+  var total = App.cart.reduce(function(s, i) { return s + (Number(i.subtotal) || 0); }, 0);
+
+  var btn = document.getElementById('completeSaleBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; }
+
+  try {
+    var receiptNo = genReceiptNo();
+    var saleData = {
+      receiptNo: receiptNo,
+      businessId: App.currentBusinessId,
+      items: App.cart.map(function(i) {
+        return {
+          productId: i.productId, name: i.name, price: Number(i.price) || 0,
+          cost: Number(i.cost) || 0, category: i.category || '',
+          qty: Number(i.qty) || 0, subtotal: Number(i.subtotal) || 0
+        };
+      }),
+      total: total,
+      paymentMethod: paymentMethod,
+      customerId: customerId || null,
+      customerName: customerId ? (App.allCustomers.find(function(c){return c.id===customerId;}) || {}).name || '' : 'Walk-in',
+      cashierId: App.currentUser ? App.currentUser.uid : '',
+      cashierName: App.currentUserData ? App.currentUserData.name || '' : 'Unknown',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    var saleRef = await db.collection('sales').add(saleData);
+
+    // Batch update stock and potentially create debt
+    var batch = db.batch();
+    App.cart.forEach(function(item) {
+      var prod = App.allProducts.find(function(p) { return p.id === item.productId; });
+      if (prod) {
+        var newStock = Math.max(0, (Number(prod.stock) || 0) - (Number(item.qty) || 0));
+        batch.update(db.collection('products').doc(item.productId), {
+          stock: newStock, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    });
+
+    if (paymentMethod === 'credit' && customerId) {
+      var debtRef = db.collection('debts').doc();
+      batch.set(debtRef, {
+        businessId: App.currentBusinessId, customerId: customerId,
+        customerName: saleData.customerName, amount: total, paid: 0,
+        note: 'Credit sale - ' + receiptNo, saleId: saleRef.id,
+        status: 'unpaid', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    await batch.commit();
+
+    App.showReceipt(saleData);
+    App.cart = [];
+    App.renderCart();
+    
+    await Promise.all([
+      App.loadProducts(App.currentBusinessId),
+      App.loadSales(App.currentBusinessId),
+      App.loadDebts(App.currentBusinessId)
+    ]);
+
+    toast('Sale completed successfully!');
+  } catch (err) {
+    console.error('[Sales] Complete sale failed:', err);
+    toast(err.message || 'Failed to complete sale', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check-circle"></i> Complete Sale'; }
+  }
+};
+
+App.showReceipt = function(sale) {
+  var biz = App.currentBusiness;
+  var itemsHtml = (sale.items || []).map(function(i) {
+    return '<tr><td>' + escHtml(i.name) + '</td><td style="text-align:center">' + (i.qty || 0) + '</td><td style="text-align:right">' + fmt(i.price) + '</td><td style="text-align:right">' + fmt(i.subtotal) + '</td></tr>';
+  }).join('');
+
+  var html = '<div class="receipt-content">' +
+    '<h3>' + escHtml(biz ? biz.name : 'Business') + '</h3>' +
+    (biz && biz.address ? '<p style="text-align:center;font-size:10px">' + escHtml(biz.address) + '</p>' : '') +
+    '<div class="rc-divider"></div>' +
+    '<p style="font-size:10px">Receipt: ' + escHtml(sale.receiptNo) + '</p>' +
+    '<p style="font-size:10px">Date: ' + formatDate(sale.createdAt) + '</p>' +
+    '<p style="font-size:10px">Cashier: ' + escHtml(sale.cashierName) + '</p>' +
+    '<p style="font-size:10px">Customer: ' + escHtml(sale.customerName) + '</p>' +
+    '<p style="font-size:10px">Payment: ' + escHtml(sale.paymentMethod) + '</p>' +
+    '<div class="rc-divider"></div>' +
+    '<table style="width:100%"><thead><tr><th style="text-align:left">Item</th><th>Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Sub</th></tr></thead><tbody>' +
+    itemsHtml + '</tbody></table>' +
+    '<div class="rc-divider"></div>' +
+    '<div class="rc-total rc-line"><span>TOTAL</span><span>' + fmt(sale.total) + '</span></div>' +
+    '<div class="rc-divider"></div>' +
+    '<p style="text-align:center;font-size:10px">' + escHtml(biz && biz.receiptFooter ? biz.receiptFooter : 'Thank you for your purchase!') + '</p>' +
+    '</div>';
+    
+  var rcptEl = document.getElementById('receiptContent');
+  if (rcptEl) rcptEl.innerHTML = html;
+  App.openModal('receiptModal');
+};
+
+App.printReceipt = function() { window.print(); };
+
+/* ============================================================
+   SALES
+=========================================================== */
+App.viewSaleReceipt = function(idx) {
+  if (idx < 0 || idx >= App.allSales.length) return;
+  App.showReceipt(App.allSales[idx]);
+};
+
+App.renderSales = function() {
+  var searchEl = document.getElementById('salesSearch');
+  var search = searchEl ? (searchEl.value || '').toLowerCase() : '';
+  var filtered = App.allSales;
+  if (search) {
+    filtered = filtered.filter(function(s) {
+      return (s.receiptNo || '').toLowerCase().includes(search) ||
+             (s.customerName || '').toLowerCase().includes(search) ||
+             (s.cashierName || '').toLowerCase().includes(search);
+    });
+  }
+  if (App.salesFilter === 'cash') filtered = filtered.filter(function(s){return s.paymentMethod==='cash';});
+  else if (App.salesFilter === 'card') filtered = filtered.filter(function(s){return s.paymentMethod==='card';});
+  else if (App.salesFilter === 'mobile') filtered = filtered.filter(function(s){return s.paymentMethod==='mobile';});
+  else if (App.salesFilter === 'credit') filtered = filtered.filter(function(s){return s.paymentMethod==='credit';});
+
+  var filterEl = document.getElementById('salesFilter');
+  if (filterEl) {
+    filterEl.innerHTML = '<button class="pf-btn ' + (App.salesFilter==='all'?'active':'') + '" onclick="App.salesFilter=\'all\';App.renderSales()">All</button>' +
+      '<button class="pf-btn ' + (App.salesFilter==='cash'?'active':'') + '" onclick="App.salesFilter=\'cash\';App.renderSales()">Cash</button>' +
+      '<button class="pf-btn ' + (App.salesFilter==='card'?'active':'') + '" onclick="App.salesFilter=\'card\';App.renderSales()">Card</button>' +
+      '<button class="pf-btn ' + (App.salesFilter==='mobile'?'active':'') + '" onclick="App.salesFilter=\'mobile\';App.renderSales()">Mobile</button>' +
+      '<button class="pf-btn ' + (App.salesFilter==='credit'?'active':'') + '" onclick="App.salesFilter=\'credit\';App.renderSales()">Credit</button>';
+  }
+
+  var tbody = document.getElementById('salesTableBody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = filtered.length ? filtered.map(function(s, idx) {
+    var origIdx = App.allSales.indexOf(s);
+    return '<tr>' +
+      '<td>' + formatDateShort(s.createdAt) + '</td>' +
+      '<td style="font-family:monospace;font-size:10px">' + escHtml(s.receiptNo) + '</td>' +
+      '<td>' + (s.items || []).length + ' items</td>' +
+      '<td><strong style="color:var(--success)">' + fmt(s.total) + '</strong></td>' +
+      '<td><span class="status-badge ' + (s.paymentMethod==='cash'?'active':s.paymentMethod==='credit'?'unpaid':'pending') + '">' + escHtml(s.paymentMethod) + '</span></td>' +
+      '<td>' + escHtml(s.customerName || '-') + '</td>' +
+      '<td>' + escHtml(s.cashierName || '-') + '</td>' +
+      '<td>' +
+        '<button class="btn-icon" onclick="App.viewSaleReceipt(' + origIdx + ')" title="View Receipt"><i class="fas fa-receipt"></i></button>' +
+        '<button class="btn-icon dng" onclick="App.deleteSale(\'' + s.id + '\')" title="Delete"><i class="fas fa-trash"></i></button>' +
+      '</td></tr>';
+  }).join('') : '<tr><td colspan="8" class="empty-s"><i class="fas fa-inbox"></i><p>No sales found</p></td></tr>';
+};
+
+App.deleteSale = function(id) {
+  confirm('Are you sure you want to delete this sale record? Stock will NOT be restored.', async function() {
+    try {
+      await db.collection('sales').doc(id).delete();
+      toast('Sale deleted');
+      await App.loadSales(App.currentBusinessId);
+      App.renderSales();
+    } catch (err) {
+      console.error('[Sales] Delete failed:', err);
+      toast('Failed to delete sale', 'e');
+    }
+  });
+};
+
+/* ============================================================
+   CUSTOMERS CRUD
+=========================================================== */
+App.renderCustomers = function() {
+  var searchEl = document.getElementById('custSearch');
+  var search = searchEl ? (searchEl.value || '').toLowerCase() : '';
+  var filtered = App.allCustomers;
+  if (search) filtered = filtered.filter(function(c) {
+    return (c.name || '').toLowerCase().includes(search) || (c.phone || '').includes(search) || (c.email || '').toLowerCase().includes(search);
+  });
+
+  var tbody = document.getElementById('custTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = filtered.length ? filtered.map(function(c) {
+    var totalPurchases = App.allSales.filter(function(s){return s.customerId===c.id;}).reduce(function(s,x){return s+x.total;}, 0);
+    var totalDebt = App.allDebts.filter(function(d){return d.customerId===c.id;}).reduce(function(s,d){return s+(d.amount||0)-(d.paid||0);}, 0);
+    return '<tr>' +
+      '<td><strong>' + escHtml(c.name) + '</strong></td>' +
+      '<td>' + escHtml(c.phone || '-') + '</td>' +
+      '<td>' + escHtml(c.email || '-') + '</td>' +
+      '<td>' + fmt(totalPurchases) + '</td>' +
+      '<td style="color:' + (totalDebt > 0 ? 'var(--danger)' : 'var(--success)') + ';font-weight:700">' + fmt(totalDebt) + '</td>' +
+      '<td>' +
+        '<button class="btn-icon" onclick="App.editCustomer(\'' + c.id + '\')" title="Edit"><i class="fas fa-pen"></i></button>' +
+        '<button class="btn-icon dng" onclick="App.deleteCustomer(\'' + c.id + '\')" title="Delete"><i class="fas fa-trash"></i></button>' +
+      '</td></tr>';
+  }).join('') : '<tr><td colspan="6" class="empty-s"><i class="fas fa-users"></i><p>No customers found</p></td></tr>';
+};
+
+App.resetCustomerForm = function() {
+  var title = document.getElementById('custModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-user" style="color:var(--primary2);margin-right:6px"></i>Add Customer';
+  ['custEditId','custName','custPhone','custEmail','custAddress'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+};
+
+App.editCustomer = function(id) {
+  var c = App.allCustomers.find(function(x){return x.id===id;});
+  if (!c) return;
+  var title = document.getElementById('custModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-pen" style="color:var(--warning);margin-right:6px"></i>Edit Customer';
+  var fields = {custEditId: id, custName: c.name||'', custPhone: c.phone||'', custEmail: c.email||'', custAddress: c.address||''};
+  for (var k in fields) { var el = document.getElementById(k); if (el) el.value = fields[k]; }
+  App.openModal('customerModal');
+};
+
+App.saveCustomer = async function() {
+  var editId = document.getElementById('custEditId').value;
+  var name = (document.getElementById('custName').value || '').trim();
+  var phone = (document.getElementById('custPhone').value || '').trim();
+  var email = (document.getElementById('custEmail').value || '').trim();
+  var address = (document.getElementById('custAddress').value || '').trim();
+  if (!name) return toast('Customer name is required', 'e');
+
+  var btn = document.getElementById('saveCustBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    var data = {name: name, phone: phone, email: email, address: address, businessId: App.currentBusinessId, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
+    if (editId) { await db.collection('customers').doc(editId).update(data); toast('Customer updated'); }
+    else { data.createdAt = firebase.firestore.FieldValue.serverTimestamp(); await db.collection('customers').add(data); toast('Customer added'); }
+    App.closeModal('customerModal');
+    await App.loadCustomers(App.currentBusinessId);
+    App.renderCustomers();
+  } catch (err) {
+    console.error('[Customers] Save failed:', err);
+    toast(err.message || 'Failed to save customer', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Customer'; }
+  }
+};
+
+App.deleteCustomer = function(id) {
+  var c = App.allCustomers.find(function(x){return x.id===id;});
+  confirm('Delete customer "' + (c ? c.name : '') + '"? This will not delete their sales or debt records.', async function() {
+    try {
+      await db.collection('customers').doc(id).delete();
+      toast('Customer deleted');
+      await App.loadCustomers(App.currentBusinessId);
+      App.renderCustomers();
+    } catch (err) {
+      console.error('[Customers] Delete failed:', err);
+      toast('Failed to delete customer', 'e');
+    }
+  });
+};
+
+/* ============================================================
+   SUPPLIERS CRUD
+=========================================================== */
+App.renderSuppliers = function() {
+  var searchEl = document.getElementById('suppSearch');
+  var search = searchEl ? (searchEl.value || '').toLowerCase() : '';
+  var filtered = App.allSuppliers;
+  if (search) filtered = filtered.filter(function(s) {
+    return (s.name || '').toLowerCase().includes(search) || (s.phone || '').includes(search);
+  });
+
+  var tbody = document.getElementById('suppTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = filtered.length ? filtered.map(function(s) {
+    return '<tr>' +
+      '<td><strong>' + escHtml(s.name) + '</strong></td>' +
+      '<td>' + escHtml(s.phone || '-') + '</td>' +
+      '<td>' + escHtml(s.email || '-') + '</td>' +
+      '<td>' + escHtml(s.address || '-') + '</td>' +
+      '<td>' + (s.productsSupplied || 0) + '</td>' +
+      '<td>' +
+        '<button class="btn-icon" onclick="App.editSupplier(\'' + s.id + '\')" title="Edit"><i class="fas fa-pen"></i></button>' +
+        '<button class="btn-icon dng" onclick="App.deleteSupplier(\'' + s.id + '\')" title="Delete"><i class="fas fa-trash"></i></button>' +
+      '</td></tr>';
+  }).join('') : '<tr><td colspan="6" class="empty-s"><i class="fas fa-truck"></i><p>No suppliers found</p></td></tr>';
+};
+
+App.resetSupplierForm = function() {
+  var title = document.getElementById('suppModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-truck" style="color:var(--primary2);margin-right:6px"></i>Add Supplier';
+  ['suppEditId','suppName','suppPhone','suppEmail','suppAddress'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+};
+
+App.editSupplier = function(id) {
+  var s = App.allSuppliers.find(function(x){return x.id===id;});
+  if (!s) return;
+  var title = document.getElementById('suppModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-pen" style="color:var(--warning);margin-right:6px"></i>Edit Supplier';
+  var fields = {suppEditId: id, suppName: s.name||'', suppPhone: s.phone||'', suppEmail: s.email||'', suppAddress: s.address||''};
+  for (var k in fields) { var el = document.getElementById(k); if (el) el.value = fields[k]; }
+  App.openModal('supplierModal');
+};
+
+App.saveSupplier = async function() {
+  var editId = document.getElementById('suppEditId').value;
+  var name = (document.getElementById('suppName').value || '').trim();
+  var phone = (document.getElementById('suppPhone').value || '').trim();
+  var email = (document.getElementById('suppEmail').value || '').trim();
+  var address = (document.getElementById('suppAddress').value || '').trim();
+  if (!name) return toast('Supplier name is required', 'e');
+
+  var btn = document.getElementById('saveSuppBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    var data = {name: name, phone: phone, email: email, address: address, businessId: App.currentBusinessId, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
+    if (editId) { await db.collection('suppliers').doc(editId).update(data); toast('Supplier updated'); }
+    else { data.productsSupplied = 0; data.createdAt = firebase.firestore.FieldValue.serverTimestamp(); await db.collection('suppliers').add(data); toast('Supplier added'); }
+    App.closeModal('supplierModal');
+    await App.loadSuppliers(App.currentBusinessId);
+    App.renderSuppliers();
+  } catch (err) {
+    console.error('[Suppliers] Save failed:', err);
+    toast(err.message || 'Failed to save supplier', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Supplier'; }
+  }
+};
+
+App.deleteSupplier = function(id) {
+  confirm('Delete this supplier?', async function() {
+    try {
+      await db.collection('suppliers').doc(id).delete();
+      toast('Supplier deleted');
+      await App.loadSuppliers(App.currentBusinessId);
+      App.renderSuppliers();
+    } catch (err) {
+      console.error('[Suppliers] Delete failed:', err);
+      toast('Failed to delete supplier', 'e');
+    }
+  });
+};
+
+/* ============================================================
+   DEBTS CRUD
+=========================================================== */
+App.renderDebts = function() {
+  var searchEl = document.getElementById('debtSearch');
+  var search = searchEl ? (searchEl.value || '').toLowerCase() : '';
+  var filtered = App.allDebts;
+  if (search) filtered = filtered.filter(function(d) { return (d.customerName || '').toLowerCase().includes(search); });
+  if (App.debtFilter === 'paid') filtered = filtered.filter(function(d) { return (d.paid||0) >= (d.amount||0); });
+  else if (App.debtFilter === 'unpaid') filtered = filtered.filter(function(d) { return (d.paid||0) < (d.amount||0); });
+
+  var totalOutstanding = App.allDebts.reduce(function(s,d){return s+(d.amount||0)-(d.paid||0);}, 0);
+  var alertBanner = document.getElementById('debtAlertBanner');
+  if (alertBanner) {
+    if (totalOutstanding > 0) {
+      alertBanner.style.display = 'flex';
+      var alertText = document.getElementById('debtAlertText');
+      if (alertText) alertText.textContent = 'Total outstanding debt: ' + fmt(totalOutstanding) + ' across ' + App.allDebts.filter(function(d){return (d.paid||0)<(d.amount||0);}).length + ' records';
+    } else { alertBanner.style.display = 'none'; }
+  }
+
+  var filterEl = document.getElementById('debtFilter');
+  if (filterEl) {
+    filterEl.innerHTML = '<button class="pf-btn ' + (App.debtFilter==='all'?'active':'') + '" onclick="App.debtFilter=\'all\';App.renderDebts()">All</button>' +
+      '<button class="pf-btn ' + (App.debtFilter==='unpaid'?'active':'') + '" onclick="App.debtFilter=\'unpaid\';App.renderDebts()">Unpaid</button>' +
+      '<button class="pf-btn ' + (App.debtFilter==='paid'?'active':'') + '" onclick="App.debtFilter=\'paid\';App.renderDebts()">Paid</button>';
+  }
+
+  var debtCustSel = document.getElementById('debtCustomer');
+  if (debtCustSel) {
+    var currentVal = debtCustSel.value;
+    debtCustSel.innerHTML = '<option value="">Select customer...</option>' + App.allCustomers.map(function(c){return '<option value="' + c.id + '">' + escHtml(c.name) + '</option>';}).join('');
+    debtCustSel.value = currentVal;
+  }
+
+  var tbody = document.getElementById('debtTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = filtered.length ? filtered.map(function(d) {
+    var balance = (d.amount||0) - (d.paid||0);
+    var isPaid = balance <= 0;
+    return '<tr>' +
+      '<td><strong>' + escHtml(d.customerName || '-') + '</strong></td>' +
+      '<td>' + fmt(d.amount) + '</td><td>' + fmt(d.paid) + '</td>' +
+      '<td style="color:' + (isPaid ? 'var(--success)' : 'var(--danger)') + ';font-weight:700">' + fmt(balance) + '</td>' +
+      '<td>' + formatDateShort(d.createdAt) + '</td>' +
+      '<td><span class="status-badge ' + (isPaid ? 'paid' : 'unpaid') + '">' + (isPaid ? 'Paid' : 'Unpaid') + '</span></td>' +
+      '<td>' +
+        (!isPaid ? '<button class="btn btn-xs btn-s" onclick="App.openPayDebt(\'' + d.id + '\')" title="Record Payment"><i class="fas fa-money-bill-wave"></i> Pay</button>' : '') +
+        '<button class="btn-icon dng" onclick="App.deleteDebt(\'' + d.id + '\')" title="Delete"><i class="fas fa-trash"></i></button>' +
+      '</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="empty-s"><i class="fas fa-hand-holding-dollar"></i><p>No debts found</p></td></tr>';
+};
+
+App.resetDebtForm = function() {
+  ['debtEditId','debtAmount','debtNote'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  var sel = document.getElementById('debtCustomer'); if (sel) sel.value = '';
+};
+
+App.saveDebt = async function() {
+  var customerId = document.getElementById('debtCustomer').value;
+  var amount = parseFloat(document.getElementById('debtAmount').value) || 0;
+  var note = (document.getElementById('debtNote').value || '').trim();
+  if (!customerId) return toast('Please select a customer', 'e');
+  if (amount <= 0) return toast('Amount must be greater than 0', 'e');
+
+  var cust = App.allCustomers.find(function(c){return c.id===customerId;});
+  var btn = document.getElementById('saveDebtBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    await db.collection('debts').add({
+      businessId: App.currentBusinessId, customerId: customerId,
+      customerName: cust ? cust.name : '', amount: amount, paid: 0,
+      note: note, status: 'unpaid', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Debt recorded');
+    App.closeModal('debtModal');
+    await App.loadDebts(App.currentBusinessId);
+    App.renderDebts();
+  } catch (err) {
+    console.error('[Debts] Save failed:', err);
+    toast(err.message || 'Failed to save debt', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Debt'; }
+  }
+};
+
+App.openPayDebt = function(id) {
+  var d = App.allDebts.find(function(x){return x.id===id;});
+  if (!d) return;
+  var elId = document.getElementById('payDebtId'); if (elId) elId.value = id;
+  var elBal = document.getElementById('payDebtBalance'); if (elBal) elBal.textContent = fmt((d.amount||0) - (d.paid||0));
+  var elAmt = document.getElementById('payDebtAmount'); if (elAmt) elAmt.value = '';
+  App.openModal('payDebtModal');
+};
+
+App.payDebt = async function() {
+  var id = document.getElementById('payDebtId').value;
+  var amount = parseFloat(document.getElementById('payDebtAmount').value) || 0;
+  if (amount <= 0) return toast('Payment amount must be greater than 0', 'e');
+  var d = App.allDebts.find(function(x){return x.id===id;});
+  if (!d) return;
+  var balance = (d.amount||0) - (d.paid||0);
+  if (amount > balance) return toast('Payment exceeds outstanding balance', 'w');
+
+  var btn = document.getElementById('payDebtBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; }
+
+  try {
+    var newPaid = (d.paid||0) + amount;
+    var isPaid = newPaid >= (d.amount||0);
+    await db.collection('debts').doc(id).update({
+      paid: newPaid, status: isPaid ? 'paid' : 'unpaid',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Payment recorded');
+    App.closeModal('payDebtModal');
+    await App.loadDebts(App.currentBusinessId);
+    App.renderDebts();
+  } catch (err) {
+    console.error('[Debts] Pay failed:', err);
+    toast(err.message || 'Failed to record payment', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Record Payment'; }
+  }
+};
+
+App.deleteDebt = function(id) {
+  confirm('Delete this debt record?', async function() {
+    try {
+      await db.collection('debts').doc(id).delete();
+      toast('Debt deleted');
+      await App.loadDebts(App.currentBusinessId);
+      App.renderDebts();
+    } catch (err) {
+      console.error('[Debts] Delete failed:', err);
+      toast('Failed to delete debt', 'e');
+    }
+  });
+};
+
+/* ============================================================
+   EXPENSES CRUD
+=========================================================== */
+App.renderExpenses = function() {
+  var searchEl = document.getElementById('expSearch');
+  var search = searchEl ? (searchEl.value || '').toLowerCase() : '';
+  var filtered = App.allExpenses;
+  if (search) filtered = filtered.filter(function(e) { return (e.description||'').toLowerCase().includes(search) || (e.category||'').toLowerCase().includes(search); });
+
+  var tbody = document.getElementById('expTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = filtered.length ? filtered.map(function(e) {
+    return '<tr>' +
+      '<td>' + formatDateShort(e.createdAt) + '</td>' +
+      '<td><span class="status-badge pending">' + escHtml(e.category) + '</span></td>' +
+      '<td>' + escHtml(e.description || '-') + '</td>' +
+      '<td style="color:var(--danger);font-weight:700">' + fmt(e.amount) + '</td>' +
+      '<td>' + escHtml(e.recordedByName || '-') + '</td>' +
+      '<td><button class="btn-icon dng" onclick="App.deleteExpense(\'' + e.id + '\')" title="Delete"><i class="fas fa-trash"></i></button></td>' +
+    '</tr>';
+  }).join('') : '<tr><td colspan="6" class="empty-s"><i class="fas fa-receipt"></i><p>No expenses found</p></td></tr>';
+};
+
+App.resetExpenseForm = function() {
+  ['expEditId','expAmount','expDesc'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  var sel = document.getElementById('expCategory'); if (sel) sel.value = 'rent';
+};
+
+App.saveExpense = async function() {
+  var category = document.getElementById('expCategory').value;
+  var amount = parseFloat(document.getElementById('expAmount').value) || 0;
+  var description = (document.getElementById('expDesc').value || '').trim();
+  if (amount <= 0) return toast('Amount must be greater than 0', 'e');
+
+  var btn = document.getElementById('saveExpBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    await db.collection('expenses').add({
+      businessId: App.currentBusinessId, category: category, amount: amount,
+      description: description, recordedBy: App.currentUser ? App.currentUser.uid : '',
+      recordedByName: App.currentUserData ? App.currentUserData.name || '' : 'Unknown',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Expense recorded');
+    App.closeModal('expenseModal');
+    await App.loadExpenses(App.currentBusinessId);
+    App.renderExpenses();
+  } catch (err) {
+    console.error('[Expenses] Save failed:', err);
+    toast(err.message || 'Failed to save expense', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Expense'; }
+  }
+};
+
+App.deleteExpense = function(id) {
+  confirm('Delete this expense record?', async function() {
+    try {
+      await db.collection('expenses').doc(id).delete();
+      toast('Expense deleted');
+      await App.loadExpenses(App.currentBusinessId);
+      App.renderExpenses();
+    } catch (err) {
+      console.error('[Expenses] Delete failed:', err);
+      toast('Failed to delete expense', 'e');
+    }
+  });
+};
+
+/* ============================================================
+   STAFF CRUD
+=========================================================== */
+App.renderStaff = function() {
+  var searchEl = document.getElementById('staffSearch');
+  var search = searchEl ? (searchEl.value || '').toLowerCase() : '';
+  var filtered = App.allStaff;
+  if (search) filtered = filtered.filter(function(s) { return (s.name||'').toLowerCase().includes(search) || (s.email||'').toLowerCase().includes(search); });
+
+  var roleColors = {manager:'background:var(--warning-bg);color:var(--warning)',storekeeper:'background:var(--info-bg);color:var(--info)',cashier:'background:var(--success-bg);color:var(--success)',seller:'background:var(--primary-bg);color:var(--primary2)'};
+  var avColors = {manager:'background:linear-gradient(135deg,#f59e0b,#fbbf24)',storekeeper:'background:linear-gradient(135deg,#3b82f6,#60a5fa)',cashier:'background:linear-gradient(135deg,#10b981,#34d399)',seller:'background:linear-gradient(135deg,#6366f1,#818cf8)'};
+
+  var grid = document.getElementById('staffGrid');
+  if (!grid) return;
+
+  grid.innerHTML = filtered.length ? filtered.map(function(s) {
+    return '<div class="emp-card">' +
+      '<div class="emp-card-head"><div class="emp-av" style="' + (avColors[s.role]||'') + '">' + getInitials(s.name) + '</div><div><h4>' + escHtml(s.name) + '</h4><p>' + escHtml(s.email||'') + '</p></div></div>' +
+      '<div class="emp-card-body">' +
+        '<span class="emp-tag role" style="' + (roleColors[s.role]||'') + '">' + escHtml(s.role) + '</span>' +
+        '<span class="emp-tag status ' + (s.status==='inactive'?'inactive':'') + '">' + (s.status||'active') + '</span>' +
+        (s.phone ? '<span class="emp-tag" style="background:var(--bg3);color:var(--text3)">' + escHtml(s.phone) + '</span>' : '') +
+      '</div>' +
+      '<div class="emp-card-foot">' +
+        '<button class="btn btn-xs btn-o" onclick="App.editStaff(\'' + s.id + '\')"><i class="fas fa-pen"></i> Edit</button>' +
+        '<button class="btn btn-xs btn-d" onclick="App.deleteStaff(\'' + s.id + '\')"><i class="fas fa-trash"></i> Delete</button>' +
+      '</div></div>';
+  }).join('') : '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-users-gear"></i><p>No employees found</p></div>';
+};
+
+App.resetStaffForm = function() {
+  var title = document.getElementById('staffModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-user-plus" style="color:var(--primary2);margin-right:6px"></i>Add Employee';
+  ['staffEditId','staffName','staffEmail','staffPhone','staffPass'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  var rSel = document.getElementById('staffRole'); if (rSel) rSel.value = 'cashier';
+  var sSel = document.getElementById('staffStatus'); if (sSel) sSel.value = 'active';
+  var pEl = document.getElementById('staffPass'); if (pEl) pEl.placeholder = 'Min 6 characters';
+};
+
+App.editStaff = function(id) {
+  var s = App.allStaff.find(function(x){return x.id===id;});
+  if (!s) return;
+  var title = document.getElementById('staffModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-pen" style="color:var(--warning);margin-right:6px"></i>Edit Employee';
+  var fields = {staffEditId: id, staffName: s.name||'', staffEmail: s.email||'', staffPhone: s.phone||''};
+  for (var k in fields) { var el = document.getElementById(k); if (el) el.value = fields[k]; }
+  var rSel = document.getElementById('staffRole'); if (rSel) rSel.value = s.role||'cashier';
+  var sSel = document.getElementById('staffStatus'); if (sSel) sSel.value = s.status||'active';
+  var pEl = document.getElementById('staffPass'); if (pEl) { pEl.value = ''; pEl.placeholder = 'Leave blank to keep current'; }
+  App.openModal('staffModal');
+};
+
+App.saveStaff = async function() {
+  var editId = document.getElementById('staffEditId').value;
+  var name = (document.getElementById('staffName').value || '').trim();
+  var email = (document.getElementById('staffEmail').value || '').trim();
+  var phone = (document.getElementById('staffPhone').value || '').trim();
+  var role = document.getElementById('staffRole').value;
+  var password = document.getElementById('staffPass').value;
+  var status = document.getElementById('staffStatus').value;
+
+  if (!name) return toast('Employee name is required', 'e');
+  if (!email) return toast('Email is required', 'e');
+  if (!editId && password.length < 6) return toast('Password must be at least 6 characters', 'e');
+
+  var btn = document.getElementById('saveStaffBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    if (editId) {
+      var data = {name: name, email: email, phone: phone, role: role, status: status, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
+      await db.collection('staff').doc(editId).update(data);
+      if (password) {
+        var existing = App.allStaff.find(function(s){return s.id===editId;});
+        if (existing && existing.userId) {
+          try { await auth.updateUser(existing.userId, {password: password}); } catch(pe) { console.warn('[Staff] Could not update auth password:', pe); }
+        }
+      }
+      toast('Employee updated');
+    } else {
+      // WARNING: createUserWithEmailAndPassword changes the auth state to the new user.
+      // We must handle this carefully to avoid locking the owner out.
+      var cred = await auth.createUserWithEmailAndPassword(email, password);
+      await db.collection('staff').add({
+        businessId: App.currentBusinessId, userId: cred.user.uid,
+        name: name, email: email, phone: phone, role: role, status: status,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      // Fix auth context: sign out the new user, then re-auth the owner
+      await auth.signOut();
+      if (App._ownerCredentials) {
+        try { await auth.signInWithEmailAndPassword(App._ownerCredentials.email, App._ownerCredentials.password); }
+        catch(reauthErr) { console.warn('[Staff] Could not re-auth owner automatically:', reauthErr); }
+      }
+      toast('Employee created. You may need to log back in if issues occur.');
+    }
+    App.closeModal('staffModal');
+    await App.loadStaff(App.currentBusinessId);
+    App.renderStaff();
+  } catch (err) {
+    console.error('[Staff] Save failed:', err);
+    toast(err.message || 'Failed to save employee', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Employee'; }
+  }
+};
+
+App.deleteStaff = function(id) {
+  var s = App.allStaff.find(function(x){return x.id===id;});
+  confirm('Delete employee "' + (s ? s.name : '') + '"? Their auth account will also be deleted.', async function() {
+    try {
+      var staff = App.allStaff.find(function(x){return x.id===id;});
+      if (staff && staff.userId) {
+        try { await auth.deleteUser(staff.userId); } catch(pe) { console.warn('[Staff] Could not delete auth user:', pe); }
+      }
+      await db.collection('staff').doc(id).delete();
+      toast('Employee deleted');
+      await App.loadStaff(App.currentBusinessId);
+      App.renderStaff();
+    } catch (err) {
+      console.error('[Staff] Delete failed:', err);
+      toast('Failed to delete employee', 'e');
+    }
+  });
+};
+
+/* ============================================================
+   ADVERTISEMENTS CRUD
+=========================================================== */
+App.renderAds = function() {
+  var searchEl = document.getElementById('adSearch');
+  var search = searchEl ? (searchEl.value || '').toLowerCase() : '';
+  var filtered = App.allAds;
+  if (search) filtered = filtered.filter(function(a) { return (a.title||'').toLowerCase().includes(search) || (a.description||'').toLowerCase().includes(search); });
+
+  var adProdSel = document.getElementById('adProduct');
+  if (adProdSel) {
+    adProdSel.innerHTML = '<option value="">None</option>' + App.allProducts.map(function(p){return '<option value="' + p.id + '">' + escHtml(p.name) + '</option>';}).join('');
+  }
+
+  var tbody = document.getElementById('adTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = filtered.length ? filtered.map(function(a) {
+    return '<tr>' +
+      '<td><strong>' + escHtml(a.title) + '</strong></td>' +
+      '<td>' + escHtml(a.productName || '-') + '</td>' +
+      '<td><span class="status-badge ' + (a.status==='active'?'active':a.status==='suspended'?'suspended':'pending') + '">' + escHtml(a.status) + '</span></td>' +
+      '<td><span class="status-badge ' + (a.featured?'featured':'pending') + '">' + (a.featured?'Featured':'Normal') + '</span></td>' +
+      '<td>' + formatDateShort(a.createdAt) + '</td>' +
+      '<td>' +
+        '<button class="btn-icon" onclick="App.editAd(\'' + a.id + '\')" title="Edit"><i class="fas fa-pen"></i></button>' +
+        '<button class="btn-icon dng" onclick="App.deleteAd(\'' + a.id + '\')" title="Delete"><i class="fas fa-trash"></i></button>' +
+      '</td></tr>';
+  }).join('') : '<tr><td colspan="6" class="empty-s"><i class="fas fa-bullhorn"></i><p>No advertisements found</p></td></tr>';
+};
+
+App.resetAdForm = function() {
+  var title = document.getElementById('adModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-bullhorn" style="color:var(--warning);margin-right:6px"></i>Create Advertisement';
+  ['adEditId','adTitle','adDesc'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  var pSel = document.getElementById('adProduct'); if (pSel) pSel.value = '';
+  var sSel = document.getElementById('adStatus'); if (sSel) sSel.value = 'active';
+  var fSel = document.getElementById('adFeatured'); if (fSel) fSel.value = 'false';
+  var prev = document.getElementById('adImgPreview'); if (prev) prev.style.display = 'none';
+  App.adImageData = null;
+};
+
+App.handleAdImage = function(input) {
+  var file = input.files ? input.files[0] : null;
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    App.adImageData = e.target.result;
+    var prev = document.getElementById('adImgPreview');
+    if (prev) { prev.src = e.target.result; prev.style.display = 'block'; }
+  };
+  reader.readAsDataURL(file);
+};
+
+App.editAd = function(id) {
+  var a = App.allAds.find(function(x){return x.id===id;});
+  if (!a) return;
+  var title = document.getElementById('adModalTitle');
+  if (title) title.innerHTML = '<i class="fas fa-pen" style="color:var(--warning);margin-right:6px"></i>Edit Advertisement';
+  var fields = {adEditId: id, adTitle: a.title||'', adDesc: a.description||''};
+  for (var k in fields) { var el = document.getElementById(k); if (el) el.value = fields[k]; }
+  var pSel = document.getElementById('adProduct'); if (pSel) pSel.value = a.productId||'';
+  var sSel = document.getElementById('adStatus'); if (sSel) sSel.value = a.status||'active';
+  var fSel = document.getElementById('adFeatured'); if (fSel) fSel.value = a.featured?'true':'false';
+  if (a.imageUrl) {
+    var prev = document.getElementById('adImgPreview');
+    if (prev) { prev.src = a.imageUrl; prev.style.display = 'block'; }
+    App.adImageData = null;
+  }
+  App.openModal('adModal');
+};
+
+App.saveAd = async function() {
+  var editId = document.getElementById('adEditId').value;
+  var title = (document.getElementById('adTitle').value || '').trim();
+  var description = (document.getElementById('adDesc').value || '').trim();
+  var productId = document.getElementById('adProduct').value;
+  var status = document.getElementById('adStatus').value;
+  var featured = document.getElementById('adFeatured').value === 'true';
+  if (!title) return toast('Ad title is required', 'e');
+
+  var btn = document.getElementById('saveAdBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    var prod = App.allProducts.find(function(p){return p.id===productId;});
+    var data = {businessId: App.currentBusinessId, title: title, description: description, productId: productId||null, productName: prod?prod.name:'', status: status, featured: featured, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
+    if (App.adImageData) data.imageUrl = App.adImageData;
+    if (editId) { await db.collection('advertisements').doc(editId).update(data); toast('Advertisement updated'); }
+    else { data.createdAt = firebase.firestore.FieldValue.serverTimestamp(); await db.collection('advertisements').add(data); toast('Advertisement created'); }
+    App.closeModal('adModal');
+    await App.loadAds(App.currentBusinessId);
+    App.renderAds();
+  } catch (err) {
+    console.error('[Ads] Save failed:', err);
+    toast(err.message || 'Failed to save advertisement', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Advertisement'; }
+  }
+};
+
+App.deleteAd = function(id) {
+  confirm('Delete this advertisement?', async function() {
+    try {
+      await db.collection('advertisements').doc(id).delete();
+      toast('Advertisement deleted');
+      await App.loadAds(App.currentBusinessId);
+      App.renderAds();
+    } catch (err) {
+      console.error('[Ads] Delete failed:', err);
+      toast('Failed to delete advertisement', 'e');
+    }
+  });
+};
+
+/* ============================================================
+   REPORTS
+=========================================================== */
+App.renderReports = function() {
+  var totalRevenue = App.allSales.reduce(function(s,x){return s+(x.total||0);}, 0);
+  var totalCost = App.allSales.reduce(function(s,x){return s+(x.items||[]).reduce(function(ss,i){return ss+((i.cost||0)*(i.qty||0));},0);}, 0);
+  var totalExpenses = App.allExpenses.reduce(function(s,x){return s+(x.amount||0);}, 0);
+  var grossProfit = totalRevenue - totalCost;
+  var netProfit = grossProfit - totalExpenses;
+  var totalItemsSold = App.allSales.reduce(function(s,x){return s+(x.items||[]).reduce(function(ss,i){return ss+(i.qty||0);},0);}, 0);
+  var avgSale = App.allSales.length > 0 ? totalRevenue / App.allSales.length : 0;
+
+  var metricsEl = document.getElementById('reportMetrics');
+  if (metricsEl) {
+    metricsEl.innerHTML = '<div class="mc g"><div class="mc-icon"><i class="fas fa-money-bill-wave"></i></div><h3>' + fmt(totalRevenue) + '</h3><p>Total Revenue</p></div>' +
+      '<div class="mc pu"><div class="mc-icon"><i class="fas fa-chart-line"></i></div><h3>' + fmt(grossProfit) + '</h3><p>Gross Profit</p></div>' +
+      '<div class="mc b"><div class="mc-icon"><i class="fas fa-coins"></i></div><h3>' + fmt(netProfit) + '</h3><p>Net Profit</p></div>' +
+      '<div class="mc r"><div class="mc-icon"><i class="fas fa-receipt"></i></div><h3>' + fmt(totalExpenses) + '</h3><p>Total Expenses</p></div>' +
+      '<div class="mc a"><div class="mc-icon"><i class="fas fa-box"></i></div><h3>' + totalItemsSold + '</h3><p>Items Sold</p></div>' +
+      '<div class="mc g"><div class="mc-icon"><i class="fas fa-calculator"></i></div><h3>' + fmt(avgSale) + '</h3><p>Avg Sale Value</p></div>';
+  }
+
+  var container = document.getElementById('reportCharts');
+  if (container) {
+    container.innerHTML = '<div class="ch-c"><h4><i class="fas fa-chart-bar"></i> Revenue vs Expenses (Last 7 Days)</h4><div class="ch-box"><canvas id="reportRevExpChart"></canvas></div></div>' +
+      '<div class="ch-c"><h4><i class="fas fa-chart-doughnut"></i> Sales by Payment Method</h4><div class="ch-box"><canvas id="reportPayChart"></canvas></div></div>';
+    
+    if (App.charts.repRevExp) { App.charts.repRevExp.destroy(); App.charts.repRevExp = null; }
+    if (App.charts.repPay) { App.charts.repPay.destroy(); App.charts.repPay = null; }
+
+    var days = [];
+    for (var i=6; i>=0; i--) {
+      var d = new Date(); d.setDate(d.getDate()-i);
+      var key = d.toISOString().split('T')[0];
+      var label = d.toLocaleDateString('en-GB',{weekday:'short'});
+      var dayRev = App.allSales.filter(function(s){if(!s.createdAt)return false;var sd=s.createdAt.toDate?s.createdAt.toDate():new Date(s.createdAt);return sd.toISOString().split('T')[0]===key;}).reduce(function(s,x){return s+x.total;},0);
+      var dayExp = App.allExpenses.filter(function(e){if(!e.createdAt)return false;var ed=e.createdAt.toDate?e.createdAt.toDate():new Date(e.createdAt);return ed.toISOString().split('T')[0]===key;}).reduce(function(s,x){return s+x.amount;},0);
+      days.push({label:label, rev:dayRev, exp:dayExp});
+    }
+
+    var chartOpts = {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:'#9494a8',font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#9494a8',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#9494a8',font:{size:10}}}}};
+    
+    App.charts.repRevExp = new Chart(document.getElementById('reportRevExpChart'),{type:'bar',data:{labels:days.map(function(d){return d.label;}),datasets:[{label:'Revenue',data:days.map(function(d){return d.rev;}),backgroundColor:'rgba(16,185,129,.6)',borderRadius:4,borderSkipped:false},{label:'Expenses',data:days.map(function(d){return d.exp;}),backgroundColor:'rgba(239,68,68,.6)',borderRadius:4,borderSkipped:false}]},options:chartOpts});
+
+    var payMethods = {};
+    App.allSales.forEach(function(s){payMethods[s.paymentMethod||'cash']=(payMethods[s.paymentMethod||'cash']||0)+s.total;});
+    var payLabels = Object.keys(payMethods);
+    var payValues = Object.values(payMethods);
+    var payColors = ['#10b981','#3b82f6','#f59e0b','#ef4444'];
+
+    App.charts.repPay = new Chart(document.getElementById('reportPayChart'),{type:'doughnut',data:{labels:payLabels.length?payLabels:['No data'],datasets:[{data:payValues.length?payValues:[1],backgroundColor:payLabels.length?payColors.slice(0,payLabels.length):['#232330'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#9494a8',font:{size:10},padding:10,usePointStyle:true}}},cutout:'65%'}});
+  }
+
+  // Top Products
+  var prodSales = {};
+  App.allSales.forEach(function(s){(s.items||[]).forEach(function(i){if(!prodSales[i.productId])prodSales[i.productId]={name:i.name,qty:0,revenue:0,cost:0};prodSales[i.productId].qty+=i.qty;prodSales[i.productId].revenue+=i.subtotal;prodSales[i.productId].cost+=(i.cost||0)*i.qty;});});
+  var topProds = Object.values(prodSales).sort(function(a,b){return b.revenue-a.revenue;}).slice(0,10);
+  var topProdEl = document.getElementById('reportTopProducts');
+  if (topProdEl) {
+    topProdEl.innerHTML = topProds.length ? topProds.map(function(p){return '<tr><td>' + escHtml(p.name) + '</td><td>' + p.qty + '</td><td style="color:var(--success)">' + fmt(p.revenue) + '</td><td style="color:' + (p.revenue-p.cost>=0?'var(--success)':'var(--danger)') + '">' + fmt(p.revenue-p.cost) + '</td></tr>';}).join('') : '<tr><td colspan="4" class="empty-s"><p>No data yet</p></td></tr>';
+  }
+
+  // Top Customers
+  var custSales = {};
+  App.allSales.forEach(function(s){if(!s.customerId||s.customerName==='Walk-in')return;var cid=s.customerId;if(!custSales[cid])custSales[cid]={name:s.customerName,count:0,total:0};custSales[cid].count++;custSales[cid].total+=s.total;});
+  var topCusts = Object.values(custSales).sort(function(a,b){return b.total-a.total;}).slice(0,10);
+  var topCustEl = document.getElementById('reportTopCustomers');
+  if (topCustEl) {
+    topCustEl.innerHTML = topCusts.length ? topCusts.map(function(c){return '<tr><td>' + escHtml(c.name) + '</td><td>' + c.count + '</td><td style="color:var(--success)">' + fmt(c.total) + '</td></tr>';}).join('') : '<tr><td colspan="3" class="empty-s"><p>No customer data yet</p></td></tr>';
+  }
+};
+
+/* ============================================================
+   SETTINGS
+=========================================================== */
+App.loadSettings = function() {
+  var biz = App.currentBusiness;
+  if (!biz) return;
+  var fields = {setBizName: biz.name||'-', setBizType: biz.type||'-', setBizAddr: biz.address||'-', setBizOwner: biz.ownerName||'-', setBizCreated: biz.createdAt ? formatDate(biz.createdAt) : '-'};
+  for (var k in fields) { var el = document.getElementById(k); if (el) el.textContent = fields[k]; }
+  
+  var inputs = {setBizNameInput: biz.name||'', setBizTypeInput: biz.type||'retail', setBizAddrInput: biz.address||'', setCurrencyInput: biz.currency||'TZS', setTaxInput: biz.taxRate||0, setReceiptFooter: biz.receiptFooter||''};
+  for (var k2 in inputs) { var el2 = document.getElementById(k2); if (el2) el2.value = inputs[k2]; }
+};
+
+App.saveSettings = async function() {
+  if (App.currentRole !== 'owner') return toast('Only the business owner can change settings', 'e');
+  var btn = document.getElementById('saveSettingsBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    var data = {
+      name: (document.getElementById('setBizNameInput').value || '').trim(),
+      type: document.getElementById('setBizTypeInput').value,
+      address: (document.getElementById('setBizAddrInput').value || '').trim(),
+      currency: (document.getElementById('setCurrencyInput').value || '').trim() || 'TZS',
+      taxRate: parseFloat(document.getElementById('setTaxInput').value) || 0,
+      receiptFooter: (document.getElementById('setReceiptFooter').value || '').trim(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    await db.collection('businesses').doc(App.currentBusinessId).update(data);
+    App.currency = data.currency;
+    if (App.currentBusiness) Object.assign(App.currentBusiness, data);
+    App.updateTopbar();
+    toast('Settings saved successfully');
+    App.loadSettings();
+  } catch (err) {
+    console.error('[Settings] Save failed:', err);
+    toast(err.message || 'Failed to save settings', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Settings'; }
+  }
+};
+
+App.uploadLogo = async function(input) {
+  var file = input.files ? input.files[0] : null;
+  if (!file) return;
+  if (file.size > 500000) return toast('Image must be under 500KB', 'e');
+
+  var reader = new FileReader();
+  reader.onload = async function(e) {
+    var base64 = e.target.result;
+    var prev = document.getElementById('logoPrev');
+    if (prev) prev.innerHTML = '<img src="' + base64 + '" alt="Logo"/>';
+    try {
+      await db.collection('businesses').doc(App.currentBusinessId).update({logoUrl: base64, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+      if (App.currentBusiness) App.currentBusiness.logoUrl = base64;
+      var sbLogo = document.getElementById('sbBizLogo'); if(sbLogo){sbLogo.src=base64;sbLogo.style.display='block';}
+      var tbLogo = document.getElementById('tbBizLogo'); if(tbLogo){tbLogo.src=base64;tbLogo.style.display='block';}
+      toast('Logo updated');
+    } catch (err) {
+      console.error('[Settings] Upload logo failed:', err);
+      toast('Failed to upload logo', 'e');
+    }
+  };
+  reader.readAsDataURL(file);
+};
+
+/* ============================================================
+   PROFILE
+=========================================================== */
+App.loadProfile = function() {
+  var u = App.currentUserData;
+  if (!u) return;
+  var av = document.getElementById('profAvatar'); if(av) av.textContent = getInitials(u.name);
+  var nm = document.getElementById('profName'); if(nm) nm.textContent = u.name||'-';
+  var rl = document.getElementById('profRole'); if(rl){var roleLabels={owner:'Business Owner',manager:'Manager',storekeeper:'Storekeeper',cashier:'Cashier',seller:'Seller'};rl.textContent=roleLabels[App.currentRole]||App.currentRole;}
+  var em = document.getElementById('profEmail'); if(em) em.textContent = u.email||'-';
+  var ph = document.getElementById('profPhone'); if(ph) ph.textContent = u.phone||'-';
+  var jd = document.getElementById('profJoined'); if(jd) jd.textContent = u.createdAt ? formatDate(u.createdAt) : '-';
+  
+  var ni = document.getElementById('profNameInput'); if(ni) ni.value = u.name||'';
+  var pi = document.getElementById('profPhoneInput'); if(pi) pi.value = u.phone||'';
+  var np = document.getElementById('profNewPass'); if(np) np.value = '';
+  var cp = document.getElementById('profConfirmPass'); if(cp) cp.value = '';
+};
+
+App.saveProfile = async function() {
+  var name = (document.getElementById('profNameInput').value || '').trim();
+  var phone = (document.getElementById('profPhoneInput').value || '').trim();
+  var newPass = document.getElementById('profNewPass').value;
+  var confirmPass = document.getElementById('profConfirmPass').value;
+  if (!name) return toast('Name is required', 'e');
+  if (newPass && newPass.length < 6) return toast('Password must be at least 6 characters', 'e');
+  if (newPass && newPass !== confirmPass) return toast('Passwords do not match', 'e');
+
+  var btn = document.getElementById('saveProfileBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; }
+
+  try {
+    var updateData = {name: name, phone: phone, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
+    if (App.currentRole === 'owner') {
+      await db.collection('users').doc(App.currentUser.uid).update(updateData);
+      await db.collection('businesses').doc(App.currentBusinessId).update({ownerName: name, ownerPhone: phone});
+    } else if (App.currentUserData && App.currentUserData.staffId) {
+      await db.collection('staff').doc(App.currentUserData.staffId).update(updateData);
+    }
+    if (newPass && App.currentUser) await App.currentUser.updatePassword(newPass);
+    if (App.currentUserData) { App.currentUserData.name = name; App.currentUserData.phone = phone; }
+    App.updateTopbar();
+    App.loadProfile();
+    toast('Profile updated successfully');
+  } catch (err) {
+    console.error('[Profile] Save failed:', err);
+    toast(err.message || 'Failed to update profile', 'e');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Save Profile'; }
+  }
+};
+
+/* ============================================================
+   PRICE CALCULATOR, STAFF AUTH, SUPER ADMIN, EXPORTS, PUBLIC DATA, EVENTS
+=========================================================== */
+App.openPriceCalc = function() { var m = document.getElementById('priceCalcModal'); if(m) m.classList.remove('hidden'); };
+App.closePriceCalc = function() { var m = document.getElementById('priceCalcModal'); if(m) m.classList.add('hidden'); };
+App.calculatePrice = function() {
+  var cost = parseFloat(document.getElementById('pcCost').value) || 0;
+  var margin = parseFloat(document.getElementById('pcMargin').value) || 0;
+  var tax = parseFloat(document.getElementById('pcTax').value) || 0;
+  var res = document.getElementById('pcResult');
+  var val = document.getElementById('pcResultVal');
+  if (cost <= 0) { if(res) res.style.display='none'; return; }
+  var profit = cost * (margin / 100);
+  var price = cost + profit;
+  if (tax > 0) price = price * (1 + tax / 100);
+  if(res) res.style.display = 'block';
+  if(val) val.textContent = App.currency + ' ' + Math.round(price).toLocaleString();
+};
+
+App.openStaffAuth = function(role) {
+  var labels = {manager:'Manager',storekeeper:'Storekeeper',cashier:'Cashier',seller:'Seller'};
+  var icons = {manager:'fa-user-tie',storekeeper:'fa-warehouse',cashier:'fa-cash-register',seller:'fa-cart-shopping'};
+  var badges = {manager:'rb-mgr',storekeeper:'rb-sk',cashier:'rb-cash',seller:'rb-sell'};
+  var bgs = {manager:'background:var(--warning-bg);color:var(--warning)',storekeeper:'background:var(--info-bg);color:var(--info)',cashier:'background:var(--success-bg);color:var(--success)',seller:'background:var(--primary-bg);color:var(--primary2)'};
+  var box = document.getElementById('oaBoxContent');
+  if (!box) return;
+  box.innerHTML = '<button class="oa-back" onclick="App.closeStaffAuth()"><i class="fas fa-arrow-left"></i> Back</button>' +
+    '<div class="mgr-ic" style="' + (bgs[role]||'') + '"><i class="fas ' + (icons[role]||'') + '"></i></div>' +
+    '<span class="oa-badge ' + (badges[role]||'') + '">' + escHtml(labels[role]||'') + '</span>' +
+    '<h3>' + escHtml(labels[role]||'') + ' Login</h3>' +
+    '<p class="oa-sub">Enter your credentials to access the ' + escHtml((labels[role]||'').toLowerCase()) + ' dashboard</p>' +
+    '<div class="auth-err" id="staffAuthErr"><i class="fas fa-circle-exclamation"></i><span></span></div>' +
+    '<div class="oa-tabs"><button class="oa-tab active" onclick="App.switchStaffAuthTab(\'login\',this)">Login</button><button class="oa-tab" onclick="App.switchStaffAuthTab(\'join\',this)">Request Access</button></div>' +
+    '<div class="oa-form active" id="staffLoginForm"><div class="fg"><div class="iw"><i class="fas fa-envelope"></i><input class="fi" type="email" id="staffLoginEmail" placeholder="Your email"/></div></div>' +
+    '<div class="fg"><div class="iw"><i class="fas fa-lock"></i><input class="fi" type="password" id="staffLoginPass" placeholder="Password" onkeydown="if(event.key===\'Enter\')App.staffLogin(\'' + role + '\')"/></div></div>' +
+    '<button class="btn-auth btn-auth-p" onclick="App.staffLogin(\'' + role + '\')"><i class="fas fa-sign-in-alt"></i> Login</button></div>' +
+    '<div class="oa-form" id="staffJoinForm"><div class="fg"><div class="iw"><i class="fas fa-envelope"></i><input class="fi" type="email" id="staffJoinEmail" placeholder="Your email"/></div></div>' +
+    '<div class="fg"><div class="iw"><i class="fas fa-lock"></i><input class="fi" type="password" id="staffJoinPass" placeholder="Choose password (min 6 chars)"/></div></div>' +
+    '<div class="fg"><div class="iw"><i class="fas fa-user"></i><input class="fi" type="text" id="staffJoinName" placeholder="Your full name"/></div></div>' +
+    '<button class="btn-auth btn-auth-p" onclick="App.staffJoin(\'' + role + '\')"><i class="fas fa-user-plus"></i> Request Access</button></div>';
+  document.getElementById('overlayAuth').classList.add('show');
+};
+App.closeStaffAuth = function() { var el = document.getElementById('overlayAuth'); if(el) el.classList.remove('show'); };
+App.switchStaffAuthTab = function(tab, btn) {
+  var tabs = document.querySelectorAll('.oa-tab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
+  if(btn) btn.classList.add('active');
+  var lf = document.getElementById('staffLoginForm'); if(lf) lf.classList.toggle('active', tab==='login');
+  var jf = document.getElementById('staffJoinForm'); if(jf) jf.classList.toggle('active', tab==='join');
+  var err = document.getElementById('staffAuthErr'); if(err) err.classList.remove('show');
+};
+App.staffLogin = async function(role) {
+  var email = (document.getElementById('staffLoginEmail').value || '').trim();
+  var pass = document.getElementById('staffLoginPass').value;
+  if (!email || !pass) return App.showAuthErr('staffAuthErr', 'Email and password are required');
+  try { await auth.signInWithEmailAndPassword(email, pass); App.closeStaffAuth(); }
+  catch (err) { console.error('[Auth] Staff login failed:', err); App.showAuthErr('staffAuthErr', err.message || 'Login failed'); }
+};
+App.staffJoin = async function(role) {
+  var email = (document.getElementById('staffJoinEmail').value || '').trim();
+  var pass = document.getElementById('staffJoinPass').value;
+  var name = (document.getElementById('staffJoinName').value || '').trim();
+  if (!email || !pass || !name) return App.showAuthErr('staffAuthErr', 'All fields are required');
+  if (pass.length < 6) return App.showAuthErr('staffAuthErr', 'Password must be at least 6 characters');
+  try {
+    var cred = await auth.createUserWithEmailAndPassword(email, pass);
+    if (App.currentBusinessId) {
+      await db.collection('staff').add({businessId: App.currentBusinessId, userId: cred.user.uid, name: name, email: email, role: role, phone: '', status: 'active', createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+    }
+    toast('Access request sent! You can now login.');
+    App.closeStaffAuth();
+  } catch (err) { console.error('[Auth] Staff join failed:', err); App.showAuthErr('staffAuthErr', err.message || 'Failed to create account'); }
+};
+
+App.superAdminLogin = function() {
+  var pass = document.getElementById('superPass').value;
+  var errEl = document.getElementById('superErr');
+  if (pass === 'bizbook2025') {
+    App.isSuperAdmin = true;
+    var sl = document.getElementById('superLogin'); if(sl) sl.classList.add('hidden');
+    var sp = document.getElementById('superPanel'); if(sp) sp.classList.remove('hidden');
+    if(errEl) errEl.textContent = '';
+    App.loadSuperData();
+  } else { if(errEl) errEl.textContent = 'Incorrect password'; }
+};
+App.superLogout = function() {
+  App.isSuperAdmin = false;
+  var sl = document.getElementById('superLogin'); if(sl) sl.classList.remove('hidden');
+  var sp = document.getElementById('superPanel'); if(sp) sp.classList.add('hidden');
+  var spEl = document.getElementById('superPass'); if(spEl) spEl.value = '';
+  App.showScreen('landingScreen');
+};
+App.superCreateSeller = function() {
+  ['ssBizName','ssEmail','ssPassword','ssPhone','ssLocation','ssOwnerName'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  var err = document.getElementById('ssErr'); if(err) err.textContent = '';
+  App.openModal('superSellerModal');
+};
+App.createSellerAccount = async function() {
+  var bizName = (document.getElementById('ssBizName').value||'').trim();
+  var email = (document.getElementById('ssEmail').value||'').trim();
+  var password = document.getElementById('ssPassword').value;
+  var phone = (document.getElementById('ssPhone').value||'').trim();
+  var location = (document.getElementById('ssLocation').value||'').trim();
+  var ownerName = (document.getElementById('ssOwnerName').value||'').trim();
+  var err = document.getElementById('ssErr');
+  if (!bizName || !email || !password) { if(err) err.textContent = 'Business name, email and password are required'; return; }
+  if (password.length < 6) { if(err) err.textContent = 'Password must be at least 6 characters'; return; }
+  var btn = document.getElementById('ssSubmitBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...'; }
+  try {
+    var cred = await auth.createUserWithEmailAndPassword(email, password);
+    var bizId = genId();
+    await db.collection('businesses').doc(bizId).set({name:bizName,type:'retail',address:location,ownerId:cred.user.uid,ownerName:ownerName||bizName,ownerEmail:email,ownerPhone:phone,currency:'TZS',taxRate:0,receiptFooter:'Thank you!',status:'active',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    await db.collection('users').doc(cred.user.uid).set({name:ownerName||bizName,email:email,phone:phone,username:email.split('@')[0],role:'owner',businessId:bizId,businesses:[bizId],status:'active',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    toast('Seller account created successfully');
+    App.closeModal('superSellerModal');
+    await auth.signOut();
+    App.isSuperAdmin = true;
+    App.loadSuperData();
+  } catch (err) { console.error('[Super] Create seller failed:', err); if(err) err.textContent = err.message || 'Failed to create account'; }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Create Account'; } }
+};
+App.loadSuperData = async function() {
+  try {
+    var bizSnap = await db.collection('businesses').orderBy('createdAt','desc').get();
+    App.allBusinesses = bizSnap.docs.map(function(d){return {id:d.id,...d.data()};});
+    App.renderSuperMetrics(); App.renderSuperCharts(); App.renderSuperTable();
+  } catch (err) { console.error('[Super] Load data failed:', err); }
+};
+App.renderSuperMetrics = function() {
+  var el = document.getElementById('superMetrics'); if(!el) return;
+  var total = App.allBusinesses.length, active = App.allBusinesses.filter(function(b){return b.status==='active';}).length;
+  el.innerHTML = '<div class="sm-card"><h4>Total Businesses</h4><div class="sm-val">' + total + '</div><div class="sm-sub">Registered on platform</div></div>' +
+    '<div class="sm-card"><h4>Active Businesses</h4><div class="sm-val" style="color:var(--success)">' + active + '</div><div class="sm-sub">Currently active</div></div>' +
+    '<div class="sm-card"><h4>Suspended</h4><div class="sm-val" style="color:var(--danger)">' + (total-active) + '</div><div class="sm-sub">Inactive businesses</div></div>' +
+    '<div class="sm-card"><h4>Platform Status</h4><div class="sm-val" style="color:var(--success)">OK</div><div class="sm-sub">All systems operational</div></div>';
+};
+App.renderSuperCharts = function() {
+  var container = document.getElementById('superCharts'); if(!container) return;
+  var types = {}; App.allBusinesses.forEach(function(b){types[b.type||'other']=(types[b.type||'other']||0)+1;});
+  var tL = Object.keys(types), tV = Object.values(types), tC = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6'];
+  container.innerHTML = '<div class="super-card"><div class="super-card-head"><h3><i class="fas fa-chart-pie"></i> Businesses by Type</h3></div><div class="super-chart-box"><canvas id="superTypeChart"></canvas></div></div>' +
+    '<div class="super-card"><div class="super-card-head"><h3><i class="fas fa-chart-bar"></i> Registration Trend</h3></div><div class="super-chart-box"><canvas id="superRegChart"></canvas></div></div>';
+  if(App.charts.superType){App.charts.superType.destroy();App.charts.superType=null;}
+  if(App.charts.superReg){App.charts.superReg.destroy();App.charts.superReg=null;}
+  App.charts.superType = new Chart(document.getElementById('superTypeChart'),{type:'doughnut',data:{labels:tL.length?tL:['No data'],datasets:[{data:tV.length?tV:[1],backgroundColor:tL.length?tC.slice(0,tL.length):['#232330'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#9494a8',font:{size:10}}}},cutout:'65%'}});
+  var months = [];
+  for(var i=5;i>=0;i--){var d=new Date();d.setMonth(d.getMonth()-i);var key=d.toISOString().substr(0,7);var label=d.toLocaleDateString('en-GB',{month:'short'});var count=App.allBusinesses.filter(function(b){if(!b.createdAt)return false;var bd=b.createdAt.toDate?b.createdAt.toDate():new Date(b.createdAt);return bd.toISOString().substr(0,7)===key;}).length;months.push({label:label,count:count});}
+  App.charts.superReg = new Chart(document.getElementById('superRegChart'),{type:'bar',data:{labels:months.map(function(m){return m.label;}),datasets:[{data:months.map(function(m){return m.count;}),backgroundColor:'rgba(99,102,241,.6)',borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#9494a8',font:{size:10}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#9494a8',font:{size:10},stepSize:1}}}}});
+};
+App.renderSuperTable = function() {
+  var search = (document.getElementById('superSearch') ? document.getElementById('superSearch').value : '').toLowerCase();
+  var filtered = App.allBusinesses;
+  if (search) filtered = filtered.filter(function(b) { return (b.name||'').toLowerCase().includes(search) || (b.ownerName||'').toLowerCase().includes(search); });
+  var tbody = document.getElementById('superTableBody'); if(!tbody) return;
+  tbody.innerHTML = filtered.length ? filtered.map(function(b) {
+    return '<tr><td><strong>' + escHtml(b.name) + '</strong></td><td>' + escHtml(b.ownerName||'-') + '</td><td>' + escHtml(b.ownerPhone||'-') + '</td><td>-</td><td>-</td>' +
+      '<td><span class="status-badge ' + (b.status==='active'?'active':'suspended') + '">' + escHtml(b.status||'active') + '</span></td><td>' + formatDateShort(b.createdAt) + '</td>' +
+      '<td><button class="btn btn-xs ' + (b.status==='active'?'btn-w':'btn-s') + '" onclick="App.toggleBizStatus(\'' + b.id + '\',\'' + (b.status||'active') + '\')"><i class="fas fa-' + (b.status==='active'?'pause':'play') + '"></i> ' + (b.status==='active'?'Suspend':'Activate') + '</button>' +
+      '<button class="btn-icon dng" onclick="App.superDeleteBiz(\'' + b.id + '\')" title="Delete"><i class="fas fa-trash"></i></button></td></tr>';
+  }).join('') : '<tr><td colspan="8" class="empty-s"><i class="fas fa-building"></i><p>No businesses found</p></td></tr>';
+};
+App.toggleBizStatus = async function(bizId, cur) {
+  var newS = cur === 'active' ? 'suspended' : 'active';
+  try { await db.collection('businesses').doc(bizId).update({status: newS}); toast('Business ' + (newS==='active'?'activated':'suspended')); App.loadSuperData(); }
+  catch (err) { console.error('[Super] Toggle status failed:', err); toast('Failed to update status', 'e'); }
+};
+App.superDeleteBiz = function(bizId) {
+  var biz = App.allBusinesses.find(function(b){return b.id===bizId;});
+  confirm('DELETE business "' + (biz?biz.name:'') + '" and ALL its data? This cannot be undone!', async function() {
+    try {
+      var cols = ['products','sales','customers','suppliers','debts','expenses','staff','advertisements','notifications'];
+      for (var i=0; i<cols.length; i++) { var snap = await db.collection(cols[i]).where('businessId','==',bizId).get(); var batch = db.batch(); snap.docs.forEach(function(d){batch.delete(d.ref);}); if(!snap.empty) await batch.commit(); }
+      await db.collection('businesses').doc(bizId).delete();
+      if (biz && biz.ownerId) { try { await db.collection('users').doc(biz.ownerId).delete(); } catch(e){} try { await auth.deleteUser(biz.ownerId); } catch(e){ console.warn('[Super] Could not delete auth user:', e); } }
+      toast('Business and all data deleted'); App.loadSuperData();
+    } catch (err) { console.error('[Super] Delete biz failed:', err); toast('Failed to delete business', 'e'); }
+  });
+};
+
+// Export Helpers
+function generatePdfBase(title, headers, rows, filename) {
+  try {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF();
+    doc.setFontSize(16); doc.text(title, 14, 20);
+    doc.setFontSize(10); doc.text('Generated: ' + new Date().toLocaleString(), 14, 28);
+    doc.autoTable({ startY: 36, head: [headers], body: rows, styles: {fontSize: 8}, headStyles: {fillColor: [99,102,241]} });
+    doc.save(filename); toast('PDF downloaded');
+  } catch (err) { console.error('[Export] PDF failed:', err); toast('Failed to generate PDF', 'e'); }
+}
+function generateExcelBase(data, sheetName, filename) {
+  try {
+    var ws = XLSX.utils.json_to_sheet(data);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, filename); toast('Excel downloaded');
+  } catch (err) { console.error('[Export] Excel failed:', err); toast('Failed to generate Excel', 'e'); }
+}
+App.dlSuperPDF = function() { App.toggleDlMenu('superDlMenu'); generatePdfBase('BizBook - Super Admin Report', ['Business','Owner','Email','Phone','Status','Registered'], App.allBusinesses.map(function(b){return [b.name,b.ownerName||'-',b.ownerEmail||'-',b.ownerPhone||'-',b.status||'active',b.createdAt?formatDate(b.createdAt):'-'];}), 'bizbook-super-report.pdf'); };
+App.dlSuperExcel = function() { App.toggleDlMenu('superDlMenu'); generateExcelBase(App.allBusinesses.map(function(b){return {Business:b.name,Owner:b.ownerName||'-',Email:b.ownerEmail||'-',Status:b.status||'active'};}), 'Businesses', 'bizbook-super-report.xlsx'); };
+App.dlDashPDF = function() { App.toggleDlMenu('dashDlMenu'); generatePdfBase((App.currentBusiness?App.currentBusiness.name:'Business') + ' - Dashboard Report', ['Date','Receipt','Items','Total','Payment','Cashier'], App.allSales.slice(0,50).map(function(s){return [formatDate(s.createdAt),s.receiptNo,(s.items||[]).length,s.total,s.paymentMethod,s.cashierName||'-'];}), 'bizbook-dashboard-report.pdf'); };
+App.dlDashExcel = function() { App.toggleDlMenu('dashDlMenu'); generateExcelBase(App.allSales.map(function(s){return {Date:formatDate(s.createdAt),Receipt:s.receiptNo,Items:(s.items||[]).length,Total:s.total,Payment:s.paymentMethod,Customer:s.customerName||'-'};}), 'Sales', 'bizbook-dashboard-report.xlsx'); };
+App.dlSalesPDF = function() { App.toggleDlMenu('salesDlMenu'); App.dlDashPDF(); };
+App.dlSalesExcel = function() { App.toggleDlMenu('salesDlMenu'); App.dlDashExcel(); };
+App.dlReportPDF = function() { App.toggleDlMenu('reportDlMenu'); App.dlDashPDF(); };
+App.dlReportExcel = function() {
+  App.toggleDlMenu('reportDlMenu');
+  try {
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(App.allSales.map(function(s){return {Date:formatDate(s.createdAt),Total:s.total,Payment:s.paymentMethod};})), 'Sales');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(App.allProducts.map(function(p){return {Name:p.name,Price:p.price,Stock:p.stock};})), 'Products');
+    XLSX.writeFile(wb, 'bizbook-full-report.xlsx'); toast('Excel report downloaded');
+  } catch (err) { console.error('[Export] Report Excel failed:', err); toast('Failed to generate Excel', 'e'); }
+};
+
+App.loadPublicData = async function() {
+  try {
+    var adsSnap = await db.collection('advertisements').where('status','==','active').orderBy('createdAt','desc').limit(12).get();
+    var ads = adsSnap.docs.map(function(d){return d.data();});
+    var adsGrid = document.getElementById('publicAdsGrid');
+    if (adsGrid) {
+      adsGrid.innerHTML = ads.length === 0 ? '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>No advertisements yet</p></div>' :
+        ads.map(function(a){ return '<div class="pub-card">' + (a.imageUrl ? '<img class="pub-card-img" src="' + a.imageUrl + '" alt="' + escHtml(a.title) + '"/>' : '<div class="pub-card-img"><i class="fas fa-bullhorn"></i></div>') +
+        '<div class="pub-card-body"><h4>' + escHtml(a.title) + '</h4><p>' + escHtml((a.description||'').substring(0,100)) + '</p>' + (a.featured ? '<span class="status-badge featured" style="margin-top:6px">Featured</span>' : '') + '</div></div>'; }).join('');
+    }
+    var prodsSnap = await db.collection('products').orderBy('createdAt','desc').limit(12).get();
+    var prods = prodsSnap.docs.map(function(d){return d.data();});
+    var prodsGrid = document.getElementById('publicProductsGrid');
+    if (prodsGrid) {
+      var inStock = prods.filter(function(p){return (p.stock||0)>0;});
+      prodsGrid.innerHTML = inStock.length === 0 ? '<div class="empty-s"><i class="fas fa-box-open"></i><p>No products in stock</p></div>' :
+        inStock.map(function(p){ return '<div class="pub-card"><div class="pub-card-img"><i class="fas fa-box-open"></i></div><div class="pub-card-body"><h4>' + escHtml(p.name) + '</h4><p>' + escHtml((p.description||'').substring(0,80)) + '</p><div class="pub-price">' + fmt(p.price) + '</div><div class="pub-seller">' + escHtml(p.category||'') + '</div></div></div>'; }).join('');
+    }
+  } catch (err) { console.error('[Public] Load data failed:', err); }
+};
+
+window.addEventListener('online', function() { document.body.classList.remove('is-offline'); toast('Back online', 's'); });
+window.addEventListener('offline', function() { document.body.classList.add('is-offline'); toast('You are offline', 'w'); });
+if (!navigator.onLine) document.body.classList.add('is-offline');
+
+var _globalListenersInit = false;
+document.addEventListener('DOMContentLoaded', function() {
+  if (_globalListenersInit) return;
+  _globalListenersInit = true;
+  
+  App.showScreen('landingScreen');
+  App.loadPublicData();
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-ov.show').forEach(function(m){m.classList.remove('show');});
+      var np = document.getElementById('notifPanel'); if(np) np.classList.remove('show');
+      var oa = document.getElementById('overlayAuth'); if(oa) oa.classList.remove('show');
+      App.closePriceCalc();
+      App.closeSidebar();
+      var ud = document.getElementById('userDd'); if(ud) ud.classList.remove('show');
+      document.querySelectorAll('.dl-menu.show').forEach(function(m){m.classList.remove('show');});
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dl-wrap')) document.querySelectorAll('.dl-menu.show').forEach(function(m){m.classList.remove('show');});
+    if (!e.target.closest('.u-chip')) { var ud = document.getElementById('userDd'); if(ud) ud.classList.remove('show'); }
+    if (!e.target.closest('.np') && !e.target.closest('.tb-btn')) { var np = document.getElementById('notifPanel'); if(np) np.classList.remove('show'); }
+  });
+
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 768 && App.currentUser) { document.getElementById('sidebar').classList.add('open'); }
+    else { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarBackdrop').classList.remove('show'); }
+  });
+});
+</script>
+</body>
+</html>
 
 
 
