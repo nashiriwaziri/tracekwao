@@ -1133,64 +1133,528 @@ async function handleLogin() {
 
 /* =========================================================
    AUTHENTICATION - REGISTER
+   FIREBASE MODULAR SDK ONLY
    ========================================================= */
+
 async function handleRegister() {
-    if (State.isProcessingAuth) return;
-    const fname = document.getElementById('regFname').value.trim();
-    const lname = document.getElementById('regLname').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
-    const phone = document.getElementById('regPhone').value.trim();
-    const password = document.getElementById('regPass').value;
-    const cpass = document.getElementById('regCpass').value;
-    const bizName = document.getElementById('regBizName').value.trim();
-    const agree = document.getElementById('regAgree').checked;
-    document.querySelectorAll('.form-error').forEach(e => e.classList.remove('show'));
-    if (!fname || !lname) { toast('Jaza jina lako kamili.', 'e'); return; }
-    if (!email || !email.includes('@')) { document.getElementById('regEmailErr').classList.add('show'); return; }
-    if (!phone || phone.length < 8) { document.getElementById('regPhoneErr').classList.add('show'); return; }
-    if (password.length < 6) { toast('Nenosiri lazima iwe na herufi 6 au zaidi.', 'e'); return; }
-    if (password !== cpass) { document.getElementById('regCpassErr').classList.add('show'); return; }
-    if (!bizName) { toast('Jaza jina la biashara.', 'e'); return; }
-    if (!agree) { toast('Lazima ukubali masharti ya huduma.', 'e'); return; }
-    const btn = document.getElementById('regBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div> Inajisajili...';
+
+    if (State.isProcessingAuth) {
+        return;
+    }
+
+    const fname =
+        document.getElementById('regFname')?.value.trim() || '';
+
+    const lname =
+        document.getElementById('regLname')?.value.trim() || '';
+
+    const email =
+        document.getElementById('regEmail')?.value.trim().toLowerCase() || '';
+
+    const phone =
+        document.getElementById('regPhone')?.value.trim() || '';
+
+    const password =
+        document.getElementById('regPass')?.value || '';
+
+    const cpass =
+        document.getElementById('regCpass')?.value || '';
+
+    const bizName =
+        document.getElementById('regBizName')?.value.trim() || '';
+
+    const agree =
+        document.getElementById('regAgree')?.checked || false;
+
+    const btn =
+        document.getElementById('regBtn');
+
+
+    /* ========================================================
+       CLEAR VALIDATION ERRORS
+       ======================================================== */
+
+    document
+        .querySelectorAll('.form-error')
+        .forEach(el => {
+            el.classList.remove('show');
+        });
+
+
+    /* ========================================================
+       VALIDATION
+       ======================================================== */
+
+    if (!fname || !lname) {
+        toast(
+            'Jaza jina lako kamili.',
+            'e'
+        );
+        return;
+    }
+
+    if (
+        !email ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+
+        document
+            .getElementById('regEmailErr')
+            ?.classList.add('show');
+
+        return;
+    }
+
+    if (
+        !phone ||
+        phone.length < 8
+    ) {
+
+        document
+            .getElementById('regPhoneErr')
+            ?.classList.add('show');
+
+        return;
+    }
+
+    if (password.length < 6) {
+
+        toast(
+            'Nenosiri lazima liwe na herufi 6 au zaidi.',
+            'e'
+        );
+
+        return;
+    }
+
+    if (password !== cpass) {
+
+        document
+            .getElementById('regCpassErr')
+            ?.classList.add('show');
+
+        return;
+    }
+
+    if (!bizName) {
+
+        toast(
+            'Jaza jina la biashara.',
+            'e'
+        );
+
+        return;
+    }
+
+    if (!agree) {
+
+        toast(
+            'Lazima ukubali masharti ya huduma.',
+            'e'
+        );
+
+        return;
+    }
+
+
+    /* ========================================================
+       START PROCESS
+       ======================================================== */
+
+    State.isProcessingAuth = true;
+
+    if (btn) {
+
+        btn.disabled = true;
+
+        btn.innerHTML =
+            '<div class="spinner" style="width:20px;height:20px;border-width:2px"></div> Inajisajili...';
+    }
+
+
+    let createdAuthUser = null;
+    let createdBusinessId = null;
+
+
     try {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        const uid = cred.user.uid;
-        const businessRef = await addDoc(collection(db, 'businesses'), {
-            name: bizName,
-            phone: phone,
-            email: email,
-            address: '',
-            taxId: '',
-            logoUrl: '',
-            ownerId: uid,
-            status: 'active',
-            createdAt: serverTimestamp()
-        });
-        const businessId = businessRef.id;
-        await setDoc(doc(db, 'users', uid), {
-            firstName: fname,
-            lastName: lname,
-            email: email,
-            phone: phone,
-            role: 'user',
-            businessId: businessId,
-            status: 'active',
-            createdAt: serverTimestamp()
-        });
-        toast('Akaunti imeundwa! Karibu.', 's');
+
+        /* ====================================================
+           STEP 1 — CREATE FIREBASE AUTH ACCOUNT
+           ==================================================== */
+
+        console.log(
+            '[REGISTER] Creating Auth account...'
+        );
+
+        const credential =
+            await createUserWithEmailAndPassword(
+                auth,
+                email,
+                password
+            );
+
+        createdAuthUser =
+            credential.user;
+
+
+        const uid =
+            createdAuthUser.uid;
+
+
+        console.log(
+            '[REGISTER] Auth account created:',
+            uid
+        );
+
+
+        /* ====================================================
+           STEP 2 — CREATE BUSINESS
+           ==================================================== */
+
+        console.log(
+            '[REGISTER] Creating business...'
+        );
+
+        const businessRef =
+            await addDoc(
+                collection(db, 'businesses'),
+                {
+                    name: bizName,
+                    phone: phone,
+                    email: email,
+                    address: '',
+                    taxId: '',
+                    logoUrl: '',
+                    ownerId: uid,
+                    status: 'active',
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                }
+            );
+
+
+        createdBusinessId =
+            businessRef.id;
+
+
+        console.log(
+            '[REGISTER] Business created:',
+            createdBusinessId
+        );
+
+
+        /* ====================================================
+           STEP 3 — CREATE USER PROFILE
+           ==================================================== */
+
+        console.log(
+            '[REGISTER] Creating user profile...'
+        );
+
+        await setDoc(
+            doc(
+                db,
+                'users',
+                uid
+            ),
+            {
+                firstName: fname,
+                lastName: lname,
+                displayName: `${fname} ${lname}`.trim(),
+                email: email,
+                phone: phone,
+
+                role: 'user',
+
+                businessId:
+                    createdBusinessId,
+
+                status: 'active',
+
+                createdAt:
+                    serverTimestamp(),
+
+                updatedAt:
+                    serverTimestamp()
+            }
+        );
+
+
+        /* ====================================================
+           STEP 4 — VERIFY USER PROFILE
+           ==================================================== */
+
+        const verifyUser =
+            await getDoc(
+                doc(
+                    db,
+                    'users',
+                    uid
+                )
+            );
+
+
+        if (!verifyUser.exists()) {
+
+            throw new Error(
+                'User profile haikuundwa kwenye Firestore.'
+            );
+        }
+
+
+        const verifyData =
+            verifyUser.data();
+
+
+        if (
+            verifyData.businessId !==
+            createdBusinessId
+        ) {
+
+            throw new Error(
+                'Business ID haijaunganishwa na akaunti.'
+            );
+        }
+
+
+        /* ====================================================
+           STEP 5 — VERIFY BUSINESS
+           ==================================================== */
+
+        const verifyBusiness =
+            await getDoc(
+                doc(
+                    db,
+                    'businesses',
+                    createdBusinessId
+                )
+            );
+
+
+        if (!verifyBusiness.exists()) {
+
+            throw new Error(
+                'Business profile haikuundwa.'
+            );
+        }
+
+
+        /* ====================================================
+           STEP 6 — SET APPLICATION STATE
+           ==================================================== */
+
+        State.currentUserId =
+            uid;
+
+        State.currentUserData = {
+            id: uid,
+            ...verifyData
+        };
+
+        State.currentBizId =
+            createdBusinessId;
+
+        State.currentBizData = {
+            id: verifyBusiness.id,
+            ...verifyBusiness.data()
+        };
+
+
+        console.log(
+            '[REGISTER] FINAL STATE:',
+            {
+                uid:
+                    State.currentUserId,
+
+                businessId:
+                    State.currentBizId,
+
+                role:
+                    State.currentUserData.role,
+
+                business:
+                    State.currentBizData.name
+            }
+        );
+
+
+        /* ====================================================
+           SUCCESS
+           ==================================================== */
+
+        toast(
+            'Akaunti imeundwa kikamilifu! Karibu.',
+            's'
+        );
+
+
+        /* ====================================================
+           OPEN APPLICATION
+           ==================================================== */
+
+        document
+            .getElementById('loginPage')
+            ?.classList.add('hidden');
+
+        document
+            .getElementById('mainApp')
+            ?.classList.remove('hidden');
+
+
+        if (
+            typeof updateTopbar ===
+            'function'
+        ) {
+            updateTopbar();
+        }
+
+
+        if (
+            typeof loadDashboard ===
+            'function'
+        ) {
+            await loadDashboard();
+        }
+
+
+        if (
+            typeof navTo ===
+            'function'
+        ) {
+            navTo('dashboard');
+        }
+
+
     } catch (error) {
-        console.error('[REGISTER]', error);
-        let msg = 'Hitilafu katika kusajili.';
-        if (error.code === 'auth/email-already-in-use') { msg = 'Barua pepe tayari inatumika.'; document.getElementById('regEmailErr').classList.add('show'); }
-        toast(msg, 'e');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-user-plus"></i> Jisajili Sasa';
+
+        console.error(
+            '[REGISTER] FAILED:',
+            error
+        );
+
+
+        /* ====================================================
+           AUTH ERROR MESSAGES
+           ==================================================== */
+
+        let message =
+            'Hitilafu katika kusajili akaunti.';
+
+
+        switch (error?.code) {
+
+            case 'auth/email-already-in-use':
+
+                message =
+                    'Barua pepe tayari inatumika.';
+
+                document
+                    .getElementById('regEmailErr')
+                    ?.classList.add('show');
+
+                break;
+
+
+            case 'auth/invalid-email':
+
+                message =
+                    'Barua pepe sio sahihi.';
+
+                break;
+
+
+            case 'auth/weak-password':
+
+                message =
+                    'Nenosiri ni dhaifu. Tumia angalau herufi 6.';
+
+                break;
+
+
+            case 'permission-denied':
+
+                message =
+                    'Firebase imezuia kuhifadhi taarifa. Kagua Firestore Security Rules.';
+
+                break;
+
+
+            default:
+
+                message =
+                    error?.message ||
+                    message;
+        }
+
+
+        toast(
+            message,
+            'e'
+        );
+
+
+        /* ====================================================
+           IMPORTANT:
+           DO NOT SILENTLY LEAVE PARTIAL STATE
+           ==================================================== */
+
+        State.currentUserId =
+            null;
+
+        State.currentUserData =
+            null;
+
+        State.currentBizId =
+            null;
+
+        State.currentBizData =
+            null;
+
+
+        /*
+         * If Auth was created but Firestore profile creation
+         * failed, sign out so the app does not immediately
+         * treat the half-created account as a normal user.
+         */
+
+        if (createdAuthUser) {
+
+            try {
+
+                await signOut(auth);
+
+            } catch (logoutError) {
+
+                console.error(
+                    '[REGISTER] Cleanup signOut failed:',
+                    logoutError
+                );
+            }
+        }
+
+
+    } finally {
+
+        State.isProcessingAuth =
+            false;
+
+        if (btn) {
+
+            btn.disabled = false;
+
+            btn.innerHTML =
+                '<i class="fas fa-user-plus"></i> Jisajili Sasa';
+        }
     }
 }
 
+
+/* ============================================================
+   MAKE AVAILABLE TO HTML onclick
+   ============================================================ */
+
+window.handleRegister =
+    handleRegister;
 /* =========================================================
    AUTHENTICATION - LOGOUT
    ========================================================= */
