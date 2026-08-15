@@ -830,6 +830,237 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+  /* =========================================================
+   FIREBASE READY STATE
+   AUTH + USER DATA + BUSINESS ID
+   FIREBASE MODULAR SDK
+   ========================================================= */
+
+let firebaseReadyPromise = null;
+let firebaseReadyResolve = null;
+let firebaseReadyReject = null;
+
+let firebaseAuthReady = false;
+let firebaseUserReady = false;
+let firebaseBusinessReady = false;
+
+
+/* =========================================================
+   SAFE ID VALIDATION
+   ========================================================= */
+
+function isValidId(value) {
+
+    return (
+        typeof value === 'string' &&
+        value.trim().length > 0
+    );
+}
+
+
+/* =========================================================
+   GET CURRENT BUSINESS ID
+   ========================================================= */
+
+function getBusinessId() {
+
+    let bizId = null;
+
+    /*
+     * 1. State
+     */
+    if (
+        typeof State !== 'undefined' &&
+        State
+    ) {
+
+        bizId =
+            State.currentBizId ||
+            State.currentBusinessId ||
+            null;
+    }
+
+
+    /*
+     * 2. Global compatibility variables
+     */
+    if (!isValidId(bizId)) {
+
+        bizId =
+            typeof businessId !== 'undefined'
+                ? businessId
+                : null;
+    }
+
+
+    if (!isValidId(bizId)) {
+
+        bizId =
+            typeof currentBizId !== 'undefined'
+                ? currentBizId
+                : null;
+    }
+
+
+    /*
+     * 3. Current user data
+     */
+    if (
+        !isValidId(bizId) &&
+        typeof currentUserData !== 'undefined' &&
+        currentUserData
+    ) {
+
+        bizId =
+            currentUserData.businessId ||
+            currentUserData.bizId ||
+            null;
+    }
+
+
+    /*
+     * 4. Trim final value
+     */
+    if (
+        typeof bizId === 'string'
+    ) {
+
+        bizId =
+            bizId.trim();
+    }
+
+
+    return isValidId(bizId)
+        ? bizId
+        : null;
+}
+
+
+/* =========================================================
+   WAIT FOR FIREBASE READY
+   ========================================================= */
+
+function waitForFirebaseReady(
+    requireBusiness = true
+) {
+
+    /*
+     * Already ready
+     */
+    if (
+        firebaseAuthReady &&
+        firebaseUserReady &&
+        (
+            !requireBusiness ||
+            firebaseBusinessReady
+        )
+    ) {
+
+        return Promise.resolve();
+    }
+
+
+    /*
+     * Prevent multiple initialization promises
+     */
+    if (
+        firebaseReadyPromise
+    ) {
+
+        return firebaseReadyPromise;
+    }
+
+
+    firebaseReadyPromise =
+        new Promise(
+            (resolve, reject) => {
+
+                firebaseReadyResolve =
+                    resolve;
+
+                firebaseReadyReject =
+                    reject;
+            }
+        );
+
+
+    /*
+     * Safety timeout.
+     *
+     * Prevent the application from waiting forever
+     * if Firebase Auth never responds.
+     */
+
+    setTimeout(
+        () => {
+
+            if (
+                !firebaseAuthReady ||
+                !firebaseUserReady ||
+                (
+                    requireBusiness &&
+                    !firebaseBusinessReady
+                )
+            ) {
+
+                const error =
+                    new Error(
+                        'Firebase haikuja tayari. Auth/User/Business data haijapatikana.'
+                    );
+
+                console.error(
+                    '[FIREBASE READY TIMEOUT]',
+                    error
+                );
+
+                if (
+                    firebaseReadyReject
+                ) {
+
+                    firebaseReadyReject(
+                        error
+                    );
+                }
+
+                firebaseReadyPromise =
+                    null;
+            }
+
+        },
+        15000
+    );
+
+
+    return firebaseReadyPromise;
+}
+
+
+/* =========================================================
+   MARK FIREBASE READY
+   ========================================================= */
+
+function resolveFirebaseReady() {
+
+    const ready =
+        firebaseAuthReady &&
+        firebaseUserReady &&
+        firebaseBusinessReady;
+
+
+    if (
+        ready &&
+        firebaseReadyResolve
+    ) {
+
+        firebaseReadyResolve();
+
+        firebaseReadyResolve =
+            null;
+
+        firebaseReadyReject =
+            null;
+    }
+} 
 /* =========================================================
    SINGLE AUTHORITATIVE GLOBAL STATE
    ========================================================= */
