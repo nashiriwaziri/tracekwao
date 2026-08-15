@@ -1357,47 +1357,302 @@ function renderProducts() {
     </tr>`).join('');
 }
 
-/* ===== SAVE PRODUCT ===== */
+/* ===== SAVE PRODUCT — MODULAR FIREBASE + SAFE VALIDATION ===== */
 async function saveProduct() {
-    const name = document.getElementById('apName').value.trim();
-    const category = document.getElementById('apCategory').value;
-    const sku = document.getElementById('apSku').value.trim();
-    const costPrice = parseFloat(document.getElementById('apCostPrice').value) || 0;
-    const sellPrice = parseFloat(document.getElementById('apSellPrice').value) || 0;
-    const stock = parseInt(document.getElementById('apStock').value) || 0;
-    const desc = document.getElementById('apDesc').value.trim();
-    if (!name) { toast('Jaza jina la bidhaa.', 'w'); return; }
-    if (!category) { toast('Chagua aina ya bidhaa.', 'w'); return; }
-    if (sellPrice <= 0) { toast('Bei ya kuuza lazima iwe kubwa kuliko 0.', 'w'); return; }
     const btn = document.getElementById('saveProductBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Inahifadhi...';
+
     try {
-        const validBizId = requireId(businessId, 'Business ID');
-        await addDoc(collection(db, 'products'), {
-            name, category, sku, costPrice, sellPrice, stock, description: desc,
+        // =====================================================
+        // 1. CHECK FIREBASE
+        // =====================================================
+        if (!db) {
+            throw new Error('Firestore haijaandaliwa.');
+        }
+
+        // =====================================================
+        // 2. CHECK AUTHENTICATED USER
+        // =====================================================
+        if (!auth) {
+            throw new Error('Firebase Auth haijaandaliwa.');
+        }
+
+        const user = auth.currentUser;
+
+        if (!user || !user.uid) {
+            throw new Error('Mtumiaji hajaingia kwenye mfumo.');
+        }
+
+        // =====================================================
+        // 3. GET BUSINESS ID FROM EXISTING GLOBAL STATE
+        // =====================================================
+        const resolvedBusinessId =
+            (typeof businessId !== 'undefined' && businessId) ||
+            (typeof currentBizId !== 'undefined' && currentBizId) ||
+            (typeof currentBusinessId !== 'undefined' && currentBusinessId) ||
+            currentUserData?.businessId ||
+            null;
+
+        if (
+            typeof resolvedBusinessId !== 'string' ||
+            !resolvedBusinessId.trim()
+        ) {
+            console.error('[PRODUCTS] Missing Business ID:', {
+                businessId:
+                    typeof businessId !== 'undefined'
+                        ? businessId
+                        : 'undefined',
+
+                currentBizId:
+                    typeof currentBizId !== 'undefined'
+                        ? currentBizId
+                        : 'undefined',
+
+                currentBusinessId:
+                    typeof currentBusinessId !== 'undefined'
+                        ? currentBusinessId
+                        : 'undefined',
+
+                currentUserData
+            });
+
+            throw new Error(
+                'Business ID haijapatikana kwenye akaunti yako.'
+            );
+        }
+
+        const validBizId = resolvedBusinessId.trim();
+
+        // =====================================================
+        // 4. READ FORM DATA SAFELY
+        // =====================================================
+        const nameEl = document.getElementById('apName');
+        const categoryEl = document.getElementById('apCategory');
+        const skuEl = document.getElementById('apSku');
+        const costPriceEl = document.getElementById('apCostPrice');
+        const sellPriceEl = document.getElementById('apSellPrice');
+        const stockEl = document.getElementById('apStock');
+        const descEl = document.getElementById('apDesc');
+
+        if (!nameEl || !categoryEl || !skuEl ||
+            !costPriceEl || !sellPriceEl ||
+            !stockEl || !descEl) {
+
+            throw new Error(
+                'Baadhi ya sehemu za fomu ya bidhaa hazijapatikana.'
+            );
+        }
+
+        const name = nameEl.value.trim();
+        const category = categoryEl.value.trim();
+        const sku = skuEl.value.trim();
+
+        const costPrice =
+            Number.parseFloat(costPriceEl.value) || 0;
+
+        const sellPrice =
+            Number.parseFloat(sellPriceEl.value) || 0;
+
+        const stock =
+            Number.parseInt(stockEl.value, 10) || 0;
+
+        const desc = descEl.value.trim();
+
+        // =====================================================
+        // 5. VALIDATE DATA
+        // =====================================================
+        if (!name) {
+            toast('Jaza jina la bidhaa.', 'w');
+            return;
+        }
+
+        if (!category) {
+            toast('Chagua aina ya bidhaa.', 'w');
+            return;
+        }
+
+        if (sellPrice <= 0) {
+            toast(
+                'Bei ya kuuza lazima iwe kubwa kuliko 0.',
+                'w'
+            );
+            return;
+        }
+
+        if (costPrice < 0) {
+            toast(
+                'Bei ya kununua haiwezi kuwa chini ya 0.',
+                'w'
+            );
+            return;
+        }
+
+        if (stock < 0) {
+            toast(
+                'Stock haiwezi kuwa chini ya 0.',
+                'w'
+            );
+            return;
+        }
+
+        // =====================================================
+        // 6. DISABLE BUTTON
+        // =====================================================
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML =
+                '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Inahifadhi...';
+        }
+
+        // =====================================================
+        // 7. CREATE FIRESTORE DATA
+        // =====================================================
+        const productData = {
+            name,
+            category,
+            sku,
+            costPrice,
+            sellPrice,
+            stock,
+            description: desc,
             businessId: validBizId,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
+        };
+
+        console.log('[PRODUCTS] Saving product:', {
+            businessId: validBizId,
+            name,
+            category,
+            sku
         });
+
+        // =====================================================
+        // 8. MODULAR FIRESTORE — ADD PRODUCT
+        // =====================================================
+        const productsRef = collection(db, 'products');
+
+        const productRef = await addDoc(
+            productsRef,
+            productData
+        );
+
+        console.log(
+            '[PRODUCTS] Product saved successfully:',
+            productRef.id
+        );
+
+        // =====================================================
+        // 9. SUCCESS
+        // =====================================================
         toast('Bidhaa imehifadhiwa!', 's');
-        document.getElementById('apName').value = '';
-        document.getElementById('apCategory').value = '';
-        document.getElementById('apSku').value = '';
-        document.getElementById('apCostPrice').value = '';
-        document.getElementById('apSellPrice').value = '';
-        document.getElementById('apStock').value = '';
-        document.getElementById('apDesc').value = '';
-        navTo('products');
+
+        // =====================================================
+        // 10. CLEAR FORM
+        // =====================================================
+        nameEl.value = '';
+        categoryEl.value = '';
+        skuEl.value = '';
+        costPriceEl.value = '';
+        sellPriceEl.value = '';
+        stockEl.value = '';
+        descEl.value = '';
+
+        // =====================================================
+        // 11. RETURN TO PRODUCTS
+        // =====================================================
+        if (typeof navTo === 'function') {
+            await navTo('products');
+        }
+
     } catch (err) {
-        console.error('[PRODUCTS] Save error:', err);
-        toast('Hitilafu ya kuhifadhi bidhaa.', 'e');
+
+        // =====================================================
+        // IMPORTANT:
+        // SHOW REAL FIREBASE ERROR IN CONSOLE
+        // =====================================================
+        console.error(
+            '[PRODUCTS] Save product failed:',
+            err
+        );
+
+        console.error(
+            '[PRODUCTS] Error code:',
+            err?.code || 'NO_CODE'
+        );
+
+        console.error(
+            '[PRODUCTS] Error message:',
+            err?.message || err
+        );
+
+        // =====================================================
+        // USER-FRIENDLY ERROR
+        // =====================================================
+        let message =
+            'Hitilafu ya kuhifadhi bidhaa.';
+
+        if (
+            err?.message?.includes(
+                'Business ID haijapatikana'
+            )
+        ) {
+            message =
+                'Business ID haijapatikana kwenye akaunti yako.';
+        }
+
+        else if (
+            err?.code === 'permission-denied'
+        ) {
+            message =
+                'Huna ruhusa ya kuhifadhi bidhaa kwenye biashara hii.';
+        }
+
+        else if (
+            err?.code === 'failed-precondition'
+        ) {
+            message =
+                'Firebase haijaweza kukamilisha operesheni hii.';
+        }
+
+        else if (
+            err?.code === 'unavailable'
+        ) {
+            message =
+                'Firebase haipatikani kwa sasa. Angalia internet kisha ujaribu tena.';
+        }
+
+        else if (
+            err?.message?.includes(
+                'not defined'
+            )
+        ) {
+            message =
+                'Kuna sehemu ya Firebase Modular SDK haijaunganishwa vizuri.';
+        }
+
+        else if (
+            err?.message?.includes(
+                'empty path'
+            )
+        ) {
+            message =
+                'Business ID au Document ID haijapatikana.';
+        }
+
+        toast(message, 'e');
+
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-save"></i> Hifadhi Bidhaa';
+
+        // =====================================================
+        // 12. RESTORE BUTTON
+        // =====================================================
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML =
+                '<i class="fas fa-save"></i> Hifadhi Bidhaa';
+        }
     }
 }
-
 /* ===== EDIT PRODUCT ===== */
 function editProduct(id) {
     const p = products.find(x => x.id === id);
