@@ -3276,176 +3276,158 @@ async function sendMessage() {
     } catch (error) { console.error('[SEND MSG]', error); toast('Hitilafu katika kutuma ujumbe.', 'e'); }
 }
 
-/* =========================================================
-   DASHBOARD — SAFE MODULAR FIREBASE
+
+   /* =========================================================
+   DASHBOARD — FIREBASE MODULAR SDK
+   SAFE BUSINESS ID + DIRECT FIRESTORE LOADING
    ========================================================= */
+
 async function loadDashboard() {
 
     const metricsEl = document.getElementById('dashMetrics');
     const recentEl = document.getElementById('dashRecentSales');
 
     if (!metricsEl) {
-        console.warn('[DASHBOARD] #dashMetrics haijapatikana.');
+        console.warn('[DASHBOARD] dashMetrics haipo kwenye HTML.');
         return;
     }
 
-    /* =====================================================
-       1. SHOW LOADING
-       ===================================================== */
-
-    metricsEl.innerHTML =
-        '<div class="mc">' +
-            '<div class="spinner" style="margin:20px auto"></div>' +
-        '</div>'.repeat(4);
-
-
     try {
 
-        /* =================================================
-           2. FIREBASE CHECK
-           ================================================= */
+        /* =====================================================
+           1. FIREBASE CHECK
+           ===================================================== */
 
         if (!db) {
-            throw new Error(
-                'Firestore haijaandaliwa.'
-            );
+            throw new Error('Firestore haijaandaliwa.');
         }
 
         if (!auth) {
-            throw new Error(
-                'Firebase Auth haijaandaliwa.'
-            );
+            throw new Error('Firebase Auth haijaandaliwa.');
         }
 
 
-        /* =================================================
-           3. WAIT FOR AUTH + USER DATA + BUSINESS
-           ================================================= */
+        /* =====================================================
+           2. WAIT FOR AUTH / USER / BUSINESS
+           ===================================================== */
 
-        await waitForFirebaseReady(true);
+        if (typeof waitForFirebaseReady === 'function') {
+
+            await waitForFirebaseReady(true);
+
+        } else {
+
+            /*
+             * Kama waitForFirebaseReady() haipo,
+             * hatutaki Dashboard ivunjike.
+             */
+
+            if (!auth.currentUser) {
+                throw new Error(
+                    'Mtumiaji hajaingia kwenye mfumo.'
+                );
+            }
+        }
 
 
-        /* =================================================
-           4. GET VALID BUSINESS ID
-           ================================================= */
+        /* =====================================================
+           3. GET BUSINESS ID SAFELY
+           ===================================================== */
 
-        const bizId = getBusinessId();
+        let bizId = null;
 
-        if (!isValidId(bizId)) {
-            throw new Error(
-                'Business ID haijapatikana kwenye akaunti yako.'
-            );
+
+        if (typeof getBusinessId === 'function') {
+
+            bizId = getBusinessId();
+
+        } else {
+
+            /*
+             * Fallback salama bila kuunda ID bandia.
+             */
+
+            bizId =
+                State?.currentBizId ||
+                State?.currentBusinessId ||
+                window.businessId ||
+                window.currentBizId ||
+                null;
+        }
+
+
+        /* =====================================================
+           4. VALIDATE BUSINESS ID
+           ===================================================== */
+
+        if (
+            typeof isValidId === 'function'
+        ) {
+
+            if (!isValidId(bizId)) {
+                throw new Error(
+                    'Business ID haijapatikana kwenye akaunti yako.'
+                );
+            }
+
+        } else {
+
+            if (
+                typeof bizId !== 'string' ||
+                !bizId.trim()
+            ) {
+
+                throw new Error(
+                    'Business ID haijapatikana kwenye akaunti yako.'
+                );
+            }
+
+            bizId = bizId.trim();
+        }
+
+
+        /* =====================================================
+           5. SYNC STATE
+           ===================================================== */
+
+        if (typeof State !== 'undefined') {
+
+            State.currentBizId = bizId;
+
+            if ('currentBusinessId' in State) {
+                State.currentBusinessId = bizId;
+            }
         }
 
 
         console.log(
-            '[DASHBOARD] Loading business:',
+            '[DASHBOARD] Business ID:',
             bizId
         );
 
 
-        /* =================================================
-           5. ENSURE STATE OBJECT EXISTS
-           ================================================= */
+        /* =====================================================
+           6. LOADING UI
+           ===================================================== */
+
+        metricsEl.innerHTML =
+            '<div class="mc">' +
+                '<div class="spinner" style="margin:20px auto"></div>' +
+            '</div>'.repeat(4);
+
+
+        /* =====================================================
+           7. ENSURE STATE ARRAYS
+           ===================================================== */
 
         if (
-            typeof State === 'undefined' ||
-            !State
+            typeof State === 'undefined'
         ) {
+
             throw new Error(
-                'Application State haijaandaliwa.'
+                'State haijaandaliwa kwenye mfumo.'
             );
         }
-
-
-        /* =================================================
-           6. KEEP ALL BUSINESS ID VARIABLES IN SYNC
-           ================================================= */
-
-        State.currentBizId = bizId;
-        State.currentBusinessId = bizId;
-
-
-        /* =================================================
-           7. LOAD REQUIRED DATA FIRST
-           ================================================= */
-
-        /*
-         * Dashboard inategemea:
-         *
-         * State.allProducts
-         * State.allSales
-         * State.allCustomers
-         *
-         * Hivyo lazima zipakwe kabla ya rendering.
-         */
-
-        const loaders = [];
-
-
-        if (
-            typeof loadProducts === 'function'
-        ) {
-            loaders.push(
-                Promise.resolve(
-                    loadProducts()
-                )
-            );
-        }
-
-
-        if (
-            typeof loadSales === 'function'
-        ) {
-            loaders.push(
-                Promise.resolve(
-                    loadSales()
-                )
-            );
-        }
-
-
-        if (
-            typeof loadCustomers === 'function'
-        ) {
-            loaders.push(
-                Promise.resolve(
-                    loadCustomers()
-                )
-            );
-        }
-
-
-        /*
-         * Usiruhusu failure ya loader moja
-         * kuzuia dashboard yote.
-         */
-
-        const loaderResults =
-            await Promise.allSettled(
-                loaders
-            );
-
-
-        loaderResults.forEach(
-            result => {
-
-                if (
-                    result.status === 'rejected'
-                ) {
-
-                    console.error(
-                        '[DASHBOARD] Data loader failed:',
-                        result.reason
-                    );
-                }
-            }
-        );
-
-
-        /* =================================================
-           8. GUARANTEE ARRAYS EXIST
-           ================================================= */
 
         if (!Array.isArray(State.allProducts)) {
             State.allProducts = [];
@@ -3460,111 +3442,241 @@ async function loadDashboard() {
         }
 
 
-        console.log(
-            '[DASHBOARD] State loaded:',
-            {
-                businessId: bizId,
-                products: State.allProducts.length,
-                sales: State.allSales.length,
-                customers: State.allCustomers.length
-            }
-        );
+        /* =====================================================
+           8. LOAD PRODUCTS DIRECTLY
+           ===================================================== */
+
+        try {
+
+            const productsQuery = query(
+                collection(db, 'products'),
+                where(
+                    'businessId',
+                    '==',
+                    bizId
+                )
+            );
+
+            const productsSnap =
+                await getDocs(productsQuery);
+
+            State.allProducts =
+                productsSnap.docs.map(
+                    productDoc => ({
+                        id: productDoc.id,
+                        ...productDoc.data()
+                    })
+                );
+
+        } catch (error) {
+
+            console.error(
+                '[DASHBOARD] Products failed:',
+                error
+            );
+
+            State.allProducts = [];
+        }
 
 
-        /* =================================================
-           9. CALCULATE METRICS
-           ================================================= */
+        /* =====================================================
+           9. LOAD SALES DIRECTLY
+           ===================================================== */
+
+        try {
+
+            const salesQuery = query(
+                collection(db, 'sales'),
+                where(
+                    'businessId',
+                    '==',
+                    bizId
+                )
+            );
+
+            const salesSnap =
+                await getDocs(salesQuery);
+
+            State.allSales =
+                salesSnap.docs.map(
+                    saleDoc => ({
+                        id: saleDoc.id,
+                        ...saleDoc.data()
+                    })
+                );
+
+
+            /*
+             * Sort newest first.
+             * Hakuna orderBy hapa ili kuepuka
+             * index requirement isiyokuwa lazima.
+             */
+
+            State.allSales.sort(
+                (a, b) => {
+
+                    const getTime = value => {
+
+                        if (
+                            value &&
+                            typeof value.toDate === 'function'
+                        ) {
+                            return value
+                                .toDate()
+                                .getTime();
+                        }
+
+                        if (
+                            value instanceof Date
+                        ) {
+                            return value.getTime();
+                        }
+
+                        if (
+                            typeof value === 'number'
+                        ) {
+                            return value;
+                        }
+
+                        return 0;
+                    };
+
+                    return (
+                        getTime(b.createdAt) -
+                        getTime(a.createdAt)
+                    );
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                '[DASHBOARD] Sales failed:',
+                error
+            );
+
+            State.allSales = [];
+        }
+
+
+        /* =====================================================
+           10. LOAD CUSTOMERS DIRECTLY
+           ===================================================== */
+
+        try {
+
+            const customersQuery = query(
+                collection(db, 'customers'),
+                where(
+                    'businessId',
+                    '==',
+                    bizId
+                )
+            );
+
+            const customersSnap =
+                await getDocs(
+                    customersQuery
+                );
+
+            State.allCustomers =
+                customersSnap.docs.map(
+                    customerDoc => ({
+                        id: customerDoc.id,
+                        ...customerDoc.data()
+                    })
+                );
+
+        } catch (error) {
+
+            console.error(
+                '[DASHBOARD] Customers failed:',
+                error
+            );
+
+            State.allCustomers = [];
+        }
+
+
+        /* =====================================================
+           11. CALCULATE SALES
+           ===================================================== */
 
         let totalRevenue = 0;
         let todayRevenue = 0;
-        let totalExpenses = 0;
-        let totalDebt = 0;
-        let lowStock = 0;
 
+        const now = new Date();
 
-        /* =================================================
-           10. TODAY START
-           ================================================= */
+        const todayStart =
+            new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                now.getDate()
+            );
 
-        const today = new Date();
-
-        today.setHours(
-            0,
-            0,
-            0,
-            0
-        );
-
-
-        /* =================================================
-           11. SALES
-           ================================================= */
 
         State.allSales.forEach(
             sale => {
 
                 if (!sale) return;
 
-                const total =
+                const amount =
                     Number(sale.total) || 0;
 
-                totalRevenue += total;
+                totalRevenue += amount;
 
+
+                let saleDate = null;
 
                 if (
                     sale.createdAt &&
                     typeof sale.createdAt.toDate === 'function'
                 ) {
 
-                    const saleDate =
+                    saleDate =
                         sale.createdAt.toDate();
-
-                    if (
-                        saleDate >= today
-                    ) {
-
-                        todayRevenue += total;
-                    }
 
                 } else if (
                     sale.createdAt instanceof Date
                 ) {
 
-                    if (
-                        sale.createdAt >= today
-                    ) {
+                    saleDate =
+                        sale.createdAt;
+                }
 
-                        todayRevenue += total;
-                    }
+
+                if (
+                    saleDate &&
+                    saleDate >= todayStart
+                ) {
+
+                    todayRevenue += amount;
                 }
             }
         );
 
 
-        /* =================================================
-           12. EXPENSES
-           ================================================= */
+        /* =====================================================
+           12. LOAD EXPENSES
+           ===================================================== */
+
+        let totalExpenses = 0;
 
         try {
 
-            const expensesQuery =
-                query(
-                    collection(
-                        db,
-                        'expenses'
-                    ),
-                    where(
-                        'businessId',
-                        '==',
-                        bizId
-                    )
-                );
+            const expensesQuery = query(
+                collection(db, 'expenses'),
+                where(
+                    'businessId',
+                    '==',
+                    bizId
+                )
+            );
 
             const expensesSnap =
                 await getDocs(
                     expensesQuery
                 );
-
 
             expensesSnap.forEach(
                 expenseDoc => {
@@ -3588,30 +3700,27 @@ async function loadDashboard() {
         }
 
 
-        /* =================================================
-           13. DEBTS
-           ================================================= */
+        /* =====================================================
+           13. LOAD DEBTS
+           ===================================================== */
+
+        let totalDebt = 0;
 
         try {
 
-            const debtsQuery =
-                query(
-                    collection(
-                        db,
-                        'debts'
-                    ),
-                    where(
-                        'businessId',
-                        '==',
-                        bizId
-                    )
-                );
+            const debtsQuery = query(
+                collection(db, 'debts'),
+                where(
+                    'businessId',
+                    '==',
+                    bizId
+                )
+            );
 
             const debtsSnap =
                 await getDocs(
                     debtsQuery
                 );
-
 
             debtsSnap.forEach(
                 debtDoc => {
@@ -3646,29 +3755,29 @@ async function loadDashboard() {
         }
 
 
-        /* =================================================
+        /* =====================================================
            14. LOW STOCK
-           ================================================= */
+           ===================================================== */
 
-        lowStock =
+        const lowStock =
             State.allProducts.filter(
                 product =>
                     (Number(product.stock) || 0) <= 5
             ).length;
 
 
-        /* =================================================
+        /* =====================================================
            15. PROFIT
-           ================================================= */
+           ===================================================== */
 
         const profit =
             totalRevenue -
             totalExpenses;
 
 
-        /* =================================================
-           16. FORMAT NUMBERS SAFELY
-           ================================================= */
+        /* =====================================================
+           16. SAFE FORMAT
+           ===================================================== */
 
         const formatMoney =
             typeof fmt === 'function'
@@ -3678,9 +3787,9 @@ async function loadDashboard() {
                         .toLocaleString();
 
 
-        /* =================================================
-           17. RENDER DASHBOARD METRICS
-           ================================================= */
+        /* =====================================================
+           17. RENDER METRICS
+           ===================================================== */
 
         metricsEl.innerHTML =
 
@@ -3725,11 +3834,7 @@ async function loadDashboard() {
             '</div>' +
 
             '<div class="mc ' +
-                (
-                    profit >= 0
-                        ? 'g'
-                        : 'r'
-                ) +
+                (profit >= 0 ? 'g' : 'r') +
             '">' +
                 '<div class="mc-icon">' +
                     '<i class="fas fa-chart-line"></i>' +
@@ -3777,70 +3882,94 @@ async function loadDashboard() {
             );
 
 
-        /* =================================================
+        /* =====================================================
            18. RECENT SALES
-           ================================================= */
+           ===================================================== */
 
-        renderDashRecentSales();
+        if (
+            typeof renderDashRecentSales === 'function'
+        ) {
+
+            renderDashRecentSales();
+
+        } else {
+
+            console.warn(
+                '[DASHBOARD] renderDashRecentSales() haipo.'
+            );
+
+            if (recentEl) {
+
+                recentEl.innerHTML =
+                    '<tr>' +
+                        '<td colspan="6" class="empty-s">' +
+                            '<p>Hakuna mauzo bado</p>' +
+                        '</td>' +
+                    '</tr>';
+            }
+        }
 
 
-        /* =================================================
+        /* =====================================================
            19. CHARTS
-           ================================================= */
+           ===================================================== */
 
-        renderDashCharts();
+        if (
+            typeof renderDashCharts === 'function'
+        ) {
+
+            renderDashCharts();
+
+        } else {
+
+            console.warn(
+                '[DASHBOARD] renderDashCharts() haipo.'
+            );
+        }
 
 
-        /* =================================================
-           20. FINAL LOG
-           ================================================= */
+        /* =====================================================
+           20. SUCCESS
+           ===================================================== */
 
         console.log(
-            '[DASHBOARD] Loaded successfully.',
+            '[DASHBOARD] SUCCESS',
             {
                 businessId: bizId,
-                revenue: totalRevenue,
+                products: State.allProducts.length,
+                sales: State.allSales.length,
+                customers: State.allCustomers.length,
                 todayRevenue,
-                expenses: totalExpenses,
-                debt: totalDebt,
+                totalRevenue,
+                totalExpenses,
+                totalDebt,
                 profit,
-                products:
-                    State.allProducts.length,
-                customers:
-                    State.allCustomers.length,
-                sales:
-                    State.allSales.length
+                lowStock
             }
         );
 
+
     } catch (error) {
 
-        /* =================================================
-           REAL ERROR — DO NOT HIDE IT
-           ================================================= */
-
         console.error(
-            '[DASHBOARD] FAILED:',
+            '[DASHBOARD] ERROR:',
             error
         );
 
         console.error(
-            '[DASHBOARD] Code:',
-            error?.code || 'NO_CODE'
+            '[DASHBOARD] ERROR CODE:',
+            error?.code
         );
 
         console.error(
-            '[DASHBOARD] Message:',
-            error?.message || error
+            '[DASHBOARD] ERROR MESSAGE:',
+            error?.message
         );
 
 
-        /* =================================================
-           USER MESSAGE
-           ================================================= */
-
         let message =
-            'Imeshindikana kupakia dashboard.';
+            'Imeshindikana kupakia Dashboard.';
+
 
         if (
             error?.message?.includes(
@@ -3849,19 +3978,25 @@ async function loadDashboard() {
         ) {
 
             message =
-                'Business ID haijapatikana kwenye akaunti yako. Tafadhali ingia tena.';
-        }
+                'Business ID haijapatikana kwenye akaunti yako.';
 
-        else if (
+        } else if (
             error?.code ===
             'permission-denied'
         ) {
 
             message =
-                'Huna ruhusa ya kuona taarifa za biashara hii.';
-        }
+                'Huna ruhusa ya kusoma taarifa za biashara hii.';
 
-        else if (
+        } else if (
+            error?.code ===
+            'failed-precondition'
+        ) {
+
+            message =
+                'Firestore inahitaji index kwa query hii.';
+
+        } else if (
             error?.code ===
             'unavailable'
         ) {
@@ -3882,20 +4017,16 @@ async function loadDashboard() {
         }
 
 
-        /* =================================================
-           SHOW SAFE EMPTY STATE
-           ================================================= */
-
         metricsEl.innerHTML =
             '<div class="empty-s" style="grid-column:1/-1">' +
-                '<i class="fas fa-chart-line"></i>' +
+                '<i class="fas fa-triangle-exclamation"></i>' +
                 '<p>' +
                     message +
                 '</p>' +
             '</div>';
     }
 }
-/* =========================================================
+   /* =========================================================
    REPORTS - DAILY
    ========================================================= */
 function initDailyReport() {
