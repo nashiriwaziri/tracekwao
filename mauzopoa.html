@@ -546,7 +546,21 @@ tr:hover td{background:var(--bg3)}
       <input type="hidden" id="superAdId"/>
       <div class="fg"><label>Title</label><input class="fi" id="superAdTitle" required/></div>
       <div class="fg"><label>Description</label><textarea class="fi" id="superAdText" rows="3"></textarea></div>
-      <div class="fg"><label>Image URL</label><input class="fi" id="superAdImage" placeholder="https://..."/></div>
+     <div class="fg">
+  <label for="superAdImage">Picha ya Tangazo</label>
+
+  <input
+    class="fi"
+    type="file"
+    id="superAdImage"
+    accept="image/*"
+  />
+
+  <small style="display:block;margin-top:6px;color:var(--muted);font-size:11px;">
+    Chagua picha ya size yoyote. Mfumo uta-compress na kuibadilisha
+    automatically hadi isizidi 500KB.
+  </small>
+</div>
       <div class="fg"><label>Link / Call to Action</label><input class="fi" id="superAdLink" placeholder="https://..."/></div>
       <div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeSuperModal('superAdModal')">Cancel</button><button class="btn btn-p" type="submit">Save Advertisement</button></div>
     </form>
@@ -3117,32 +3131,526 @@ function editSuperAd(id) {
   document.getElementById('superAdModal').style.display = 'flex';
 }
 
+/* ============================================================
+   SUPER ADMIN ADS
+   IMAGE UPLOAD + AUTO COMPRESS TO MAX 500KB
+   ============================================================ */
+
 async function saveSuperAd(e) {
   e.preventDefault();
-  if (!db) { toast('Firebase haijawaunganishwa.','e'); return; }
-  const editId = document.getElementById('superAdId').value;
-  const data = {
-    title: document.getElementById('superAdTitle').value.trim(),
-    description: document.getElementById('superAdText').value.trim(),
-    imageUrl: document.getElementById('superAdImage').value.trim(),
-    link: document.getElementById('superAdLink').value.trim()
-  };
-  if (!data.title) { toast('Title linahitajika.','w'); return; }
+
   try {
-    if (editId) {
-      await db.collection('globalAds').doc(editId).update(data);
-      toast('Matangazo yamesasishwa.','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('globalAds').add(data);
-      toast('Matangazo yameongezwa.','s');
+    // ----------------------------------------------------------
+    // CHECK FIREBASE
+    // ----------------------------------------------------------
+    if (!db) {
+      toast('Firebase haijaunganishwa.', 'e');
+      return;
     }
+
+    if (typeof firebase === 'undefined') {
+      toast('Firebase haijapatikana.', 'e');
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // GET FORM VALUES
+    // ----------------------------------------------------------
+    const editId =
+      document.getElementById('superAdId')?.value?.trim() || '';
+
+    const title =
+      document.getElementById('superAdTitle')?.value?.trim() || '';
+
+    const description =
+      document.getElementById('superAdText')?.value?.trim() || '';
+
+    const link =
+      document.getElementById('superAdLink')?.value?.trim() || '';
+
+    const imageInput =
+      document.getElementById('superAdImage');
+
+    // ----------------------------------------------------------
+    // VALIDATE TITLE
+    // ----------------------------------------------------------
+    if (!title) {
+      toast('Title linahitajika.', 'w');
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // VALIDATE IMAGE INPUT
+    // ----------------------------------------------------------
+    if (!imageInput) {
+      console.error(
+        '[SUPER AD] #superAdImage haipo kwenye HTML.'
+      );
+
+      toast(
+        'Sehemu ya kuchagua picha haijapatikana.',
+        'e'
+      );
+
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // GET SELECTED FILE
+    // ----------------------------------------------------------
+    const imageFile =
+      imageInput.files && imageInput.files.length
+        ? imageInput.files[0]
+        : null;
+
+    // ----------------------------------------------------------
+    // EDIT MODE:
+    // GET OLD IMAGE URL
+    // ----------------------------------------------------------
+    let oldImageUrl = '';
+
+    if (editId) {
+      const oldAdSnap = await db
+        .collection('globalAds')
+        .doc(editId)
+        .get();
+
+      if (oldAdSnap.exists) {
+        const oldData = oldAdSnap.data() || {};
+
+        oldImageUrl =
+          oldData.imageUrl ||
+          '';
+      }
+    }
+
+    // ----------------------------------------------------------
+    // IMAGE URL WILL NEVER BE ENTERED MANUALLY
+    // ----------------------------------------------------------
+    let imageUrl = oldImageUrl;
+
+    // ----------------------------------------------------------
+    // UPLOAD NEW IMAGE IF SELECTED
+    // ----------------------------------------------------------
+    if (imageFile) {
+
+      // Check image type
+      if (!imageFile.type.startsWith('image/')) {
+        toast(
+          'Tafadhali chagua picha halali.',
+          'w'
+        );
+
+        return;
+      }
+
+      toast(
+        'Picha inachakatwa...',
+        'i'
+      );
+
+      console.log(
+        '[SUPER AD] Original image:',
+        {
+          name: imageFile.name,
+          type: imageFile.type,
+          sizeKB: Math.round(
+            imageFile.size / 1024
+          )
+        }
+      );
+
+      // --------------------------------------------------------
+      // COMPRESS IMAGE TO MAX 500KB
+      // --------------------------------------------------------
+      const compressedBlob =
+        await compressImageTo500KB(imageFile);
+
+      if (!compressedBlob) {
+        toast(
+          'Imeshindikana ku-compress picha.',
+          'e'
+        );
+
+        return;
+      }
+
+      console.log(
+        '[SUPER AD] Compressed image:',
+        {
+          type: compressedBlob.type,
+          sizeKB: Math.round(
+            compressedBlob.size / 1024
+          )
+        }
+      );
+
+      // --------------------------------------------------------
+      // FIREBASE STORAGE
+      // --------------------------------------------------------
+      const storage =
+        firebase.storage();
+
+      const timestamp =
+        Date.now();
+
+      const safeName =
+        imageFile.name
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      const filePath =
+        `globalAds/${timestamp}_${safeName}.jpg`;
+
+      const storageRef =
+        storage.ref(filePath);
+
+      // --------------------------------------------------------
+      // UPLOAD COMPRESSED IMAGE
+      // --------------------------------------------------------
+      const uploadTask =
+        await storageRef.put(
+          compressedBlob,
+          {
+            contentType: 'image/jpeg',
+            cacheControl: 'public,max-age=31536000'
+          }
+        );
+
+      console.log(
+        '[SUPER AD] Image uploaded successfully.'
+      );
+
+      // --------------------------------------------------------
+      // GET DOWNLOAD URL
+      // --------------------------------------------------------
+      imageUrl =
+        await uploadTask.ref.getDownloadURL();
+
+      console.log(
+        '[SUPER AD] Image URL created.'
+      );
+    }
+
+    // ----------------------------------------------------------
+    // PREPARE DATA
+    // ----------------------------------------------------------
+    const data = {
+      title: title,
+      description: description,
+      imageUrl: imageUrl || '',
+      link: link,
+      updatedAt:
+        firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    // ----------------------------------------------------------
+    // SAVE / UPDATE AD
+    // ----------------------------------------------------------
+    if (editId) {
+
+      await db
+        .collection('globalAds')
+        .doc(editId)
+        .update(data);
+
+      toast(
+        'Tangazo limesasishwa kikamilifu.',
+        's'
+      );
+
+    } else {
+
+      data.createdAt =
+        firebase.firestore.FieldValue.serverTimestamp();
+
+      await db
+        .collection('globalAds')
+        .add(data);
+
+      toast(
+        'Tangazo limeongezwa kikamilifu.',
+        's'
+      );
+    }
+
+    // ----------------------------------------------------------
+    // CLOSE MODAL
+    // ----------------------------------------------------------
     closeSuperModal('superAdModal');
-    loadSuperAdmin();
-  } catch(err) {
-    console.error("Save ad error:", err);
-    toast('Imeshindwa kuhifadhi matangazo.','e');
+
+    // ----------------------------------------------------------
+    // REFRESH SUPER ADMIN
+    // ----------------------------------------------------------
+    if (typeof loadSuperAdmin === 'function') {
+      await loadSuperAdmin();
+    }
+
+  } catch (err) {
+
+    console.error(
+      '[SUPER AD] SAVE ERROR:',
+      err
+    );
+
+    console.error(
+      '[SUPER AD] MESSAGE:',
+      err?.message
+    );
+
+    toast(
+      err?.message ||
+      'Imeshindwa kuhifadhi tangazo.',
+      'e'
+    );
   }
+}
+
+
+/* ============================================================
+   IMAGE COMPRESSOR
+   MAXIMUM SIZE = 500KB
+   ============================================================ */
+
+async function compressImageTo500KB(file) {
+
+  const MAX_SIZE =
+    500 * 1024;
+
+  // ----------------------------------------------------------
+  // ALREADY SMALL ENOUGH
+  // ----------------------------------------------------------
+  if (
+    file.size <= MAX_SIZE &&
+    file.type === 'image/jpeg'
+  ) {
+    return file;
+  }
+
+  // ----------------------------------------------------------
+  // LOAD IMAGE
+  // ----------------------------------------------------------
+  const image =
+    await loadImageFromFile(file);
+
+  // ----------------------------------------------------------
+  // INITIAL DIMENSIONS
+  // ----------------------------------------------------------
+  let width =
+    image.naturalWidth ||
+    image.width;
+
+  let height =
+    image.naturalHeight ||
+    image.height;
+
+  // ----------------------------------------------------------
+  // LIMIT VERY LARGE IMAGES
+  // ----------------------------------------------------------
+  const MAX_DIMENSION = 2400;
+
+  if (
+    width > MAX_DIMENSION ||
+    height > MAX_DIMENSION
+  ) {
+
+    const ratio =
+      Math.min(
+        MAX_DIMENSION / width,
+        MAX_DIMENSION / height
+      );
+
+    width =
+      Math.round(width * ratio);
+
+    height =
+      Math.round(height * ratio);
+  }
+
+  // ----------------------------------------------------------
+  // CANVAS
+  // ----------------------------------------------------------
+  const canvas =
+    document.createElement('canvas');
+
+  const ctx =
+    canvas.getContext('2d', {
+      alpha: false
+    });
+
+  // ----------------------------------------------------------
+  // TRY MULTIPLE QUALITY LEVELS
+  // ----------------------------------------------------------
+  let quality = 0.90;
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+
+    canvas.width = width;
+    canvas.height = height;
+
+    // White background
+    ctx.fillStyle = '#ffffff';
+
+    ctx.fillRect(
+      0,
+      0,
+      width,
+      height
+    );
+
+    ctx.drawImage(
+      image,
+      0,
+      0,
+      width,
+      height
+    );
+
+    const blob =
+      await canvasToBlob(
+        canvas,
+        'image/jpeg',
+        quality
+      );
+
+    if (!blob) {
+      throw new Error(
+        'Browser imeshindwa kutengeneza picha.'
+      );
+    }
+
+    console.log(
+      `[IMAGE COMPRESS] Attempt ${attempt + 1}:`,
+      Math.round(blob.size / 1024),
+      'KB',
+      'quality:',
+      quality,
+      'dimensions:',
+      width,
+      'x',
+      height
+    );
+
+    // --------------------------------------------------------
+    // SUCCESS
+    // --------------------------------------------------------
+    if (blob.size <= MAX_SIZE) {
+      return blob;
+    }
+
+    // --------------------------------------------------------
+    // REDUCE QUALITY
+    // --------------------------------------------------------
+    quality -= 0.07;
+
+    // --------------------------------------------------------
+    // IF QUALITY IS TOO LOW, REDUCE DIMENSIONS
+    // --------------------------------------------------------
+    if (quality < 0.45) {
+
+      quality = 0.82;
+
+      width =
+        Math.round(width * 0.85);
+
+      height =
+        Math.round(height * 0.85);
+    }
+
+    // --------------------------------------------------------
+    // SAFETY LIMIT
+    // --------------------------------------------------------
+    if (
+      width < 500 ||
+      height < 500
+    ) {
+      quality = 0.35;
+    }
+  }
+
+  // ----------------------------------------------------------
+  // FINAL ATTEMPT
+  // ----------------------------------------------------------
+  const finalBlob =
+    await canvasToBlob(
+      canvas,
+      'image/jpeg',
+      0.30
+    );
+
+  if (
+    finalBlob &&
+    finalBlob.size <= MAX_SIZE
+  ) {
+    return finalBlob;
+  }
+
+  throw new Error(
+    'Picha ni kubwa sana na haikuweza kupunguzwa hadi 500KB.'
+  );
+}
+
+
+/* ============================================================
+   LOAD IMAGE FROM FILE
+   ============================================================ */
+
+function loadImageFromFile(file) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const img =
+        new Image();
+
+      const url =
+        URL.createObjectURL(file);
+
+      img.onload = () => {
+
+        URL.revokeObjectURL(url);
+
+        resolve(img);
+      };
+
+      img.onerror = () => {
+
+        URL.revokeObjectURL(url);
+
+        reject(
+          new Error(
+            'Imeshindikana kusoma picha.'
+          )
+        );
+      };
+
+      img.src = url;
+    }
+  );
+}
+
+
+/* ============================================================
+   CANVAS TO BLOB
+   ============================================================ */
+
+function canvasToBlob(
+  canvas,
+  type,
+  quality
+) {
+
+  return new Promise(
+    resolve => {
+
+      canvas.toBlob(
+        blob => resolve(blob),
+        type,
+        quality
+      );
+
+    }
+  );
 }
 
 function deleteSuperAd(id) {
