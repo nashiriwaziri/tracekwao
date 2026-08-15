@@ -750,9 +750,23 @@ tr:hover td{background:var(--bg3)}
 
 <script type="module">
 
-/* ===== FIREBASE MODULAR IMPORTS ===== */
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js';
+<script type="module">
 
+/* ============================================================
+   FIREBASE MODULAR SDK — CENTRAL INITIALIZATION
+   Version: Firebase 12.12.0
+   ============================================================ */
+
+/* ============================================================
+   1. FIREBASE APP
+   ============================================================ */
+import { initializeApp } from
+    'https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js';
+
+
+/* ============================================================
+   2. FIREBASE AUTH — MODULAR SDK
+   ============================================================ */
 import {
     getAuth,
     onAuthStateChanged,
@@ -761,8 +775,13 @@ import {
     signOut,
     updatePassword,
     sendPasswordResetEmail
-} from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js';
+} from
+    'https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js';
 
+
+/* ============================================================
+   3. FIRESTORE — MODULAR SDK
+   ============================================================ */
 import {
     getFirestore,
     collection,
@@ -781,8 +800,13 @@ import {
     serverTimestamp,
     writeBatch,
     runTransaction
-} from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
+} from
+    'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
 
+
+/* ============================================================
+   4. FIREBASE STORAGE — MODULAR SDK
+   ============================================================ */
 import {
     getStorage,
     ref,
@@ -790,33 +814,976 @@ import {
     uploadBytesResumable,
     getDownloadURL,
     deleteObject
-} from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
+} from
+    'https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js';
 
-/* ===== FIREBASE CONFIGURATION ===== */
-const firebaseConfig = {
-  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-        authDomain: "ncrs-aeb43.firebaseapp.com",
-        projectId: "ncrs-aeb43",
-        storageBucket: "ncrs-aeb43.firebasestorage.app",
-        messagingSenderId: "786434442929",
-        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-        measurementId: "G-ZYB71RY8J5",
-      };
+
 /* ============================================================
-   SINGLE AUTHORITATIVE FIREBASE INITIALIZATION
-   MODULAR FIREBASE SDK ONLY
+   5. FIREBASE CONFIGURATION
    ============================================================ */
 
-const app = initializeApp(firebaseConfig);
+const firebaseConfig = {
 
-const auth = getAuth(app);
+    apiKey:
+        "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
 
-const db = getFirestore(app);
+    authDomain:
+        "ncrs-aeb43.firebaseapp.com",
 
-const storage = getStorage(app);
+    projectId:
+        "ncrs-aeb43",
+
+    storageBucket:
+        "ncrs-aeb43.firebasestorage.app",
+
+    messagingSenderId:
+        "786434442929",
+
+    appId:
+        "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+
+    measurementId:
+        "G-ZYB71RY8J5"
+};
 
 
 /* ============================================================
+   6. INITIALIZE FIREBASE ONCE
+   ============================================================ */
+
+let firebaseApp = null;
+let auth = null;
+let db = null;
+let storage = null;
+
+try {
+
+    firebaseApp = initializeApp(firebaseConfig);
+
+    auth = getAuth(firebaseApp);
+
+    db = getFirestore(firebaseApp);
+
+    storage = getStorage(firebaseApp);
+
+    console.log(
+        '[FIREBASE] Modular SDK initialized successfully.'
+    );
+
+} catch (error) {
+
+    console.error(
+        '[FIREBASE] Initialization failed:',
+        error
+    );
+
+    throw new Error(
+        'Firebase haikuweza kuanzishwa. Angalia Firebase Configuration.'
+    );
+}
+
+
+/* ============================================================
+   7. GLOBAL APPLICATION STATE
+   ============================================================ */
+
+/*
+   DO NOT create random Business IDs.
+
+   These variables represent the authenticated
+   user's actual application state.
+*/
+
+let currentUser = null;
+let currentUserData = null;
+
+let businessId = null;
+let currentBizId = null;
+let currentBusinessId = null;
+
+let businessData = null;
+
+let firebaseAuthReady = false;
+let userDataReady = false;
+let businessReady = false;
+let appReady = false;
+
+
+/* ============================================================
+   8. ID VALIDATION
+   ============================================================ */
+
+function isValidId(value) {
+
+    return (
+        typeof value === 'string' &&
+        value.trim().length > 0 &&
+        value.trim() !== 'undefined' &&
+        value.trim() !== 'null'
+    );
+}
+
+
+/* ============================================================
+   9. REQUIRE VALID ID
+   ============================================================ */
+
+function requireId(value, label = 'ID') {
+
+    if (!isValidId(value)) {
+
+        console.error(
+            `[FIREBASE] Invalid ${label}:`,
+            value
+        );
+
+        throw new Error(
+            `${label} haijapatikana au si sahihi.`
+        );
+    }
+
+    return value.trim();
+}
+
+
+/* ============================================================
+   10. SAFE FIRESTORE DOCUMENT REFERENCE
+   ============================================================ */
+
+function safeDoc(
+    dbInstance,
+    collectionName,
+    id,
+    label = 'Document ID'
+) {
+
+    if (!dbInstance) {
+
+        throw new Error(
+            'Firestore haijaandaliwa.'
+        );
+    }
+
+    if (
+        typeof collectionName !== 'string' ||
+        !collectionName.trim()
+    ) {
+
+        throw new Error(
+            'Collection name haijapatikana.'
+        );
+    }
+
+    const validId = requireId(
+        id,
+        label
+    );
+
+    return doc(
+        dbInstance,
+        collectionName.trim(),
+        validId
+    );
+}
+
+
+/* ============================================================
+   11. SAFE COLLECTION REFERENCE
+   ============================================================ */
+
+function safeCollection(
+    dbInstance,
+    collectionName
+) {
+
+    if (!dbInstance) {
+
+        throw new Error(
+            'Firestore haijaandaliwa.'
+        );
+    }
+
+    if (
+        typeof collectionName !== 'string' ||
+        !collectionName.trim()
+    ) {
+
+        throw new Error(
+            'Collection name haijapatikana.'
+        );
+    }
+
+    return collection(
+        dbInstance,
+        collectionName.trim()
+    );
+}
+
+
+/* ============================================================
+   12. SAFE STORAGE PATH
+   ============================================================ */
+
+function requireStorageId(
+    value,
+    label = 'Storage ID'
+) {
+
+    return requireId(
+        value,
+        label
+    );
+}
+
+
+/* ============================================================
+   13. SYNCHRONIZE BUSINESS ID
+   ============================================================ */
+
+/*
+   Mfumo wako unaweza kuwa na code ya zamani inayotumia:
+
+   businessId
+   currentBizId
+   currentBusinessId
+
+   Badala ya kuvunja modules hizo, zote
+   zitasawazishwa hapa.
+*/
+
+function syncBusinessId(id) {
+
+    const validId = requireId(
+        id,
+        'Business ID'
+    );
+
+    businessId = validId;
+
+    currentBizId = validId;
+
+    currentBusinessId = validId;
+
+    console.log(
+        '[BUSINESS] Business ID synchronized:',
+        validId
+    );
+
+    return validId;
+}
+
+
+/* ============================================================
+   14. CLEAR BUSINESS STATE
+   ============================================================ */
+
+function clearBusinessState() {
+
+    businessId = null;
+
+    currentBizId = null;
+
+    currentBusinessId = null;
+
+    businessData = null;
+
+    businessReady = false;
+
+    console.log(
+        '[BUSINESS] Business state cleared.'
+    );
+}
+
+
+/* ============================================================
+   15. GET CURRENT BUSINESS ID
+   ============================================================ */
+
+function getBusinessId() {
+
+    /*
+       First preference:
+       officially synchronized global state.
+    */
+
+    if (isValidId(businessId)) {
+
+        return businessId.trim();
+    }
+
+
+    /*
+       Compatibility fallback.
+    */
+
+    if (isValidId(currentBizId)) {
+
+        return syncBusinessId(
+            currentBizId
+        );
+    }
+
+
+    if (isValidId(currentBusinessId)) {
+
+        return syncBusinessId(
+            currentBusinessId
+        );
+    }
+
+
+    /*
+       Last safe source:
+       authenticated user's loaded data.
+    */
+
+    if (
+        currentUserData &&
+        isValidId(currentUserData.businessId)
+    ) {
+
+        return syncBusinessId(
+            currentUserData.businessId
+        );
+    }
+
+
+    /*
+       DO NOT invent a fake ID.
+    */
+
+    throw new Error(
+        'Business ID haijapatikana kwenye akaunti yako.'
+    );
+}
+
+
+/* ============================================================
+   16. REQUIRE AUTHENTICATED USER
+   ============================================================ */
+
+function requireCurrentUser() {
+
+    if (
+        !currentUser ||
+        !isValidId(currentUser.uid)
+    ) {
+
+        throw new Error(
+            'Mtumiaji hajaingia kwenye mfumo.'
+        );
+    }
+
+    return currentUser;
+}
+
+
+/* ============================================================
+   17. REQUIRE BUSINESS USER
+   ============================================================ */
+
+function requireBusinessUser() {
+
+    const user = requireCurrentUser();
+
+    /*
+       Super Administrator / system-level users
+       wanaweza kutokuwa na businessId.
+
+       Hivyo hatuwalazimishi hapa bila sababu.
+    */
+
+    const role =
+        currentUserData?.role ||
+        currentUserData?.userRole ||
+        '';
+
+    const normalizedRole =
+        String(role)
+            .trim()
+            .toLowerCase();
+
+    const systemRoles = [
+        'superadmin',
+        'super administrator',
+        'super_admin',
+        'administrator',
+        'admin'
+    ];
+
+    /*
+       Kama role ni system-level,
+       caller aamue kama business context inahitajika.
+    */
+
+    if (
+        systemRoles.includes(
+            normalizedRole
+        )
+    ) {
+
+        return {
+            user,
+            userData: currentUserData,
+            businessId: isValidId(businessId)
+                ? businessId
+                : null,
+            isSystemUser: true
+        };
+    }
+
+
+    /*
+       Business users lazima wawe na Business ID.
+    */
+
+    const validBusinessId =
+        getBusinessId();
+
+    return {
+        user,
+        userData: currentUserData,
+        businessId: validBusinessId,
+        isSystemUser: false
+    };
+}
+
+
+/* ============================================================
+   18. LOAD USER DATA
+   ============================================================ */
+
+async function loadCurrentUserData(user) {
+
+    if (
+        !user ||
+        !isValidId(user.uid)
+    ) {
+
+        throw new Error(
+            'User ID haijapatikana.'
+        );
+    }
+
+    const uid = user.uid.trim();
+
+    const userRef = safeDoc(
+        db,
+        'users',
+        uid,
+        'User ID'
+    );
+
+    const userSnap =
+        await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+
+        throw new Error(
+            'Akaunti yako haipo kwenye mfumo.'
+        );
+    }
+
+    const data = userSnap.data();
+
+    if (!data || typeof data !== 'object') {
+
+        throw new Error(
+            'Taarifa za akaunti yako si sahihi.'
+        );
+    }
+
+    currentUserData = {
+        ...data,
+        uid
+    };
+
+    userDataReady = true;
+
+    console.log(
+        '[AUTH] User data loaded:',
+        currentUserData
+    );
+
+    /*
+       IMPORTANT:
+       Only synchronize businessId if it actually exists.
+    */
+
+    if (
+        isValidId(
+            currentUserData.businessId
+        )
+    ) {
+
+        syncBusinessId(
+            currentUserData.businessId
+        );
+
+    } else {
+
+        clearBusinessState();
+
+        console.warn(
+            '[BUSINESS] User has no businessId.'
+        );
+    }
+
+    return currentUserData;
+}
+
+
+/* ============================================================
+   19. LOAD BUSINESS DATA
+   ============================================================ */
+
+async function loadCurrentBusinessData() {
+
+    /*
+       Do not run this for a user
+       who legitimately has no business.
+    */
+
+    const validBusinessId =
+        getBusinessId();
+
+    const businessRef = safeDoc(
+        db,
+        'businesses',
+        validBusinessId,
+        'Business ID'
+    );
+
+    const businessSnap =
+        await getDoc(
+            businessRef
+        );
+
+    if (!businessSnap.exists()) {
+
+        businessReady = false;
+
+        throw new Error(
+            'Akaunti ya biashara haijapatikana.'
+        );
+    }
+
+    businessData =
+        businessSnap.data();
+
+    businessReady = true;
+
+    console.log(
+        '[BUSINESS] Business loaded:',
+        businessData
+    );
+
+    return businessData;
+}
+
+
+/* ============================================================
+   20. APPLICATION AUTH INITIALIZATION
+   ============================================================ */
+
+let authInitializationPromise = null;
+
+function initializeAuthState() {
+
+    if (authInitializationPromise) {
+
+        return authInitializationPromise;
+    }
+
+    authInitializationPromise =
+        new Promise(resolve => {
+
+            onAuthStateChanged(
+                auth,
+                async user => {
+
+                    try {
+
+                        firebaseAuthReady = true;
+
+                        currentUser =
+                            user || null;
+
+                        userDataReady = false;
+
+                        businessReady = false;
+
+                        appReady = false;
+
+
+                        /* ====================================
+                           USER LOGGED OUT
+                           ==================================== */
+
+                        if (!user) {
+
+                            currentUserData = null;
+
+                            clearBusinessState();
+
+                            console.log(
+                                '[AUTH] No authenticated user.'
+                            );
+
+                            resolve(null);
+
+                            return;
+                        }
+
+
+                        /* ====================================
+                           LOAD USER DOCUMENT
+                           ==================================== */
+
+                        await loadCurrentUserData(
+                            user
+                        );
+
+
+                        /* ====================================
+                           LOAD BUSINESS ONLY WHEN REQUIRED
+                           ==================================== */
+
+                        const role =
+                            String(
+                                currentUserData?.role ||
+                                currentUserData?.userRole ||
+                                ''
+                            )
+                            .trim()
+                            .toLowerCase();
+
+                        const systemRoles = [
+                            'superadmin',
+                            'super administrator',
+                            'super_admin',
+                            'administrator',
+                            'admin'
+                        ];
+
+                        const isSystemUser =
+                            systemRoles.includes(
+                                role
+                            );
+
+
+                        if (
+                            !isSystemUser &&
+                            isValidId(businessId)
+                        ) {
+
+                            await loadCurrentBusinessData();
+
+                        } else {
+
+                            console.log(
+                                '[BUSINESS] Business loading skipped for system-level user.'
+                            );
+                        }
+
+
+                        /* ====================================
+                           APPLICATION READY
+                           ==================================== */
+
+                        appReady = true;
+
+                        console.log(
+                            '[APP] Firebase application state ready.'
+                        );
+
+                        resolve(user);
+
+                    } catch (error) {
+
+                        console.error(
+                            '[AUTH] Initialization failed:',
+                            error
+                        );
+
+                        appReady = false;
+
+                        resolve(null);
+
+                        if (
+                            typeof toast === 'function'
+                        ) {
+
+                            toast(
+                                error?.message ||
+                                'Imeshindikana kuanzisha akaunti.',
+                                'e'
+                            );
+                        }
+                    }
+                }
+            );
+        });
+
+    return authInitializationPromise;
+}
+
+
+/* ============================================================
+   21. WAIT UNTIL AUTH + USER DATA ARE READY
+   ============================================================ */
+
+async function waitForFirebaseReady(
+    requireBusiness = true
+) {
+
+    await initializeAuthState();
+
+
+    if (!firebaseAuthReady) {
+
+        throw new Error(
+            'Firebase Auth bado haijawa tayari.'
+        );
+    }
+
+
+    requireCurrentUser();
+
+
+    if (!userDataReady) {
+
+        throw new Error(
+            'Taarifa za mtumiaji bado hazijapakiwa.'
+        );
+    }
+
+
+    if (requireBusiness) {
+
+        getBusinessId();
+
+        if (!businessReady) {
+
+            await loadCurrentBusinessData();
+        }
+    }
+
+    return {
+        user: currentUser,
+        userData: currentUserData,
+        businessId:
+            isValidId(businessId)
+                ? businessId
+                : null,
+        businessData
+    };
+}
+
+
+/* ============================================================
+   22. SAFE BUSINESS DOCUMENT
+   ============================================================ */
+
+function safeBusinessDoc(
+    collectionName
+) {
+
+    const validBusinessId =
+        getBusinessId();
+
+    return safeDoc(
+        db,
+        collectionName,
+        validBusinessId,
+        'Business ID'
+    );
+}
+
+
+/* ============================================================
+   23. SAFE BUSINESS QUERY
+   ============================================================ */
+
+function safeBusinessQuery(
+    collectionName,
+    ...queryConstraints
+) {
+
+    const validBusinessId =
+        getBusinessId();
+
+    const colRef =
+        safeCollection(
+            db,
+            collectionName
+        );
+
+    return query(
+        colRef,
+        where(
+            'businessId',
+            '==',
+            validBusinessId
+        ),
+        ...queryConstraints
+    );
+}
+
+
+/* ============================================================
+   24. SAFE STORAGE REFERENCE
+   ============================================================ */
+
+function safeStorageRef(
+    pathParts = []
+) {
+
+    if (!storage) {
+
+        throw new Error(
+            'Firebase Storage haijaandaliwa.'
+        );
+    }
+
+    if (!Array.isArray(pathParts)) {
+
+        throw new Error(
+            'Storage path si sahihi.'
+        );
+    }
+
+    const cleanParts =
+        pathParts.map(
+            (part, index) => {
+
+                if (
+                    !isValidId(
+                        String(part)
+                    )
+                ) {
+
+                    throw new Error(
+                        `Storage path sehemu ya ${index + 1} si sahihi.`
+                    );
+                }
+
+                return String(part)
+                    .trim()
+                    .replace(/^\/+|\/+$/g, '');
+            }
+        );
+
+    const path =
+        cleanParts.join('/');
+
+    if (!path) {
+
+        throw new Error(
+            'Storage path haijapatikana.'
+        );
+    }
+
+    return ref(
+        storage,
+        path
+    );
+}
+
+
+/* ============================================================
+   25. GLOBAL FIREBASE HELPERS
+   ============================================================ */
+
+/*
+   Existing application functions may already use
+   these helpers without modification.
+*/
+
+window.isValidId =
+    isValidId;
+
+window.requireId =
+    requireId;
+
+window.safeDoc =
+    safeDoc;
+
+window.safeCollection =
+    safeCollection;
+
+window.safeBusinessDoc =
+    safeBusinessDoc;
+
+window.safeBusinessQuery =
+    safeBusinessQuery;
+
+window.safeStorageRef =
+    safeStorageRef;
+
+window.getBusinessId =
+    getBusinessId;
+
+window.syncBusinessId =
+    syncBusinessId;
+
+window.requireCurrentUser =
+    requireCurrentUser;
+
+window.requireBusinessUser =
+    requireBusinessUser;
+
+window.waitForFirebaseReady =
+    waitForFirebaseReady;
+
+
+/* ============================================================
+   26. EXPOSE FIREBASE INSTANCES FOR EXISTING APP CODE
+   ============================================================ */
+
+window.firebaseApp =
+    firebaseApp;
+
+window.auth =
+    auth;
+
+window.db =
+    db;
+
+window.storage =
+    storage;
+
+
+/* ============================================================
+   27. EXPOSE CURRENT STATE ACCESSORS
+   ============================================================ */
+
+window.getCurrentUser =
+    () => currentUser;
+
+window.getCurrentUserData =
+    () => currentUserData;
+
+window.getCurrentBusinessData =
+    () => businessData;
+
+
+/* ============================================================
+   28. START AUTH STATE MONITORING
+   ============================================================ */
+
+initializeAuthState();
+
+
+/* ============================================================
+   29. FIREBASE READY LOG
+   ============================================================ */
+
+console.log(
+    '[FIREBASE] Modular Firebase environment ready.'
+);
+
+    /* ============================================================
    SINGLE AUTHORITATIVE APPLICATION STATE
    ============================================================ */
 
