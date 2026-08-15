@@ -1885,57 +1885,556 @@ async function selectRole(role) {
   }
 }
 
-        // ============================================================
+ // ============================================================
 // BUSINESS RESOLVER
+// FIREBASE MODULAR SDK
+// SAFE AUTH + USER + BUSINESS RESOLUTION
 // ============================================================
 async function resolveBusiness(uid) {
-  try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    if (!userDoc.exists()) { toast('Akaunti haipo kwenye mfumo. Tafadhali jisajili.', 'e'); await signOut(auth); showScreen('landingScreen'); return false; }
-    const ud = userDoc.data();
-    State.currentUserData = ud;
-    if (!ud.businessId) {
-      toast('Akaunti haina biashara. Tafadhali jisajili tena.', 'e');
-      await signOut(auth);
-      showScreen('landingScreen');
-      return false;
-    }
-    State.currentBizId = ud.businessId;
-    const bizDoc = await getDoc(doc(db, 'businesses', ud.businessId));
-    if (!bizDoc.exists()) {
-      toast('Biashara haipo. Tafadhali wasiliana na msimamizi.', 'e');
-      await signOut(auth);
-      showScreen('landingScreen');
-      return false;
-    }
-    State.currentBizData = bizDoc.data();
 
-    // Check business status
-    if (State.currentBizData.status === 'suspended') {
-      toast('Biashara yako imefungwa. Wasiliana na msimamizi mkuu.', 'e');
-      await signOut(auth);
-      showScreen('landingScreen');
-      return false;
+    try {
+
+        /* =====================================================
+           1. VALIDATE UID
+           ===================================================== */
+
+        if (
+            typeof uid !== 'string' ||
+            !uid.trim()
+        ) {
+
+            console.error(
+                '[BUSINESS RESOLVER] Invalid UID:',
+                uid
+            );
+
+            toast(
+                'User ID haijapatikana.',
+                'e'
+            );
+
+            return false;
+        }
+
+
+        uid =
+            uid.trim();
+
+
+        /* =====================================================
+           2. FIREBASE CHECK
+           ===================================================== */
+
+        if (
+            typeof db === 'undefined' ||
+            !db
+        ) {
+
+            console.error(
+                '[BUSINESS RESOLVER] Firestore haijaandaliwa.'
+            );
+
+            toast(
+                'Firebase Firestore haijaandaliwa.',
+                'e'
+            );
+
+            return false;
+        }
+
+
+        if (
+            typeof auth === 'undefined' ||
+            !auth
+        ) {
+
+            console.error(
+                '[BUSINESS RESOLVER] Firebase Auth haijaandaliwa.'
+            );
+
+            toast(
+                'Firebase Auth haijaandaliwa.',
+                'e'
+            );
+
+            return false;
+        }
+
+
+        /* =====================================================
+           3. GET USER DOCUMENT
+           users/{uid}
+           ===================================================== */
+
+        console.log(
+            '[BUSINESS RESOLVER] Loading user:',
+            `users/${uid}`
+        );
+
+
+        const userRef =
+            doc(
+                db,
+                'users',
+                uid
+            );
+
+
+        const userDoc =
+            await getDoc(
+                userRef
+            );
+
+
+        /* =====================================================
+           4. USER DOCUMENT NOT FOUND
+           ===================================================== */
+
+        if (
+            !userDoc.exists()
+        ) {
+
+            console.error(
+                '[BUSINESS RESOLVER] USER DOCUMENT NOT FOUND',
+                {
+                    uid:
+                        uid,
+
+                    path:
+                        `users/${uid}`
+                }
+            );
+
+
+            /*
+             * IMPORTANT:
+             *
+             * Do NOT sign out immediately.
+             *
+             * Registration may have created Firebase Auth
+             * but Firestore users/{uid} may still be missing.
+             */
+
+            toast(
+                'Akaunti ya Firebase imepatikana lakini taarifa za akaunti hazijapatikana. Tafadhali jaribu tena.',
+                'e'
+            );
+
+
+            return false;
+        }
+
+
+        /* =====================================================
+           5. READ USER DATA
+           ===================================================== */
+
+        const ud =
+            userDoc.data() || {};
+
+
+        console.log(
+            '[BUSINESS RESOLVER] User data loaded:',
+            ud
+        );
+
+
+        /* =====================================================
+           6. STORE USER DATA
+           ===================================================== */
+
+        if (
+            typeof State !== 'undefined' &&
+            State
+        ) {
+
+            State.currentUserData =
+                ud;
+        }
+
+
+        /*
+         * Compatibility with existing code.
+         */
+
+        window.currentUserData =
+            ud;
+
+
+        /* =====================================================
+           7. GET ROLE
+           ===================================================== */
+
+        const role =
+            String(
+                ud.role || ''
+            )
+            .trim()
+            .toLowerCase();
+
+
+        State.currentRole =
+            role || 'manager';
+
+
+        /* =====================================================
+           8. SYSTEM USERS
+           ===================================================== */
+
+        const isSystemUser =
+            role === 'superadmin' ||
+            role === 'super_admin' ||
+            role === 'super administrator' ||
+            role === 'system';
+
+
+        /*
+         * System-level users do NOT require businessId.
+         */
+
+        if (
+            isSystemUser
+        ) {
+
+            console.log(
+                '[BUSINESS RESOLVER] System user detected:',
+                role
+            );
+
+
+            State.currentBizId =
+                null;
+
+
+            State.currentBizData =
+                null;
+
+
+            window.businessId =
+                null;
+
+
+            window.currentBizId =
+                null;
+
+
+            return true;
+        }
+
+
+        /* =====================================================
+           9. GET BUSINESS ID
+           ===================================================== */
+
+        const businessId =
+            typeof ud.businessId === 'string'
+                ? ud.businessId.trim()
+                : (
+                    typeof ud.bizId === 'string'
+                        ? ud.bizId.trim()
+                        : ''
+                );
+
+
+        /* =====================================================
+           10. VALIDATE BUSINESS ID
+           ===================================================== */
+
+        if (
+            !businessId
+        ) {
+
+            console.error(
+                '[BUSINESS RESOLVER] Business ID missing.',
+                {
+                    uid:
+                        uid,
+
+                    userData:
+                        ud
+                }
+            );
+
+
+            /*
+             * Do NOT sign out.
+             *
+             * This is important because the account itself
+             * exists. Only the business relationship is missing.
+             */
+
+            toast(
+                'Akaunti yako imepatikana lakini haijaunganishwa na biashara.',
+                'e'
+            );
+
+
+            return false;
+        }
+
+
+        /* =====================================================
+           11. SYNC BUSINESS ID
+           ===================================================== */
+
+        State.currentBizId =
+            businessId;
+
+
+        if (
+            'currentBusinessId' in State
+        ) {
+
+            State.currentBusinessId =
+                businessId;
+        }
+
+
+        window.businessId =
+            businessId;
+
+
+        window.currentBizId =
+            businessId;
+
+
+        console.log(
+            '[BUSINESS RESOLVER] Business ID:',
+            businessId
+        );
+
+
+        /* =====================================================
+           12. LOAD BUSINESS
+           businesses/{businessId}
+           ===================================================== */
+
+        const businessRef =
+            doc(
+                db,
+                'businesses',
+                businessId
+            );
+
+
+        console.log(
+            '[BUSINESS RESOLVER] Loading business:',
+            `businesses/${businessId}`
+        );
+
+
+        const bizDoc =
+            await getDoc(
+                businessRef
+            );
+
+
+        /* =====================================================
+           13. BUSINESS NOT FOUND
+           ===================================================== */
+
+        if (
+            !bizDoc.exists()
+        ) {
+
+            console.error(
+                '[BUSINESS RESOLVER] BUSINESS NOT FOUND',
+                {
+                    uid:
+                        uid,
+
+                    businessId:
+                        businessId,
+
+                    userData:
+                        ud,
+
+                    expectedPath:
+                        `businesses/${businessId}`
+                }
+            );
+
+
+            /*
+             * Do NOT create a fake business.
+             * Do NOT create a new business here.
+             * Do NOT sign out automatically.
+             */
+
+            toast(
+                'Akaunti yako ipo lakini taarifa za biashara hazijapatikana.',
+                'e'
+            );
+
+
+            return false;
+        }
+
+
+        /* =====================================================
+           14. STORE BUSINESS DATA
+           ===================================================== */
+
+        const businessData =
+            bizDoc.data() || {};
+
+
+        State.currentBizData =
+            businessData;
+
+
+        window.businessData =
+            businessData;
+
+
+        console.log(
+            '[BUSINESS RESOLVER] Business loaded successfully:',
+            {
+                businessId:
+                    businessId,
+
+                data:
+                    businessData
+            }
+        );
+
+
+        /* =====================================================
+           15. BUSINESS STATUS
+           ===================================================== */
+
+        if (
+            String(
+                businessData.status || ''
+            )
+            .trim()
+            .toLowerCase() ===
+            'suspended'
+        ) {
+
+            toast(
+                'Biashara yako imefungwa. Wasiliana na msimamizi mkuu.',
+                'e'
+            );
+
+
+            await signOut(
+                auth
+            );
+
+
+            showScreen(
+                'landingScreen'
+            );
+
+
+            return false;
+        }
+
+
+        /* =====================================================
+           16. ROLE
+           ===================================================== */
+
+        State.currentRole =
+            ud.role ||
+            'manager';
+
+
+        /* =====================================================
+           17. ROLE NOT SET
+           ===================================================== */
+
+        if (
+            !ud.role
+        ) {
+
+            const bizNameEl =
+                document.getElementById(
+                    'rsBizName'
+                );
+
+
+            const bizDescEl =
+                document.getElementById(
+                    'rsBizDesc'
+                );
+
+
+            if (
+                bizNameEl
+            ) {
+
+                bizNameEl.textContent =
+                    businessData.name ||
+                    'Biashara';
+            }
+
+
+            if (
+                bizDescEl
+            ) {
+
+                bizDescEl.textContent =
+                    businessData.description ||
+                    'Bila maelezo';
+            }
+
+
+            showScreen(
+                'roleScreen'
+            );
+
+
+            return false;
+        }
+
+
+        /* =====================================================
+           18. EVERYTHING READY
+           ===================================================== */
+
+        console.log(
+            '[BUSINESS RESOLVER] Complete.',
+            {
+                uid:
+                    uid,
+
+                businessId:
+                    businessId,
+
+                role:
+                    State.currentRole
+            }
+        );
+
+
+        return true;
+
+
+    } catch (error) {
+
+        console.error(
+            '[BUSINESS RESOLVER ERROR]',
+            error
+        );
+
+
+        if (
+            typeof toast === 'function'
+        ) {
+
+            toast(
+                error?.message ||
+                'Hitilafu wakati wa kupata taarifa za akaunti.',
+                'e'
+            );
+        }
+
+
+        return false;
     }
-
-    State.currentRole = ud.role || 'manager';
-
-    // If no role set, show role selection
-    if (!ud.role) {
-      document.getElementById('rsBizName').textContent = State.currentBizData.name || 'Biashara';
-      document.getElementById('rsBizDesc').textContent = State.currentBizData.description || 'Bila maelezo';
-      showScreen('roleScreen');
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('[BUSINESS RESOLVER]', error);
-    toast('Hitilafu wakati wa kupata data ya biashara', 'e');
-    return false;
-  }
 }
-
 // ============================================================
 // INIT MAIN APP
 // ============================================================
