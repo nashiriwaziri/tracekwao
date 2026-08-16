@@ -1548,34 +1548,401 @@ async function handleLogin(e) {
 
 // ============================================================
 // AUTH — SIGNUP
+// FIREBASE MODULAR
 // ============================================================
 async function handleSignup(e) {
+
   e.preventDefault();
-  const btn = document.getElementById('signupBtn');
-  const name = document.getElementById('signupName').value.trim();
-  const email = document.getElementById('signupEmail').value.trim();
-  const pass = document.getElementById('signupPass').value;
-  const bizName = document.getElementById('signupBizName').value.trim();
-  const bizCat = document.getElementById('signupBizCat').value;
-  const bizPhone = document.getElementById('signupBizPhone').value.trim();
-  if (!bizName || !bizCat) { showAuthError('Tafadhali jaza taarifa za biashara.'); return; }
-  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Inajisajili...';
+
+  if (window.signupSubmitting) return;
+  window.signupSubmitting = true;
+
+
+  // ============================================================
+  // ELEMENTS
+  // ============================================================
+  const btn =
+    document.getElementById('signupBtn');
+
+  const nameEl =
+    document.getElementById('signupName');
+
+  const emailEl =
+    document.getElementById('signupEmail');
+
+  const passEl =
+    document.getElementById('signupPass');
+
+  const bizNameEl =
+    document.getElementById('signupBizName');
+
+  const bizCatEl =
+    document.getElementById('signupBizCat');
+
+  const bizPhoneEl =
+    document.getElementById('signupBizPhone');
+
+
+  // ============================================================
+  // VALUES
+  // ============================================================
+  const name =
+    nameEl ? nameEl.value.trim() : '';
+
+  const email =
+    emailEl ? emailEl.value.trim().toLowerCase() : '';
+
+  const pass =
+    passEl ? passEl.value : '';
+
+  const bizName =
+    bizNameEl ? bizNameEl.value.trim() : '';
+
+  const bizCat =
+    bizCatEl ? bizCatEl.value.trim() : '';
+
+  const bizPhone =
+    bizPhoneEl ? bizPhoneEl.value.trim() : '';
+
+
+  // ============================================================
+  // VALIDATION
+  // ============================================================
+  if (!name) {
+
+    showAuthError(
+      'Tafadhali weka jina lako.'
+    );
+
+    window.signupSubmitting = false;
+    return;
+  }
+
+
+  if (!email) {
+
+    showAuthError(
+      'Tafadhali weka email.'
+    );
+
+    window.signupSubmitting = false;
+    return;
+  }
+
+
+  if (!pass) {
+
+    showAuthError(
+      'Tafadhali weka password.'
+    );
+
+    window.signupSubmitting = false;
+    return;
+  }
+
+
+  if (pass.length < 6) {
+
+    showAuthError(
+      'Password lazima iwe na angalau herufi 6.'
+    );
+
+    window.signupSubmitting = false;
+    return;
+  }
+
+
+  if (!bizName) {
+
+    showAuthError(
+      'Tafadhali weka jina la biashara.'
+    );
+
+    window.signupSubmitting = false;
+    return;
+  }
+
+
+  if (!bizCat) {
+
+    showAuthError(
+      'Tafadhali chagua aina ya biashara.'
+    );
+
+    window.signupSubmitting = false;
+    return;
+  }
+
+
+  // ============================================================
+  // BUTTON
+  // ============================================================
+  if (btn) {
+
+    btn.disabled = true;
+
+    btn.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin"></i> Inajisajili...';
+  }
+
+
   try {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    await updateProfile(cred.user, { displayName: name });
-    const bizId = 'biz_' + cred.user.uid.slice(0, 12) + '_' + Date.now().toString(36);
-    await setDoc(doc(db, 'users', cred.user.uid), {
-      displayName: name, email, role: 'owner', businessId: bizId, status: 'active', createdAt: serverTimestamp()
-    });
-    await setDoc(doc(db, 'businesses', bizId), {
-      name: bizName, category: bizCat, phone: bizPhone, logo: '', ownerId: cred.user.uid, status: 'active', createdAt: serverTimestamp()
-    });
-    toast('Akaunti imeundwa kwa mafanikio!', 's');
+
+    // ==========================================================
+    // 1. CREATE FIREBASE AUTH ACCOUNT
+    // ==========================================================
+    console.log(
+      '[SIGNUP] Creating authentication account...'
+    );
+
+    const cred =
+      await createUserWithEmailAndPassword(
+        auth,
+        email,
+        pass
+      );
+
+    const user =
+      cred.user;
+
+    console.log(
+      '[SIGNUP] Auth account created:',
+      user.uid
+    );
+
+
+    // ==========================================================
+    // 2. UPDATE FIREBASE PROFILE
+    // ==========================================================
+    if (name) {
+
+      await updateProfile(
+        user,
+        {
+          displayName: name
+        }
+      );
+    }
+
+
+    // ==========================================================
+    // 3. CREATE BUSINESS ID
+    // ==========================================================
+    const bizId =
+      'biz_' +
+      user.uid +
+      '_' +
+      Date.now().toString(36);
+
+
+    console.log(
+      '[SIGNUP] Business ID:',
+      bizId
+    );
+
+
+    // ==========================================================
+    // 4. CREATE USER DOCUMENT
+    // ==========================================================
+    console.log(
+      '[SIGNUP] Creating users document...'
+    );
+
+    await setDoc(
+      doc(
+        db,
+        'users',
+        user.uid
+      ),
+      {
+        uid: user.uid,
+
+        name: name,
+
+        displayName: name,
+
+        email: email,
+
+        role: 'owner',
+
+        businessId: bizId,
+
+        businessName: bizName,
+
+        status: 'active',
+
+        createdAt:
+          serverTimestamp(),
+
+        updatedAt:
+          serverTimestamp()
+      }
+    );
+
+
+    console.log(
+      '[SIGNUP] User document created.'
+    );
+
+
+    // ==========================================================
+    // 5. CREATE BUSINESS DOCUMENT
+    // ==========================================================
+    console.log(
+      '[SIGNUP] Creating business document...'
+    );
+
+    await setDoc(
+      doc(
+        db,
+        'businesses',
+        bizId
+      ),
+      {
+        id: bizId,
+
+        name: bizName,
+
+        category: bizCat,
+
+        phone: bizPhone,
+
+        logo: '',
+
+        ownerId: user.uid,
+
+        status: 'active',
+
+        createdAt:
+          serverTimestamp(),
+
+        updatedAt:
+          serverTimestamp()
+      }
+    );
+
+
+    console.log(
+      '[SIGNUP] Business document created.'
+    );
+
+
+    // ==========================================================
+    // 6. SUCCESS
+    // ==========================================================
+    toast(
+      'Akaunti imeundwa kwa mafanikio!',
+      's'
+    );
+
+
+    // ==========================================================
+    // OPTIONAL: CLEAR FORM
+    // ==========================================================
+    if (passEl) {
+      passEl.value = '';
+    }
+
+
+    // ==========================================================
+    // AUTH STATE WILL HANDLE NAVIGATION
+    // ==========================================================
+
   } catch (err) {
-    console.error('[AUTH SIGNUP]', err);
-    const msgs = { 'auth/email-already-in-use':'Barua pepe tayari inatumika.', 'auth/weak-password':'Password ni dhaifu.' };
-    showAuthError(msgs[err.code] || 'Imeshindikana kujisajili. Jaribu tena.');
-  } finally { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Jisajili'; }
+
+    console.error(
+      '[AUTH SIGNUP ERROR]',
+      err
+    );
+
+
+    // ==========================================================
+    // SHOW REAL FIREBASE ERROR
+    // ==========================================================
+    let msg =
+      'Imeshindikana kujisajili. Jaribu tena.';
+
+
+    switch (err.code) {
+
+      case 'auth/email-already-in-use':
+        msg =
+          'Barua pepe tayari inatumika.';
+        break;
+
+      case 'auth/invalid-email':
+        msg =
+          'Barua pepe uliyoingiza si sahihi.';
+        break;
+
+      case 'auth/weak-password':
+        msg =
+          'Password ni dhaifu. Tumia angalau herufi 6.';
+        break;
+
+      case 'auth/password-does-not-meet-requirements':
+        msg =
+          'Password haikidhi masharti ya mfumo.';
+        break;
+
+      case 'auth/operation-not-allowed':
+        msg =
+          'Email/Password Authentication haijawezeshwa Firebase.';
+        break;
+
+      case 'auth/network-request-failed':
+        msg =
+          'Hakuna muunganisho mzuri wa internet.';
+        break;
+
+      case 'auth/too-many-requests':
+        msg =
+          'Majaribio yamekuwa mengi. Subiri kidogo kisha ujaribu tena.';
+        break;
+
+      case 'permission-denied':
+      case 'firestore/permission-denied':
+        msg =
+          'Huna ruhusa ya kuhifadhi taarifa za usajili kwenye Firestore.';
+        break;
+
+      case 'failed-precondition':
+        msg =
+          'Firestore ina tatizo la configuration au index.';
+        break;
+
+      default:
+
+        if (
+          err &&
+          err.message
+        ) {
+
+          console.error(
+            '[SIGNUP REAL ERROR]',
+            err.message
+          );
+        }
+
+        break;
+    }
+
+
+    showAuthError(msg);
+
+
+  } finally {
+
+    window.signupSubmitting = false;
+
+    if (btn) {
+
+      btn.disabled = false;
+
+      btn.innerHTML =
+        '<i class="fa-solid fa-user-plus"></i> Jisajili';
+    }
+  }
 }
 
 // ============================================================
