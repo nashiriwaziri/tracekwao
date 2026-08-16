@@ -3516,7 +3516,6 @@ function loadSettings() {
 // SUPER ADMIN
 // ================================================================
 
-// Email zinazoruhusiwa kuingia kama Super Administrator
 var SUPER_ADMIN_EMAILS = [
   "nashiri2waziri29@gmail.com"
 ];
@@ -3539,56 +3538,164 @@ async function superLogin(event) {
   var errEl = document.getElementById('superErr');
 
   try {
-    var email = document.getElementById('superUser').value.trim().toLowerCase();
-    var password = document.getElementById('superPass').value;
+
+    var emailInput = document.getElementById('superUser');
+    var passwordInput = document.getElementById('superPass');
+
+    var email = emailInput
+      ? emailInput.value.trim().toLowerCase()
+      : '';
+
+    var password = passwordInput
+      ? passwordInput.value
+      : '';
 
     if (!email || !password) {
-      if (errEl) errEl.textContent = 'Jaza email na nywila.';
+      if (errEl) {
+        errEl.textContent = 'Jaza email na nywila.';
+      }
       return;
     }
 
-    // Hakikisha email imeruhusiwa kabla ya kuingia
+    // ------------------------------------------------------------
+    // CHECK SUPER ADMIN EMAIL
+    // ------------------------------------------------------------
     if (
       SUPER_ADMIN_EMAILS.length > 0 &&
       SUPER_ADMIN_EMAILS.indexOf(email) === -1
     ) {
       if (errEl) {
-        errEl.textContent = 'Huna ruhusa ya Super Admin.';
+        errEl.textContent =
+          'Huna ruhusa ya Super Admin.';
       }
       return;
     }
 
-    // Firebase Authentication
-    var cred = await auth.signInWithEmailAndPassword(email, password);
+    // ------------------------------------------------------------
+    // FIREBASE MODULAR AUTH
+    // ------------------------------------------------------------
+    const cred =
+      await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
 
-    // Login imefanikiwa
-    document.getElementById('superLoginBox').classList.add('hidden');
-    document.getElementById('superPanel').classList.remove('hidden');
+    console.log(
+      '[SUPER LOGIN] Login successful:',
+      cred.user.email
+    );
 
-    await loadSuperDashboard();
+    // ------------------------------------------------------------
+    // SHOW SUPER ADMIN PANEL
+    // ------------------------------------------------------------
+    var loginBox =
+      document.getElementById('superLoginBox');
 
-    toast('Super Admin umeingia.', 's');
+    var superPanel =
+      document.getElementById('superPanel');
 
-  } catch (error) {
-    console.error('[SUPER LOGIN]', error);
-
-    var msg = 'Imeshindikana kuingia.';
-
-    if (error.code === 'auth/user-not-found') {
-      msg = 'Akaunti ya Super Admin haipo kwenye Firebase Authentication.';
-    } else if (error.code === 'auth/wrong-password') {
-      msg = 'Nywila sio sahihi.';
-    } else if (error.code === 'auth/invalid-email') {
-      msg = 'Email ya Super Admin sio sahihi.';
-    } else if (error.code === 'auth/user-disabled') {
-      msg = 'Akaunti hii ya Super Admin imezimwa.';
-    } else if (error.code === 'auth/too-many-requests') {
-      msg = 'Majaribio ya kuingia yamekuwa mengi. Jaribu tena baadaye.';
+    if (loginBox) {
+      loginBox.classList.add('hidden');
     }
 
-    if (errEl) errEl.textContent = msg;
+    if (superPanel) {
+      superPanel.classList.remove('hidden');
+    }
+
+    // ------------------------------------------------------------
+    // LOAD DASHBOARD
+    // ------------------------------------------------------------
+    if (typeof loadSuperDashboard === 'function') {
+      await loadSuperDashboard();
+    }
+
+    toast(
+      'Super Admin umeingia.',
+      's'
+    );
+
+  } catch (error) {
+
+    console.error(
+      '[SUPER LOGIN ERROR]',
+      error
+    );
+
+    console.error(
+      '[SUPER LOGIN CODE]',
+      error?.code
+    );
+
+    console.error(
+      '[SUPER LOGIN MESSAGE]',
+      error?.message
+    );
+
+    var msg =
+      'Imeshindikana kuingia.';
+
+    if (
+      error?.code === 'auth/user-not-found'
+    ) {
+      msg =
+        'Akaunti hii haipo kwenye Firebase Authentication.';
+    }
+
+    else if (
+      error?.code === 'auth/wrong-password'
+    ) {
+      msg =
+        'Nywila sio sahihi.';
+    }
+
+    else if (
+      error?.code === 'auth/invalid-credential'
+    ) {
+      msg =
+        'Email au nywila sio sahihi.';
+    }
+
+    else if (
+      error?.code === 'auth/invalid-email'
+    ) {
+      msg =
+        'Email sio sahihi.';
+    }
+
+    else if (
+      error?.code === 'auth/user-disabled'
+    ) {
+      msg =
+        'Akaunti hii imezimwa.';
+    }
+
+    else if (
+      error?.code === 'auth/too-many-requests'
+    ) {
+      msg =
+        'Majaribio yamekuwa mengi. Jaribu tena baadaye.';
+    }
+
+    else if (
+      error?.code === 'auth/network-request-failed'
+    ) {
+      msg =
+        'Tatizo la mtandao. Hakikisha umeunganishwa na internet.';
+    }
+
+    else if (error?.message) {
+      msg =
+        'Imeshindikana kuingia: ' +
+        error.message;
+    }
+
+    if (errEl) {
+      errEl.textContent = msg;
+    }
 
   } finally {
+
     submitting = false;
 
     if (btn) {
@@ -3597,7 +3704,6 @@ async function superLogin(event) {
     }
   }
 }
-
 async function superLogout() {
   try {
     await auth.signOut();
