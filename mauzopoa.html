@@ -1935,65 +1935,29 @@ function openProductModal() {
   if (prev) prev.innerHTML = '';
   openModal('productModal');
 }
-
-// ================================================================
-// PRODUCTS - FIREBASE MODULAR
-// ================================================================
-
-async function editProduct(id) {
+  async function editProduct(id) {
   try {
-    if (!id) {
-      toast('Product ID haijapatikana.', 'e');
-      return;
-    }
-
-    const productRef = doc(db, 'products', id);
-    const productSnap = await getDoc(productRef);
-
-    if (!productSnap.exists()) {
-      toast('Bidhaa haipo.', 'e');
-      return;
-    }
-
-    const d = productSnap.data() || {};
-
+    var doc = await db.collection('products').doc(id).get();
+    if (!doc.exists) { toast('Bidhaa haipo.', 'e'); return; }
+    var d = doc.data();
     document.getElementById('prodId').value = id;
     document.getElementById('prodName').value = d.name || '';
     document.getElementById('prodCategory').value = d.category || '';
-    document.getElementById('prodPrice').value =
-      d.price !== undefined && d.price !== null ? d.price : '';
-    document.getElementById('prodCost').value =
-      d.costPrice !== undefined && d.costPrice !== null ? d.costPrice : '';
-    document.getElementById('prodStock').value =
-      d.stock !== undefined && d.stock !== null ? d.stock : '';
+    document.getElementById('prodPrice').value = d.price || '';
+    document.getElementById('prodCost').value = d.costPrice || '';
+    document.getElementById('prodStock').value = d.stock || '';
     document.getElementById('prodDesc').value = d.description || '';
     document.getElementById('prodImage').value = '';
-
-    const prev = document.getElementById('prodImagePreview');
-
+    var prev = document.getElementById('prodImagePreview');
     if (prev) {
-      prev.innerHTML = d.imageUrl
-        ? '<img src="' +
-          String(d.imageUrl).replace(/"/g, '&quot;') +
-          '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;margin-top:8px">'
-        : '';
+      prev.innerHTML = d.imageUrl ? '<img src="' + d.imageUrl + '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;margin-top:8px">' : '';
     }
-
     openModal('productModal');
-
   } catch (error) {
     console.error('[EDIT PRODUCT]', error);
-    console.error('[EDIT PRODUCT CODE]', error?.code);
-    console.error('[EDIT PRODUCT MESSAGE]', error?.message);
-
-    toast(
-      'Imeshindikana kupakia bidhaa: ' +
-      (error?.message || 'Hitilafu isiyojulikana.'),
-      'e'
-    );
+    toast('Imeshindikana kupakua bidhaa.', 'e');
   }
 }
-
 
 // ================================================================
 // SAVE PRODUCT
@@ -2007,11 +1971,11 @@ async function saveProduct(event) {
   const form = event.target;
   const btn = form.querySelector('button[type="submit"]');
   const origText = btn ? btn.innerHTML : '';
+  const errToast = (msg) => toast(msg, 'e');
 
   try {
-
     // ------------------------------------------------------------
-    // BUTTON
+    // BUTTON STATE
     // ------------------------------------------------------------
     if (btn) {
       btn.disabled = true;
@@ -2020,22 +1984,9 @@ async function saveProduct(event) {
     }
 
     // ------------------------------------------------------------
-    // BUSINESS ID
+    // GET FORM VALUES
     // ------------------------------------------------------------
-    if (
-      typeof businessId === 'undefined' ||
-      !businessId
-    ) {
-      throw new Error(
-        'Business ID haijapatikana. Tafadhali ingia tena.'
-      );
-    }
-
-    // ------------------------------------------------------------
-    // FORM VALUES
-    // ------------------------------------------------------------
-    const id =
-      document.getElementById('prodId')?.value?.trim() || '';
+    const id = document.getElementById('prodId')?.value?.trim() || '';
 
     const name =
       document.getElementById('prodName')?.value?.trim() || '';
@@ -2044,25 +1995,18 @@ async function saveProduct(event) {
       document.getElementById('prodCategory')?.value?.trim() || '';
 
     const price =
-      Number(
-        document.getElementById('prodPrice')?.value
-      ) || 0;
+      parseFloat(document.getElementById('prodPrice')?.value) || 0;
 
     const costPrice =
-      Number(
-        document.getElementById('prodCost')?.value
-      ) || 0;
+      parseFloat(document.getElementById('prodCost')?.value) || 0;
 
     const stock =
-      Number(
-        document.getElementById('prodStock')?.value
-      ) || 0;
+      parseInt(document.getElementById('prodStock')?.value, 10) || 0;
 
-    const description =
+    const desc =
       document.getElementById('prodDesc')?.value?.trim() || '';
 
-    const fileInput =
-      document.getElementById('prodImage');
+    const fileInput = document.getElementById('prodImage');
 
     const file =
       fileInput &&
@@ -2095,7 +2039,25 @@ async function saveProduct(event) {
     }
 
     // ------------------------------------------------------------
-    // DATA
+    // CHECK BUSINESS ID
+    // ------------------------------------------------------------
+    if (!businessId) {
+      console.error('[SAVE PRODUCT] businessId haipo.');
+
+      toast(
+        'Business ID haijapatikana. Tafadhali ingia tena.',
+        'e'
+      );
+
+      return;
+    }
+
+    console.log('[SAVE PRODUCT] Starting...');
+    console.log('[SAVE PRODUCT] businessId:', businessId);
+    console.log('[SAVE PRODUCT] productId:', id || 'NEW');
+
+    // ------------------------------------------------------------
+    // PREPARE DATA
     // ------------------------------------------------------------
     const data = {
       name: name,
@@ -2103,9 +2065,9 @@ async function saveProduct(event) {
       price: price,
       costPrice: costPrice,
       stock: stock,
-      description: description,
+      description: desc,
       businessId: businessId,
-      updatedAt: serverTimestamp()
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
     // ------------------------------------------------------------
@@ -2113,343 +2075,71 @@ async function saveProduct(event) {
     // ------------------------------------------------------------
     if (file) {
 
+      console.log('[SAVE PRODUCT] Uploading image...');
+
       if (btn) {
         btn.innerHTML =
           '<i class="fa-solid fa-spinner fa-spin"></i> Inapakia picha...';
       }
 
-      const safeFileName =
-        file.name.replace(
-          /[^a-zA-Z0-9._-]/g,
-          '_'
+      try {
+
+        const path =
+          'products/' +
+          businessId +
+          '/' +
+          Date.now() +
+          '_' +
+          file.name;
+
+        // Timeout ya dakika 1
+        const uploadPromise = uploadImage(file, path);
+
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(
+              new Error('Image upload timeout: uploadImage haijamaliza.')
+            );
+          }, 60000);
+        });
+
+        const imageUrl = await Promise.race([
+          uploadPromise,
+          timeoutPromise
+        ]);
+
+        if (imageUrl) {
+          data.imageUrl = imageUrl;
+          console.log('[SAVE PRODUCT] Image uploaded:', imageUrl);
+        }
+
+      } catch (imageError) {
+
+        console.error(
+          '[SAVE PRODUCT] Image upload failed:',
+          imageError
         );
 
-      const path =
-        'products/' +
-        businessId +
-        '/' +
-        Date.now() +
-        '_' +
-        safeFileName;
-
-      console.log(
-        '[SAVE PRODUCT] Uploading:',
-        path
-      );
-
-      const imageUrl =
-        await uploadImage(
-          file,
-          path
+        throw new Error(
+          'Picha haikuweza kupakiwa: ' +
+          (imageError.message || imageError)
         );
-
-      if (imageUrl) {
-        data.imageUrl = imageUrl;
       }
     }
 
     // ------------------------------------------------------------
-    // SAVE TO FIRESTORE
+    // FIRESTORE SAVE
     // ------------------------------------------------------------
     if (btn) {
       btn.innerHTML =
         '<i class="fa-solid fa-spinner fa-spin"></i> Inaandika kwenye mfumo...';
     }
 
+    console.log('[SAVE PRODUCT] Saving to Firestore...');
+
     if (id) {
 
-      // ----------------------------------------------------------
-      // UPDATE EXISTING PRODUCT
-      // ----------------------------------------------------------
-      await updateDoc(
-        doc(db, 'products', id),
-        data
-      );
 
-      toast(
-        'Bidhaa imesasishwa kikamilifu.',
-        's'
-      );
-
-      console.log(
-        '[SAVE PRODUCT] UPDATED:',
-        id
-      );
-
-    } else {
-
-      // ----------------------------------------------------------
-      // CREATE NEW PRODUCT
-      // ----------------------------------------------------------
-      data.createdAt = serverTimestamp();
-
-      const newProductRef =
-        await addDoc(
-          collection(db, 'products'),
-          data
-        );
-
-      console.log(
-        '[SAVE PRODUCT] CREATED:',
-        newProductRef.id
-      );
-
-      toast(
-        'Bidhaa imehifadhiwa kikamilifu.',
-        's'
-      );
-    }
-
-    // ------------------------------------------------------------
-    // CLOSE MODAL
-    // ------------------------------------------------------------
-    closeModal('productModal');
-
-    // ------------------------------------------------------------
-    // RELOAD PRODUCTS
-    // ------------------------------------------------------------
-    await loadProducts();
-
-  } catch (error) {
-
-    console.error(
-      '========================================'
-    );
-    console.error(
-      '[SAVE PRODUCT] ERROR',
-      error
-    );
-    console.error(
-      '[SAVE PRODUCT] CODE:',
-      error?.code
-    );
-    console.error(
-      '[SAVE PRODUCT] MESSAGE:',
-      error?.message
-    );
-    console.error(
-      '========================================'
-    );
-
-    let message =
-      'Imeshindikana kuhifadhi bidhaa.';
-
-    if (error?.code === 'permission-denied') {
-      message =
-        'Huna ruhusa ya kuhifadhi bidhaa.';
-    }
-
-    else if (error?.code === 'unauthenticated') {
-      message =
-        'Session yako imeisha. Tafadhali ingia tena.';
-    }
-
-    else if (error?.code === 'not-found') {
-      message =
-        'Bidhaa hiyo haipatikani tena.';
-    }
-
-    else if (error?.message) {
-      message =
-        'Imeshindikana kuhifadhi: ' +
-        error.message;
-    }
-
-    toast(message, 'e');
-
-  } finally {
-
-    submitting = false;
-
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = origText;
-    }
-  }
-}
-
-
-// ================================================================
-// LOAD PRODUCTS
-// ================================================================
-async function loadProducts() {
-  try {
-
-    if (
-      typeof businessId === 'undefined' ||
-      !businessId
-    ) {
-      console.warn(
-        '[LOAD PRODUCTS] businessId haipo.'
-      );
-
-      allProducts = [];
-
-      if (typeof renderProducts === 'function') {
-        renderProducts([]);
-      }
-
-      return;
-    }
-
-    console.log(
-      '[LOAD PRODUCTS] Business ID:',
-      businessId
-    );
-
-    const productsRef =
-      collection(db, 'products');
-
-    const q =
-      query(
-        productsRef,
-        where(
-          'businessId',
-          '==',
-          businessId
-        )
-      );
-
-    const snap =
-      await getDocs(q);
-
-    allProducts = [];
-
-    snap.forEach((productDoc) => {
-
-      allProducts.push({
-        id: productDoc.id,
-        data: productDoc.data() || {}
-      });
-
-    });
-
-    // ------------------------------------------------------------
-    // SORT NEWEST FIRST
-    // ------------------------------------------------------------
-    allProducts.sort((a, b) => {
-
-      const aCreated = a.data.createdAt;
-      const bCreated = b.data.createdAt;
-
-      const aTime =
-        aCreated &&
-        typeof aCreated.toMillis === 'function'
-          ? aCreated.toMillis()
-          : 0;
-
-      const bTime =
-        bCreated &&
-        typeof bCreated.toMillis === 'function'
-          ? bCreated.toMillis()
-          : 0;
-
-      return bTime - aTime;
-    });
-
-    console.log(
-      '[LOAD PRODUCTS] Products found:',
-      allProducts.length
-    );
-
-    // ------------------------------------------------------------
-    // RENDER
-    // ------------------------------------------------------------
-    renderProducts(allProducts);
-
-  } catch (error) {
-
-    console.error(
-      '[LOAD PRODUCTS]',
-      error
-    );
-
-    console.error(
-      '[LOAD PRODUCTS CODE]',
-      error?.code
-    );
-
-    console.error(
-      '[LOAD PRODUCTS MESSAGE]',
-      error?.message
-    );
-
-    let message =
-      'Imeshindikana kupakua bidhaa.';
-
-    if (error?.code === 'permission-denied') {
-      message =
-        'Huna ruhusa ya kuona bidhaa.';
-    }
-
-    else if (error?.code === 'unavailable') {
-      message =
-        'Firebase haipatikani. Angalia internet.';
-    }
-
-    else if (error?.message) {
-      message =
-        'Imeshindikana kupakua bidhaa: ' +
-        error.message;
-    }
-
-    toast(message, 'e');
-  }
-}
-
-
-// ================================================================
-// DELETE PRODUCT
-// ================================================================
-async function deleteProduct(id) {
-
-  if (!id) {
-    toast(
-      'Product ID haijapatikana.',
-      'e'
-    );
-    return;
-  }
-
-  if (
-    !confirm(
-      'Una uhakika unataka kufuta bidhaa hii?'
-    )
-  ) {
-    return;
-  }
-
-  try {
-
-    await deleteDoc(
-      doc(
-        db,
-        'products',
-        id
-      )
-    );
-
-    toast(
-      'Bidhaa imefutwa.',
-      's'
-    );
-
-    await loadProducts();
-
-  } catch (error) {
-
-    console.error(
-      '[DELETE PRODUCT]',
-      error
-    );
-
-    toast(
-      'Imeshindikana kufuta bidhaa: ' +
-      (error?.message || ''),
-      'e'
-    );
-  }
-}
       // ============================================================
       // UPDATE PRODUCT
       // ============================================================
