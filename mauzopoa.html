@@ -1774,15 +1774,119 @@ async function loadFinanceDashboard() {
 // PRODUCTS
 // ================================================================
 async function loadProducts() {
-  if (!businessId) return;
   try {
-    var snap = await db.collection('products').where('businessId', '==', businessId).orderBy('createdAt', 'desc').get();
+
+    // ------------------------------------------------------------
+    // CHECK BUSINESS
+    // ------------------------------------------------------------
+    if (!businessId) {
+      console.warn('[LOAD PRODUCTS] businessId haipo.');
+
+      allProducts = [];
+      renderProducts([]);
+
+      return;
+    }
+
+    console.log('[LOAD PRODUCTS] Loading...');
+    console.log('[LOAD PRODUCTS] businessId:', businessId);
+
+    // ------------------------------------------------------------
+    // LOAD PRODUCTS
+    // ------------------------------------------------------------
+    const snap = await db
+      .collection('products')
+      .where('businessId', '==', businessId)
+      .get();
+
+    console.log(
+      '[LOAD PRODUCTS] Documents:',
+      snap.size
+    );
+
+    // ------------------------------------------------------------
+    // BUILD ARRAY
+    // ------------------------------------------------------------
     allProducts = [];
-    snap.forEach(function (doc) { allProducts.push({ id: doc.id, data: doc.data() }); });
+
+    snap.forEach(function (doc) {
+
+      const data = doc.data() || {};
+
+      allProducts.push({
+        id: doc.id,
+        data: data
+      });
+
+    });
+
+    // ------------------------------------------------------------
+    // SORT LOCALLY
+    // Avoid Firestore composite index requirement
+    // ------------------------------------------------------------
+    allProducts.sort(function (a, b) {
+
+      const aTime =
+        a.data.createdAt &&
+        typeof a.data.createdAt.toMillis === 'function'
+          ? a.data.createdAt.toMillis()
+          : 0;
+
+      const bTime =
+        b.data.createdAt &&
+        typeof b.data.createdAt.toMillis === 'function'
+          ? b.data.createdAt.toMillis()
+          : 0;
+
+      return bTime - aTime;
+    });
+
+    // ------------------------------------------------------------
+    // RENDER
+    // ------------------------------------------------------------
     renderProducts(allProducts);
+
+    console.log(
+      '[LOAD PRODUCTS] Successfully loaded:',
+      allProducts.length
+    );
+
   } catch (error) {
-    console.error('[LOAD PRODUCTS]', error);
-    toast('Imeshindikana kupakua bidhaa.', 'e');
+
+    console.error('====================================');
+    console.error('[LOAD PRODUCTS] ERROR');
+    console.error('====================================');
+    console.error('Error:', error);
+    console.error('Code:', error?.code);
+    console.error('Message:', error?.message);
+
+    // ------------------------------------------------------------
+    // MORE SPECIFIC ERROR
+    // ------------------------------------------------------------
+    let message = 'Imeshindikana kupakua bidhaa.';
+
+    if (error?.code === 'permission-denied') {
+      message =
+        'Huna ruhusa ya kusoma bidhaa za biashara hii.';
+    }
+
+    else if (error?.code === 'failed-precondition') {
+      message =
+        'Firestore inahitaji Index kwa bidhaa.';
+    }
+
+    else if (error?.code === 'unavailable') {
+      message =
+        'Firebase haipatikani. Angalia internet yako.';
+    }
+
+    else if (error?.message) {
+      message =
+        'Imeshindikana kupakua bidhaa: ' +
+        error.message;
+    }
+
+    toast(message, 'e');
   }
 }
 
