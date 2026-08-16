@@ -1529,23 +1529,172 @@ function signupPrevStep() {
 
 // ============================================================
 // AUTH — LOGIN
+// FIREBASE MODULAR
 // ============================================================
 async function handleLogin(e) {
-  e.preventDefault();
-  const btn = document.getElementById('loginBtn');
-  const email = document.getElementById('loginEmail').value.trim();
-  const pass = document.getElementById('loginPass').value;
-  if (!email || !pass) { showAuthError('Tafadhali jaza email na password.'); return; }
-  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Inaingia...';
-  try {
-    await signInWithEmailAndPassword(auth, email, pass);
-  } catch (err) {
-    console.error('[AUTH LOGIN]', err);
-    const msgs = { 'auth/invalid-credential':'Email au password si sahihi.', 'auth/user-not-found':'Akaunti haipo.', 'auth/too-many-requests':'Jaribu tena baada ya dakika.', 'auth/wrong-password':'Password si sahihi.' };
-    showAuthError(msgs[err.code] || 'Imeshindikana kuingia. Jaribu tena.');
-  } finally { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Ingia'; }
-}
 
+  e.preventDefault();
+
+  if (window.loginSubmitting) return;
+
+  window.loginSubmitting = true;
+
+
+  const btn =
+    document.getElementById('loginBtn');
+
+  const emailEl =
+    document.getElementById('loginEmail');
+
+  const passEl =
+    document.getElementById('loginPass');
+
+
+  const email =
+    emailEl
+      ? emailEl.value.trim().toLowerCase()
+      : '';
+
+  const pass =
+    passEl
+      ? passEl.value
+      : '';
+
+
+  // ============================================================
+  // VALIDATION
+  // ============================================================
+  if (!email || !pass) {
+
+    showAuthError(
+      'Tafadhali jaza email na password.'
+    );
+
+    window.loginSubmitting = false;
+
+    return;
+  }
+
+
+  // ============================================================
+  // BUTTON
+  // ============================================================
+  if (btn) {
+
+    btn.disabled = true;
+
+    btn.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin"></i> Inaingia...';
+  }
+
+
+  try {
+
+    console.log(
+      '[AUTH LOGIN] Signing in:',
+      email
+    );
+
+
+    // ==========================================================
+    // FIREBASE AUTHENTICATION
+    // ==========================================================
+    const cred =
+      await signInWithEmailAndPassword(
+        auth,
+        email,
+        pass
+      );
+
+
+    console.log(
+      '[AUTH LOGIN] Authentication successful:',
+      cred.user.uid
+    );
+
+
+    // ==========================================================
+    // MUHIMU:
+    // HAPA USIFUNGUE DASHBOARD.
+    //
+    // onAuthStateChanged() itafanya:
+    // Firebase User
+    //      ↓
+    // users/{uid}
+    //      ↓
+    // Role
+    //      ↓
+    // Super Admin / Business User
+    // ==========================================================
+
+
+  } catch (err) {
+
+    console.error(
+      '[AUTH LOGIN ERROR]',
+      err
+    );
+
+
+    let msg =
+      'Imeshindikana kuingia. Jaribu tena.';
+
+
+    switch (err.code) {
+
+      case 'auth/invalid-credential':
+        msg =
+          'Email au password si sahihi.';
+        break;
+
+      case 'auth/user-not-found':
+        msg =
+          'Akaunti haipo.';
+        break;
+
+      case 'auth/wrong-password':
+        msg =
+          'Password si sahihi.';
+        break;
+
+      case 'auth/invalid-email':
+        msg =
+          'Email si sahihi.';
+        break;
+
+      case 'auth/too-many-requests':
+        msg =
+          'Majaribio yamekuwa mengi. Jaribu tena baada ya muda.';
+        break;
+
+      case 'auth/network-request-failed':
+        msg =
+          'Hakuna muunganisho wa internet.';
+        break;
+
+      case 'auth/user-disabled':
+        msg =
+          'Akaunti hii imezimwa.';
+        break;
+    }
+
+
+    showAuthError(msg);
+
+
+  } finally {
+
+    window.loginSubmitting = false;
+
+    if (btn) {
+
+      btn.disabled = false;
+
+      btn.innerHTML =
+        '<i class="fa-solid fa-right-to-bracket"></i> Ingia';
+    }
+  }
+}
 // ============================================================
 // AUTH — SIGNUP
 // FIREBASE MODULAR
