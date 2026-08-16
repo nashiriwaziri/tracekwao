@@ -2124,60 +2124,310 @@ async function handleLogout() {
 
 // ============================================================
 // AUTH STATE OBSERVER
+// FIREBASE MODULAR
 // ============================================================
 onAuthStateChanged(auth, async (user) => {
+
+  // ============================================================
+  // NOT LOGGED IN
+  // ============================================================
   if (!user) {
+
+    console.log('[AUTH] No authenticated user');
+
+    State.currentUser = null;
+    State.currentUserId = null;
+    State.userData = null;
+    State.currentRole = null;
+    State.currentBizId = null;
+    State.businessData = null;
+
     showLanding();
+
     return;
   }
+
+
   try {
-    const userData = await FS.getUser(user.uid);
-    if (!userData) {
-      // User doc doesn't exist — could be super admin or unregistered
+
+    console.log(
+      '[AUTH] Firebase user authenticated:',
+      user.uid,
+      user.email
+    );
+
+
+    // ==========================================================
+    // LOAD USER DOCUMENT DIRECTLY FROM FIRESTORE
+    // ==========================================================
+    const userRef =
+      doc(
+        db,
+        'users',
+        user.uid
+      );
+
+    const userSnap =
+      await getDoc(userRef);
+
+
+    console.log(
+      '[AUTH] users document exists:',
+      userSnap.exists()
+    );
+
+
+    // ==========================================================
+    // USER DOCUMENT DOES NOT EXIST
+    // ==========================================================
+    if (!userSnap.exists()) {
+
+      console.error(
+        '[AUTH] USER DOCUMENT NOT FOUND',
+        {
+          uid: user.uid,
+          email: user.email
+        }
+      );
+
+
       showAuth();
-      showAuthError('Akaunti yako haipo kwenye mfumo. Wasiliana na admin.');
+
+      showAuthError(
+        'Akaunti yako haipo kwenye mfumo. Wasiliana na admin.'
+      );
+
       return;
     }
-    State.currentUser = user;
-    State.currentUserId = user.uid;
-    State.userData = userData;
-    State.currentRole = userData.role;
-    State.currentBizId = userData.businessId;
 
-    if (userData.role === 'super_admin') {
+
+    // ==========================================================
+    // USER DATA
+    // ==========================================================
+    const userData =
+      userSnap.data() || {};
+
+
+    console.log(
+      '[AUTH] User data:',
+      userData
+    );
+
+
+    // ==========================================================
+    // SAVE GLOBAL STATE
+    // ==========================================================
+    State.currentUser =
+      user;
+
+    State.currentUserId =
+      user.uid;
+
+    State.userData =
+      {
+        ...userData,
+        uid: user.uid,
+        email:
+          userData.email ||
+          user.email ||
+          ''
+      };
+
+    State.currentRole =
+      String(
+        userData.role || ''
+      ).toLowerCase();
+
+    State.currentBizId =
+      userData.businessId || null;
+
+
+    // ==========================================================
+    // SUPER ADMIN
+    // ==========================================================
+    if (
+      State.currentRole === 'super_admin' ||
+      State.currentRole === 'superadmin'
+    ) {
+
+      console.log(
+        '[AUTH] Super Administrator detected'
+      );
+
+
       showSuperAdminPanel();
+
       return;
     }
 
-    const biz = await FS.getBusiness(userData.businessId);
-    State.businessData = biz;
 
-    if (!biz) {
+    // ==========================================================
+    // BUSINESS USER MUST HAVE BUSINESS ID
+    // ==========================================================
+    if (!State.currentBizId) {
+
+      console.error(
+        '[AUTH] Business ID missing:',
+        userData
+      );
+
+
       showAuth();
-      showAuthError('Biashara haipo. Wasiliana na admin.');
+
+      showAuthError(
+        'Akaunti yako haina taarifa za biashara. Wasiliana na admin.'
+      );
+
       return;
     }
 
-    if (biz.status === 'suspended') {
+
+    // ==========================================================
+    // LOAD BUSINESS
+    // ==========================================================
+    console.log(
+      '[AUTH] Loading business:',
+      State.currentBizId
+    );
+
+
+    const businessRef =
+      doc(
+        db,
+        'businesses',
+        State.currentBizId
+      );
+
+    const businessSnap =
+      await getDoc(businessRef);
+
+
+    // ==========================================================
+    // BUSINESS NOT FOUND
+    // ==========================================================
+    if (!businessSnap.exists()) {
+
+      console.error(
+        '[AUTH] Business document not found:',
+        State.currentBizId
+      );
+
+
       showAuth();
-      showAuthError('Biashara yako imefungwa. Wasiliana na admin.');
+
+      showAuthError(
+        'Biashara haipo. Wasiliana na admin.'
+      );
+
       return;
     }
 
-    // Show role screen for staff roles, or go directly to app for owner/admin
-    if (['seller','cashier','storekeeper','manager'].includes(userData.role)) {
+
+    // ==========================================================
+    // BUSINESS DATA
+    // ==========================================================
+    const biz =
+      {
+        id: State.currentBizId,
+        ...businessSnap.data()
+      };
+
+
+    State.businessData =
+      biz;
+
+
+    console.log(
+      '[AUTH] Business loaded:',
+      biz
+    );
+
+
+    // ==========================================================
+    // SUSPENDED BUSINESS
+    // ==========================================================
+    if (
+      String(biz.status || '').toLowerCase()
+      === 'suspended'
+    ) {
+
+      showAuth();
+
+      showAuthError(
+        'Biashara yako imefungwa. Wasiliana na admin.'
+      );
+
+      return;
+    }
+
+
+    // ==========================================================
+    // UPDATE TOPBAR
+    // ==========================================================
+    if (
+      typeof updateTopbarUI === 'function'
+    ) {
+      updateTopbarUI();
+    }
+
+
+    // ==========================================================
+    // STAFF ROLES
+    // ==========================================================
+    const staffRoles = [
+      'seller',
+      'cashier',
+      'storekeeper',
+      'manager'
+    ];
+
+
+    if (
+      staffRoles.includes(
+        State.currentRole
+      )
+    ) {
+
+      console.log(
+        '[AUTH] Staff role:',
+        State.currentRole
+      );
+
+
       showRoleScreen();
-    } else {
-      enterMainApp();
-    }
-  } catch (err) {
-    console.error('[AUTH STATE]', err);
-    showLanding();
-    toast('Hitilafu kwenye kupoakua data. Jaribu tena.', 'e');
-  }
-});
 
-// ============================================================
+      return;
+    }
+
+
+    // ==========================================================
+    // OWNER / ADMIN / OTHER BUSINESS ROLES
+    // ==========================================================
+    console.log(
+      '[AUTH] Opening main application'
+    );
+
+
+    enterMainApp();
+
+
+  } catch (err) {
+
+    console.error(
+      '[AUTH STATE ERROR]',
+      err
+    );
+
+    showLanding();
+
+    toast(
+      'Hitilafu kwenye kupakia data. Jaribu tena.',
+      'e'
+    );
+  }
+
+});
+  // ============================================================
 // ROLE SELECTION SCREEN
 // ============================================================
 function showRoleScreen() {
