@@ -1117,47 +1117,217 @@ async function login(e) {
     showAuthErr(msgs[err.code] || 'Hitilafu ya kuingia. Jaribu tena.');
   }
 }
-
+```javascript
 /* ============================================================
-   AUTH — REGISTER
+   AUTH — REGISTER — FIREBASE MODULAR V10
    ============================================================ */
 async function register(e) {
-  e.preventDefault();
-  hideAuthErr();
-  const name = document.getElementById('regName').value.trim();
-  const email = document.getElementById('regEmail').value.trim();
-  const pass = document.getElementById('regPass').value;
-  const pass2 = document.getElementById('regPass2').value;
-  const bizName = document.getElementById('regBizName').value.trim();
-  const bizCat = document.getElementById('regBizCat').value;
-  const bizPhone = document.getElementById('regBizPhone').value.trim();
-  const bizAddr = document.getElementById('regBizAddr').value.trim();
+  if (e) e.preventDefault();
 
-  if (pass !== pass2) { showAuthErr('Nenosiri hazilingani.'); regNext(1); return; }
-  if (pass.length < 6) { showAuthErr('Nenosiri lazima iwe na herufi 6 au zaidi.'); regNext(1); return; }
-  if (!bizName || !bizCat) { showAuthErr('Jina na aina ya biashara zinahitajika.'); regNext(2); return; }
+  hideAuthErr();
+
+  const name = document.getElementById('regName')?.value.trim() || '';
+  const email = document.getElementById('regEmail')?.value.trim() || '';
+  const pass = document.getElementById('regPass')?.value || '';
+  const pass2 = document.getElementById('regPass2')?.value || '';
+  const bizName = document.getElementById('regBizName')?.value.trim() || '';
+  const bizCat = document.getElementById('regBizCat')?.value || '';
+  const bizPhone = document.getElementById('regBizPhone')?.value.trim() || '';
+  const bizAddr = document.getElementById('regBizAddr')?.value.trim() || '';
+
+  // ==========================================================
+  // VALIDATION
+  // ==========================================================
+  if (!name || !email || !pass || !pass2) {
+    showAuthErr('Tafadhali jaza taarifa zote zinazohitajika.');
+    return;
+  }
+
+  if (pass !== pass2) {
+    showAuthErr('Nenosiri hazilingani.');
+    regNext(1);
+    return;
+  }
+
+  if (pass.length < 6) {
+    showAuthErr('Nenosiri lazima liwe na herufi 6 au zaidi.');
+    regNext(1);
+    return;
+  }
+
+  if (!bizName || !bizCat) {
+    showAuthErr('Jina na aina ya biashara zinahitajika.');
+    regNext(2);
+    return;
+  }
+
+  const btn =
+    document.getElementById('regBtn') ||
+    document.querySelector('[type="submit"]');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.originalHtml = btn.innerHTML;
+    btn.innerHTML =
+      '<i class="fas fa-spinner fa-spin"></i> Inajiandikisha...';
+  }
 
   try {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    await updateProfile(cred.user, { displayName: name });
-    const bizId = cred.user.uid;
-    await setDoc(doc(db, 'users', bizId), {
-      name, email, businessName: bizName, businessCategory: bizCat,
-      businessPhone: bizPhone, businessAddress: bizAddr, businessLogo: '',
-      role: 'manager', status: 'active', businessId: bizId,
-      createdAt: serverTimestamp()
+
+    // ========================================================
+    // 1. CREATE FIREBASE AUTH ACCOUNT
+    // ========================================================
+    const cred = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      pass
+    );
+
+    const user = cred.user;
+    const uid = user.uid;
+
+    console.log('REGISTER STEP 1 OK — AUTH:', uid);
+
+    // ========================================================
+    // 2. UPDATE AUTH PROFILE
+    // ========================================================
+    await updateProfile(user, {
+      displayName: name
     });
-    showToast('Akaunti imeundwa! Chagua jukumu lako.', 's');
+
+    console.log('REGISTER STEP 2 OK — PROFILE');
+
+    // ========================================================
+    // 3. CREATE USER DOCUMENT IN FIRESTORE
+    // ========================================================
+    const userRef = doc(db, 'users', uid);
+
+    await setDoc(userRef, {
+      name: name,
+      email: email,
+      businessName: bizName,
+      businessCategory: bizCat,
+      businessPhone: bizPhone,
+      businessAddress: bizAddr,
+      businessLogo: '',
+      role: 'manager',
+      status: 'active',
+      businessId: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    console.log('REGISTER STEP 3 OK — FIRESTORE USER:', uid);
+
+    // ========================================================
+    // 4. VERIFY FIRESTORE WRITE
+    // ========================================================
+    const verifySnap = await getDoc(userRef);
+
+    if (!verifySnap.exists()) {
+      throw new Error(
+        'Akaunti iliundwa lakini taarifa za mtumiaji hazikuthibitishwa Firestore.'
+      );
+    }
+
+    console.log(
+      'REGISTER STEP 4 OK — FIRESTORE VERIFIED'
+    );
+
+    // ========================================================
+    // 5. REGISTRATION COMPLETED
+    // ========================================================
+    showToast(
+      'Usajili umekamilika kikamilifu.',
+      's'
+    );
+
+    console.log('REGISTER COMPLETED SUCCESSFULLY:', uid);
+
+    // ========================================================
+    // 6. OPEN USER SYSTEM
+    // ========================================================
+    // IMPORTANT:
+    // Replace this section with the existing function
+    // that your application uses to open the main dashboard.
+
+    if (typeof showApp === 'function') {
+      showApp();
+    } else if (typeof openDashboard === 'function') {
+      openDashboard();
+    } else if (typeof loadDashboard === 'function') {
+      loadDashboard();
+    } else {
+      console.warn(
+        'Registration successful, but no dashboard-opening function was found.'
+      );
+    }
+
   } catch (err) {
-    console.error('Register error:', err);
-    const msgs = {
-      'auth/email-already-in-use': 'Barua pepe tayari inatumika.',
-      'auth/weak-password': 'Nenosiri ni dhaifu sana.',
-      'auth/invalid-email': 'Barua pepe si sahihi.'
-    };
-    showAuthErr(msgs[err.code] || 'Hitilafu katika kusajili. Jaribu tena.');
+
+    console.error('=================================');
+    console.error('REGISTER ERROR:', err);
+    console.error('ERROR CODE:', err?.code);
+    console.error('ERROR MESSAGE:', err?.message);
+    console.error('=================================');
+
+    let message = 'Hitilafu katika kusajili. Jaribu tena.';
+
+    switch (err?.code) {
+
+      case 'auth/email-already-in-use':
+        message = 'Barua pepe tayari inatumika.';
+        break;
+
+      case 'auth/weak-password':
+        message = 'Nenosiri ni dhaifu sana.';
+        break;
+
+      case 'auth/invalid-email':
+        message = 'Barua pepe si sahihi.';
+        break;
+
+      case 'auth/network-request-failed':
+        message = 'Tatizo la mtandao. Tafadhali jaribu tena.';
+        break;
+
+      case 'auth/operation-not-allowed':
+        message =
+          'Email/Password Authentication haijawezeshwa Firebase.';
+        break;
+
+      case 'permission-denied':
+        message =
+          'Firebase imekataa kuhifadhi taarifa. Angalia Firestore Rules.';
+        break;
+
+      default:
+        if (
+          err?.message &&
+          err.message.toLowerCase().includes('permission')
+        ) {
+          message =
+            'Huna ruhusa ya kuhifadhi taarifa kwenye Firestore.';
+        } else if (err?.message) {
+          message =
+            'Hitilafu katika kusajili: ' + err.message;
+        }
+    }
+
+    showAuthErr(message);
+
+  } finally {
+
+    if (btn) {
+      btn.disabled = false;
+
+      btn.innerHTML =
+        btn.dataset.originalHtml ||
+        '<i class="fas fa-user-plus"></i> Jisajili';
+    }
   }
 }
+```
 
 /* ============================================================
    AUTH — LOGOUT
