@@ -1284,9 +1284,1011 @@ function deleteSeller(id){deleteItem('sellers',id);renderSellers();toast('Imefut
 /* ======================================================================
    CUSTOMERS
    ====================================================================== */
+
+/* ================================================================
+   ESCAPE HTML
+   ================================================================ */
+function customerEsc(value) {
+  if (value === null || value === undefined) return '';
+
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+
+/* ================================================================
+   RENDER CUSTOMERS
+   ================================================================ */
 function renderCustomers() {
-  const customers=getUserItems('customers');
-  document.getElementById('sec-customers').innerHTML=`
-    <div class="sh"><div><h2>Wateja</h2><p>Wateja wako wote</p></div><div class="sh-acts">${exportBar('customers')}<button class="btn btn-p btn-sm" onclick="openCustomerModal()"><i class="fa-solid fa-plus"></i> Ongeza</button></div></div>
-    <div class="tw"><div class="ts"><table id="tbl-customers"><thead><tr><th>Jina</th><th>Simu</th><th>Email</th><th>Anwani</th><th>Actions</th></tr></thead>
-    <tbody>${customers.length?customers.map(c=>`<tr><td><strong>${c.name}</strong></td><td>${c.phone
+
+  const section =
+    document.getElementById('sec-customers');
+
+  if (!section) {
+    console.warn(
+      '[CUSTOMERS] sec-customers not found'
+    );
+    return;
+  }
+
+
+  let customers = [];
+
+  try {
+
+    customers =
+      getUserItems('customers') || [];
+
+  } catch (error) {
+
+    console.error(
+      '[CUSTOMERS] Failed to load customers:',
+      error
+    );
+
+    customers = [];
+  }
+
+
+  /* ==============================================================
+     CUSTOMER ROWS
+     ============================================================== */
+
+  let rows = '';
+
+  if (customers.length) {
+
+    rows = customers.map(function(c) {
+
+      const id =
+        customerEsc(c.id || '');
+
+      const name =
+        customerEsc(c.name || '—');
+
+      const phone =
+        customerEsc(c.phone || '—');
+
+      const email =
+        customerEsc(c.email || '—');
+
+      const address =
+        customerEsc(c.address || '—');
+
+
+      return `
+        <tr>
+
+          <td>
+            <strong>${name}</strong>
+          </td>
+
+          <td>
+            ${phone}
+          </td>
+
+          <td>
+            ${email}
+          </td>
+
+          <td>
+            ${address}
+          </td>
+
+          <td>
+
+            <div class="table-actions">
+
+              <button
+                type="button"
+                class="btn btn-i btn-xs"
+                title="Hariri"
+                onclick="openCustomerModal('${id}')">
+
+                <i class="fa-solid fa-pen"></i>
+
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-d btn-xs"
+                title="Futa"
+                onclick="deleteCustomer('${id}')">
+
+                <i class="fa-solid fa-trash"></i>
+
+              </button>
+
+            </div>
+
+          </td>
+
+        </tr>
+      `;
+
+    }).join('');
+
+  } else {
+
+    rows = `
+      <tr>
+
+        <td
+          colspan="5"
+          class="empty-s">
+
+          <i class="fa-solid fa-users"></i>
+
+          <p>
+            Hakuna wateja
+          </p>
+
+        </td>
+
+      </tr>
+    `;
+  }
+
+
+  /* ==============================================================
+     PAGE
+     ============================================================== */
+
+  section.innerHTML = `
+
+    <div class="sh">
+
+      <div>
+
+        <h2>
+          Wateja
+        </h2>
+
+        <p>
+          Wateja wako wote
+        </p>
+
+      </div>
+
+
+      <div class="sh-acts">
+
+        ${exportBar('customers')}
+
+        <button
+          type="button"
+          class="btn btn-p btn-sm"
+          onclick="openCustomerModal()">
+
+          <i class="fa-solid fa-plus"></i>
+
+          Ongeza
+
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <div class="tw">
+
+      <div class="ts">
+
+        <table id="tbl-customers">
+
+          <thead>
+
+            <tr>
+
+              <th>Jina</th>
+              <th>Simu</th>
+              <th>Email</th>
+              <th>Anwani</th>
+              <th>Actions</th>
+
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            ${rows}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+  `;
+}
+
+
+/* ================================================================
+   OPEN CUSTOMER MODAL
+   ================================================================ */
+function openCustomerModal(id) {
+
+  let customer = null;
+
+  if (id) {
+
+    try {
+
+      customer =
+        getUserItem(
+          'customers',
+          id
+        );
+
+    } catch (error) {
+
+      console.error(
+        '[CUSTOMERS] Failed to get customer:',
+        error
+      );
+    }
+  }
+
+
+  const title =
+    document.getElementById('genModalTitle');
+
+  const body =
+    document.getElementById('genModalBody');
+
+  const actions =
+    document.getElementById('genModalActions');
+
+  const modal =
+    document.getElementById('genModal');
+
+
+  if (!body || !actions || !modal) {
+
+    console.error(
+      '[CUSTOMERS] Generic modal elements missing'
+    );
+
+    toast(
+      'Modal ya mteja haijapatikana.',
+      'e'
+    );
+
+    return;
+  }
+
+
+  if (title) {
+
+    title.textContent =
+      id
+        ? 'Hariri Mteja'
+        : 'Ongeza Mteja';
+  }
+
+
+  body.innerHTML = `
+
+    <input
+      type="hidden"
+      id="fmCusId"
+      value="${customerEsc(id || '')}"
+    />
+
+
+    <div class="fg">
+
+      <label>
+        Jina
+        <span class="req">*</span>
+      </label>
+
+      <input
+        class="fi"
+        id="fmCusName"
+        type="text"
+        value="${customerEsc(customer?.name || '')}"
+        placeholder="Jina la mteja"
+        autocomplete="name"
+      />
+
+    </div>
+
+
+    <div class="fg">
+
+      <label>
+        Simu
+      </label>
+
+      <input
+        class="fi"
+        id="fmCusPhone"
+        type="tel"
+        value="${customerEsc(customer?.phone || '')}"
+        placeholder="Namba ya simu"
+        autocomplete="tel"
+      />
+
+    </div>
+
+
+    <div class="fg">
+
+      <label>
+        Email
+      </label>
+
+      <input
+        class="fi"
+        id="fmCusEmail"
+        type="email"
+        value="${customerEsc(customer?.email || '')}"
+        placeholder="Email ya mteja"
+        autocomplete="email"
+      />
+
+    </div>
+
+
+    <div class="fg">
+
+      <label>
+        Anwani
+      </label>
+
+      <input
+        class="fi"
+        id="fmCusAddr"
+        type="text"
+        value="${customerEsc(customer?.address || '')}"
+        placeholder="Anwani ya mteja"
+        autocomplete="street-address"
+      />
+
+    </div>
+
+  `;
+
+
+  actions.innerHTML = `
+
+    <button
+      type="button"
+      class="btn btn-o"
+      onclick="closeGenModal()">
+
+      Ghairi
+
+    </button>
+
+
+    <button
+      type="button"
+      class="btn btn-p"
+      id="saveCustomerBtn"
+      onclick="saveCustomer()">
+
+      <i class="fa-solid fa-save"></i>
+
+      Hifadhi
+
+    </button>
+
+  `;
+
+
+  modal.classList.add('show');
+}
+
+
+/* ================================================================
+   SAVE CUSTOMER
+   ================================================================ */
+async function saveCustomer() {
+
+  if (window.customerSaving) {
+    return;
+  }
+
+
+  const idEl =
+    document.getElementById('fmCusId');
+
+  const nameEl =
+    document.getElementById('fmCusName');
+
+  const phoneEl =
+    document.getElementById('fmCusPhone');
+
+  const emailEl =
+    document.getElementById('fmCusEmail');
+
+  const addressEl =
+    document.getElementById('fmCusAddr');
+
+  const btn =
+    document.getElementById('saveCustomerBtn');
+
+
+  if (!nameEl) {
+
+    toast(
+      'Fomu ya mteja haijapatikana.',
+      'e'
+    );
+
+    return;
+  }
+
+
+  const id =
+    idEl
+      ? idEl.value.trim()
+      : '';
+
+
+  const name =
+    nameEl.value.trim();
+
+
+  const phone =
+    phoneEl
+      ? phoneEl.value.trim()
+      : '';
+
+
+  const email =
+    emailEl
+      ? emailEl.value.trim()
+      : '';
+
+
+  const address =
+    addressEl
+      ? addressEl.value.trim()
+      : '';
+
+
+  /* ==============================================================
+     VALIDATION
+     ============================================================== */
+
+  if (!name) {
+
+    toast(
+      'Tafadhali jaza jina la mteja.',
+      'e'
+    );
+
+    nameEl.focus();
+
+    return;
+  }
+
+
+  if (
+    email &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+
+    toast(
+      'Email ya mteja si sahihi.',
+      'e'
+    );
+
+    if (emailEl) {
+      emailEl.focus();
+    }
+
+    return;
+  }
+
+
+  /* ==============================================================
+     USER
+     ============================================================== */
+
+  const currentUid =
+    typeof uid === 'function'
+      ? uid()
+      : (
+          typeof CU !== 'undefined' &&
+          CU
+            ? CU.id
+            : ''
+        );
+
+
+  if (!currentUid) {
+
+    toast(
+      'Session ya mtumiaji haijapatikana.',
+      'e'
+    );
+
+    console.error(
+      '[CUSTOMERS] Current user not found'
+    );
+
+    return;
+  }
+
+
+  /* ==============================================================
+     BUTTON LOCK
+     ============================================================== */
+
+  window.customerSaving = true;
+
+
+  if (btn) {
+
+    btn.disabled = true;
+
+    btn.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin"></i> Inahifadhi...';
+  }
+
+
+  try {
+
+    const customerId =
+      id ||
+      (
+        typeof crypto !== 'undefined' &&
+        crypto.randomUUID
+          ? crypto.randomUUID()
+          : uid()
+      );
+
+
+    const customerData = {
+
+      id: customerId,
+
+      userId: currentUid,
+
+      name: name,
+
+      phone: phone,
+
+      email: email,
+
+      address: address,
+
+      updatedAt:
+        new Date().toISOString()
+    };
+
+
+    console.log(
+      '[CUSTOMERS] Saving:',
+      customerData
+    );
+
+
+    /* ==========================================================
+       SAVE THROUGH EXISTING DATA LAYER
+       ========================================================== */
+
+    await Promise.resolve(
+      saveItem(
+        'customers',
+        customerData
+      )
+    );
+
+
+    /* ==========================================================
+       SUCCESS
+       ========================================================== */
+
+    closeGenModal();
+
+    renderCustomers();
+
+    toast(
+      id
+        ? 'Mteja amesasishwa.'
+        : 'Mteja amehifadhiwa.',
+      's'
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      '[CUSTOMERS SAVE ERROR]',
+      error
+    );
+
+
+    toast(
+      'Imeshindikana kuhifadhi mteja. Jaribu tena.',
+      'e'
+    );
+
+
+  } finally {
+
+    window.customerSaving = false;
+
+
+    if (btn) {
+
+      btn.disabled = false;
+
+      btn.innerHTML =
+        '<i class="fa-solid fa-save"></i> Hifadhi';
+    }
+  }
+}
+
+
+/* ================================================================
+   DELETE CUSTOMER
+   ================================================================ */
+async function deleteCustomer(id) {
+
+  if (!id) {
+
+    toast(
+      'Mteja hajapatikana.',
+      'e'
+    );
+
+    return;
+  }
+
+
+  /* ==============================================================
+     CONFIRM
+     ============================================================== */
+
+  const confirmed =
+    window.confirm(
+      'Una uhakika unataka kumfuta mteja huyu?'
+    );
+
+
+  if (!confirmed) {
+    return;
+  }
+
+
+  try {
+
+    console.log(
+      '[CUSTOMERS] Deleting:',
+      id
+    );
+
+
+    await Promise.resolve(
+      deleteItem(
+        'customers',
+        id
+      )
+    );
+
+
+    renderCustomers();
+
+
+    toast(
+      'Mteja amefutwa.',
+      's'
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      '[CUSTOMERS DELETE ERROR]',
+      error
+    );
+
+
+    toast(
+      'Imeshindikana kufuta mteja.',
+      'e'
+    );
+  }
+}
+/* ======================================================================
+   DEBTS
+   ====================================================================== */
+function renderDebts() {
+  const debts=getUserItems('debts').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const unpaidTotal=debts.filter(d=>d.status!=='paid').reduce((a,d)=>a+(d.amount-(d.paid||0)),0);
+  document.getElementById('sec-debts').innerHTML=`
+    ${unpaidTotal>0?`<div class="debt-alert"><i class="fa-solid fa-triangle-exclamation"></i> Madeni yasiyolipwa: <strong>${fmt(unpaidTotal)} TZS</strong></div>`:''}
+    <div class="sh"><div><h2>Madeni</h2><p>Fuatilia madeni yote</p></div><div class="sh-acts">${exportBar('debts')}<button class="btn btn-p btn-sm" onclick="openDebtModal()"><i class="fa-solid fa-plus"></i> Ongeza</button></div></div>
+    <div class="tw"><div class="ts"><table id="tbl-debts"><thead><tr><th>Mteja</th><th>Kiasi</th><th>Imelipwa</th><th>Baki</th><th>Halisi</th><th>Tarehe</th><th>Actions</th></tr></thead>
+    <tbody>${debts.length?debts.map(d=>{const baki=d.amount-(d.paid||0);return`<tr><td><strong>${d.customerName}</strong></td><td>${fmt(d.amount)}</td><td>${fmt(d.paid||0)}</td><td style="color:${baki>0?'var(--danger)':'var(--success)'}"><strong>${fmt(baki)}</strong></td><td><span class="status-badge ${d.status==='paid'?'paid':'unpaid'}">${d.status==='paid'?'Imelipwa':'Haijalipwa'}</span></td><td>${fmtDate(d.date)}</td><td>${d.status!=='paid'?`<button class="btn btn-s btn-xs" onclick="payDebt('${d.id}')"><i class="fa-solid fa-money-bill"></i> Lipa</button> `:''}<button class="btn btn-i btn-xs" onclick="openDebtModal('${d.id}')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteDebt('${d.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`}).join(''):'<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-hand-holding-dollar"></i><p>Hakuna madeni</p></td></tr>'}</tbody></table></div></div>`;
+}
+function openDebtModal(id) {
+  const d=id?getUserItem('debts',id):null;
+  document.getElementById('genModalTitle').textContent=id?'Edit Deni':'Ongeza Deni';
+  document.getElementById('genModalBody').innerHTML=`
+    <input type="hidden" id="fmDebtId" value="${id||''}"/>
+    <div class="fg"><label>Mteja <span class="req">*</span></label><input class="fi" id="fmDebtCus" value="${d?d.customerName:''}" required/></div>
+    <div class="fg"><label>Kiasi cha Deni (TZS) <span class="req">*</span></label><input class="fi" id="fmDebtAmt" type="number" value="${d?d.amount:''}" required min="0"/></div>
+    <div class="fg"><label>Imelipwa</label><input class="fi" id="fmDebtPaid" type="number" value="${d?d.paid||0:0}" min="0"/></div>
+    <div class="fg"><label>Maelezo</label><textarea class="fi" id="fmDebtDesc" rows="2">${d?d.description||'':''}</textarea></div>`;
+  document.getElementById('genModalActions').innerHTML=`<button class="btn btn-o" onclick="closeGenModal()">Ghairi</button><button class="btn btn-p" onclick="saveDebt()"><i class="fa-solid fa-save"></i> Hifadhi</button>`;
+  document.getElementById('genModal').classList.add('show');
+}
+function saveDebt(){const id=document.getElementById('fmDebtId').value;const amt=parseFloat(document.getElementById('fmDebtAmt').value);const cus=document.getElementById('fmDebtCus').value;if(!cus||isNaN(amt))return toast('Jaza sehemu zilizohitajika.','e');const paid=parseFloat(document.getElementById('fmDebtPaid').value)||0;saveItem('debts',{id:id||uid(),userId:CU.id,customerName:cus,amount:amt,paid,status:paid>=amt?'paid':'unpaid',description:document.getElementById('fmDebtDesc').value,date:new Date().toISOString()});closeGenModal();renderDebts();updateBadges();toast('Deni limehifadhiwa.','s');}
+function payDebt(id){const d=getUserItem('debts',id);if(!d)return;const baki=d.amount-(d.paid||0);if(baki<=0)return toast('Deni limelipwa tayari.','i');document.getElementById('genModalTitle').textContent='Lipa Deni';document.getElementById('genModalBody').innerHTML=`<p style="margin-bottom:14px;color:var(--text2)">Deni la <strong>${d.customerName}</strong>: <strong style="color:var(--danger)">${fmt(baki)} TZS</strong></p><div class="fg"><label>Kiasi cha Kulipa (TZS) <span class="req">*</span></label><input class="fi" id="fmPayAmt" type="number" value="${baki}" required min="1" max="${baki}"/></div>`;document.getElementById('genModalActions').innerHTML=`<button class="btn btn-o" onclick="closeGenModal()">Ghairi</button><button class="btn btn-s" onclick="confirmPayDebt('${id}')"><i class="fa-solid fa-check"></i> Lipa</button>`;document.getElementById('genModal').classList.add('show');}
+function confirmPayDebt(id){const d=getUserItem('debts',id);if(!d)return;const pay=parseFloat(document.getElementById('fmPayAmt').value)||0;if(pay<=0)return toast('Jaza kiasi.','e');d.paid=(d.paid||0)+pay;if(d.paid>=d.amount)d.status='paid';saveItem('debts',d);closeGenModal();renderDebts();updateBadges();toast('Malipo yamehifadhiwa!','s');}
+function deleteDebt(id){deleteItem('debts',id);renderDebts();updateBadges();toast('Imefutwa.','w');}
+
+/* ======================================================================
+   EXPENSES
+   ====================================================================== */
+function renderExpenses() {
+  const expenses=getUserItems('expenses').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const total=expenses.reduce((a,e)=>a+(e.amount||0),0);
+  document.getElementById('sec-expenses').innerHTML=`
+    <div class="metrics"><div class="mc r"><div class="mc-icon"><i class="fa-solid fa-money-bill-trend-up"></i></div><h3>${fmt(total)}</h3><p>Jumla ya Matumizi</p></div></div>
+    <div class="sh"><div><h2>Matumizi</h2><p>Gharama za biashara</p></div><div class="sh-acts">${exportBar('expenses')}<button class="btn btn-p btn-sm" onclick="openExpenseModal()"><i class="fa-solid fa-plus"></i> Ongeza</button></div></div>
+    <div class="tw"><div class="ts"><table id="tbl-expenses"><thead><tr><th>Maelezo</th><th>Category</th><th>Kiasi</th><th>Tarehe</th><th>Actions</th></tr></thead>
+    <tbody>${expenses.length?expenses.map(e=>`<tr><td><strong>${e.description}</strong></td><td>${e.category||'-'}</td><td style="color:var(--danger)">${fmt(e.amount)}</td><td>${fmtDate(e.date)}</td><td><button class="btn btn-i btn-xs" onclick="openExpenseModal('${e.id}')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteExpense('${e.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join(''):'<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-money-bill-trend-up"></i><p>Hakuna matumizi</p></td></tr>'}</tbody></table></div></div>`;
+}
+function openExpenseModal(id) {
+  const e=id?getUserItem('expenses',id):null;
+  document.getElementById('genModalTitle').textContent=id?'Edit Matumizi':'Ongeza Matumizi';
+  document.getElementById('genModalBody').innerHTML=`
+    <input type="hidden" id="fmExpId" value="${id||''}"/>
+    <div class="fg"><label>Maelezo <span class="req">*</span></label><input class="fi" id="fmExpDesc" value="${e?e.description:''}" required/></div>
+    <div class="fg"><label>Category</label><select class="fi" id="fmExpCat"><option value="">Chagua...</option><option ${e&&e.category==='Rent'?'selected':''}>Rent</option><option ${e&&e.category==='Salary'?'selected':''}>Salary</option><option ${e&&e.category==='Utilities'?'selected':''}>Utilities</option><option ${e&&e.category==='Transport'?'selected':''}>Transport</option><option ${e&&e.category==='Supplies'?'selected':''}>Supplies</option><option ${e&&e.category==='Other'?'selected':''}>Other</option></select></div>
+    <div class="fg"><label>Kiasi (TZS) <span class="req">*</span></label><input class="fi" id="fmExpAmt" type="number" value="${e?e.amount:''}" required min="0"/></div>
+    <div class="fg"><label>Tarehe</label><input class="fi" id="fmExpDate" type="date" value="${e?e.date?.split('T')[0]:new Date().toISOString().split('T')[0]}"/></div>`;
+  document.getElementById('genModalActions').innerHTML=`<button class="btn btn-o" onclick="closeGenModal()">Ghairi</button><button class="btn btn-p" onclick="saveExpense()"><i class="fa-solid fa-save"></i> Hifadhi</button>`;
+  document.getElementById('genModal').classList.add('show');
+}
+function saveExpense(){const id=document.getElementById('fmExpId').value;const desc=document.getElementById('fmExpDesc').value;const amt=parseFloat(document.getElementById('fmExpAmt').value);if(!desc||isNaN(amt))return toast('Jaza sehemu zilizohitajika.','e');saveItem('expenses',{id:id||uid(),userId:CU.id,description:desc,category:document.getElementById('fmExpCat').value,amount:amt,date:document.getElementById('fmExpDate').value||new Date().toISOString()});closeGenModal();renderExpenses();toast('Matumizi yamehifadhiwa.','s');}
+function deleteExpense(id){deleteItem('expenses',id);renderExpenses();toast('Imefutwa.','w');}
+
+/* ======================================================================
+   EMPLOYEES
+   ====================================================================== */
+function renderEmployees() {
+  const emps=getUserItems('employees');
+  document.getElementById('sec-employees').innerHTML=`
+    <div class="sh"><div><h2>Wafanyakazi</h2><p>Simamia wafanyakazi</p></div><div class="sh-acts">${exportBar('employees')}<button class="btn btn-p btn-sm" onclick="openEmployeeModal()"><i class="fa-solid fa-plus"></i> Ongeza</button></div></div>
+    <div class="tw"><div class="ts"><table id="tbl-employees"><thead><tr><th>Jina</th><th>Nafasi</th><th>Simu</th><th>Mshahara</th><th>Halisi</th><th>Actions</th></tr></thead>
+    <tbody>${emps.length?emps.map(e=>`<tr><td><strong>${e.name}</strong></td><td>${e.position||'-'}</td><td>${e.phone||'-'}</td><td>${fmt(e.salary||0)}</td><td><span class="status-badge ${e.status==='active'?'active':'suspended'}">${e.status==='active'?'Amefanya kazi':'Ameacha'}</span></td><td><button class="btn btn-i btn-xs" onclick="openEmployeeModal('${e.id}')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-d btn-xs" onclick="deleteEmployee('${e.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join(''):'<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-id-badge"></i><p>Hakuna wafanyakazi</p></td></tr>'}</tbody></table></div></div>`;
+}
+function openEmployeeModal(id) {
+  const e=id?getUserItem('employees',id):null;
+  document.getElementById('genModalTitle').textContent=id?'Edit Mfanyakazi':'Ongeza Mfanyakazi';
+  document.getElementById('genModalBody').innerHTML=`
+    <input type="hidden" id="fmEmpId" value="${id||''}"/>
+    <div class="fg"><label>Jina <span class="req">*</span></label><input class="fi" id="fmEmpName" value="${e?e.name:''}" required/></div>
+    <div class="fg"><label>Nafasi</label><input class="fi" id="fmEmpPos" value="${e?e.position||'':''}"/></div>
+    <div class="fg"><label>Simu</label><input class="fi" id="fmEmpPhone" value="${e?e.phone||'':''}"/></div>
+    <div class="fg"><label>Mshahara (TZS)</label><input class="fi" id="fmEmpSalary" type="number" value="${e?e.salary||'':''}" min="0"/></div>
+    <div class="fg"><label>Halisi</label><select class="fi" id="fmEmpStatus"><option value="active" ${e&&e.status==='active'?'selected':''}>Amefanya kazi</option><option value="inactive" ${e&&e.status==='inactive'?'selected':''}>Ameacha</option></select></div>`;
+  document.getElementById('genModalActions').innerHTML=`<button class="btn btn-o" onclick="closeGenModal()">Ghairi</button><button class="btn btn-p" onclick="saveEmployee()"><i class="fa-solid fa-save"></i> Hifadhi</button>`;
+  document.getElementById('genModal').classList.add('show');
+}
+function saveEmployee(){const id=document.getElementById('fmEmpId').value;const name=document.getElementById('fmEmpName').value;if(!name)return toast('Jaza jina.','e');saveItem('employees',{id:id||uid(),userId:CU.id,name,position:document.getElementById('fmEmpPos').value,phone:document.getElementById('fmEmpPhone').value,salary:parseFloat(document.getElementById('fmEmpSalary').value)||0,status:document.getElementById('fmEmpStatus').value});closeGenModal();renderEmployees();toast('Mfanyakazi amehifadhiwa.','s');}
+function deleteEmployee(id){deleteItem('employees',id);renderEmployees();toast('Imefutwa.','w');}
+
+/* ======================================================================
+   NOTIFICATIONS
+   ====================================================================== */
+function addNotification(title,msg,type){
+  saveItem('notifications',{id:uid(),userId:CU.id,title,message:msg,type:type||'info',read:false,createdAt:new Date().toISOString()});
+  updateBadges();
+}
+function renderNotifications() {
+  const notifs=getUserItems('notifications').sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const iconMap={success:'fa-check-circle',error:'fa-circle-exclamation',warning:'fa-triangle-exclamation',info:'fa-circle-info'};
+  const colorMap={success:'var(--success)',error:'var(--danger)',warning:'var(--warning)',info:'var(--info)'};
+  document.getElementById('sec-notifications').innerHTML=`
+    <div class="sh"><div><h2>Arifa</h2><p>Arifa zako zote</p></div><div class="sh-acts">${notifs.some(n=>!n.read)?`<button class="btn btn-o btn-sm" onclick="markAllRead()"><i class="fa-solid fa-check-double"></i> Soma Yote</button>`:''}</div></div>
+    <div>${notifs.length?notifs.map(n=>`<div class="notif-item" style="opacity:${n.read?.6:1}"><i class="fa-solid ${iconMap[n.type]||iconMap.info}" style="color:${colorMap[n.type]||colorMap.info}"></i><div><h5>${n.title}</h5><p>${n.message}</p><p style="margin-top:4px;font-size:10px;color:var(--text3)">${fmtDate(n.createdAt)}</p></div></div>`).join(''):'<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa</p></div>'}</div>`;
+  // Also update notification panel
+  document.getElementById('nList').innerHTML=notifs.slice(0,15).map(n=>`<div class="notif-item" style="opacity:${n.read?.6:1}"><i class="fa-solid ${iconMap[n.type]||iconMap.info}" style="color:${colorMap[n.type]||colorMap.info}"></i><div><h5>${n.title}</h5><p>${n.message}</p></div></div>`).join('')||'<div class="empty-s"><p>Hakuna arifa</p></div>';
+}
+function markAllRead(){const db=getDB();db.notifications=db.notifications.map(n=>n.userId===CU.id?{...n,read:true}:n);saveDB(db);renderNotifications();updateBadges();toast('Arifa zote zimesomwa.','i');}
+
+/* ======================================================================
+   PROFILE (with Logo Upload)
+   ====================================================================== */
+function renderProfile() {
+  const u=getUserItem('users',CU.id); if(!u) return;
+  document.getElementById('sec-profile').innerHTML=`
+    <div class="sh"><div><h2>Profaili</h2><p>Mipangilio ya akaunti yako</p></div></div>
+    <div class="prof-grid">
+      <div class="prof-left">
+        <div class="logo-card">
+          <h4 style="margin-bottom:16px">Logo ya Biashara</h4>
+          <div class="logo-prev" id="logoPreview" onclick="document.getElementById('logoUpload').click()">
+            ${u.logo?`<img src="${u.logo}" alt="Logo"/>`:'<i class="fa-solid fa-cloud-arrow-up"></i>'}
+          </div>
+          <input type="file" id="logoUpload" accept="image/*" style="display:none" onchange="uploadLogo(event)"/>
+          <p style="font-size:11px;color:var(--text3);margin-bottom:10px">Bonyeza kuongeza logo. Logo itaonekana kwa wewe tu.</p>
+          ${u.logo?`<button class="btn btn-d btn-sm" onclick="removeLogo()"><i class="fa-solid fa-trash"></i> Ondoa Logo</button>`:''}
+        </div>
+        <div style="margin-top:20px">
+          <h4 style="margin-bottom:12px">Maelezo ya Akaunti</h4>
+          <div style="font-size:13px;color:var(--text2);line-height:2">
+            <div><strong style="color:var(--text)">Jina:</strong> ${u.name}</div>
+            <div><strong style="color:var(--text)">Email:</strong> ${u.email}</div>
+            <div><strong style="color:var(--text)">Jukumu:</strong> ${{manager:'Meneja',staff:'Mfanyabiashara',cashier:'Mhifadhi',seller:'Muuzaji'}[u.role]||u.role}</div>
+            <div><strong style="color:var(--text)">Ilijiunga:</strong> ${fmtDate(u.createdAt)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="prof-right">
+        <h3><i class="fa-solid fa-pen-to-square" style="color:var(--primary2);margin-right:8px"></i>Badilisha Maelezo</h3>
+        <form onsubmit="saveProfile(event)">
+          <div class="fg"><label>Jina Kamili <span class="req">*</span></label><input class="fi" id="profName" value="${u.name}" required/></div>
+          <div class="fg"><label>Simu</label><input class="fi" id="profPhone" value="${u.phone||''}"/></div>
+          <div class="fg"><label>Anwani</label><input class="fi" id="profAddr" value="${u.address||''}"/></div>
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
+            <h4 style="margin-bottom:12px;font-size:14px">Maelezo ya Biashara</h4>
+            <div class="fg"><label>Jina la Biashara</label><input class="fi" id="profBiz" value="${u.businessName||''}"/></div>
+            <div class="fg"><label>Aina ya Biashara</label><select class="fi" id="profCat"><option value="">Chagua...</option>${['Duka la Bidhaa','Restaurant/Hotel','Maduka ya Dawa','Electronics','Fashions/Nguo','Ujenzi','Uchukuzi','Elimu','Ushauri','King\'ora','IT Technology','Other'].map(c=>`<option ${u.businessCategory===c?'selected':''}>${c}</option>`).join('')}</select></div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
+            <h4 style="margin-bottom:12px;font-size:14px">Badilisha Password</h4>
+            <div class="fg"><label>Password ya Sasa</label><input class="fi" id="profCurPw" type="password" placeholder="Acha tupu usipobadilisha"/></div>
+            <div class="fg"><label>Password Mpya</label><input class="fi" id="profNewPw" type="password" placeholder="Acha tupu usipobadilisha"/></div>
+          </div>
+          <button class="btn-auth btn-auth-p" type="submit" style="margin-top:8px"><i class="fa-solid fa-save"></i> Hifadhi Mabadiliko</button>
+        </form>
+      </div>
+    </div>`;
+}
+function uploadLogo(e) {
+  const file=e.target.files[0]; if(!file) return;
+  if(file.size>2*1024*1024){toast('Picha lazima iwe chini ya 2MB.','e');return;}
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const u=getUserItem('users',CU.id);
+    u.logo=ev.target.result;
+    saveItem('users',u);
+    updateBranding();
+    renderProfile();
+    toast('Logo imeongezwa!','s');
+  };
+  reader.readAsDataURL(file);
+}
+function removeLogo(){
+  const u=getUserItem('users',CU.id);
+  u.logo='';
+  saveItem('users',u);
+  updateBranding();
+  renderProfile();
+  toast('Logo imeondolewa.','w');
+}
+function saveProfile(e){
+  e.preventDefault();
+  const u=getUserItem('users',CU.id); if(!u) return;
+  u.name=document.getElementById('profName').value;
+  u.phone=document.getElementById('profPhone').value;
+  u.address=document.getElementById('profAddr').value;
+  u.businessName=document.getElementById('profBiz').value;
+  u.businessCategory=document.getElementById('profCat').value;
+  const curPw=document.getElementById('profCurPw').value;
+  const newPw=document.getElementById('profNewPw').value;
+  if(curPw||newPw){
+    if(curPw!==u.password) return toast('Password ya sasa si sahihi.','e');
+    if(newPw.length<6) return toast('Password mpya lazima iwe na herufi 6+.','e');
+    u.password=newPw;
+  }
+  saveItem('users',u);
+  updateBranding();
+  renderProfile();
+  toast('Profaili imehifadhiwa!','s');
+}
+
+/* ======================================================================
+   USERS (Manager only)
+   ====================================================================== */
+function renderUsers() {
+  if(CU?.role!=='manager'){document.getElementById('sec-users').innerHTML='<div class="empty-s"><i class="fa-solid fa-lock"></i><p>Hakuna ruhusa</p></div>';return;}
+  const db=getDB();
+  // Show sub-users created under this business
+  const bizUsers=db.users.filter(u=>u.id!==CU.id); // For demo show all; in real app filter by business
+  document.getElementById('sec-users').innerHTML=`
+    <div class="sh"><div><h2>Watumiaji</h2><p>Watumiaji wote katika mfumo</p></div><div class="sh-acts">${exportBar('users')}</div></div>
+    <div class="tw"><div class="ts"><table id="tbl-users"><thead><tr><th>Jina</th><th>Email</th><th>Biashara</th><th>Jukumu</th><th>Halisi</th><th>Actions</th></tr></thead>
+    <tbody>${bizUsers.length?bizUsers.map(u=>`<tr><td><strong>${u.name}</strong></td><td>${u.email}</td><td>${u.businessName||'-'}</td><td>${u.role||'-'}</td><td><span class="status-badge ${u.status==='suspended'?'suspended':'active'}">${u.status==='suspended'?'Imefungwa':'Imefunguka'}</span></td><td><button class="btn btn-w btn-xs" onclick="toggleUserStatus('${u.id}')"><i class="fa-solid fa-ban"></i></button></td></tr>`).join(''):'<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna watumiaji wengine</p></td></tr>'}</tbody></table></div></div>`;
+}
+function toggleUserStatus(id){
+  const db=getDB();const u=db.users.find(x=>x.id===id);if(!u)return;
+  u.status=u.status==='suspended'?'active':'suspended';
+  saveDB(db);renderUsers();toast('Hali ya mtumiaji imebadilishwa.','i');
+}
+
+/* ======================================================================
+   SAMPLE DATA
+   ====================================================================== */
+function addSampleData(userId) {
+  const db=getDB();
+  const cats=['Electronics','Food','Clothing','Health'];
+  const names=['Samsung TV 43"','Rice 25kg','T-Shirt Premium','Paracetamol 500mg','Laptop HP','Cooking Oil 5L','Jeans Denim','Bandages','Phone Charger','Sugar 1kg'];
+  names.forEach((n,i)=>{
+    db.products.push({id:uid(),userId,name:n,category:cats[i%4],price:Math.round((Math.random()*200000+5000)/1000)*1000,cost:Math.round((Math.random()*100000+2000)/1000)*1000,stock:Math.floor(Math.random()*100)+5,description:'',isPublic:i<3});
+  });
+  // Sample sales
+  for(let i=0;i<5;i++){
+    const items=db.products.filter(p=>p.userId===userId).slice(0,3).map(p=>({productId:p.id,name:p.name,price:p.price,qty:Math.floor(Math.random()*3)+1,subtotal:0}));
+    items.forEach(it=>it.subtotal=it.qty*it.price);
+    const total=items.reduce((a,it)=>a+it.subtotal,0);
+    const d=new Date();d.setDate(d.getDate()-i*2);
+    db.sales.push({id:uid(),userId,items,total,customerName:['Juma','Aisha','Hassan','Fatma','Ali'][i],paymentMethod:['Cash','Mobile Money','Card'][i%3],date:d.toISOString()});
+  }
+  // Sample customers
+  ['Juma Kijiji','Asha Mohamed','Hassan Ali','Fatma Said','Omar Kimaro'].forEach(n=>{db.customers.push({id:uid(),userId,name:n,phone:'+255'+Math.floor(Math.random()*900000000+100000000),email:'',address:''});});
+  // Sample sellers
+  ['Duka Kuu Ltd','Wholesale Co','Import Mart'].forEach(n=>{db.sellers.push({id:uid(),userId,name:n,phone:'+255'+Math.floor(Math.random()*900000000+100000000),email:'',address:''});});
+  // Sample expenses
+  ['Rent','Electricity','Water','Transport'].forEach((c,i)=>{db.expenses.push({id:uid(),userId,description:c+' - mwezi huu',category:c,amount:Math.round((Math.random()*200000+20000)/1000)*1000,date:new Date().toISOString()});});
+  // Sample debts
+  db.debts.push({id:uid(),userId,customerName:'Juma Kijiji',amount:150000,paid:50000,status:'unpaid',description:'Deni la bidhaa',date:new Date().toISOString()});
+  // Sample employees
+  ['Mary John - Cashier','Peter Msafiri - Accountant'].forEach(e=>{
+    const [name,...rest]=e.split(' - ');
+    db.employees.push({id:uid(),userId,name,position:rest[0]||'',phone:'+255'+Math.floor(Math.random()*900000000+100000000),salary:Math.round(Math.random()*500000+200000),status:'active'});
+  });
+  // Sample notifications
+  db.notifications.push({id:uid(),userId,title:'Karibu BizBook!',message:'Akaunti yako iko tayari. Anza kuongeza bidhaa na kufanya mauzo.',type:'info',read:false,createdAt:new Date().toISOString()});
+  saveDB(db);
+}
+
+/* ======================================================================
+   TOAST
+   ====================================================================== */
+function toast(msg, type) {
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');
+  t.className='toast '+(type||'i');
+  const icons={s:'fa-check-circle',e:'fa-circle-exclamation',i:'fa-circle-info',w:'fa-triangle-exclamation'};
+  t.innerHTML=`<i class="fa-solid ${icons[type]||icons.i}"></i> ${msg}`;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(100%)';t.style.transition='all .3s';setTimeout(()=>t.remove(),300);},3000);
+}
+
+/* ======================================================================
+   GENERIC MODAL
+   ====================================================================== */
+function closeGenModal(){document.getElementById('genModal').classList.remove('show');}
+
+/* ======================================================================
+   INIT
+   ====================================================================== */
+(function init(){
+  // Ensure DB exists
+  getDB();
+  // Check session
+  try{
+    const sess=JSON.parse(localStorage.getItem('bizbook_session'));
+    if(sess&&sess.id){
+      const u=getUserItem('users',sess.id);
+      if(u){
+        CU=sess;
+        if(!u.role) showRoleScreen(); else showMainApp();
+        return;
+      }
+    }
+  }catch(e){}
+  showLanding();
+})();
+</script>
+</body>
+</html>
