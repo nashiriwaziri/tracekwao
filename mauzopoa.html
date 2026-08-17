@@ -1337,10 +1337,11 @@ async function handleLogin(e) {
 }
 
 // ============================================================
-// AUTHENTICATION — REGISTER
+// AUTHENTICATION — REGISTER — FIREBASE MODULAR V10
 // ============================================================
 async function handleRegister(e) {
   e.preventDefault();
+
   const name = document.getElementById('regName').value.trim();
   const email = document.getElementById('regEmail').value.trim();
   const pass = document.getElementById('regPass').value;
@@ -1348,51 +1349,161 @@ async function handleRegister(e) {
   const bizCategory = document.getElementById('regBizCategory').value;
   const phone = document.getElementById('regPhone').value.trim();
   const bizDesc = document.getElementById('regBizDesc').value.trim();
-  if (!bizName || !bizCategory || !phone) {
-    showAuthErr('Tafadhali jaza sehemu zote zinazohitajika za biashara.');
+
+  // Validate
+  if (!name || !email || !pass || !bizName || !bizCategory || !phone) {
+    showAuthErr('Tafadhali jaza sehemu zote zinazohitajika.');
     return;
   }
+
   const btn = document.getElementById('regBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inajiandikisha...';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML =
+      '<i class="fas fa-spinner fa-spin"></i> Inajiandikisha...';
+  }
+
   try {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    await updateProfile(cred.user, { displayName: name });
-    const bizId = await createDocument('businesses', {
+
+    // ==========================================================
+    // 1. CREATE FIREBASE AUTH ACCOUNT
+    // ==========================================================
+    const cred = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      pass
+    );
+
+    const user = cred.user;
+    const uid = user.uid;
+
+    console.log('AUTH ACCOUNT CREATED:', uid);
+
+    // ==========================================================
+    // 2. UPDATE AUTH PROFILE
+    // ==========================================================
+    await updateProfile(user, {
+      displayName: name
+    });
+
+    console.log('AUTH PROFILE UPDATED');
+
+    // ==========================================================
+    // 3. CREATE BUSINESS DOCUMENT
+    // ==========================================================
+    const businessRef = doc(collection(db, 'businesses'));
+
+    const businessData = {
       name: bizName,
       category: bizCategory,
       phone: phone,
       description: bizDesc,
-      ownerId: cred.user.uid,
+      ownerId: uid,
       ownerName: name,
       ownerEmail: email,
       logo: '',
       status: 'active',
-      createdAt: new Date().toISOString()
-    });
-    await saveDocument('users', cred.user.uid, {
-      name: name,
-      email: email,
-      phone: phone,
-      businessId: bizId,
-      businessName: bizName,
-      businessCategory: bizCategory,
-      role: 'owner',
-      status: 'active'
-    });
-    showToast('Akaunti imeundwa kikamilifu!', 's');
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    await setDoc(businessRef, businessData);
+
+    const bizId = businessRef.id;
+
+    console.log('BUSINESS CREATED:', bizId);
+
+    // ==========================================================
+    // 4. CREATE USER DOCUMENT
+    // ==========================================================
+    await setDoc(
+      doc(db, 'users', uid),
+      {
+        name: name,
+        email: email,
+        phone: phone,
+        businessId: bizId,
+        businessName: bizName,
+        businessCategory: bizCategory,
+        role: 'owner',
+        status: 'active',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      },
+      {
+        merge: true
+      }
+    );
+
+    console.log('USER DOCUMENT CREATED:', uid);
+
+    // ==========================================================
+    // 5. SUCCESS
+    // ==========================================================
+    showToast(
+      'Akaunti imeundwa kikamilifu!',
+      's'
+    );
+
+    console.log('REGISTRATION COMPLETED SUCCESSFULLY');
+
   } catch (error) {
-    console.error('Register error:', error);
-    let msg = 'Imeshindikana kusajili.';
-    if (error.code === 'auth/email-already-in-use') msg = 'Barua pepe tayari inatumika.';
-    else if (error.code === 'auth/weak-password') msg = 'Nenosiri ni dhaifu sana.';
+
+    // ==========================================================
+    // IMPORTANT DEBUG INFORMATION
+    // ==========================================================
+    console.error('REGISTER ERROR:', error);
+    console.error('ERROR CODE:', error?.code);
+    console.error('ERROR MESSAGE:', error?.message);
+
+    let msg = 'Imeshindikana kujisajili.';
+
+    switch (error?.code) {
+
+      case 'auth/email-already-in-use':
+        msg = 'Barua pepe tayari inatumika.';
+        break;
+
+      case 'auth/invalid-email':
+        msg = 'Barua pepe si sahihi.';
+        break;
+
+      case 'auth/weak-password':
+        msg = 'Nenosiri ni dhaifu sana.';
+        break;
+
+      case 'auth/network-request-failed':
+        msg = 'Tatizo la mtandao. Tafadhali jaribu tena.';
+        break;
+
+      case 'auth/operation-not-allowed':
+        msg = 'Email/Password Authentication haijawezeshwa kwenye Firebase.';
+        break;
+
+      case 'permission-denied':
+        msg = 'Firebase imekataa kuhifadhi taarifa. Angalia Firestore Security Rules.';
+        break;
+
+      default:
+        if (error?.message?.toLowerCase().includes('permission')) {
+          msg = 'Huna ruhusa ya kuhifadhi taarifa kwenye Firestore.';
+        } else if (error?.message) {
+          msg = 'Imeshindikana kujisajili: ' + error.message;
+        }
+    }
+
     showAuthErr(msg);
+
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-user-plus"></i> Jisajili';
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML =
+        '<i class="fas fa-user-plus"></i> Jisajili';
+    }
   }
 }
-
 // ============================================================
 // AUTH STATE OBSERVER
 // ============================================================
