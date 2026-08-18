@@ -1147,41 +1147,216 @@ async function login(e) {
 /* ============================================================
    AUTH — REGISTER
    ============================================================ */
+/* ============================================================
+   AUTH — REGISTER
+   FIREBASE MODULAR v10.8.0
+   ============================================================ */
 async function register(e) {
   e.preventDefault();
   hideAuthErr();
-  const name = document.getElementById('regName').value.trim();
-  const email = document.getElementById('regEmail').value.trim();
-  const pass = document.getElementById('regPass').value;
-  const pass2 = document.getElementById('regPass2').value;
-  const bizName = document.getElementById('regBizName').value.trim();
-  const bizCat = document.getElementById('regBizCat').value;
-  const bizPhone = document.getElementById('regBizPhone').value.trim();
-  const bizAddr = document.getElementById('regBizAddr').value.trim();
 
-  if (pass !== pass2) { showAuthErr('Nenosiri hazilingani.'); regNext(1); return; }
-  if (pass.length < 6) { showAuthErr('Nenosiri lazima iwe na herufi 6 au zaidi.'); regNext(1); return; }
-  if (!bizName || !bizCat) { showAuthErr('Jina na aina ya biashara zinahitajika.'); regNext(2); return; }
+  const name = document.getElementById('regName')?.value.trim() || '';
+  const email = document.getElementById('regEmail')?.value.trim() || '';
+  const pass = document.getElementById('regPass')?.value || '';
+  const pass2 = document.getElementById('regPass2')?.value || '';
+
+  const bizName =
+    document.getElementById('regBizName')?.value.trim() || '';
+
+  const bizCat =
+    document.getElementById('regBizCat')?.value || '';
+
+  const bizPhone =
+    document.getElementById('regBizPhone')?.value.trim() || '';
+
+  const bizAddr =
+    document.getElementById('regBizAddr')?.value.trim() || '';
+
+  /* ============================================================
+     VALIDATION
+     ============================================================ */
+
+  if (!name) {
+    showAuthErr('Weka jina lako.');
+    return;
+  }
+
+  if (!email) {
+    showAuthErr('Weka barua pepe.');
+    return;
+  }
+
+  if (!pass) {
+    showAuthErr('Weka nenosiri.');
+    return;
+  }
+
+  if (pass !== pass2) {
+    showAuthErr('Nenosiri hazilingani.');
+    regNext(1);
+    return;
+  }
+
+  if (pass.length < 6) {
+    showAuthErr(
+      'Nenosiri lazima liwe na herufi 6 au zaidi.'
+    );
+    regNext(1);
+    return;
+  }
+
+  if (!bizName || !bizCat) {
+    showAuthErr(
+      'Jina na aina ya biashara vinahitajika.'
+    );
+    regNext(2);
+    return;
+  }
 
   try {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    await updateProfile(cred.user, { displayName: name });
-    const bizId = cred.user.uid;
-    await setDoc(doc(db, 'users', bizId), {
-      name, email, businessName: bizName, businessCategory: bizCat,
-      businessPhone: bizPhone, businessAddress: bizAddr, businessLogo: '',
-      role: 'manager', status: 'active', businessId: bizId,
-      createdAt: serverTimestamp()
+
+    /* ==========================================================
+       STEP 1 — FIREBASE AUTH
+       ========================================================== */
+
+    console.log('REGISTER STEP 1: Creating Auth account...');
+
+    const cred = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      pass
+    );
+
+    console.log(
+      'REGISTER STEP 1 SUCCESS:',
+      cred.user.uid
+    );
+
+
+    /* ==========================================================
+       STEP 2 — UPDATE PROFILE
+       ========================================================== */
+
+    console.log('REGISTER STEP 2: Updating profile...');
+
+    await updateProfile(cred.user, {
+      displayName: name
     });
-    showToast('Akaunti imeundwa! Chagua jukumu lako.', 's');
+
+    console.log('REGISTER STEP 2 SUCCESS');
+
+
+    /* ==========================================================
+       STEP 3 — BUSINESS ID
+       ========================================================== */
+
+    const bizId = cred.user.uid;
+
+    console.log(
+      'REGISTER STEP 3: Business ID:',
+      bizId
+    );
+
+
+    /* ==========================================================
+       STEP 4 — FIRESTORE USER DOCUMENT
+       ========================================================== */
+
+    console.log(
+      'REGISTER STEP 4: Saving users document...'
+    );
+
+    await setDoc(
+      doc(db, 'users', bizId),
+      {
+        uid: cred.user.uid,
+
+        name: name,
+        email: email,
+
+        businessId: bizId,
+        businessName: bizName,
+        businessCategory: bizCat,
+        businessPhone: bizPhone,
+        businessAddress: bizAddr,
+        businessLogo: '',
+
+        role: 'manager',
+        status: 'active',
+
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }
+    );
+
+    console.log(
+      'REGISTER STEP 4 SUCCESS: Firestore saved'
+    );
+
+
+    /* ==========================================================
+       STEP 5 — SUCCESS
+       ========================================================== */
+
+    showToast(
+      'Akaunti imeundwa kikamilifu!',
+      's'
+    );
+
+    console.log(
+      'REGISTER COMPLETE SUCCESS'
+    );
+
   } catch (err) {
-    console.error('Register error:', err);
+
+    /* ==========================================================
+       REAL ERROR — USIFICHE
+       ========================================================== */
+
+    console.error('================================');
+    console.error('REGISTER FAILED');
+    console.error('ERROR CODE:', err?.code);
+    console.error('ERROR MESSAGE:', err?.message);
+    console.error('FULL ERROR:', err);
+    console.error('================================');
+
     const msgs = {
-      'auth/email-already-in-use': 'Barua pepe tayari inatumika.',
-      'auth/weak-password': 'Nenosiri ni dhaifu sana.',
-      'auth/invalid-email': 'Barua pepe si sahihi.'
+
+      'auth/email-already-in-use':
+        'Barua pepe hii tayari inatumika.',
+
+      'auth/weak-password':
+        'Nenosiri ni dhaifu sana.',
+
+      'auth/invalid-email':
+        'Barua pepe si sahihi.',
+
+      'auth/missing-email':
+        'Weka barua pepe.',
+
+      'auth/network-request-failed':
+        'Tatizo la mtandao. Hakikisha umeunganishwa na Internet.',
+
+      'auth/operation-not-allowed':
+        'Email/Password Authentication haijawezeshwa kwenye Firebase.',
+
+      'auth/too-many-requests':
+        'Majaribio yamekuwa mengi. Jaribu tena baada ya muda.',
+
+      'permission-denied':
+        'Firestore imekataa ruhusa ya kuhifadhi akaunti.',
+
+      'failed-precondition':
+        'Firestore haijasanidiwa vizuri.',
+
+      'unavailable':
+        'Firestore haipatikani kwa sasa.'
     };
-    showAuthErr(msgs[err.code] || 'Hitilafu katika kusajili. Jaribu tena.');
+
+    showAuthErr(
+      msgs[err?.code] ||
+      `Hitilafu: ${err?.code || err?.message || 'Unknown error'}`
+    );
   }
 }
   /* ============================================================
