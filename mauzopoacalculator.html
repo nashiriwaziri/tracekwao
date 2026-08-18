@@ -2975,23 +2975,187 @@ async function loadPublicData() {
    ============================================================ */
 const SUPER_EMAIL = 'nashiri2waziri29@gmail.com';
 
+/* ============================================================
+   SUPER ADMIN LOGIN
+   FIREBASE MODULAR
+   ============================================================ */
+
 async function superLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('superUser').value.trim();
-  const pass = document.getElementById('superPass').value;
-  document.getElementById('superErr').textContent = '';
-  if (email !== SUPER_EMAIL) {
-    document.getElementById('superErr').textContent = 'Hakikisha umetumia barua pepe sahihi ya Super Admin.';
+
+  const emailEl = document.getElementById('superUser');
+  const passEl = document.getElementById('superPass');
+  const errEl = document.getElementById('superErr');
+
+  if (!emailEl || !passEl || !errEl) {
+    console.error('Super Admin login fields hazipatikani.');
     return;
   }
+
+  const email = emailEl.value.trim().toLowerCase();
+  const pass = passEl.value;
+
+  errEl.textContent = '';
+
+  if (!email || !pass) {
+    errEl.textContent = 'Weka email na nenosiri.';
+    return;
+  }
+
   try {
-    await signInWithEmailAndPassword(auth, email, pass);
-    document.getElementById('superLoginBox').classList.add('hidden');
-    document.getElementById('superPanel').classList.remove('hidden');
-    loadSuperData();
+    console.log('SUPER LOGIN: Starting...');
+    console.log('SUPER LOGIN EMAIL:', email);
+
+    /* ========================================================
+       1. FIREBASE AUTHENTICATION
+       ======================================================== */
+
+    const credential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      pass
+    );
+
+    const user = credential.user;
+
+    console.log(
+      'SUPER LOGIN AUTH SUCCESS:',
+      user.uid
+    );
+
+    /* ========================================================
+       2. GET USER FROM FIRESTORE
+       ======================================================== */
+
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+
+      await signOut(auth);
+
+      errEl.textContent =
+        'Akaunti hii haijasajiliwa kwenye mfumo.';
+
+      return;
+    }
+
+    const userData = userSnap.data();
+
+    console.log(
+      'SUPER LOGIN FIRESTORE USER:',
+      userData
+    );
+
+    /* ========================================================
+       3. CHECK SUPER ADMIN ROLE
+       ======================================================== */
+
+    const role = String(
+      userData.role || ''
+    ).toLowerCase().trim();
+
+    const isSuperAdmin =
+      role === 'superadmin' ||
+      role === 'super_admin' ||
+      role === 'super administrator';
+
+    if (!isSuperAdmin) {
+
+      await signOut(auth);
+
+      errEl.textContent =
+        'Akaunti hii haina ruhusa za Super Administrator.';
+
+      return;
+    }
+
+    /* ========================================================
+       4. CHECK ACCOUNT STATUS
+       ======================================================== */
+
+    if (
+      userData.status &&
+      String(userData.status).toLowerCase() !== 'active'
+    ) {
+
+      await signOut(auth);
+
+      errEl.textContent =
+        'Akaunti ya Super Administrator haipo active.';
+
+      return;
+    }
+
+    /* ========================================================
+       5. OPEN SUPER ADMIN PANEL
+       ======================================================== */
+
+    const loginBox =
+      document.getElementById('superLoginBox');
+
+    const panel =
+      document.getElementById('superPanel');
+
+    if (loginBox) {
+      loginBox.classList.add('hidden');
+    }
+
+    if (panel) {
+      panel.classList.remove('hidden');
+    }
+
+    console.log(
+      'SUPER ADMIN LOGIN SUCCESS'
+    );
+
+    /* ========================================================
+       6. LOAD SUPER ADMIN DATA
+       ======================================================== */
+
+    if (typeof loadSuperData === 'function') {
+      await loadSuperData();
+    }
+
   } catch (err) {
-    console.error('Super login error:', err);
-    document.getElementById('superErr').textContent = err.code === 'auth/invalid-credential' ? 'Nenosiri sio sahihi.' : 'Hitilafu ya kuingia.';
+
+    console.error('================================');
+    console.error('SUPER LOGIN ERROR');
+    console.error('CODE:', err?.code);
+    console.error('MESSAGE:', err?.message);
+    console.error('FULL ERROR:', err);
+    console.error('================================');
+
+    const messages = {
+
+      'auth/user-not-found':
+        'Akaunti ya Super Administrator haipo Firebase Authentication.',
+
+      'auth/wrong-password':
+        'Nenosiri sio sahihi.',
+
+      'auth/invalid-credential':
+        'Email au nenosiri sio sahihi.',
+
+      'auth/invalid-login-credentials':
+        'Email au nenosiri sio sahihi.',
+
+      'auth/invalid-email':
+        'Email si sahihi.',
+
+      'auth/user-disabled':
+        'Akaunti hii imezuiwa.',
+
+      'auth/too-many-requests':
+        'Majaribio yamekuwa mengi. Jaribu tena baada ya muda.',
+
+      'auth/network-request-failed':
+        'Tatizo la mtandao. Hakikisha Internet inafanya kazi.'
+    };
+
+    errEl.textContent =
+      messages[err?.code] ||
+      `Hitilafu ya kuingia: ${err?.code || err?.message || 'Unknown error'}`;
   }
 }
 
