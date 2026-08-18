@@ -2624,51 +2624,442 @@ function loadProfile() {
   }
 }
 
+/* ============================================================
+   PROFILE — SAVE / UPDATE
+   FIREBASE MODULAR v10
+   ============================================================ */
 async function saveProfile(e) {
   e.preventDefault();
-  if (!currentUser) return;
+
   try {
-    await updateDocument('users', currentUser.uid, {
-      businessName: document.getElementById('profBizName').value.trim(),
-      businessCategory: document.getElementById('profBizCat').value,
-      businessPhone: document.getElementById('profBizPhone').value.trim(),
-      businessAddress: document.getElementById('profBizAddr').value.trim(),
-      name: document.getElementById('profUserName').value.trim(),
-      updatedAt: serverTimestamp()
+    /* ----------------------------------------------------------
+       1. CHECK AUTHENTICATION
+       ---------------------------------------------------------- */
+    const user = auth.currentUser;
+
+    if (!user) {
+      showToast(
+        'Session imekwisha. Tafadhali ingia tena.',
+        'error'
+      );
+      return;
+    }
+
+    /* ----------------------------------------------------------
+       2. GET FORM VALUES
+       ---------------------------------------------------------- */
+    const name =
+      document.getElementById('profUserName')?.value.trim() || '';
+
+    const businessName =
+      document.getElementById('profBizName')?.value.trim() || '';
+
+    const businessCategory =
+      document.getElementById('profBizCat')?.value || '';
+
+    const businessPhone =
+      document.getElementById('profBizPhone')?.value.trim() || '';
+
+    const businessAddress =
+      document.getElementById('profBizAddr')?.value.trim() || '';
+
+    /* ----------------------------------------------------------
+       3. VALIDATION
+       ---------------------------------------------------------- */
+    if (!name) {
+      showToast('Weka jina lako.', 'error');
+      return;
+    }
+
+    if (!businessName) {
+      showToast('Weka jina la biashara.', 'error');
+      return;
+    }
+
+    if (!businessCategory) {
+      showToast('Chagua aina ya biashara.', 'error');
+      return;
+    }
+
+    /* ----------------------------------------------------------
+       4. UPDATE FIRESTORE
+       ---------------------------------------------------------- */
+    console.log(
+      'PROFILE UPDATE START:',
+      user.uid
+    );
+
+    await updateDoc(
+      doc(db, 'users', user.uid),
+      {
+        name: name,
+        businessName: businessName,
+        businessCategory: businessCategory,
+        businessPhone: businessPhone,
+        businessAddress: businessAddress,
+        updatedAt: serverTimestamp()
+      }
+    );
+
+    console.log(
+      'PROFILE FIRESTORE UPDATE SUCCESS'
+    );
+
+    /* ----------------------------------------------------------
+       5. UPDATE FIREBASE AUTH PROFILE
+       ---------------------------------------------------------- */
+    await updateProfile(user, {
+      displayName: name
     });
-    await updateProfile(currentUser, { displayName: document.getElementById('profUserName').value.trim() });
-    currentBizData.businessName = document.getElementById('profBizName').value.trim();
-    currentBizData.businessCategory = document.getElementById('profBizCat').value;
-    currentBizData.businessPhone = document.getElementById('profBizPhone').value.trim();
-    currentBizData.businessAddress = document.getElementById('profBizAddr').value.trim();
-    currentBizData.name = document.getElementById('profUserName').value.trim();
-    updateTopbar();
-    showToast('Profaili imesasishwa!', 'success');
+
+    console.log(
+      'PROFILE AUTH UPDATE SUCCESS'
+    );
+
+    /* ----------------------------------------------------------
+       6. UPDATE LOCAL CURRENT DATA
+       ---------------------------------------------------------- */
+    if (typeof currentBizData === 'object' && currentBizData) {
+
+      currentBizData.name = name;
+      currentBizData.businessName = businessName;
+      currentBizData.businessCategory = businessCategory;
+      currentBizData.businessPhone = businessPhone;
+      currentBizData.businessAddress = businessAddress;
+    }
+
+    /* ----------------------------------------------------------
+       7. UPDATE TOPBAR
+       ---------------------------------------------------------- */
+    if (typeof updateTopbar === 'function') {
+      updateTopbar();
+    }
+
+    /* ----------------------------------------------------------
+       8. SUCCESS
+       ---------------------------------------------------------- */
+    showToast(
+      'Profaili imesasishwa!',
+      'success'
+    );
+
   } catch (err) {
-    console.error('Save profile error:', err);
-    showToast('Hitilafu katika kusasisha profaili', 'error');
+
+    console.error('================================');
+    console.error('SAVE PROFILE ERROR');
+    console.error('CODE:', err?.code);
+    console.error('MESSAGE:', err?.message);
+    console.error('ERROR:', err);
+    console.error('================================');
+
+    const messages = {
+
+      'permission-denied':
+        'Huna ruhusa ya kusasisha profaili hii.',
+
+      'not-found':
+        'Profaili yako haijapatikana kwenye Firestore.',
+
+      'unauthenticated':
+        'Session yako imekwisha. Ingia tena.',
+
+      'network-request-failed':
+        'Tatizo la mtandao. Jaribu tena.',
+
+      'failed-precondition':
+        'Firestore haijasanidiwa vizuri.'
+    };
+
+    showToast(
+      messages[err?.code] ||
+      `Hitilafu katika kusasisha profaili: ${
+        err?.code || err?.message || 'Unknown error'
+      }`,
+      'error'
+    );
   }
 }
 
-function handleLogoUpload(e) {
-  const file = e.target.files[0];
+/* ============================================================
+   LOGO UPLOAD
+   - Accepts large images
+   - Automatically resizes
+   - Maintains aspect ratio
+   - Compresses image
+   - Saves to Firestore Modular
+   ============================================================ */
+
+async function handleLogoUpload(e) {
+
+  const file = e.target.files?.[0];
+
   if (!file) return;
-  if (file.size > 200 * 1024) { showToast('Logo lazima iwe chini ya 200KB', 'warning'); return; }
-  const reader = new FileReader();
-  reader.onload = async function(ev) {
-    const dataUrl = ev.target.result;
-    document.getElementById('logoPreview').innerHTML = `<img src="${dataUrl}" alt="Logo"/>`;
-    try {
-      await updateDocument('users', currentUser.uid, { logo: dataUrl, updatedAt: serverTimestamp() });
-      currentBizData.logo = dataUrl;
-      updateTopbar();
-      showToast('Logo imesasishwa!', 'success');
-    } catch (err) {
-      console.error('Logo upload error:', err);
-      showToast('Hitilafu katika kupakia logo', 'error');
+
+  try {
+
+    /* ----------------------------------------------------------
+       1. CHECK FILE TYPE
+       ---------------------------------------------------------- */
+
+    if (!file.type.startsWith('image/')) {
+
+      showToast(
+        'Tafadhali chagua picha ya logo.',
+        'warning'
+      );
+
+      e.target.value = '';
+      return;
     }
-  };
-  reader.readAsDataURL(file);
+
+
+    /* ----------------------------------------------------------
+       2. CHECK AUTH
+       ---------------------------------------------------------- */
+
+    const user = auth.currentUser;
+
+    if (!user) {
+
+      showToast(
+        'Tafadhali ingia tena kwenye mfumo.',
+        'error'
+      );
+
+      return;
+    }
+
+
+    /* ----------------------------------------------------------
+       3. LOAD ORIGINAL IMAGE
+       ---------------------------------------------------------- */
+
+    const originalUrl =
+      URL.createObjectURL(file);
+
+    const img = new Image();
+
+    img.onload = async function () {
+
+      try {
+
+        /* ------------------------------------------------------
+           4. LOGO MAXIMUM SIZE
+
+           Logo will NEVER exceed:
+           600 x 600 px
+
+           Aspect ratio is preserved.
+           ------------------------------------------------------ */
+
+        const MAX_WIDTH = 600;
+        const MAX_HEIGHT = 600;
+
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+
+        const scale = Math.min(
+          MAX_WIDTH / width,
+          MAX_HEIGHT / height,
+          1
+        );
+
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+
+
+        /* ------------------------------------------------------
+           5. CREATE CANVAS
+           ------------------------------------------------------ */
+
+        const canvas =
+          document.createElement('canvas');
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx =
+          canvas.getContext('2d');
+
+        /* Better image quality */
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+
+        /* ------------------------------------------------------
+           6. DRAW / RESIZE IMAGE
+           ------------------------------------------------------ */
+
+        ctx.drawImage(
+          img,
+          0,
+          0,
+          width,
+          height
+        );
+
+
+        /* ------------------------------------------------------
+           7. COMPRESS TO JPEG
+
+           Quality:
+           0.85 = good quality
+           + significantly smaller file
+           ------------------------------------------------------ */
+
+        let dataUrl =
+          canvas.toDataURL(
+            'image/jpeg',
+            0.85
+          );
+
+
+        /* ------------------------------------------------------
+           8. IF STILL LARGE, COMPRESS MORE
+
+           Keep Firestore document reasonably small.
+           ------------------------------------------------------ */
+
+        const MAX_DATA_SIZE =
+          700 * 1024;
+
+        if (dataUrl.length > MAX_DATA_SIZE) {
+
+          dataUrl =
+            canvas.toDataURL(
+              'image/jpeg',
+              0.70
+            );
+        }
+
+
+        /* ------------------------------------------------------
+           9. PREVIEW
+           ------------------------------------------------------ */
+
+        const preview =
+          document.getElementById('logoPreview');
+
+        if (preview) {
+
+          preview.innerHTML = `
+            <img
+              src="${dataUrl}"
+              alt="Logo"
+              style="
+                width:120px;
+                height:120px;
+                object-fit:contain;
+                display:block;
+              "
+            />
+          `;
+        }
+
+
+        /* ------------------------------------------------------
+           10. SAVE TO FIRESTORE
+           ------------------------------------------------------ */
+
+        await setDoc(
+          doc(db, 'users', user.uid),
+          {
+            logo: dataUrl,
+            updatedAt: serverTimestamp()
+          },
+          {
+            merge: true
+          }
+        );
+
+
+        /* ------------------------------------------------------
+           11. UPDATE CURRENT DATA
+           ------------------------------------------------------ */
+
+        if (
+          typeof currentBizData === 'object' &&
+          currentBizData
+        ) {
+          currentBizData.logo = dataUrl;
+        }
+
+
+        /* ------------------------------------------------------
+           12. UPDATE TOPBAR
+           ------------------------------------------------------ */
+
+        if (
+          typeof updateTopbar === 'function'
+        ) {
+          updateTopbar();
+        }
+
+
+        /* ------------------------------------------------------
+           13. SUCCESS
+           ------------------------------------------------------ */
+
+        showToast(
+          'Logo imepakiwa na kuhifadhiwa kikamilifu!',
+          'success'
+        );
+
+      } catch (err) {
+
+        console.error(
+          'Logo processing/save error:',
+          err
+        );
+
+        console.error(
+          'Code:',
+          err?.code
+        );
+
+        console.error(
+          'Message:',
+          err?.message
+        );
+
+        showToast(
+          'Hitilafu katika kuhifadhi logo.',
+          'error'
+        );
+
+      } finally {
+
+        URL.revokeObjectURL(originalUrl);
+
+      }
+    };
+
+
+    img.onerror = function () {
+
+      URL.revokeObjectURL(originalUrl);
+
+      showToast(
+        'Picha ya logo haijasomeka.',
+        'error'
+      );
+    };
+
+
+    img.src = originalUrl;
+
+  } catch (err) {
+
+    console.error(
+      'Logo upload error:',
+      err
+    );
+
+    showToast(
+      'Hitilafu katika kupakia logo.',
+      'error'
+    );
+  }
 }
 
 // === USERS / SUB-USER MANAGEMENT ===
