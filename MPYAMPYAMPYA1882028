@@ -1706,5 +1706,1626 @@ function loadFinancialDashboard() {
   const debtsRemaining = state.debts.reduce((s, x) => s + ((x.amount || 0) - (x.paid || 0)), 0);
 
   document.getElementById('finMetrics').innerHTML = `
-    <div class="mc g"><div class="mc-icon"><i class="fas fa-arrow-up"></i></div><h3>${fmt(revenue)}</h3><p>Mapato (TZS)</p></div>
+<div class="mc g">
+  <div class="mc-icon">
+    <i class="fas fa-arrow-up"></i>
+  </div>
+  <h3>${fmt(revenue)}</h3>
+  <p>Mapato (TZS)</p>
+</div>
+
+<div class="mc ${profit >= 0 ? 'g' : 'r'}">
+  <div class="mc-icon">
+    <i class="fas fa-chart-pie"></i>
+  </div>
+  <h3>${fmt(profit)}</h3>
+  <p>Faida (TZS)</p>
+</div>
+    <div class="mc a"><div class="mc-icon"><i class="fas fa-truck"></i></div><h3>${fmt(purchases)}</h3><p>Manunuzi (TZS)</p></div>
+    <div class="mc b"><div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div><h3>${fmt(debtsPaid)}</h3><p>Madeni Yalipwayo (TZS)</p></div>
+    <div class="mc r"><div class="mc-icon"><i class="fas fa-exclamation-circle"></i></div><h3>${fmt(debtsRemaining)}</h3><p>Madeni Yaliyobaki (TZS)</p></div>`;
+
+  renderFinCharts();
+}
+
+function renderFinCharts() {
+  const cg = document.getElementById('finCharts');
+  if (!cg.querySelector('canvas')) {
+    cg.innerHTML = `
+      <div class="ch-c"><h4><i class="fas fa-chart-line"></i> Mapato vs Matumizi</h4><div class="ch-box"><canvas id="finChartRevExp"></canvas></div></div>
+      <div class="ch-c"><h4><i class="fas fa-chart-pie"></i> Matumizi kwa Category</h4><div class="ch-box"><canvas id="finChartExpCat"></canvas></div></div>`;
+  }
+  const c1 = document.getElementById('finChartRevExp');
+  const c2 = document.getElementById('finChartExpCat');
+  if (!c1 || !c2) return;
+
+  destroyChart('finRevExp');
+  destroyChart('finExpCat');
+
+  // Revenue vs Expenses by month
+  const monthRev = {};
+  const monthExp = {};
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = d.toLocaleDateString('sw-TZ', { month: 'short' });
+    monthRev[key] = 0;
+    monthExp[key] = 0;
+  }
+  state.sales.forEach(s => {
+    if (s.createdAt) {
+      const d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+      const key = d.toLocaleDateString('sw-TZ', { month: 'short' });
+      if (monthRev[key] !== undefined) monthRev[key] += (s.total || 0);
+    }
+  });
+  state.expenses.forEach(e => {
+    if (e.createdAt) {
+      const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
+      const key = d.toLocaleDateString('sw-TZ', { month: 'short' });
+      if (monthExp[key] !== undefined) monthExp[key] += (e.amount || 0);
+    }
+  });
+
+  state.charts.finRevExp = new Chart(c1, {
+    type: 'line',
+    data: {
+      labels: Object.keys(monthRev),
+      datasets: [
+        { label: 'Mapato', data: Object.values(monthRev), borderColor: '#00b894', backgroundColor: 'rgba(0,184,148,.1)', fill: true, tension: .4 },
+        { label: 'Matumizi', data: Object.values(monthExp), borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,.1)', fill: true, tension: .4 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } }, scales: { y: { beginAtZero: true, ticks: { color: '#9a9ab0' }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { ticks: { color: '#9a9ab0' }, grid: { display: false } } } }
+  });
+
+  // Expense categories
+  const expCatData = {};
+  state.expenses.forEach(e => { const c = e.category || 'Mengine'; expCatData[c] = (expCatData[c] || 0) + (e.amount || 0); });
+  const catColors = ['#e74c3c','#f39c12','#6c5ce7','#00b894','#0984e3','#e84393','#00cec9'];
+
+  state.charts.finExpCat = new Chart(c2, {
+    type: 'doughnut',
+    data: { labels: Object.keys(expCatData), datasets: [{ data: Object.values(expCatData), backgroundColor: catColors.slice(0, Object.keys(expCatData).length), borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9a9ab0', padding: 12, font: { size: 11 } } } } }
+  });
+}
+
+// ============================================
+// POINT OF SALE
+// ============================================
+function renderPosProducts() {
+  const search = (document.getElementById('posSearch')?.value || '').toLowerCase();
+  const filtered = state.products.filter(p => p.name?.toLowerCase().includes(search) && (p.stock || 0) > 0);
+  const grid = document.getElementById('posProductsGrid');
+  if (filtered.length === 0) {
+    grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>Hakuna bidhaa</p></div>';
+    return;
+  }
+  grid.innerHTML = filtered.map(p => `
+    <div class="pos-p-card" onclick="addToCart('${p.id}')">
+      ${p.image ? `<img src="${p.image}" alt="${p.name}"/>` : `<div style="width:100%;height:80px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:24px;margin-bottom:6px"><i class="fas fa-box"></i></div>`}
+      <h5>${p.name}</h5>
+      <div class="pos-p-price">${fmt(p.sellingPrice)} TZS</div>
+      <div class="pos-p-stock">Staki: ${p.stock}</div>
+    </div>`).join('');
+}
+
+function addToCart(productId) {
+  const product = state.products.find(p => p.id === productId);
+  if (!product) return;
+  const existing = state.cart.find(c => c.productId === productId);
+  if (existing) {
+    if (existing.qty >= product.stock) { toast('Staki haiitoshi.', 'w'); return; }
+    existing.qty++;
+  } else {
+    state.cart.push({ productId, name: product.name, price: product.sellingPrice, cost: product.costPrice || 0, qty: 1, maxStock: product.stock });
+  }
+  renderCart();
+}
+
+function updateCartQty(productId, delta) {
+  const item = state.cart.find(c => c.productId === productId);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) { state.cart = state.cart.filter(c => c.productId !== productId); }
+  else if (item.qty > item.maxStock) { item.qty = item.maxStock; toast('Staki haiitoshi.', 'w'); }
+  renderCart();
+}
+
+function removeFromCart(productId) {
+  state.cart = state.cart.filter(c => c.productId !== productId);
+  renderCart();
+}
+
+function renderCart() {
+  const body = document.getElementById('posCartBody');
+  if (state.cart.length === 0) {
+    body.innerHTML = '<div class="empty-s" style="padding:20px"><i class="fas fa-cart-plus"></i><p>Gurudumu ni tupu</p></div>';
+    document.getElementById('posTotal').textContent = '0 TZS';
+    return;
+  }
+  body.innerHTML = state.cart.map(c => `
+    <div class="cart-item">
+      <div class="cart-item-info"><h6>${c.name}</h6><span>${fmt(c.price)} TZS kila moja</span></div>
+      <div class="cart-qty">
+        <button onclick="updateCartQty('${c.productId}',-1)">-</button>
+        <span>${c.qty}</span>
+        <button onclick="updateCartQty('${c.productId}',1)">+</button>
+      </div>
+      <div class="cart-item-price">${fmt(c.price * c.qty)}</div>
+      <button class="cart-item-rm" onclick="removeFromCart('${c.productId}')"><i class="fas fa-trash"></i></button>
+    </div>`).join('');
+  const total = state.cart.reduce((s, c) => s + (c.price * c.qty), 0);
+  document.getElementById('posTotal').textContent = `${fmt(total)} TZS`;
+}
+
+async function handleCheckout() {
+  if (state.cart.length === 0) { toast('Gurudumu ni tupu.', 'w'); return; }
+  const btn = document.getElementById('checkoutBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inatengeneza...';
+  try {
+    const total = state.cart.reduce((s, c) => s + (c.price * c.qty), 0);
+    const totalCost = state.cart.reduce((s, c) => s + (c.cost * c.qty), 0);
+    const items = state.cart.map(c => ({ productId: c.productId, name: c.name, price: c.price, cost: c.cost, qty: c.qty, subtotal: c.price * c.qty }));
+    const saleData = {
+      businessId: getBizId(),
+      items,
+      total,
+      totalCost,
+      profit: total - totalCost,
+      customerName: document.getElementById('posCustomer').value.trim() || 'Mteja wa Kawaida',
+      paymentMethod: document.getElementById('posPayMethod').value,
+      createdBy: state.currentUser.uid,
+      createdAt: serverTimestamp()
+    };
+    const docRef = await addDoc(collection(db, 'sales'), saleData);
+
+    // Update stock for each product
+    for (const item of state.cart) {
+      const prod = state.products.find(p => p.id === item.productId);
+      if (prod) {
+        const newStock = Math.max(0, (prod.stock || 0) - item.qty);
+        await updateDoc(doc(db, 'products', item.productId), { stock: newStock });
+        prod.stock = newStock;
+      }
+    }
+
+    // Add notification
+    await addDoc(collection(db, 'notifications'), {
+      businessId: getBizId(),
+      type: 'success',
+      title: 'Mauzo Mpya',
+      message: `Mauzo ya ${fmt(total)} TZS kwa ${saleData.customerName}`,
+      read: false,
+      createdAt: serverTimestamp()
+    });
+
+    // Check low stock
+    for (const item of state.cart) {
+      const prod = state.products.find(p => p.id === item.productId);
+      if (prod && prod.stock <= 5 && prod.stock > 0) {
+        await addDoc(collection(db, 'notifications'), {
+          businessId: getBizId(),
+          type: 'warning',
+          title: 'Staki Ipo Chini',
+          message: `${prod.name} ina staki ${prod.stock} tu`,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      }
+    }
+
+    state.cart = [];
+    renderCart();
+    renderPosProducts();
+    toast('Mauzo yamehifadhiwa!', 's');
+    showSaleReceipt({ id: docRef.id, ...saleData });
+    await loadSales();
+    await loadNotifications();
+  } catch (err) {
+    console.error('Checkout error:', err);
+    toast('Imeshindwa kuhifadhi mauzo.', 'e');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-circle"></i> Maliza Muamala';
+  }
+}
+
+function showSaleReceipt(sale) {
+  const items = sale.items || [];
+  const html = `
+    <div class="receipt-content" id="receiptPrint">
+      <h3>${state.userProfile.businessName || 'BizBook'}</h3>
+      <p style="text-align:center;font-size:11px">${state.userProfile.businessCategory || ''} | ${fmtDateTime(sale.createdAt)}</p>
+      <div class="rc-divider"></div>
+      <div class="rc-line"><span>Mteja:</span><span>${sale.customerName || '—'}</span></div>
+      <div class="rc-line"><span>Njia:</span><span>${sale.paymentMethod || 'cash'}</span></div>
+      <div class="rc-line"><span>ID:</span><span>${sale.id?.slice(0,8) || '—'}</span></div>
+      <div class="rc-divider"></div>
+      ${items.map(it => `<div class="rc-line"><span>${it.name} x${it.qty}</span><span>${fmt(it.subtotal)}</span></div>`).join('')}
+      <div class="rc-divider"></div>
+      <div class="rc-line rc-total"><span>JUMLA</span><span>${fmt(sale.total)} TZS</span></div>
+    </div>`;
+  document.getElementById('saleModalContent').innerHTML = html;
+  document.getElementById('saleModal').classList.add('show');
+}
+function closeSaleModal() { document.getElementById('saleModal').classList.remove('show'); }
+function printReceipt() {
+  const content = document.getElementById('receiptPrint');
+  if (!content) return;
+  const w = window.open('', '', 'width=400,height=600');
+  w.document.write(`<html><head><title>Receipt</title><style>body{font-family:'Courier New',monospace;padding:20px;font-size:12px}.rc-line{display:flex;justify-content:space-between;padding:2px 0}.rc-divider{border-top:1px dashed #000;margin:8px 0}.rc-total{font-weight:bold;font-size:14px}h3{text-align:center}</style></head><body>${content.innerHTML}</body></html>`);
+  w.document.close();
+  w.print();
+}
+
+// ============================================
+// PRODUCTS CRUD
+// ============================================
+function renderProducts() {
+  const search = (document.getElementById('productSearch')?.value || '').toLowerCase();
+  const filtered = state.products.filter(p => p.name?.toLowerCase().includes(search) || (p.category || '').toLowerCase().includes(search));
+  const body = document.getElementById('productsBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(p => `
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:8px">${p.image ? `<img src="${p.image}" style="width:32px;height:32px;object-fit:cover;border-radius:6px"/>` : '<div style="width:32px;height:32px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-box"></i></div>'}<span>${p.name}</span></div></td>
+      <td>${p.category || '—'}</td>
+      <td style="color:var(--success);font-weight:600">${fmt(p.sellingPrice)}</td>
+      <td>${fmt(p.costPrice || 0)}</td>
+      <td><span style="color:${(p.stock || 0) <= 5 ? 'var(--danger)' : 'var(--text)'};font-weight:${(p.stock || 0) <= 5 ? '700' : '400'}">${p.stock || 0}</span></td>
+      <td>${fmtDate(p.createdAt)}</td>
+      <td>
+        <button class="btn btn-o btn-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('products','${p.id}','${p.name}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function openProductModal() {
+  document.getElementById('productModalTitle').textContent = 'Ongeza Bidhaa';
+  document.getElementById('productId').value = '';
+  document.getElementById('prodName').value = '';
+  document.getElementById('prodDesc').value = '';
+  document.getElementById('prodPrice').value = '';
+  document.getElementById('prodCost').value = '';
+  document.getElementById('prodStock').value = '';
+  document.getElementById('prodCategory').value = '';
+  document.getElementById('prodImage').value = '';
+  document.getElementById('productModal').classList.add('show');
+}
+function closeProductModal() { document.getElementById('productModal').classList.remove('show'); }
+
+function editProduct(id) {
+  const p = state.products.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('productModalTitle').textContent = 'Hariri Bidhaa';
+  document.getElementById('productId').value = p.id;
+  document.getElementById('prodName').value = p.name || '';
+  document.getElementById('prodDesc').value = p.description || '';
+  document.getElementById('prodPrice').value = p.sellingPrice || '';
+  document.getElementById('prodCost').value = p.costPrice || '';
+  document.getElementById('prodStock').value = p.stock || 0;
+  document.getElementById('prodCategory').value = p.category || '';
+  document.getElementById('prodImage').value = p.image || '';
+  document.getElementById('productModal').classList.add('show');
+}
+
+async function saveProduct(e) {
+  e.preventDefault();
+  const id = document.getElementById('productId').value;
+  const data = {
+    name: document.getElementById('prodName').value.trim(),
+    description: document.getElementById('prodDesc').value.trim(),
+    sellingPrice: parseFloat(document.getElementById('prodPrice').value) || 0,
+    costPrice: parseFloat(document.getElementById('prodCost').value) || 0,
+    stock: parseInt(document.getElementById('prodStock').value) || 0,
+    category: document.getElementById('prodCategory').value.trim(),
+    image: document.getElementById('prodImage').value.trim(),
+    businessId: getBizId(),
+    updatedAt: serverTimestamp()
+  };
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'products', id), data);
+      const idx = state.products.findIndex(p => p.id === id);
+      if (idx !== -1) state.products[idx] = { ...state.products[idx], ...data };
+      toast('Bidhaa imesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'products'), data);
+      state.products.unshift({ id: ref.id, ...data });
+      toast('Bidhaa imeongezwa.', 's');
+    }
+    closeProductModal();
+    renderProducts();
+    renderPosProducts();
+  } catch (err) {
+    console.error('Save product error:', err);
+    toast('Imeshindwa kuhifadhi bidhaa.', 'e');
+  }
+}
+
+// ============================================
+// SALES
+// ============================================
+function renderSales() {
+  const search = (document.getElementById('saleSearch')?.value || '').toLowerCase();
+  const filtered = state.sales.filter(s => (s.customerName || '').toLowerCase().includes(search) || (s.id || '').toLowerCase().includes(search));
+  const body = document.getElementById('salesBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(s => `
+    <tr>
+      <td style="font-family:monospace;font-size:11px">${s.id?.slice(0, 8) || '—'}</td>
+      <td>${fmtDateTime(s.createdAt)}</td>
+      <td>${s.customerName || '—'}</td>
+      <td>${(s.items || []).length}</td>
+      <td style="color:var(--success);font-weight:600">${fmt(s.total)}</td>
+      <td style="color:${(s.profit || 0) >= 0 ? 'var(--success)' : 'var(--danger)'}">${fmt(s.profit || 0)}</td>
+      <td>${s.paymentMethod || 'cash'}</td>
+      <td>
+        <button class="btn btn-o btn-xs" onclick='showSaleReceipt(${JSON.stringify(s).replace(/'/g, "&#39;")})'><i class="fas fa-eye"></i></button>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('sales','${s.id}','Mauzo')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+// ============================================
+// PURCHASES CRUD
+// ============================================
+function renderPurchases() {
+  const search = (document.getElementById('purchaseSearch')?.value || '').toLowerCase();
+  const filtered = state.purchases.filter(p => (p.supplier || '').toLowerCase().includes(search) || (p.items || '').toLowerCase().includes(search));
+  const body = document.getElementById('purchasesBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-truck"></i><p>Hakuna manunuzi</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(p => `
+    <tr>
+      <td>${fmtDateTime(p.createdAt)}</td>
+      <td>${p.supplier || '—'}</td>
+      <td>${p.items || '—'} (x${p.qty || 0})</td>
+      <td style="font-weight:600">${fmt(p.total || 0)}</td>
+      <td>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('purchases','${p.id}','Manunuzi')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function openPurchaseModal() {
+  document.getElementById('purchaseModalTitle').textContent = 'Ongeza Manunuzi';
+  document.getElementById('purchaseId').value = '';
+  document.getElementById('purchSupplier').value = '';
+  document.getElementById('purchItems').value = '';
+  document.getElementById('purchQty').value = '';
+  document.getElementById('purchCost').value = '';
+  document.getElementById('purchaseModal').classList.add('show');
+}
+function closePurchaseModal() { document.getElementById('purchaseModal').classList.remove('show'); }
+
+async function savePurchase(e) {
+  e.preventDefault();
+  const qty = parseInt(document.getElementById('purchQty').value) || 0;
+  const cost = parseFloat(document.getElementById('purchCost').value) || 0;
+  const data = {
+    businessId: getBizId(),
+    supplier: document.getElementById('purchSupplier').value.trim(),
+    items: document.getElementById('purchItems').value.trim(),
+    qty, costPerItem: cost, total: qty * cost,
+    createdBy: state.currentUser.uid,
+    createdAt: serverTimestamp()
+  };
+  try {
+    const ref = await addDoc(collection(db, 'purchases'), data);
+    state.purchases.unshift({ id: ref.id, ...data });
+    closePurchaseModal();
+    renderPurchases();
+    toast('Manunuzi yamehifadhiwa.', 's');
+  } catch (err) {
+    console.error('Save purchase error:', err);
+    toast('Imeshindwa kuhifadhi manunuzi.', 'e');
+  }
+}
+
+// ============================================
+// SUPPLIERS CRUD
+// ============================================
+function renderSuppliers() {
+  const search = (document.getElementById('supplierSearch')?.value || '').toLowerCase();
+  const filtered = state.suppliers.filter(s => (s.name || '').toLowerCase().includes(search));
+  const body = document.getElementById('suppliersBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-handshake"></i><p>Hakuna wauzaji</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(s => `
+    <tr>
+      <td>${s.name || '—'}</td>
+      <td>${s.phone || '—'}</td>
+      <td>${s.email || '—'}</td>
+      <td>${s.address || '—'}</td>
+      <td>
+        <button class="btn btn-o btn-xs" onclick="editSupplier('${s.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('suppliers','${s.id}','${s.name}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function openSupplierModal() {
+  document.getElementById('supplierModalTitle').textContent = 'Ongeza Muuzaji';
+  document.getElementById('supplierId').value = '';
+  document.getElementById('suppName').value = '';
+  document.getElementById('suppPhone').value = '';
+  document.getElementById('suppEmail').value = '';
+  document.getElementById('suppAddress').value = '';
+  document.getElementById('supplierModal').classList.add('show');
+}
+function closeSupplierModal() { document.getElementById('supplierModal').classList.remove('show'); }
+
+function editSupplier(id) {
+  const s = state.suppliers.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('supplierModalTitle').textContent = 'Hariri Muuzaji';
+  document.getElementById('supplierId').value = s.id;
+  document.getElementById('suppName').value = s.name || '';
+  document.getElementById('suppPhone').value = s.phone || '';
+  document.getElementById('suppEmail').value = s.email || '';
+  document.getElementById('suppAddress').value = s.address || '';
+  document.getElementById('supplierModal').classList.add('show');
+}
+
+async function saveSupplier(e) {
+  e.preventDefault();
+  const id = document.getElementById('supplierId').value;
+  const data = {
+    name: document.getElementById('suppName').value.trim(),
+    phone: document.getElementById('suppPhone').value.trim(),
+    email: document.getElementById('suppEmail').value.trim(),
+    address: document.getElementById('suppAddress').value.trim(),
+    businessId: getBizId(),
+    updatedAt: serverTimestamp()
+  };
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'suppliers', id), data);
+      const idx = state.suppliers.findIndex(s => s.id === id);
+      if (idx !== -1) state.suppliers[idx] = { ...state.suppliers[idx], ...data };
+      toast('Muuzaji amesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'suppliers'), data);
+      state.suppliers.unshift({ id: ref.id, ...data });
+      toast('Muuzaji ameongezwa.', 's');
+    }
+    closeSupplierModal();
+    renderSuppliers();
+  } catch (err) {
+    console.error('Save supplier error:', err);
+    toast('Imeshindwa kuhifadhi muuzaji.', 'e');
+  }
+}
+
+// ============================================
+// CUSTOMERS CRUD
+// ============================================
+function renderCustomers() {
+  const search = (document.getElementById('customerSearch')?.value || '').toLowerCase();
+  const filtered = state.customers.filter(c => (c.name || '').toLowerCase().includes(search));
+  const body = document.getElementById('customersBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-users"></i><p>Hakuna wateja</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(c => `
+    <tr>
+      <td>${c.name || '—'}</td>
+      <td>${c.phone || '—'}</td>
+      <td>${c.email || '—'}</td>
+      <td>${c.address || '—'}</td>
+      <td>
+        <button class="btn btn-o btn-xs" onclick="editCustomer('${c.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('customers','${c.id}','${c.name}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function openCustomerModal() {
+  document.getElementById('customerModalTitle').textContent = 'Ongeza Mteja';
+  document.getElementById('customerId').value = '';
+  document.getElementById('custName').value = '';
+  document.getElementById('custPhone').value = '';
+  document.getElementById('custEmail').value = '';
+  document.getElementById('custAddress').value = '';
+  document.getElementById('customerModal').classList.add('show');
+}
+function closeCustomerModal() { document.getElementById('customerModal').classList.remove('show'); }
+
+function editCustomer(id) {
+  const c = state.customers.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('customerModalTitle').textContent = 'Hariri Mteja';
+  document.getElementById('customerId').value = c.id;
+  document.getElementById('custName').value = c.name || '';
+  document.getElementById('custPhone').value = c.phone || '';
+  document.getElementById('custEmail').value = c.email || '';
+  document.getElementById('custAddress').value = c.address || '';
+  document.getElementById('customerModal').classList.add('show');
+}
+
+async function saveCustomer(e) {
+  e.preventDefault();
+  const id = document.getElementById('customerId').value;
+  const data = {
+    name: document.getElementById('custName').value.trim(),
+    phone: document.getElementById('custPhone').value.trim(),
+    email: document.getElementById('custEmail').value.trim(),
+    address: document.getElementById('custAddress').value.trim(),
+    businessId: getBizId(),
+    updatedAt: serverTimestamp()
+  };
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'customers', id), data);
+      const idx = state.customers.findIndex(c => c.id === id);
+      if (idx !== -1) state.customers[idx] = { ...state.customers[idx], ...data };
+      toast('Mteja amesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'customers'), data);
+      state.customers.unshift({ id: ref.id, ...data });
+      toast('Mteja ameongezwa.', 's');
+    }
+    closeCustomerModal();
+    renderCustomers();
+  } catch (err) {
+    console.error('Save customer error:', err);
+    toast('Imeshindwa kuhifadhi mteja.', 'e');
+  }
+}
+
+// ============================================
+// DEBTS CRUD
+// ============================================
+function renderDebts() {
+  const search = (document.getElementById('debtSearch')?.value || '').toLowerCase();
+  const filtered = state.debts.filter(d => (d.customerName || '').toLowerCase().includes(search));
+  const body = document.getElementById('debtsBody');
+  const totalRemaining = state.debts.reduce((s, d) => s + ((d.amount || 0) - (d.paid || 0)), 0);
+
+  // Debt alert
+  const alertArea = document.getElementById('debtAlertArea');
+  if (totalRemaining > 0) {
+    alertArea.innerHTML = `<div class="debt-alert"><i class="fas fa-exclamation-triangle"></i> Jumla ya madeni yaliyobaki: <strong>${fmt(totalRemaining)} TZS</strong></div>`;
+  } else {
+    alertArea.innerHTML = '';
+  }
+
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-s"><i class="fas fa-hand-holding-dollar"></i><p>Hakuna madeni</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(d => {
+    const remaining = (d.amount || 0) - (d.paid || 0);
+    const status = remaining <= 0 ? 'paid' : 'unpaid';
+    return `
+    <tr>
+      <td>${d.customerName || '—'}</td>
+      <td>${fmt(d.amount || 0)}</td>
+      <td style="color:var(--success)">${fmt(d.paid || 0)}</td>
+      <td style="color:${remaining > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:700">${fmt(remaining)}</td>
+      <td><span class="status-badge ${status}">${status === 'paid' ? 'Imelipwa' : 'Haijalipwa'}</span></td>
+      <td>${fmtDate(d.createdAt)}</td>
+      <td>
+        ${remaining > 0 ? `<button class="btn btn-s btn-xs" onclick="openPayDebt('${d.id}')"><i class="fas fa-money-bill"></i></button>` : ''}
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('debts','${d.id}','Deni')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openDebtModal() {
+  document.getElementById('debtModalTitle').textContent = 'Ongeza Deni';
+  document.getElementById('debtId').value = '';
+  document.getElementById('debtCustomer').value = '';
+  document.getElementById('debtAmount').value = '';
+  document.getElementById('debtDueDate').value = '';
+  document.getElementById('debtDesc').value = '';
+  document.getElementById('debtModal').classList.add('show');
+}
+function closeDebtModal() { document.getElementById('debtModal').classList.remove('show'); }
+
+async function saveDebt(e) {
+  e.preventDefault();
+  const data = {
+    businessId: getBizId(),
+    customerName: document.getElementById('debtCustomer').value.trim(),
+    amount: parseFloat(document.getElementById('debtAmount').value) || 0,
+    paid: 0,
+    dueDate: document.getElementById('debtDueDate').value || null,
+    description: document.getElementById('debtDesc').value.trim(),
+    createdBy: state.currentUser.uid,
+    createdAt: serverTimestamp()
+  };
+  try {
+    const ref = await addDoc(collection(db, 'debts'), data);
+    state.debts.unshift({ id: ref.id, ...data });
+    closeDebtModal();
+    renderDebts();
+    toast('Deni limeongezwa.', 's');
+  } catch (err) {
+    console.error('Save debt error:', err);
+    toast('Imeshindwa kuhifadhi deni.', 'e');
+  }
+}
+
+function openPayDebt(id) {
+  const d = state.debts.find(x => x.id === id);
+  if (!d) return;
+  const remaining = (d.amount || 0) - (d.paid || 0);
+  document.getElementById('payDebtId').value = d.id;
+  document.getElementById('payDebtCustomer').value = d.customerName || '';
+  document.getElementById('payDebtRemaining').value = `${fmt(remaining)} TZS`;
+  document.getElementById('payDebtAmount').value = '';
+  document.getElementById('payDebtAmount').max = remaining;
+  document.getElementById('payDebtModal').classList.add('show');
+}
+function closePayDebtModal() { document.getElementById('payDebtModal').classList.remove('show'); }
+
+async function handlePayDebt(e) {
+  e.preventDefault();
+  const id = document.getElementById('payDebtId').value;
+  const payAmount = parseFloat(document.getElementById('payDebtAmount').value) || 0;
+  if (payAmount <= 0) { toast('Kiasi cha kulipa kiwe zaidi ya 0.', 'w'); return; }
+  const debt = state.debts.find(d => d.id === id);
+  if (!debt) return;
+  const remaining = (debt.amount || 0) - (debt.paid || 0);
+  if (payAmount > remaining) { toast(`Kiasi cha kulipa kiwe chini ya ${fmt(remaining)} TZS.`, 'w'); return; }
+  try {
+    const newPaid = (debt.paid || 0) + payAmount;
+    await updateDoc(doc(db, 'debts', id), { paid: newPaid });
+    debt.paid = newPaid;
+    closePayDebtModal();
+    renderDebts();
+    toast(`Lipa ${fmt(payAmount)} TZS kumefanikiwa.`, 's');
+  } catch (err) {
+    console.error('Pay debt error:', err);
+    toast('Imeshindwa kulipa deni.', 'e');
+  }
+}
+
+// ============================================
+// EXPENSES CRUD
+// ============================================
+function renderExpenses() {
+  const search = (document.getElementById('expenseSearch')?.value || '').toLowerCase();
+  const filtered = state.expenses.filter(e => (e.title || '').toLowerCase().includes(search) || (e.category || '').toLowerCase().includes(search));
+  const body = document.getElementById('expensesBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fas fa-money-bill-wave"></i><p>Hakuna matumizi</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(e => `
+    <tr>
+      <td>${e.title || '—'}</td>
+      <td><span class="status-badge pending">${e.category || '—'}</span></td>
+      <td style="color:var(--danger);font-weight:600">${fmt(e.amount || 0)}</td>
+      <td>${e.date ? fmtDate(e.date) : fmtDate(e.createdAt)}</td>
+      <td>
+        <button class="btn btn-o btn-xs" onclick="editExpense('${e.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('expenses','${e.id}','${e.title}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function openExpenseModal() {
+  document.getElementById('expenseModalTitle').textContent = 'Ongeza Matumizi';
+  document.getElementById('expenseId').value = '';
+  document.getElementById('expTitle').value = '';
+  document.getElementById('expCategory').value = 'Umeme';
+  document.getElementById('expAmount').value = '';
+  document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('expDesc').value = '';
+  document.getElementById('expenseModal').classList.add('show');
+}
+function closeExpenseModal() { document.getElementById('expenseModal').classList.remove('show'); }
+
+function editExpense(id) {
+  const e = state.expenses.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('expenseModalTitle').textContent = 'Hariri Matumizi';
+  document.getElementById('expenseId').value = e.id;
+  document.getElementById('expTitle').value = e.title || '';
+  document.getElementById('expCategory').value = e.category || 'Umeme';
+  document.getElementById('expAmount').value = e.amount || '';
+  document.getElementById('expDate').value = e.date || '';
+  document.getElementById('expDesc').value = e.description || '';
+  document.getElementById('expenseModal').classList.add('show');
+}
+
+async function saveExpense(e) {
+  e.preventDefault();
+  const id = document.getElementById('expenseId').value;
+  const data = {
+    businessId: getBizId(),
+    title: document.getElementById('expTitle').value.trim(),
+    category: document.getElementById('expCategory').value,
+    amount: parseFloat(document.getElementById('expAmount').value) || 0,
+    date: document.getElementById('expDate').value || null,
+    description: document.getElementById('expDesc').value.trim(),
+    createdBy: state.currentUser.uid,
+    updatedAt: serverTimestamp()
+  };
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'expenses', id), data);
+      const idx = state.expenses.findIndex(x => x.id === id);
+      if (idx !== -1) state.expenses[idx] = { ...state.expenses[idx], ...data };
+      toast('Matumizi yamesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'expenses'), data);
+      state.expenses.unshift({ id: ref.id, ...data });
+      toast('Matumizi yameongezwa.', 's');
+    }
+    closeExpenseModal();
+    renderExpenses();
+  } catch (err) {
+    console.error('Save expense error:', err);
+    toast('Imeshindwa kuhifadhi matumizi.', 'e');
+  }
+}
+
+// ============================================
+// EMPLOYEES CRUD
+// ============================================
+function renderEmployees() {
+  const search = (document.getElementById('employeeSearch')?.value || '').toLowerCase();
+  const filtered = state.employees.filter(e => (e.name || '').toLowerCase().includes(search));
+  const grid = document.getElementById('employeesGrid');
+  if (filtered.length === 0) {
+    grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-id-badge"></i><p>Hakuna wafanyakazi</p></div>';
+    return;
+  }
+  grid.innerHTML = filtered.map(e => `
+    <div class="emp-card">
+      <div class="emp-card-head">
+        <div class="emp-av" style="background:${getAvatarColor(e.name)}">${getInitials(e.name)}</div>
+        <div><h4>${e.name || '—'}</h4><p>${e.email || e.phone || '—'}</p></div>
+      </div>
+      <div class="emp-card-body">
+        <span class="emp-tag role">${ROLE_LABELS[e.role] || e.role || '—'}</span>
+        <span class="emp-tag status">Active</span>
+      </div>
+      <div class="emp-card-foot">
+        <button class="btn btn-o btn-xs" onclick="editEmployee('${e.id}')"><i class="fas fa-edit"></i> Hariri</button>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('employees','${e.id}','${e.name}')"><i class="fas fa-trash"></i> Futa</button>
+      </div>
+    </div>`).join('');
+}
+
+function openEmployeeModal() {
+  document.getElementById('employeeModalTitle').textContent = 'Ongeza Mfanyakazi';
+  document.getElementById('employeeId').value = '';
+  document.getElementById('empName').value = '';
+  document.getElementById('empEmail').value = '';
+  document.getElementById('empPhone').value = '';
+  document.getElementById('empRole').value = 'sk';
+  document.getElementById('employeeModal').classList.add('show');
+}
+function closeEmployeeModal() { document.getElementById('employeeModal').classList.remove('show'); }
+
+function editEmployee(id) {
+  const e = state.employees.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('employeeModalTitle').textContent = 'Hariri Mfanyakazi';
+  document.getElementById('employeeId').value = e.id;
+  document.getElementById('empName').value = e.name || '';
+  document.getElementById('empEmail').value = e.email || '';
+  document.getElementById('empPhone').value = e.phone || '';
+  document.getElementById('empRole').value = e.role || 'sk';
+  document.getElementById('employeeModal').classList.add('show');
+}
+
+async function saveEmployee(e) {
+  e.preventDefault();
+  const id = document.getElementById('employeeId').value;
+  const data = {
+    businessId: getBizId(),
+    name: document.getElementById('empName').value.trim(),
+    email: document.getElementById('empEmail').value.trim(),
+    phone: document.getElementById('empPhone').value.trim(),
+    role: document.getElementById('empRole').value,
+    status: 'active',
+    updatedAt: serverTimestamp()
+  };
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'employees', id), data);
+      const idx = state.employees.findIndex(x => x.id === id);
+      if (idx !== -1) state.employees[idx] = { ...state.employees[idx], ...data };
+      toast('Mfanyakazi amesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'employees'), data);
+      state.employees.unshift({ id: ref.id, ...data });
+      toast('Mfanyakazi ameongezwa.', 's');
+    }
+    closeEmployeeModal();
+    renderEmployees();
+  } catch (err) {
+    console.error('Save employee error:', err);
+    toast('Imeshindwa kuhifadhi mfanyakazi.', 'e');
+  }
+}
+
+// ============================================
+// USERS MANAGEMENT (Sub-accounts)
+// ============================================
+function renderUsers() {
+  const search = (document.getElementById('userSearch')?.value || '').toLowerCase();
+  const filtered = state.users.filter(u => (u.name || '').toLowerCase().includes(search) || (u.email || '').toLowerCase().includes(search));
+  const body = document.getElementById('usersBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fas fa-user-shield"></i><p>Hakuna watumiaji</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(u => `
+    <tr>
+      <td>${u.name || '—'}</td>
+      <td>${u.email || '—'}</td>
+      <td><span class="emp-tag role">${ROLE_LABELS[u.role] || u.role || '—'}</span></td>
+      <td><span class="status-badge ${u.status === 'active' ? 'active' : 'suspended'}">${u.status === 'active' ? 'Active' : 'Suspended'}</span></td>
+      <td>${fmtDate(u.createdAt)}</td>
+      <td>
+        <button class="btn btn-d btn-xs" onclick="confirmDelete('users','${u.id}','${u.name}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function openUserModal() {
+  document.getElementById('userModalTitle').textContent = 'Ongeza Mtumiaji';
+  document.getElementById('newUserId').value = '';
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserEmail').value = '';
+  document.getElementById('newUserPassword').value = '';
+  document.getElementById('newUserRole').value = 'sk';
+  document.getElementById('userModal').classList.add('show');
+}
+function closeUserModal() { document.getElementById('userModal').classList.remove('show'); }
+
+async function saveUser(e) {
+  e.preventDefault();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  if (password.length < 6) { toast('Nenosiri lazima iwe na herufi 6 au zaidi.', 'w'); return; }
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name: document.getElementById('newUserName').value.trim(),
+      email,
+      phone: '',
+      businessName: state.userProfile.businessName,
+      businessCategory: state.userProfile.businessCategory,
+      businessLogo: state.userProfile.businessLogo || '',
+      role: document.getElementById('newUserRole').value,
+      businessId: getBizId(),
+      createdBy: state.currentUser.uid,
+      status: 'active',
+      createdAt: serverTimestamp()
+    });
+    state.users.unshift({
+      id: cred.user.uid,
+      name: document.getElementById('newUserName').value.trim(),
+      email,
+      role: document.getElementById('newUserRole').value,
+      status: 'active',
+      createdAt: new Date()
+    });
+    closeUserModal();
+    renderUsers();
+    toast('Mtumiaji ameongezwa.', 's');
+  } catch (err) {
+    console.error('Save user error:', err);
+    const msgs = { 'auth/email-already-in-use': 'Barua pepe tayari inatumika.' };
+    toast(msgs[err.code] || 'Imeshindwa kuongeza mtumiaji.', 'e');
+  }
+}
+
+// ============================================
+// PROFILE
+// ============================================
+function loadProfile() {
+  const p = state.userProfile;
+  if (!p) return;
+  document.getElementById('profName').value = p.name || '';
+  document.getElementById('profEmail').value = p.email || '';
+  document.getElementById('profPhone').value = p.phone || '';
+  document.getElementById('profBizName').value = p.businessName || '';
+  document.getElementById('profBizCategory').value = p.businessCategory || 'Dukani';
+  const prev = document.getElementById('logoPreview');
+  if (p.businessLogo) {
+    prev.innerHTML = `<img src="${p.businessLogo}" alt="Logo"/>`;
+  } else {
+    prev.innerHTML = '<i class="fas fa-camera"></i>';
+  }
+}
+
+function uploadLogo() { document.getElementById('logoInput').click(); }
+
+async function handleLogoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('Picha ni kubwa sana (max 2MB).', 'w'); return; }
+  try {
+    const storageRef = ref(storage, `logos/${getBizId()}/${Date.now()}_${file.name}`);
+    const snap = await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(snap.ref);
+    await updateDoc(doc(db, 'users', state.currentUser.uid), { businessLogo: url });
+    state.userProfile.businessLogo = url;
+    document.getElementById('logoPreview').innerHTML = `<img src="${url}" alt="Logo"/>`;
+    const logoEl = document.getElementById('topbarBizLogo');
+    logoEl.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:contain;border-radius:8px"/>`;
+    toast('Logo imehifadhiwa.', 's');
+  } catch (err) {
+    console.error('Logo upload error:', err);
+    toast('Imeshindwa kupakia logo.', 'e');
+  }
+}
+
+async function handleUpdateProfile(e) {
+  e.preventDefault();
+  try {
+    const data = {
+      name: document.getElementById('profName').value.trim(),
+      phone: document.getElementById('profPhone').value.trim(),
+      businessName: document.getElementById('profBizName').value.trim(),
+      businessCategory: document.getElementById('profBizCategory').value,
+      updatedAt: serverTimestamp()
+    };
+    await updateDoc(doc(db, 'users', state.currentUser.uid), data);
+    Object.assign(state.userProfile, data);
+    setupTopbar();
+    toast('Profaili imesasishwa.', 's');
+  } catch (err) {
+    console.error('Update profile error:', err);
+    toast('Imeshindwa kusasisha profaili.', 'e');
+  }
+}
+
+// ============================================
+// CONFIRM DELETE MODAL
+// ============================================
+function confirmDelete(collectionName, docId, itemName) {
+  document.getElementById('confirmTitle').textContent = 'Thibitisha Kufuta';
+  document.getElementById('confirmMsg').textContent = `Una uhakika unataka kufuta "${itemName}"? Kitendo hiki hakiwezi kurudishwa.`;
+  state.confirmCallback = async () => {
+    try {
+      await deleteDoc(doc(db, collectionName, docId));
+      // Update local state
+      const key = collectionName === 'purchases' ? 'purchases' : collectionName;
+      if (state[key]) state[key] = state[key].filter(x => x.id !== docId);
+      // Re-render current section
+      const renderers = { products: renderProducts, sales: renderSales, purchases: renderPurchases, suppliers: renderSuppliers, customers: renderCustomers, debts: renderDebts, expenses: renderExpenses, employees: renderEmployees, users: renderUsers };
+      if (renderers[collectionName]) renderers[collectionName]();
+      toast(`${itemName} imefutwa.`, 's');
+    } catch (err) {
+      console.error('Delete error:', err);
+      toast('Imeshindwa kufuta.', 'e');
+    }
+  };
+  document.getElementById('confirmModal').classList.add('show');
+}
+function closeConfirmModal() { document.getElementById('confirmModal').classList.remove('show'); state.confirmCallback = null; }
+function executeConfirm() { if (state.confirmCallback) state.confirmCallback(); closeConfirmModal(); }
+
+// ============================================
+// SUPER ADMIN
+// ============================================
+async function superLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('superErr');
+  errEl.textContent = '';
+  const email = document.getElementById('superUser').value.trim();
+  const password = document.getElementById('superPass').value;
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    // onAuthStateChanged will check role
+  } catch (err) {
+    console.error('Super login error:', err);
+    errEl.textContent = 'Imeshindwa kuingia. Angalia sifa zako.';
+  }
+}
+
+function superLogout() {
+  signOut(auth).then(() => {
+    state.currentUser = null;
+    state.userProfile = null;
+    document.getElementById('superLoginBox').classList.remove('hidden');
+    document.getElementById('superPanel').classList.add('hidden');
+    document.getElementById('superUser').value = '';
+    document.getElementById('superPass').value = '';
+    document.getElementById('superErr').textContent = '';
+    showLanding();
+    toast('Umetoka kwenye Super Admin.', 'i');
+  }).catch(err => {
+    console.error('Super logout error:', err);
+    toast('Imeshindwa kutoka.', 'e');
+  });
+}
+
+async function loadSuperAdminData() {
+  await loadSuperUsers();
+  await loadSuperAds();
+  await loadSuperProducts();
+  renderSuperMetrics();
+  renderSuperCharts();
+  renderSuperUsers();
+  renderSuperAds();
+  renderSuperProducts();
+}
+
+async function loadSuperUsers() {
+  try {
+    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    state.superUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) { console.error('Load super users error:', err); }
+}
+
+async function loadSuperAds() {
+  try {
+    const q = query(collection(db, 'publicAds'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    state.superAds = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) { console.error('Load super ads error:', err); }
+}
+
+async function loadSuperProducts() {
+  try {
+    const q = query(collection(db, 'publicProducts'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    state.superProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) { console.error('Load super products error:', err); }
+}
+
+function renderSuperMetrics() {
+  const users = state.superUsers.length;
+  const businesses = state.superUsers.filter(u => u.role && u.role !== 'super_admin').length;
+  const totalSales = state.superUsers.reduce((s, u) => s + 0, 0); // Would need subcollection reads
+  const ads = state.superAds.length;
+  const prods = state.superProducts.length;
+
+  document.getElementById('superMetrics').innerHTML = `
+    <div class="sm-card"><h4>Total Users</h4><div class="sm-val">${users}</div><div class="sm-sub">Registered accounts</div></div>
+    <div class="sm-card"><h4>Businesses</h4><div class="sm-val">${businesses}</div><div class="sm-sub">Active businesses</div></div>
+    <div class="sm-card"><h4>Ads</h4><div class="sm-val">${ads}</div><div class="sm-sub">Global advertisements</div></div>
+    <div class="sm-card"><h4>Products</h4><div class="sm-val">${prods}</div><div class="sm-sub">Public catalogue</div></div>`;
+}
+
+function renderSuperCharts() {
+  // Users Trend
+  const ctx1 = document.getElementById('superUsersTrend');
+  if (ctx1) {
+    if (state.superCharts.usersTrend) state.superCharts.usersTrend.destroy();
+    const monthData = {};
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthData[d.toLocaleDateString('en', { month: 'short' })] = 0;
+    }
+    state.superUsers.forEach(u => {
+      if (u.createdAt) {
+        const d = u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt);
+        const key = d.toLocaleDateString('en', { month: 'short' });
+        if (monthData[key] !== undefined) monthData[key]++;
+      }
+    });
+    state.superCharts.usersTrend = new Chart(ctx1, {
+      type: 'line',
+      data: { labels: Object.keys(monthData), datasets: [{ label: 'Users', data: Object.values(monthData), borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,.1)', fill: true, tension: .4 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#9a9ab0' }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { ticks: { color: '#9a9ab0', font: { size: 10 } }, grid: { display: false } } } }
+    });
+  }
+
+  // Category Chart
+  const ctx2 = document.getElementById('superCategoryChart');
+  if (ctx2) {
+    if (state.superCharts.category) state.superCharts.category.destroy();
+    const catData = {};
+    state.superUsers.forEach(u => { if (u.businessCategory) catData[u.businessCategory] = (catData[u.businessCategory] || 0) + 1; });
+    const colors = ['#6c5ce7','#00b894','#e74c3c','#f39c12','#0984e3','#e84393','#00cec9','#fd79a8'];
+    state.superCharts.category = new Chart(ctx2, {
+      type: 'pie',
+      data: { labels: Object.keys(catData), datasets: [{ data: Object.values(catData), backgroundColor: colors.slice(0, Object.keys(catData).length), borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#9a9ab0', padding: 10, font: { size: 11 } } } } }
+    });
+  }
+
+  // Business Chart
+  const ctx3 = document.getElementById('superBusinessChart');
+  if (ctx3) {
+    if (state.superCharts.business) state.superCharts.business.destroy();
+    const bizData = state.superUsers.filter(u => u.role && u.role !== 'super_admin').slice(0, 8);
+    state.superCharts.business = new Chart(ctx3, {
+      type: 'bar',
+      data: { labels: bizData.map(u => (u.businessName || '—').slice(0, 15)), datasets: [{ label: 'Business', data: bizData.map(() => Math.floor(Math.random() * 50) + 5), backgroundColor: 'rgba(0,184,148,.6)', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { color: '#9a9ab0' }, grid: { color: 'rgba(255,255,255,.05)' } }, y: { ticks: { color: '#9a9ab0', font: { size: 11 } }, grid: { display: false } } } }
+    });
+  }
+
+  // Product Chart
+  const ctx4 = document.getElementById('superProductChart');
+  if (ctx4) {
+    if (state.superCharts.product) state.superCharts.product.destroy();
+    const topProds = state.superProducts.slice(0, 8);
+    state.superCharts.product = new Chart(ctx4, {
+      type: 'bar',
+      data: { labels: topProds.map(p => (p.name || '—').slice(0, 15)), datasets: [{ label: 'Price', data: topProds.map(p => p.price || 0), backgroundColor: 'rgba(243,156,18,.6)', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { color: '#9a9ab0' }, grid: { color: 'rgba(255,255,255,.05)' } }, y: { ticks: { color: '#9a9ab0', font: { size: 11 } }, grid: { display: false } } } }
+    });
+  }
+}
+
+function renderSuperUsers() {
+  const search = (document.getElementById('superUserSearch')?.value || '').toLowerCase();
+  const filtered = state.superUsers.filter(u =>
+    (u.name || '').toLowerCase().includes(search) ||
+    (u.email || '').toLowerCase().includes(search) ||
+    (u.businessName || '').toLowerCase().includes(search)
+  );
+  const body = document.getElementById('superUsersBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-s"><p>Hakuna watumiaji</p></td></tr>';
+    return;
+  }
+  body.innerHTML = filtered.map(u => `
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:8px"><div class="emp-av" style="width:30px;height:30px;font-size:11px;background:${getAvatarColor(u.name)}">${getInitials(u.name)}</div>${u.name || '—'}</div></td>
+      <td>${u.email || '—'}</td>
+      <td>${u.businessName || '—'}</td>
+      <td>${u.businessCategory || '—'}</td>
+      <td><span class="status-badge ${u.status === 'active' ? 'active' : 'suspended'}">${u.status || 'active'}</span></td>
+      <td>${fmtDate(u.createdAt)}</td>
+      <td>
+        <button class="btn btn-o btn-xs" onclick="viewSuperUser('${u.id}')"><i class="fas fa-eye"></i></button>
+        <button class="btn btn-d btn-xs" onclick="superDeleteUser('${u.id}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+async function viewSuperUser(userId) {
+  const user = state.superUsers.find(u => u.id === userId);
+  if (!user) return;
+  document.getElementById('superBodyMain').classList.add('hidden');
+  document.getElementById('superUserDetail').classList.remove('hidden');
+  document.getElementById('superBackBtn').classList.add('show');
+
+  // Load user's sub-collections
+  let salesCount = 0, productsCount = 0, debtsTotal = 0;
+  try {
+    const bizId = user.businessId || user.id;
+    const salesSnap = await getDocs(query(collection(db, 'sales'), where('businessId', '==', bizId)));
+    salesCount = salesSnap.size;
+    const prodSnap = await getDocs(query(collection(db, 'products'), where('businessId', '==', bizId)));
+    productsCount = prodSnap.size;
+    const debtSnap = await getDocs(query(collection(db, 'debts'), where('businessId', '==', bizId)));
+    debtSnap.forEach(d => { const data = d.data(); debtsTotal += ((data.amount || 0) - (data.paid || 0)); });
+  } catch (err) { console.error('View super user error:', err); }
+
+  document.getElementById('superUserDetailContent').innerHTML = `
+    <div class="super-card">
+      <div class="super-card-head"><h3><i class="fas fa-user"></i> Maelezo ya Mtumiaji</h3></div>
+      <div class="super-info-card">
+        <p><strong>Jina:</strong> ${user.name || '—'}</p>
+        <p><strong>Barua Pepe:</strong> ${user.email || '—'}</p>
+        <p><strong>Simu:</strong> ${user.phone || '—'}</p>
+        <p><strong>Biashara:</strong> ${user.businessName || '—'}</p>
+        <p><strong>Aina:</strong> ${user.businessCategory || '—'}</p>
+        <p><strong>Jukumu:</strong> <span class="role-badge" style="background:var(--primary-bg);color:var(--primary2)">${ROLE_LABELS[user.role] || user.role || '—'}</span></p>
+        <p><strong>Hali:</strong> <span class="status-badge ${user.status === 'active' ? 'active' : 'suspended'}">${user.status || 'active'}</span></p>
+        <p><strong>Alijiunga:</strong> ${fmtDateTime(user.createdAt)}</p>
+      </div>
+    </div>
+    <div class="super-metrics">
+      <div class="sm-card"><h4>Mauzo</h4><div class="sm-val">${salesCount}</div></div>
+      <div class="sm-card"><h4>Bidhaa</h4><div class="sm-val">${productsCount}</div></div>
+      <div class="sm-card"><h4>Madeni</h4><div class="sm-val" style="color:var(--danger)">${fmt(debtsTotal)}</div></div>
+    </div>`;
+}
+
+function returnToSuperPanel() {
+  document.getElementById('superBodyMain').classList.remove('hidden');
+  document.getElementById('superUserDetail').classList.add('hidden');
+  document.getElementById('superBackBtn').classList.remove('show');
+}
+
+async function superDeleteUser(userId) {
+  if (!confirm('Una uhakika unataka kufuta mtumiaji huyu?')) return;
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+    state.superUsers = state.superUsers.filter(u => u.id !== userId);
+    renderSuperUsers();
+    renderSuperMetrics();
+    toast('Mtumiaji amefutwa.', 's');
+  } catch (err) {
+    console.error('Super delete user error:', err);
+    toast('Imeshindwa kufuta mtumiaji.', 'e');
+  }
+}
+
+// ============================================
+// SUPER ADS CRUD
+// ============================================
+function renderSuperAds() {
+  const list = document.getElementById('superAdsList');
+  if (state.superAds.length === 0) {
+    list.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna tangazo</p></div>';
+    return;
+  }
+  list.innerHTML = state.superAds.map(a => `
+    <div class="super-ad-item">
+      ${a.image ? `<img src="${a.image}" class="super-ad-thumb"/>` : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-image"></i></div>'}
+      <div class="super-ad-info"><h5>${a.title || '—'}</h5><p>${a.businessName || '—'}</p></div>
+      <div class="super-ad-actions">
+        <button class="btn btn-o btn-xs" onclick="editSuperAd('${a.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-d btn-xs" onclick="deleteSuperAd('${a.id}')"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`).join('');
+}
+
+function openSuperAdModal() {
+  document.getElementById('superAdModalTitle').textContent = 'New Advertisement';
+  document.getElementById('superAdId').value = '';
+  document.getElementById('superAdTitle').value = '';
+  document.getElementById('superAdDesc').value = '';
+  document.getElementById('superAdImage').value = '';
+  document.getElementById('superAdLink').value = '';
+  document.getElementById('superAdBusiness').value = '';
+  document.getElementById('superAdModal').style.display = 'flex';
+}
+function closeSuperAdModal() { document.getElementById('superAdModal').style.display = 'none'; }
+
+function editSuperAd(id) {
+  const a = state.superAds.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('superAdModalTitle').textContent = 'Edit Advertisement';
+  document.getElementById('superAdId').value = a.id;
+  document.getElementById('superAdTitle').value = a.title || '';
+  document.getElementById('superAdDesc').value = a.description || '';
+  document.getElementById('superAdImage').value = a.image || '';
+  document.getElementById('superAdLink').value = a.link || '';
+  document.getElementById('superAdBusiness').value = a.businessName || '';
+  document.getElementById('superAdModal').style.display = 'flex';
+}
+
+async function saveSuperAd(e) {
+  e.preventDefault();
+  const id = document.getElementById('superAdId').value;
+  const data = {
+    title: document.getElementById('superAdTitle').value.trim(),
+    description: document.getElementById('superAdDesc').value.trim(),
+    image: document.getElementById('superAdImage').value.trim(),
+    link: document.getElementById('superAdLink').value.trim(),
+    businessName: document.getElementById('superAdBusiness').value.trim(),
+    updatedAt: serverTimestamp()
+  };
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'publicAds', id), data);
+      const idx = state.superAds.findIndex(a => a.id === id);
+      if (idx !== -1) state.superAds[idx] = { ...state.superAds[idx], ...data };
+      toast('Tangazo limesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'publicAds'), data);
+      state.superAds.unshift({ id: ref.id, ...data });
+      toast('Tangazo limeongezwa.', 's');
+    }
+    closeSuperAdModal();
+    renderSuperAds();
+  } catch (err) {
+    console.error('Save super ad error:', err);
+    toast('Imeshindwa kuhifadhi tangazo.', 'e');
+  }
+}
+
+async function deleteSuperAd(id) {
+  if (!confirm('Futa tangazo hili?')) return;
+  try {
+    await deleteDoc(doc(db, 'publicAds', id));
+    state.superAds = state.superAds.filter(a => a.id !== id);
+    renderSuperAds();
+    toast('Tangazo limefutwa.', 's');
+  } catch (err) {
+    console.error('Delete super ad error:', err);
+    toast('Imeshindwa kufuta tangazo.', 'e');
+  }
+}
+
+// ============================================
+// SUPER PRODUCTS CRUD
+// ============================================
+function renderSuperProducts() {
+  const list = document.getElementById('superProductsList');
+  if (state.superProducts.length === 0) {
+    list.innerHTML = '<div class="empty-s"><i class="fas fa-boxes-stacked"></i><p>Hakuna bidhaa</p></div>';
+    return;
+  }
+  list.innerHTML = state.superProducts.map(p => `
+    <div class="super-prod-item">
+      ${p.image ? `<img src="${p.image}" class="super-ad-thumb"/>` : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-box"></i></div>'}
+      <div class="super-ad-info"><h5>${p.name || '—'}</h5><p>${p.sellerName || '—'} — <span style="color:var(--success);font-weight:600">${fmt(p.price || 0)} TZS</span></p></div>
+      <div class="super-ad-actions">
+        <button class="btn btn-o btn-xs" onclick="editSuperProduct('${p.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-d btn-xs" onclick="deleteSuperProduct('${p.id}')"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`).join('');
+}
+
+function openSuperProdModal() {
+  document.getElementById('superProdModalTitle').textContent = 'New Product';
+  document.getElementById('superProdId').value = '';
+  document.getElementById('superProdName').value = '';
+  document.getElementById('superProdDesc').value = '';
+  document.getElementById('superProdPrice').value = '';
+  document.getElementById('superProdImage').value = '';
+  document.getElementById('superProdSeller').value = '';
+  document.getElementById('superProdModal').style.display = 'flex';
+}
+function closeSuperProdModal() { document.getElementById('superProdModal').style.display = 'none'; }
+
+function editSuperProduct(id) {
+  const p = state.superProducts.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('superProdModalTitle').textContent = 'Edit Product';
+  document.getElementById('superProdId').value = p.id;
+  document.getElementById('superProdName').value = p.name || '';
+  document.getElementById('superProdDesc').value = p.description || '';
+  document.getElementById('superProdPrice').value = p.price || '';
+  document.getElementById('superProdImage').value = p.image || '';
+  document.getElementById('superProdSeller').value = p.sellerName || '';
+  document.getElementById('superProdModal').style.display = 'flex';
+}
+
+async function saveSuperProduct(e) {
+  e.preventDefault();
+  const id = document.getElementById('superProdId').value;
+  const data = {
+    name: document.getElementById('superProdName').value.trim(),
+    description: document.getElementById('superProdDesc').value.trim(),
+    price: parseFloat(document.getElementById('superProdPrice').value) || 0,
+    image: document.getElementById('superProdImage').value.trim(),
+    sellerName: document.getElementById('superProdSeller').value.trim(),
+    updatedAt: serverTimestamp()
+  };
+  try {
+    if (id) {
+      await updateDoc(doc(db, 'publicProducts', id), data);
+      const idx = state.superProducts.findIndex(p => p.id === id);
+      if (idx !== -1) state.superProducts[idx] = { ...state.superProducts[idx], ...data };
+      toast('Bidhaa imesasishwa.', 's');
+    } else {
+      data.createdAt = serverTimestamp();
+      const ref = await addDoc(collection(db, 'publicProducts'), data);
+      state.superProducts.unshift({ id: ref.id, ...data });
+      toast('Bidhaa imeongezwa.', 's');
+    }
+    closeSuperProdModal();
+    renderSuperProducts();
+  } catch (err) {
+    console.error('Save super product error:', err);
+    toast('Imeshindwa kuhifadhi bidhaa.', 'e');
+  }
+}
+
+async function deleteSuperProduct(id) {
+  if (!confirm('Futa bidhaa hii?')) return;
+  try {
+    await deleteDoc(doc(db, 'publicProducts', id));
+    state.superProducts = state.superProducts.filter(p => p.id !== id);
+    renderSuperProducts();
+    toast('Bidhaa imefutwa.', 's');
+  } catch (err) {
+    console.error('Delete super product error:', err);
+    toast('Imeshindwa kufuta bidhaa.', 'e');
+  }
+}
+
+// ============================================
+// PDF EXPORT (Simple Text-based)
+// ============================================
+function exportUsersPDF() {
+  if (state.superUsers.length === 0) { toast('Hakuna watumiaji kuexport.', 'w'); return; }
+  let text = 'BIZBOOK - USERS REPORT\n';
+  text += '======================\n\n';
+  text += `Generated: ${new Date().toLocaleString()}\n`;
+  text += `Total Users: ${state.superUsers.length}\n\n`;
+  text += 'NAME | EMAIL | BUSINESS | CATEGORY | ROLE | STATUS | JOINED\n';
+  text += '-----|-------|----------|----------|------|--------|-------\n';
+  state.superUsers.forEach(u => {
+    text += `${u.name || '—'} | ${u.email || '—'} | ${u.businessName || '—'} | ${u.businessCategory || '—'} | ${ROLE_LABELS[u.role] || u.role || '—'} | ${u.status || 'active'} | ${fmtDate(u.createdAt)}\n`;
+  });
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bizbook_users_${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Ripoti imeshushwa.', 's');
+}
+
+// ============================================
+// PUBLIC DATA (Landing Page)
+// ============================================
+async function loadPublicData() {
+  await loadPublicAds();
+  await loadPublicProducts();
+}
+
+async function loadPublicAds() {
+  try {
+    const q = query(collection(db, 'publicAds'), orderBy('createdAt', 'desc'), limit(6));
+    const snap = await getDocs(q);
+    state.publicAds = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const grid = document.getElementById('publicAdsGrid');
+    if (state.publicAds.length === 0) {
+      grid.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna tangazo bado</p></div>';
+      return;
+    }
+    grid.innerHTML = state.publicAds.map(a => `
+      <div class="pub-ad-card">
+        ${a.image ? `<img src="${a.image}" class="pub-ad-img"/>` : '<div class="pub-ad-img-placeholder"><i class="fas fa-bullhorn"></i></div>'}
+        <div class="pub-ad-body">
+          <h4>${a.title || '—'}</h4>
+          <p>${(a.description || '').slice(0, 100)}</p>
+          <span class="pub-ad-seller">${a.businessName || ''}</span>
+          ${a.link ? `<a class="pub-ad-link" href="${a.link}" target="_blank">Soma zaidi <i class="fas fa-external-link-alt"></i></a>` : ''}
+        </div>
+      </div>`).join('');
+  } catch (err) { console.error('Load public ads error:', err); }
+}
+
+async function loadPublicProducts() {
+  try {
+    const q = query(collection(db, 'publicProducts'), orderBy('createdAt', 'desc'), limit(8));
+    const snap = await getDocs(q);
+    state.publicProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const grid = document.getElementById('publicProductsGrid');
+    if (state.publicProducts.length === 0) {
+      grid.innerHTML = '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p></div>';
+      return;
+    }
+    grid.innerHTML = state.publicProducts.map(p => `
+      <div class="pub-prod-card">
+        ${p.image ? `<img src="${p.image}" class="pub-prod-img"/>` : '<div class="pub-prod-img-placeholder"><i class="fas fa-box"></i></div>'}
+        <div class="pub-prod-body">
+          <h4>${p.name || '—'}</h4>
+          <p>${(p.description || '').slice(0, 60)}</p>
+          <div class="pub-prod-price">${fmt(p.price || 0)} TZS</div>
+          <div class="pub-prod-seller">${p.sellerName || ''}</div>
+        </div>
+      </div>`).join('');
+  } catch (err) { console.error('Load public products error:', err); }
+}
+
+// ============================================
+// EXPOSE FUNCTIONS FOR INLINE HTML HANDLERS
+// ============================================
+window.showScreen = showScreen;
+window.showAuth = showAuth;
+window.showLanding = showLanding;
+window.switchAuthTab = switchAuthTab;
+window.nextRegStep = nextRegStep;
+window.togglePw = togglePw;
+window.checkPwStrength = checkPwStrength;
+window.handleLogin = handleLogin;
+window.handleRegister = handleRegister;
+window.handleResetPassword = handleResetPassword;
+window.handleLogout = handleLogout;
+window.selectRole = selectRole;
+window.goBackToAuth = goBackToAuth;
+window.navigateTo = navigateTo;
+window.openSidebar = openSidebar;
+window.closeSidebar = closeSidebar;
+window.toggleUserDropdown = toggleUserDropdown;
+window.closeUserDropdown = closeUserDropdown;
+window.toggleNotifPanel = toggleNotifPanel;
+window.calcPrice = calcPrice;
+window.openPriceCalculator = openPriceCalculator;
+window.closePriceCalculator = closePriceCalculator;
+window.addToCart = addToCart;
+window.updateCartQty = updateCartQty;
+window.removeFromCart = removeFromCart;
+window.handleCheckout = handleCheckout;
+window.closeSaleModal = closeSaleModal;
+window.printReceipt = printReceipt;
+window.openProductModal = openProductModal;
+window.closeProductModal = closeProductModal;
+window.editProduct = editProduct;
+window.saveProduct = saveProduct;
+window.openPurchaseModal = openPurchaseModal;
+window.closePurchaseModal = closePurchaseModal;
+window.savePurchase = savePurchase;
+window.openSupplierModal = openSupplierModal;
+window.closeSupplierModal = closeSupplierModal;
+window.editSupplier = editSupplier;
+window.saveSupplier = saveSupplier;
+window.openCustomerModal = openCustomerModal;
+window.closeCustomerModal = closeCustomerModal;
+window.editCustomer = editCustomer;
+window.saveCustomer = saveCustomer;
+window.openDebtModal = openDebtModal;
+window.closeDebtModal = closeDebtModal;
+window.saveDebt = saveDebt;
+window.openPayDebt = openPayDebt;
+window.closePayDebtModal = closePayDebtModal;
+window.handlePayDebt = handlePayDebt;
+window.openExpenseModal = openExpenseModal;
+window.closeExpenseModal = closeExpenseModal;
+window.editExpense = editExpense;
+window.saveExpense = saveExpense;
+window.openEmployeeModal = openEmployeeModal;
+window.closeEmployeeModal = closeEmployeeModal;
+window.editEmployee = editEmployee;
+window.saveEmployee = saveEmployee;
+window.openUserModal = openUserModal;
+window.closeUserModal = closeUserModal;
+window.saveUser = saveUser;
+window.uploadLogo = uploadLogo;
+window.handleLogoUpload = handleLogoUpload;
+window.handleUpdateProfile = handleUpdateProfile;
+window.confirmDelete = confirmDelete;
+window.closeConfirmModal = closeConfirmModal;
+window.executeConfirm = executeConfirm;
+window.superLogin = superLogin;
+window.superLogout = superLogout;
+window.viewSuperUser = viewSuperUser;
+window.returnToSuperPanel = returnToSuperPanel;
+window.superDeleteUser = superDeleteUser;
+window.openSuperAdModal = openSuperAdModal;
+window.closeSuperAdModal = closeSuperAdModal;
+window.editSuperAd = editSuperAd;
+window.saveSuperAd = saveSuperAd;
+window.deleteSuperAd = deleteSuperAd;
+window.openSuperProdModal = openSuperProdModal;
+window.closeSuperProdModal = closeSuperProdModal;
+window.editSuperProduct = editSuperProduct;
+window.saveSuperProduct = saveSuperProduct;
+window.deleteSuperProduct = deleteSuperProduct;
+window.exportUsersPDF = exportUsersPDF;
+window.loadPublicData = loadPublicData;
+window.loadDashboard = loadDashboard;
+window.loadFinancialDashboard = loadFinancialDashboard;
+window.renderPosProducts = renderPosProducts;
+window.renderProducts = renderProducts;
+window.renderSales = renderSales;
+window.renderPurchases = renderPurchases;
+window.renderSuppliers = renderSuppliers;
+window.renderCustomers = renderCustomers;
+window.renderDebts = renderDebts;
+window.renderExpenses = renderExpenses;
+window.renderEmployees = renderEmployees;
+window.renderUsers = renderUsers;
+window.renderSuperUsers = renderSuperUsers;
+window.showSaleReceipt = showSaleReceipt;
+window.loadNotifications = loadNotifications;
+
+// ============================================
+// INITIAL STARTUP
+// ============================================
+loadPublicData();
+
+</script>
+</body>
+</html>
     <div class="mc r"><div class="mc-icon"><i class="fas fa-arrow-down"></i></div><h3>${fmt(expenses)}</h3><p>Matumizi (TZS)</
