@@ -2408,8 +2408,12 @@ async function activateUser(uid) {
   }
 }
 // ============================================================
-// SUPER ADMIN LOGIN — FIREBASE AUTH + FIRESTORE MODULAR
+// SUPER ADMIN LOGIN
+// FIREBASE AUTH + FIRESTORE MODULAR
 // ============================================================
+
+const SUPER_EMAIL = 'admin@mauzopoa.app';
+
 async function superLogin(e) {
   e.preventDefault();
 
@@ -2419,11 +2423,19 @@ async function superLogin(e) {
     errEl.textContent = '';
   }
 
-  const emailEl = document.getElementById('superUser');
-  const passEl = document.getElementById('superPass');
+  const email = document
+    .getElementById('superUser')
+    .value
+    .trim()
+    .toLowerCase();
 
-  const email = emailEl?.value.trim().toLowerCase();
-  const pass = passEl?.value || '';
+  const pass = document
+    .getElementById('superPass')
+    .value;
+
+  // ==========================================================
+  // BASIC VALIDATION
+  // ==========================================================
 
   if (!email || !pass) {
     if (errEl) {
@@ -2433,11 +2445,26 @@ async function superLogin(e) {
     return;
   }
 
+  // ==========================================================
+  // SUPER ADMIN EMAIL CHECK
+  // ==========================================================
+
+  if (email !== SUPER_EMAIL.toLowerCase()) {
+
+    if (errEl) {
+      errEl.textContent =
+        'Hakikisha umetumia barua pepe sahihi ya Super Administrator.';
+    }
+
+    return;
+  }
+
   try {
 
     // ========================================================
     // 1. FIREBASE AUTHENTICATION
     // ========================================================
+
     const cred = await signInWithEmailAndPassword(
       auth,
       email,
@@ -2447,99 +2474,43 @@ async function superLogin(e) {
     const user = cred.user;
 
     console.log(
-      'Super Admin authenticated:',
+      'SUPER ADMIN AUTH SUCCESS:',
       user.uid,
       user.email
     );
 
     // ========================================================
-    // 2. GET SUPER ADMIN USER DOCUMENT
+    // 2. SUPER ADMIN FIRESTORE DOCUMENT
     // ========================================================
-    const userRef = doc(
+
+    const superAdminRef = doc(
       db,
       'users',
       user.uid
     );
 
-    const userSnap = await getDoc(userRef);
+    const superAdminSnap = await getDoc(
+      superAdminRef
+    );
 
     // ========================================================
-    // 3. USER DOCUMENT EXISTS
+    // 3. CREATE / REPAIR SUPER ADMIN DOCUMENT
     // ========================================================
-    if (userSnap.exists()) {
 
-      const userData = userSnap.data();
+    /*
+      IMPORTANT:
 
-      console.log(
-        'Super Admin profile:',
-        userData
-      );
+      Kwa sababu email tayari imethibitishwa kuwa
+      SUPER_EMAIL, tunahakikisha document yake ina
+      role = superAdmin.
 
-      // ------------------------------------------------------
-      // VERIFY ROLE
-      // ------------------------------------------------------
-      if (userData.role !== 'superAdmin') {
+      merge:true inalinda fields nyingine.
+    */
 
-        await signOut(auth);
+    if (!superAdminSnap.exists()) {
 
-        if (errEl) {
-          errEl.textContent =
-            'Hujaidhinishwa kama Super Administrator.';
-        }
-
-        return;
-      }
-
-      // ------------------------------------------------------
-      // CHECK SUSPENSION
-      // ------------------------------------------------------
-      if (userData.status === 'suspended') {
-
-        await signOut(auth);
-
-        if (errEl) {
-          errEl.textContent =
-            'Akaunti ya Super Administrator imesimamishwa.';
-        }
-
-        return;
-      }
-
-    }
-
-    // ========================================================
-    // 4. USER DOCUMENT DOES NOT EXIST
-    // ========================================================
-    else {
-
-      /*
-       * IMPORTANT:
-       * Authentication account exists, but users/{uid}
-       * document is missing.
-       *
-       * Only create Super Admin profile if this is the
-       * authorized Super Admin email.
-       */
-
-      const SUPER_EMAIL = 'nashiri2waziri29@gmail.com';
-
-      if (email !== SUPER_EMAIL.toLowerCase()) {
-
-        await signOut(auth);
-
-        if (errEl) {
-          errEl.textContent =
-            'Hujaidhinishwa kama Super Administrator.';
-        }
-
-        return;
-      }
-
-      // ------------------------------------------------------
-      // CREATE MISSING SUPER ADMIN DOCUMENT
-      // ------------------------------------------------------
       await setDoc(
-        userRef,
+        superAdminRef,
         {
           name:
             user.displayName ||
@@ -2547,7 +2518,7 @@ async function superLogin(e) {
 
           email:
             user.email ||
-            email,
+            SUPER_EMAIL,
 
           role: 'superAdmin',
 
@@ -2565,53 +2536,156 @@ async function superLogin(e) {
       );
 
       console.log(
-        'Super Admin profile created successfully:',
-        user.uid
+        'Super Admin document created.'
       );
+
+    } else {
+
+      const existingData =
+        superAdminSnap.data();
+
+      // ======================================================
+      // IF DOCUMENT EXISTS BUT ROLE IS WRONG
+      // REPAIR IT BECAUSE EMAIL IS THE AUTHORIZED SUPER EMAIL
+      // ======================================================
+
+      if (
+        existingData.role !== 'superAdmin'
+      ) {
+
+        console.warn(
+          'Incorrect Super Admin role detected. Repairing...'
+        );
+
+        await setDoc(
+          superAdminRef,
+          {
+            role: 'superAdmin',
+            email:
+              user.email ||
+              SUPER_EMAIL,
+            status: 'active',
+            updatedAt: serverTimestamp()
+          },
+          {
+            merge: true
+          }
+        );
+
+      }
     }
 
     // ========================================================
-    // 5. CLEAR ERROR
+    // 4. READ AGAIN AFTER REPAIR
     // ========================================================
+
+    const verifiedSnap = await getDoc(
+      superAdminRef
+    );
+
+    if (!verifiedSnap.exists()) {
+
+      await signOut(auth);
+
+      if (errEl) {
+        errEl.textContent =
+          'Imeshindikana kuunda taarifa za Super Administrator.';
+      }
+
+      return;
+    }
+
+    const verifiedData =
+      verifiedSnap.data();
+
+    // ========================================================
+    // 5. FINAL ROLE VERIFICATION
+    // ========================================================
+
+    if (
+      verifiedData.role !== 'superAdmin'
+    ) {
+
+      await signOut(auth);
+
+      if (errEl) {
+        errEl.textContent =
+          'Imeshindikana kuthibitisha Super Administrator.';
+      }
+
+      return;
+    }
+
+    // ========================================================
+    // 6. CHECK SUSPENSION
+    // ========================================================
+
+    if (
+      verifiedData.status === 'suspended'
+    ) {
+
+      await signOut(auth);
+
+      if (errEl) {
+        errEl.textContent =
+          'Akaunti ya Super Administrator imesimamishwa.';
+      }
+
+      return;
+    }
+
+    // ========================================================
+    // 7. LOGIN SUCCESS
+    // ========================================================
+
     if (errEl) {
       errEl.textContent = '';
     }
 
+    console.log(
+      'SUPER ADMIN VERIFIED SUCCESSFULLY'
+    );
+
     // ========================================================
-    // 6. HIDE LOGIN BOX
+    // 8. HIDE LOGIN
     // ========================================================
+
     const loginBox =
-      document.getElementById('superLoginBox');
+      document.getElementById(
+        'superLoginBox'
+      );
 
     if (loginBox) {
       loginBox.classList.add('hidden');
     }
 
     // ========================================================
-    // 7. SHOW SUPER ADMIN PANEL
+    // 9. SHOW SUPER ADMIN PANEL
     // ========================================================
+
     const superPanel =
-      document.getElementById('superPanel');
+      document.getElementById(
+        'superPanel'
+      );
 
     if (superPanel) {
       superPanel.classList.remove('hidden');
     }
 
     // ========================================================
-    // 8. LOAD SUPER ADMIN DATA
+    // 10. LOAD SUPER ADMIN DATA
     // ========================================================
-    if (typeof loadSuperData === 'function') {
+
+    if (
+      typeof loadSuperData === 'function'
+    ) {
       await loadSuperData();
     }
-
-    console.log(
-      'SUPER ADMIN LOGIN SUCCESS'
-    );
 
   } catch (err) {
 
     console.error(
-      'Super Admin Login Error:',
+      'SUPER ADMIN LOGIN ERROR:',
       err.code,
       err.message,
       err
@@ -2623,7 +2697,7 @@ async function superLogin(e) {
 
       case 'auth/user-not-found':
         errEl.textContent =
-          'Akaunti ya Super Administrator haipo kwenye Firebase Authentication.';
+          'Akaunti ya Super Administrator haijasajiliwa kwenye Firebase Authentication.';
         break;
 
       case 'auth/wrong-password':
@@ -2648,13 +2722,12 @@ async function superLogin(e) {
 
       case 'auth/api-key-not-valid.-please-pass-a-valid-api-key':
         errEl.textContent =
-          'Firebase API Key sio sahihi. Kagua Firebase Configuration.';
+          'Firebase API Key sio sahihi.';
         break;
 
       case 'permission-denied':
-      case 'firestore/permission-denied':
         errEl.textContent =
-          'Huna ruhusa ya kusoma taarifa za Super Administrator.';
+          'Firebase Firestore imekataa ruhusa ya kusoma au kuandika taarifa.';
         break;
 
       default:
@@ -2663,7 +2736,6 @@ async function superLogin(e) {
     }
   }
 }
-
 async function superLogout() {
   try { await signOut(auth); } catch (err) { console.error(err); }
 }
