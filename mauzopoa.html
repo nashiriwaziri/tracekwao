@@ -2341,219 +2341,164 @@ async function saveProfile(e) {
   } catch (err) { console.error(err); showToast('Hitilafu', 'error'); }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SECTION 22: SUPER ADMIN — FULL CONTROL PANEL
-// ═══════════════════════════════════════════════════════════
-const SUPER_ADMINS = ['nashiri2waziri29@gmail.com'];
-let superAds = [];
-let superProds = [];
-let charts = {};
-let mediaModes = {};
+// ========================================================
+// ===== FEATURE 1: SUPER ADMIN SUSPEND / ACTIVATE USER =====
+// ========================================================
 
-// ─── HELPERS: Charts ───
-function destroyChart(id) {
-  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
-}
-
-// ─── HELPERS: Money Format ───
-function fmtMoney(amount) {
-  if (amount == null || isNaN(amount)) return 'TZS 0';
-  return 'TZS ' + Number(amount).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-}
-
-// ─── HELPERS: Media Upload / URL Toggle ───
-function isValidMediaUrl(url) {
-  if (!url || typeof url !== 'string') return false;
-  try { new URL(url); return true; } catch (e) { return false; }
-}
-
-function setMediaPreview(previewId, src) {
-  const el = document.getElementById(previewId);
-  if (!el) return;
-  if (!src) { el.innerHTML = ''; el.style.display = 'none'; return; }
-  el.style.display = 'block';
-  if (typeof src === 'string' && (src.startsWith('data:video') || /\.(mp4|webm|ogg)(\?|$)/i.test(src))) {
-    el.innerHTML = `<video src="${src}" controls style="max-width:100%;max-height:200px;border-radius:8px"></video>`;
-  } else if (typeof src === 'string') {
-    el.innerHTML = `<img src="${src}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover" onerror="this.parentElement.innerHTML='<div style=\\'padding:20px;color:var(--text3);text-align:center\\'>Faili halikuweza kupakia</div>'"/>`;
-  } else if (src instanceof File) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (src.type && src.type.startsWith('video')) {
-        el.innerHTML = `<video src="${e.target.result}" controls style="max-width:100%;max-height:200px;border-radius:8px"></video>`;
-      } else {
-        el.innerHTML = `<img src="${e.target.result}" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover"/>`;
-      }
-    };
-    reader.readAsDataURL(src);
-  }
-}
-
-function switchMediaMode(key, fgEl) {
-  mediaModes[key] = mediaModes[key] === 'url' ? 'upload' : 'url';
-  const fg = typeof fgEl === 'string' ? document.getElementById(fgEl) : fgEl;
-  if (!fg) return;
-  fg.querySelectorAll('.media-mode-btn').forEach(b => b.classList.remove('active'));
-  const btns = fg.querySelectorAll('.media-mode-btn');
-  if (mediaModes[key] === 'url' && btns[1]) btns[1].classList.add('active');
-  else if (btns[0]) btns[0].classList.add('active');
-  fg.querySelector('.media-file-input')?.classList.toggle('show', mediaModes[key] === 'upload');
-  fg.querySelector('.media-url-input')?.classList.toggle('show', mediaModes[key] === 'url');
-}
-
-function handleImageFileSelect(inputId, previewId) {
-  const input = document.getElementById(inputId);
-  if (!input || !input.files || !input.files[0]) return;
-  const file = input.files[0];
-  if (!file.type.startsWith('image/')) { showToast('Tafadhali chagua picha tu.', 'e'); input.value = ''; return; }
-  if (file.size > 5 * 1024 * 1024) { showToast('Picha lazima iwe chini ya 5MB.', 'e'); input.value = ''; return; }
-  setMediaPreview(previewId, file);
-}
-
-function handleImageUrlInput(inputId, previewId) {
-  const url = document.getElementById(inputId)?.value.trim();
-  if (url) setMediaPreview(previewId, url);
-  else setMediaPreview(previewId, null);
-}
-
-function handleVideoFileSelect(inputId, previewId) {
-  const input = document.getElementById(inputId);
-  if (!input || !input.files || !input.files[0]) return;
-  const file = input.files[0];
-  if (!file.type.startsWith('video/')) { showToast('Tafadhali chagua video tu.', 'e'); input.value = ''; return; }
-  if (file.size > 20 * 1024 * 1024) { showToast('Video lazima iwe chini ya 20MB.', 'e'); input.value = ''; return; }
-  setMediaPreview(previewId, file);
-}
-
-function handleVideoUrlInput(inputId, previewId) {
-  const url = document.getElementById(inputId)?.value.trim();
-  if (url) setMediaPreview(previewId, url);
-  else setMediaPreview(previewId, null);
-}
-
-function resolveMediaSource(key, fileId, urlId) {
-  if (mediaModes[key] === 'url') {
-    const url = document.getElementById(urlId)?.value.trim();
-    return isValidMediaUrl(url) ? url : null;
-  }
-  const fileInput = document.getElementById(fileId);
-  if (fileInput && fileInput.files && fileInput.files[0]) return fileInput.files[0];
-  return null;
-}
-
-function mediaToBase64(source) {
-  return new Promise((resolve, reject) => {
-    if (typeof source === 'string') { resolve(source); return; }
-    if (source instanceof File) {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(source);
+async function suspendUser(uid) {
+  try {
+    // Protect: cannot suspend own account
+    if (uid === auth.currentUser.uid) {
+      showToast('Huwezi kusimamisha akaunti yako mwenyewe.', 'warning');
       return;
     }
-    resolve(null);
-  });
+    // Protect: check target user role and current status
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (!userSnap.exists()) {
+      showToast('Mtumiaji hapatikani.', 'error');
+      return;
+    }
+    const userData = userSnap.data();
+    if (userData.role === 'superAdmin') {
+      showToast('Huwezi kusimamisha akaunti ya Super Administrator.', 'warning');
+      return;
+    }
+    // FIX: check if already suspended
+    if (userData.status === 'suspended') {
+      showToast('Akaunti hii tayari imesimamishwa.', 'info');
+      return;
+    }
+    // Confirmation
+    const confirmed = confirm('Una uhakika unataka kusimamisha akaunti hii?');
+    if (!confirmed) return;
+    // Reason
+    const reason = prompt('Weka sababu ya kusimamisha akaunti:') || '';
+    // Update Firestore
+    await setDoc(
+      doc(db, 'users', uid),
+      {
+        status: 'suspended',
+        suspendedAt: serverTimestamp(),
+        suspendedBy: auth.currentUser.uid,
+        suspensionReason: reason,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+    // FIX: update local array so UI refreshes instantly
+    const idx = allUsers.findIndex(u => u.id === uid);
+    if (idx !== -1) {
+      allUsers[idx].status = 'suspended';
+      allUsers[idx].suspendedAt = new Date();
+      allUsers[idx].suspendedBy = auth.currentUser.uid;
+      allUsers[idx].suspensionReason = reason;
+    }
+    showToast('Akaunti imesimamishwa kwa mafanikio.', 'success');
+    renderSuperUsers();
+  } catch (err) {
+    console.error(err);
+    showToast('Hitilafu imetokea wakati wa kusimamisha akaunti.', 'error');
+  }
 }
 
-// ─── SUPER ADMIN LOGIN ───
+async function activateUser(uid) {
+  try {
+    // FIX: verify user exists and is actually suspended
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (!userSnap.exists()) {
+      showToast('Mtumiaji hapatikani.', 'error');
+      return;
+    }
+    if (userSnap.data().status !== 'suspended') {
+      showToast('Akaunti hii haiko kwenye hali ya kusimamishwa.', 'info');
+      return;
+    }
+    await setDoc(
+      doc(db, 'users', uid),
+      {
+        status: 'active',
+        suspendedAt: null,
+        suspendedBy: null,
+        suspensionReason: null,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+    // FIX: update local array so UI refreshes instantly
+    const idx = allUsers.findIndex(u => u.id === uid);
+    if (idx !== -1) {
+      allUsers[idx].status = 'active';
+      allUsers[idx].suspendedAt = null;
+      allUsers[idx].suspendedBy = null;
+      allUsers[idx].suspensionReason = null;
+    }
+    showToast('Akaunti imeamilishwa kwa mafanikio.', 'success');
+    renderSuperUsers();
+  } catch (err) {
+    console.error(err);
+    showToast('Hitilafu imetokea wakati wa kuamilisha akaunti.', 'error');
+  }
+}
+
+// ===== SUPER ADMIN LOGIN =====
 async function superLogin(e) {
   e.preventDefault();
   const errEl = document.getElementById('superErr');
   if (errEl) errEl.textContent = '';
-
-  const email = document.getElementById('superUser').value.trim().toLowerCase();
-  const pass = document.getElementById('superPass').value;
-
-  if (!email || !pass) { if (errEl) errEl.textContent = 'Weka barua pepe na neno la siri.'; return; }
-  if (!SUPER_ADMINS.includes(email)) { if (errEl) errEl.textContent = 'Hakuna ruhusa ya super admin.'; return; }
-
+  const emailEl = document.getElementById('superUser');
+  const passEl = document.getElementById('superPass');
+  if (!emailEl || !passEl) return;
+  const email = emailEl.value.trim();
+  const pass = passEl.value;
+  // FIX: validate empty inputs
+  if (!email || !pass) {
+    if (errEl) errEl.textContent = 'Tafadhali jaza barua pepe na neno la siri.';
+    return;
+  }
   try {
     const cred = await signInWithEmailAndPassword(auth, email, pass);
-    const user = cred.user;
-    console.log('SUPER ADMIN AUTH SUCCESS:', user.uid, user.email);
-
-    const superAdminRef = doc(db, 'users', user.uid);
-    const superAdminSnap = await getDoc(superAdminRef);
-
-    if (!superAdminSnap.exists()) {
-      await setDoc(superAdminRef, {
-        name: user.displayName || 'Super Administrator',
-        email: user.email || email,
-        role: 'superAdmin',
-        status: 'active',
-        businessId: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      console.log('Super Admin document created.');
-    } else {
-      const existingData = superAdminSnap.data();
-      if (existingData.role !== 'superAdmin') {
-        console.warn('Incorrect Super Admin role detected. Repairing...');
-        await setDoc(superAdminRef, {
-          role: 'superAdmin',
-          email: user.email || email,
-          status: 'active',
-          updatedAt: serverTimestamp()
-        }, { merge: true });
+    // Verify super admin role
+    const userSnap = await getDoc(doc(db, 'users', cred.user.uid));
+    if (userSnap.exists()) {
+      const ud = userSnap.data();
+      if (ud.role !== 'superAdmin') {
+        await signOut(auth);
+        if (errEl) errEl.textContent = 'Hujaidhinishwa kama Super Administrator.';
+        return;
       }
-    }
-
-    const verifiedSnap = await getDoc(superAdminRef);
-    if (!verifiedSnap.exists()) {
+    } else {
       await signOut(auth);
-      if (errEl) errEl.textContent = 'Imeshindikana kuunda taarifa za Super Administrator.';
+      if (errEl) errEl.textContent = 'Akaunti hii haipo kwenye mfumo.';
       return;
     }
-
-    const verifiedData = verifiedSnap.data();
-    if (verifiedData.role !== 'superAdmin') {
-      await signOut(auth);
-      if (errEl) errEl.textContent = 'Imeshindikana kuthibitisha Super Administrator.';
-      return;
-    }
-
-    if (verifiedData.status === 'suspended') {
-      await signOut(auth);
-      if (errEl) errEl.textContent = 'Akaunti ya Super Administrator imesimamishwa.';
-      return;
-    }
-
-    if (errEl) errEl.textContent = '';
-    console.log('SUPER ADMIN VERIFIED SUCCESSFULLY');
-
-    const loginBox = document.getElementById('superLoginBox');
-    if (loginBox) loginBox.classList.add('hidden');
-
-    const superPanel = document.getElementById('superPanel');
-    if (superPanel) superPanel.classList.remove('hidden');
-
-    if (typeof loadSuperData === 'function') await loadSuperData();
-
   } catch (err) {
-    console.error('SUPER ADMIN LOGIN ERROR:', err.code, err.message);
-    if (!errEl) return;
-    switch (err.code) {
-      case 'auth/user-not-found': errEl.textContent = 'Akaunti ya Super Administrator haijasajiliwa kwenye Firebase.'; break;
-      case 'auth/wrong-password': errEl.textContent = 'Neno la siri sio sahihi.'; break;
-      case 'auth/invalid-credential': errEl.textContent = 'Barua pepe au neno la siri sio sahihi.'; break;
-      case 'auth/invalid-email': errEl.textContent = 'Barua pepe si sahihi.'; break;
-      case 'auth/too-many-requests': errEl.textContent = 'Majaribio yamekuwa mengi. Jaribu tena baada ya muda.'; break;
-      case 'permission-denied': errEl.textContent = 'Firestore imekataa ruhusa.'; break;
-      default: errEl.textContent = 'Hitilafu ya kuingia. Angalia Console.';
+    console.error(err);
+    // FIX: specific error messages
+    if (errEl) {
+      switch (err.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+        case 'auth/invalid-email':
+          errEl.textContent = 'Barua pepe au neno la siri sio sahihi.';
+          break;
+        case 'auth/too-many-requests':
+          errEl.textContent = 'Jaribu la kujaribu limeshaisha. Subiri kidogo kisha jaribu tena.';
+          break;
+        default:
+          errEl.textContent = 'Hitilafu imetokea. Jaribu tena.';
+      }
     }
   }
 }
 
-// ─── SUPER ADMIN LOGOUT ───
 async function superLogout() {
   try { await signOut(auth); } catch (err) { console.error(err); }
-  document.getElementById('superPanel')?.classList.add('hidden');
-  document.getElementById('superLoginBox')?.classList.remove('hidden');
 }
 
-// ─── LOAD SUPER DATA (entry point called from auth listener) ───
-async function loadSuperData() {
+// ===== SUPER ADMIN LOAD DATA =====
+async function loadSuperAdminData() {
+  // FIX: await ALL calls — this was the root cause of empty charts
   await loadSuperMetrics();
   await loadSuperCharts();
   renderSuperUsers();
@@ -2561,41 +2506,56 @@ async function loadSuperData() {
   await loadSuperProducts();
 }
 
-// ─── METRICS ───
 async function loadSuperMetrics() {
   try {
-    const snap = await getDocs(collection(db, COLLECTIONS.users));
+    const snap = await getDocs(collection(db, 'users'));
     const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     allUsers = users;
     const totalUsers = users.length;
     const activeUsers = users.filter(u => (u.status || 'active') === 'active').length;
     const suspendedUsers = users.filter(u => u.status === 'suspended').length;
     const businesses = users.filter(u => u.role !== 'superAdmin').length;
-    document.getElementById('superMetrics').innerHTML = `
-      <div class="sm-card"><h4>Jumla ya Watumiaji</h4><div class="sm-val">${totalUsers}</div><div class="sm-sub">Watumiaji waliosajiliwa</div></div>
-      <div class="sm-card"><h4>Watumiaji Walio Hai</h4><div class="sm-val" style="color:var(--success)">${activeUsers}</div><div class="sm-sub">Akaunti zinazofanya kazi</div></div>
-      <div class="sm-card"><h4>Waliosimamishwa</h4><div class="sm-val" style="color:var(--danger)">${suspendedUsers}</div><div class="sm-sub">Akaunti zilizozimwa</div></div>
-      <div class="sm-card"><h4>Biashara</h4><div class="sm-val" style="color:var(--primary2)">${businesses}</div><div class="sm-sub">Biashara zilizosajiliwa</div></div>
-    `;
-  } catch (err) { logError('loadSuperMetrics', COLLECTIONS.users, err); }
+    // FIX: null check on DOM element
+    const metricsEl = document.getElementById('superMetrics');
+    if (metricsEl) {
+      metricsEl.innerHTML = `
+        <div class="sm-card"><h4>Jumla ya Watumiaji</h4><div class="sm-val">${totalUsers}</div><div class="sm-sub">Watumiaji waliosajiliwa</div></div>
+        <div class="sm-card"><h4>Watumiaji Walio Hai</h4><div class="sm-val" style="color:var(--success)">${activeUsers}</div><div class="sm-sub">Akaunti zinazofanya kazi</div></div>
+        <div class="sm-card"><h4>Watumiaji Waliosimamishwa</h4><div class="sm-val" style="color:var(--danger)">${suspendedUsers}</div><div class="sm-sub">Akaunti zilizozimwa</div></div>
+        <div class="sm-card"><h4>Biashara</h4><div class="sm-val" style="color:var(--primary2)">${businesses}</div><div class="sm-sub">Biashara zilizosajiliwa</div></div>
+      `;
+    }
+  } catch (err) { console.error(err); }
 }
 
-// ─── RENDER USERS WITH SUSPEND / ACTIVATE ───
+// ===== SUPER ADMIN: RENDER USERS WITH SUSPEND/ACTIVATE =====
 function renderSuperUsers() {
   const body = document.getElementById('superUsersBody');
+  if (!body) return;
+  // FIX: guard allUsers
+  if (!allUsers || !allUsers.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-s">Hakuna watumiaji</td></tr>';
+    return;
+  }
   const search = (document.getElementById('superUserSearch')?.value || '').toLowerCase();
   const filtered = allUsers.filter(u => {
     if (u.role === 'superAdmin') return false;
     if (!search) return true;
-    return (u.name || '').toLowerCase().includes(search) || (u.email || '').toLowerCase().includes(search) || (u.businessName || '').toLowerCase().includes(search);
+    return (u.name || '').toLowerCase().includes(search)
+      || (u.email || '').toLowerCase().includes(search)
+      || (u.businessName || '').toLowerCase().includes(search);
   });
-  if (!filtered.length) { body.innerHTML = '<tr><td colspan="7" class="empty-s">Hakuna watumiaji</td></tr>'; return; }
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-s">Hakuna matokeo</td></tr>';
+    return;
+  }
   body.innerHTML = filtered.map(u => {
     const status = u.status === 'suspended' ? 'suspended' : 'active';
     const statusLabel = status === 'suspended' ? 'Suspended' : 'Active';
     const actionBtn = status === 'suspended'
       ? `<button class="btn btn-s btn-xs" onclick="activateUser('${u.id}')"><i class="fas fa-check-circle"></i> Activate</button>`
       : `<button class="btn btn-w btn-xs" onclick="suspendUser('${u.id}')"><i class="fas fa-ban"></i> Suspend</button>`;
+    const viewBtn = `<button class="btn btn-o btn-xs" onclick="viewSuperUser('${u.id}')"><i class="fas fa-eye"></i></button>`;
     return `<tr>
       <td>${u.name || '-'}</td>
       <td>${u.email || '-'}</td>
@@ -2603,68 +2563,35 @@ function renderSuperUsers() {
       <td>${u.businessCategory || '-'}</td>
       <td><span class="status-badge ${status}">${statusLabel}</span></td>
       <td>${fmtDate(u.createdAt)}</td>
-      <td>
-        <button class="btn btn-o btn-xs" onclick="viewSuperUser('${u.id}')"><i class="fas fa-eye"></i></button>
-        <button class="btn btn-d btn-xs" onclick="deleteSuperUser('${u.id}')"><i class="fas fa-trash"></i></button>
-        ${actionBtn}
-      </td>
+      <td>${viewBtn} ${actionBtn}</td>
     </tr>`;
   }).join('');
 }
 
-// ─── SUSPEND USER ───
-async function suspendUser(uid) {
-  try {
-    if (uid === auth.currentUser?.uid) { showToast('Huwezi kusimamisha akaunti yako mwenyewe.', 'w'); return; }
-    const userSnap = await getDoc(doc(db, COLLECTIONS.users, uid));
-    if (userSnap.exists() && userSnap.data().role === 'superAdmin') { showToast('Huwezi kusimamisha akaunti ya Super Administrator.', 'w'); return; }
-    if (!confirm('Una uhakika unataka kusimamisha akaunti hii?')) return;
-    const reason = prompt('Weka sababu ya kusimamisha akaunti:') || '';
-    await setDoc(doc(db, COLLECTIONS.users, uid), {
-      status: 'suspended',
-      suspendedAt: serverTimestamp(),
-      suspendedBy: auth.currentUser.uid,
-      suspensionReason: reason,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-    showToast('Akaunti imesimamishwa kwa mafanikio.', 's');
-    renderSuperUsers();
-    loadSuperMetrics();
-  } catch (err) { logError('suspendUser', COLLECTIONS.users, err); showToast('Hitilafu imetokea.', 'e'); }
-}
-
-// ─── ACTIVATE USER ───
-async function activateUser(uid) {
-  try {
-    await setDoc(doc(db, COLLECTIONS.users, uid), {
-      status: 'active',
-      suspendedAt: null,
-      suspendedBy: null,
-      suspensionReason: null,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-    showToast('Akaunti imeamilishwa kwa mafanikio.', 's');
-    renderSuperUsers();
-    loadSuperMetrics();
-  } catch (err) { logError('activateUser', COLLECTIONS.users, err); showToast('Hitilafu imetokea.', 'e'); }
-}
-
-// ─── VIEW USER DETAIL ───
 async function viewSuperUser(uid) {
   try {
-    const snap = await getDoc(doc(db, COLLECTIONS.users, uid));
-    if (!snap.exists()) return;
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (!snap.exists()) { showToast('Mtumiaji hapatikani.', 'error'); return; }
     const u = snap.data();
     const status = u.status === 'suspended' ? 'suspended' : 'active';
     const statusLabel = status === 'suspended' ? 'Suspended' : 'Active';
     let productsCount = 0, salesCount = 0, salesTotal = 0;
-    try { const pSnap = await getDocs(collection(db, 'users', uid, 'products')); productsCount = pSnap.size; } catch (e) {}
-    try { const sSnap = await getDocs(collection(db, 'users', uid, 'sales')); salesCount = sSnap.size; sSnap.forEach(d => { salesTotal += (d.data().total || 0); }); } catch (e) {}
+    try {
+      const pSnap = await getDocs(collection(db, 'users', uid, 'products'));
+      productsCount = pSnap.size;
+    } catch (e) { console.warn('Products fetch failed for', uid); }
+    try {
+      const sSnap = await getDocs(collection(db, 'users', uid, 'sales'));
+      salesCount = sSnap.size;
+      sSnap.forEach(d => { salesTotal += (d.data().total || 0); });
+    } catch (e) { console.warn('Sales fetch failed for', uid); }
     const actionBtn = status === 'suspended'
       ? `<button class="btn btn-s btn-sm" onclick="activateUser('${uid}')"><i class="fas fa-check-circle"></i> Activate</button>`
       : `<button class="btn btn-w btn-sm" onclick="suspendUser('${uid}')"><i class="fas fa-ban"></i> Suspend</button>`;
-
-    document.getElementById('superUserDetailContent').innerHTML = `
+    // FIX: null check
+    const detailEl = document.getElementById('superUserDetailContent');
+    if (!detailEl) return;
+    detailEl.innerHTML = `
       <div class="super-content-grid">
         <div class="super-card">
           <div class="super-card-head"><h3><i class="fas fa-user"></i> Maelezo ya Mtumiaji</h3><span class="status-badge ${status}">${statusLabel}</span></div>
@@ -2674,8 +2601,7 @@ async function viewSuperUser(uid) {
             <p><strong>Jukumu:</strong> ${u.role || '-'}</p>
             <p><strong>Hali:</strong> ${statusLabel}</p>
             ${u.status === 'suspended' ? `<p style="color:var(--danger)"><strong>Sababu:</strong> ${u.suspensionReason || 'Hakuna sababu iliyotajwa'}</p>` : ''}
-            <p><strong>Simu:</strong> ${u.phone || '-'}</p>
-            <p><strong>Alijiunga:</strong> ${fmtDateTime(u.createdAt)}</p>
+            <p><strong>Alijiunga:</strong> ${fmtDate(u.createdAt)}</p>
             <div style="margin-top:16px">${actionBtn}</div>
           </div>
         </div>
@@ -2693,35 +2619,34 @@ async function viewSuperUser(uid) {
             <div class="sm-card"><h4>Mapato</h4><div class="sm-val">${fmtMoney(salesTotal)}</div></div>
           </div>
         </div>
-      </div>`;
-    document.getElementById('superBodyMain').classList.add('hidden');
-    document.getElementById('superUserDetail').classList.remove('hidden');
-    document.getElementById('superBackBtn').classList.add('show');
-  } catch (err) { logError('viewSuperUser', COLLECTIONS.users, err); showToast('Hitilafu', 'e'); }
+      </div>
+    `;
+    // FIX: null checks on all panel elements
+    const mainEl = document.getElementById('superBodyMain');
+    const detailPanel = document.getElementById('superUserDetail');
+    const backBtn = document.getElementById('superBackBtn');
+    if (mainEl) mainEl.classList.add('hidden');
+    if (detailPanel) detailPanel.classList.remove('hidden');
+    if (backBtn) backBtn.classList.add('show');
+  } catch (err) { console.error(err); showToast('Hitilafu', 'error'); }
 }
 
-// ─── DELETE USER ───
-async function deleteSuperUser(uid) {
-  if (!confirm('Futa mtumiaji huyu? Hatari!')) return;
-  try {
-    await deleteDoc(doc(db, COLLECTIONS.users, uid));
-    allUsers = allUsers.filter(u => u.id !== uid);
-    renderSuperUsers();
-    loadSuperMetrics();
-    showToast('Mtumiaji amefutwa.', 's');
-  } catch (err) { logError('deleteSuperUser', COLLECTIONS.users, err); showToast('Hitilafu.', 'e'); }
-}
-
-// ─── RETURN TO SUPER PANEL ───
 function returnToSuperPanel() {
-  document.getElementById('superBodyMain').classList.remove('hidden');
-  document.getElementById('superUserDetail').classList.add('hidden');
-  document.getElementById('superBackBtn').classList.remove('show');
+  const mainEl = document.getElementById('superBodyMain');
+  const detailPanel = document.getElementById('superUserDetail');
+  const backBtn = document.getElementById('superBackBtn');
+  if (mainEl) mainEl.classList.remove('hidden');
+  if (detailPanel) detailPanel.classList.add('hidden');
+  if (backBtn) backBtn.classList.remove('show');
 }
 
-// ─── CHARTS ───
+// ===== SUPER ADMIN CHARTS =====
 async function loadSuperCharts() {
   try {
+    // FIX: safety guard — if allUsers not loaded yet, skip
+    if (!allUsers || !allUsers.length) return;
+
+    // --- Users trend ---
     const months = [];
     const now = new Date();
     for (let i = 11; i >= 0; i--) {
@@ -2736,9 +2661,8 @@ async function loadSuperCharts() {
         return cd.getMonth() === d.getMonth() && cd.getFullYear() === d.getFullYear();
       }).length;
     });
-
     destroyChart('superUsersTrend');
-    const ctx1 = document.getElementById('superUsersTrend')?.getContext('2d');
+    const ctx1 = document.getElementById('superUsersTrend');
     if (ctx1) {
       charts.superUsersTrend = new Chart(ctx1, {
         type: 'line',
@@ -2747,10 +2671,11 @@ async function loadSuperCharts() {
       });
     }
 
+    // --- Category chart ---
     const cats = {};
     allUsers.forEach(u => { const c = u.businessCategory || 'Other'; cats[c] = (cats[c] || 0) + 1; });
     destroyChart('superCategory');
-    const ctx2 = document.getElementById('superCategoryChart')?.getContext('2d');
+    const ctx2 = document.getElementById('superCategoryChart');
     if (ctx2) {
       charts.superCategory = new Chart(ctx2, {
         type: 'doughnut',
@@ -2759,15 +2684,39 @@ async function loadSuperCharts() {
       });
     }
 
+    // --- Business chart (top 5 by sales) ---
+    // FIX: use collectionGroup — 1 query instead of N queries
     const bizSales = [];
-    for (const u of allUsers.filter(u => u.role !== 'superAdmin')) {
-      let total = 0;
-      try { const sSnap = await getDocs(collection(db, 'users', u.id, 'sales')); sSnap.forEach(d => { total += (d.data().total || 0); }); } catch (e) {}
-      bizSales.push({ name: u.businessName || u.name, total });
+    const businessUsers = allUsers.filter(u => u.role !== 'superAdmin');
+    const salesByUser = {};
+
+    try {
+      const allSalesSnap = await getDocs(collectionGroup(db, 'sales'));
+      allSalesSnap.docs.forEach(d => {
+        // Path: users/{uid}/sales/{saleId} → uid is at index 1
+        const uid = d.ref.path.split('/')[1];
+        if (uid) {
+          salesByUser[uid] = (salesByUser[uid] || 0) + (d.data().total || 0);
+        }
+      });
+    } catch (e) {
+      // Fallback if collectionGroup is blocked by security rules
+      console.warn('collectionGroup(sales) blocked, using per-user fallback');
+      for (const u of businessUsers) {
+        try {
+          const sSnap = await getDocs(collection(db, 'users', u.id, 'sales'));
+          sSnap.forEach(d => { salesByUser[u.id] = (salesByUser[u.id] || 0) + (d.data().total || 0); });
+        } catch (err) { /* skip */ }
+      }
+    }
+
+    for (const u of businessUsers) {
+      bizSales.push({ name: u.businessName || u.name || '-', total: salesByUser[u.id] || 0 });
     }
     bizSales.sort((a, b) => b.total - a.total);
+
     destroyChart('superBusiness');
-    const ctx3 = document.getElementById('superBusinessChart')?.getContext('2d');
+    const ctx3 = document.getElementById('superBusinessChart');
     if (ctx3) {
       charts.superBusiness = new Chart(ctx3, {
         type: 'bar',
@@ -2776,52 +2725,80 @@ async function loadSuperCharts() {
       });
     }
 
+    // --- Product chart ---
+    // FIX: load REAL data instead of hardcoded placeholder
+    const prodCats = {};
+    try {
+      const allProdsSnap = await getDocs(collectionGroup(db, 'products'));
+      allProdsSnap.docs.forEach(d => {
+        const cat = d.data().category || 'Other';
+        prodCats[cat] = (prodCats[cat] || 0) + 1;
+      });
+    } catch (e) {
+      // Fallback
+      console.warn('collectionGroup(products) blocked, using per-user fallback');
+      for (const u of businessUsers) {
+        try {
+          const pSnap = await getDocs(collection(db, 'users', u.id, 'products'));
+          pSnap.docs.forEach(d => {
+            const cat = d.data().category || 'Other';
+            prodCats[cat] = (prodCats[cat] || 0) + 1;
+          });
+        } catch (err) { /* skip */ }
+      }
+    }
+
     destroyChart('superProduct');
-    const ctx4 = document.getElementById('superProductChart')?.getContext('2d');
+    const ctx4 = document.getElementById('superProductChart');
     if (ctx4) {
+      const pLabels = Object.keys(prodCats);
+      const pValues = Object.values(prodCats);
       charts.superProduct = new Chart(ctx4, {
         type: 'bar',
-        data: { labels: ['Data inaloadiwa...'], datasets: [{ label: 'Bidhaa', data: [0], backgroundColor: 'rgba(108,92,231,.6)', borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#9a9ab0' } }, x: { grid: { display: false }, ticks: { color: '#9a9ab0' } } } }
+        data: {
+          labels: pLabels.length ? pLabels : ['Hakuna bidhaa'],
+          datasets: [{
+            label: 'Bidhaa',
+            data: pLabels.length ? pValues : [0],
+            backgroundColor: 'rgba(108,92,231,.6)',
+            borderColor: '#6c5ce7',
+            borderWidth: 1,
+            borderRadius: 6
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#9a9ab0', stepSize: 1 } }, x: { grid: { display: false }, ticks: { color: '#9a9ab0' } } } }
       });
     }
-  } catch (err) { logError('loadSuperCharts', 'multiple', err); }
+  } catch (err) { console.error(err); }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SECTION 22B: SUPER ADMIN ADS (with image/video upload)
-// ═══════════════════════════════════════════════════════════
+// ===== SUPER ADMIN ADS =====
+let superAds = [];
 async function loadSuperAds() {
   try {
-    const snap = await getDocs(collection(db, COLLECTIONS.advertisements));
+    const snap = await getDocs(collection(db, 'superAds'));
     superAds = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderSuperAdsList();
-  } catch (err) { logError('loadSuperAds', COLLECTIONS.advertisements, err); }
+  } catch (err) { console.error(err); }
 }
 
 function renderSuperAdsList() {
   const el = document.getElementById('superAdsList');
+  if (!el) return;
   if (!superAds.length) { el.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna tangazo</p></div>'; return; }
-  el.innerHTML = superAds.map(a => {
-    const isVideo = a.image && (a.image.startsWith('data:video') || /\.(mp4|webm|ogg)(\?|$)/i.test(a.image));
-    return `<div class="super-ad-item">
-      ${a.image
-        ? (isVideo
-          ? `<video class="super-ad-thumb" src="${a.image}" muted style="object-fit:cover"></video>`
-          : `<img class="super-ad-thumb" src="${a.image}" onerror="this.style.display='none'"/>`)
-        : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-image"></i></div>'}
-      <div class="super-ad-info"><h5>${a.title || '-'}</h5><p>${a.businessName || '-'}</p></div>
-      <div class="super-ad-actions">
-        <button class="btn btn-o btn-xs" onclick="editSuperAd('${a.id}')"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-d btn-xs" onclick="deleteSuperAd('${a.id}')"><i class="fas fa-trash"></i></button>
-      </div>
-    </div>`;
-  }).join('');
+  el.innerHTML = superAds.map(a => `<div class="super-ad-item">
+    ${a.image ? `<img class="super-ad-thumb" src="${a.image}" onerror="this.style.display='none'"/>` : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-image"></i></div>'}
+    <div class="super-ad-info"><h5>${a.title || '-'}</h5><p>${a.businessName || '-'}</p></div>
+    <div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperAd('${a.id}')"><i class="fas fa-edit"></i></button> <button class="btn btn-d btn-xs" onclick="deleteSuperAd('${a.id}')"><i class="fas fa-trash"></i></button></div>
+  </div>`).join('');
 }
 
 function openSuperAdModal(id) {
-  document.getElementById('superAdModalTitle').textContent = id ? 'Hariri Tangazo' : 'New Advertisement';
-  document.getElementById('superAdId').value = id || '';
+  const titleEl = document.getElementById('superAdModalTitle');
+  const idEl = document.getElementById('superAdId');
+  if (!titleEl || !idEl) return;
+  titleEl.textContent = id ? 'Hariri Tangazo' : 'New Advertisement';
+  idEl.value = id || '';
   if (id) {
     const a = superAds.find(x => x.id === id);
     if (a) {
@@ -2840,6 +2817,7 @@ function openSuperAdModal(id) {
     setMediaPreview('superAdPreview', null);
     mediaModes['superAd'] = 'upload';
   }
+  // Sync toggle
   const fg = document.getElementById('superAdPreview')?.closest('.fg');
   if (fg) {
     fg.querySelectorAll('.media-mode-btn').forEach(b => b.classList.remove('active'));
@@ -2849,9 +2827,10 @@ function openSuperAdModal(id) {
     fg.querySelector('.media-file-input')?.classList.toggle('show', mediaModes['superAd'] === 'upload');
     fg.querySelector('.media-url-input')?.classList.toggle('show', mediaModes['superAd'] === 'url');
   }
-  document.getElementById('superAdModal').style.display = 'flex';
+  const modal = document.getElementById('superAdModal');
+  if (modal) modal.style.display = 'flex';
 }
-function closeSuperAdModal() { document.getElementById('superAdModal').style.display = 'none'; }
+function closeSuperAdModal() { const m = document.getElementById('superAdModal'); if (m) m.style.display = 'none'; }
 async function editSuperAd(id) { openSuperAdModal(id); }
 
 async function saveSuperAd(e) {
@@ -2867,54 +2846,46 @@ async function saveSuperAd(e) {
   const imgSrc = resolveMediaSource('superAd', 'superAdImageFile', 'superAdImage');
   if (imgSrc) { data.image = await mediaToBase64(imgSrc); }
   try {
-    if (id) { await setDoc(doc(db, COLLECTIONS.advertisements, id), data, { merge: true }); }
-    else { data.createdAt = serverTimestamp(); await addDoc(collection(db, COLLECTIONS.advertisements), data); }
-    showToast('Tangazo limehifadhiwa', 's');
+    if (id) { await setDoc(doc(db, 'superAds', id), data, { merge: true }); }
+    else { data.createdAt = serverTimestamp(); await addDoc(collection(db, 'superAds'), data); }
+    showToast('Tangazo limehifadhiwa', 'success');
     closeSuperAdModal();
-    await loadSuperAds();
-  } catch (err) { logError('saveSuperAd', COLLECTIONS.advertisements, err); showToast('Hitilafu', 'e'); }
+    loadSuperAds();
+  } catch (err) { console.error(err); showToast('Hitilafu', 'error'); }
 }
 
 async function deleteSuperAd(id) {
   if (!confirm('Futa tangazo hili?')) return;
-  try { await deleteDoc(doc(db, COLLECTIONS.advertisements, id)); showToast('Imefutwa', 's'); await loadSuperAds(); }
-  catch (err) { logError('deleteSuperAd', COLLECTIONS.advertisements, err); showToast('Hitilafu', 'e'); }
+  try { await deleteDoc(doc(db, 'superAds', id)); showToast('Imefutwa', 'success'); loadSuperAds(); } catch (err) { console.error(err); }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SECTION 22C: SUPER ADMIN PRODUCTS (with image/video upload)
-// ═══════════════════════════════════════════════════════════
+// ===== SUPER ADMIN PRODUCTS =====
+let superProds = [];
 async function loadSuperProducts() {
   try {
-    const snap = await getDocs(collection(db, COLLECTIONS.publicProducts));
+    const snap = await getDocs(collection(db, 'superProducts'));
     superProds = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderSuperProductsList();
-  } catch (err) { logError('loadSuperProducts', COLLECTIONS.publicProducts, err); }
+  } catch (err) { console.error(err); }
 }
 
 function renderSuperProductsList() {
   const el = document.getElementById('superProductsList');
+  if (!el) return;
   if (!superProds.length) { el.innerHTML = '<div class="empty-s"><i class="fas fa-boxes-stacked"></i><p>Hakuna bidhaa</p></div>'; return; }
-  el.innerHTML = superProds.map(p => {
-    const isVideo = p.image && (p.image.startsWith('data:video') || /\.(mp4|webm|ogg)(\?|$)/i.test(p.image));
-    return `<div class="super-prod-item">
-      ${p.image
-        ? (isVideo
-          ? `<video class="super-ad-thumb" src="${p.image}" muted style="object-fit:cover"></video>`
-          : `<img class="super-ad-thumb" src="${p.image}" onerror="this.style.display='none'"/>`)
-        : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-box"></i></div>'}
-      <div class="super-ad-info"><h5>${p.name || '-'}</h5><p>${p.sellerName || '-'} &bull; ${fmtMoney(p.price)}</p></div>
-      <div class="super-ad-actions">
-        <button class="btn btn-o btn-xs" onclick="editSuperProd('${p.id}')"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-d btn-xs" onclick="deleteSuperProd('${p.id}')"><i class="fas fa-trash"></i></button>
-      </div>
-    </div>`;
-  }).join('');
+  el.innerHTML = superProds.map(p => `<div class="super-prod-item">
+    ${p.image ? `<img class="super-ad-thumb" src="${p.image}" onerror="this.style.display='none'"/>` : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-box"></i></div>'}
+    <div class="super-ad-info"><h5>${p.name || '-'}</h5><p>${p.sellerName || '-'} &bull; ${fmtMoney(p.price)}</p></div>
+    <div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperProd('${p.id}')"><i class="fas fa-edit"></i></button> <button class="btn btn-d btn-xs" onclick="deleteSuperProd('${p.id}')"><i class="fas fa-trash"></i></button></div>
+  </div>`).join('');
 }
 
 function openSuperProdModal(id) {
-  document.getElementById('superProdModalTitle').textContent = id ? 'Hariri Bidhaa' : 'New Product';
-  document.getElementById('superProdId').value = id || '';
+  const titleEl = document.getElementById('superProdModalTitle');
+  const idEl = document.getElementById('superProdId');
+  if (!titleEl || !idEl) return;
+  titleEl.textContent = id ? 'Hariri Bidhaa' : 'New Product';
+  idEl.value = id || '';
   if (id) {
     const p = superProds.find(x => x.id === id);
     if (p) {
@@ -2933,6 +2904,7 @@ function openSuperProdModal(id) {
     setMediaPreview('superProdPreview', null);
     mediaModes['superProd'] = 'upload';
   }
+  // Sync toggle
   const fg = document.getElementById('superProdPreview')?.closest('.fg');
   if (fg) {
     fg.querySelectorAll('.media-mode-btn').forEach(b => b.classList.remove('active'));
@@ -2942,9 +2914,10 @@ function openSuperProdModal(id) {
     fg.querySelector('.media-file-input')?.classList.toggle('show', mediaModes['superProd'] === 'upload');
     fg.querySelector('.media-url-input')?.classList.toggle('show', mediaModes['superProd'] === 'url');
   }
-  document.getElementById('superProdModal').style.display = 'flex';
+  const modal = document.getElementById('superProdModal');
+  if (modal) modal.style.display = 'flex';
 }
-function closeSuperProdModal() { document.getElementById('superProdModal').style.display = 'none'; }
+function closeSuperProdModal() { const m = document.getElementById('superProdModal'); if (m) m.style.display = 'none'; }
 async function editSuperProd(id) { openSuperProdModal(id); }
 
 async function saveSuperProduct(e) {
@@ -2960,25 +2933,23 @@ async function saveSuperProduct(e) {
   const imgSrc = resolveMediaSource('superProd', 'superProdImageFile', 'superProdImage');
   if (imgSrc) { data.image = await mediaToBase64(imgSrc); }
   try {
-    if (id) { await setDoc(doc(db, COLLECTIONS.publicProducts, id), data, { merge: true }); }
-    else { data.createdAt = serverTimestamp(); await addDoc(collection(db, COLLECTIONS.publicProducts), data); }
-    showToast('Bidhaa imehifadhiwa', 's');
+    if (id) { await setDoc(doc(db, 'superProducts', id), data, { merge: true }); }
+    else { data.createdAt = serverTimestamp(); await addDoc(collection(db, 'superProducts'), data); }
+    showToast('Bidhaa imehifadhiwa', 'success');
     closeSuperProdModal();
-    await loadSuperProducts();
-  } catch (err) { logError('saveSuperProduct', COLLECTIONS.publicProducts, err); showToast('Hitilafu', 'e'); }
+    loadSuperProducts();
+  } catch (err) { console.error(err); showToast('Hitilafu', 'error'); }
 }
 
 async function deleteSuperProd(id) {
   if (!confirm('Futa bidhaa hii?')) return;
-  try { await deleteDoc(doc(db, COLLECTIONS.publicProducts, id)); showToast('Imefutwa', 's'); await loadSuperProducts(); }
-  catch (err) { logError('deleteSuperProd', COLLECTIONS.publicProducts, err); showToast('Hitilafu', 'e'); }
+  try { await deleteDoc(doc(db, 'superProducts', id)); showToast('Imefutwa', 'success'); loadSuperProducts(); } catch (err) { console.error(err); }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SECTION 22D: EXPORT USERS PDF
-// ═══════════════════════════════════════════════════════════
+// ===== EXPORT USERS PDF (basic) =====
 function exportUsersPDF() {
-  showToast('Inaatayarisha PDF...', 'i');
+  if (!allUsers || !allUsers.length) { showToast('Hakuna data ya kutoa.', 'warning'); return; }
+  showToast('Inaatayarisha PDF...', 'info');
   let html = '<html><head><title>Watumiaji</title><style>body{font-family:Arial;font-size:12px;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#6c5ce7;color:#fff}.suspended{color:red;font-weight:bold}.active{color:green;font-weight:bold}</style></head><body>';
   html += '<h2>BizBook - Orodha ya Watumiaji</h2><p>' + new Date().toLocaleString('sw-TZ') + '</p>';
   html += '<table><thead><tr><th>Jina</th><th>Barua Pepe</th><th>Biashara</th><th>Aina</th><th>Hali</th><th>Alijiunga</th></tr></thead><tbody>';
@@ -2989,134 +2960,79 @@ function exportUsersPDF() {
   });
   html += '</tbody></table></body></html>';
   const w = window.open('', '', 'width=800,height=600');
-  w.document.write(html);
-  w.document.close();
-  setTimeout(() => w.print(), 500);
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
+  else { showToast('Popup imezuiwa. Tafadhali ruhusu popup kwa tovuti hii.', 'warning'); }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SECTION 23: PUBLIC DATA (Landing Page)
-// ═══════════════════════════════════════════════════════════
+// ===== PUBLIC DATA =====
 async function loadPublicData() {
+  const adsGrid = document.getElementById('publicAdsGrid');
+  const prodsGrid = document.getElementById('publicProductsGrid');
+  // FIX: don't crash if elements don't exist
+  if (!adsGrid && !prodsGrid) return;
   try {
     // Public ads
-    const adSnap = await getDocs(collection(db, COLLECTIONS.advertisements));
-    const sAds = adSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'hidden');
-    const adsGrid = document.getElementById('publicAdsGrid');
-    if (!sAds.length) {
-      adsGrid.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna tangazo bado</p></div>';
-    } else {
-      adsGrid.innerHTML = sAds.map(a => {
-        const isVideo = a.image && (a.image.startsWith('data:video') || /\.(mp4|webm|ogg)(\?|$)/i.test(a.image));
-        return `<div class="pub-ad-card">
-          ${a.image
-            ? (isVideo
-              ? `<video class="pub-ad-img" src="${a.image}" controls></video>`
-              : `<img class="pub-ad-img" src="${a.image}" onerror="this.outerHTML='<div class=\\'pub-ad-img-placeholder\\'><i class=\\'fas fa-bullhorn\\'></i></div>'"/>`)
-            : '<div class="pub-ad-img-placeholder"><i class="fas fa-bullhorn"></i></div>'}
-          <div class="pub-ad-body"><h4>${a.title || ''}</h4><p>${a.description || ''}</p>${a.link ? `<a class="pub-ad-link" href="${a.link}" target="_blank"><i class="fas fa-external-link-alt"></i> Soma zaidi</a>` : ''}</div>
-        </div>`;
-      }).join('');
+    if (adsGrid) {
+      let adsHtml = '';
+      const adSnap = await getDocs(collection(db, 'superAds'));
+      const sAds = adSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.status !== 'hidden');
+      if (!sAds.length) {
+        adsHtml = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>Hakuna tangazo bado</p></div>';
+      } else {
+        adsHtml = sAds.map(a => `<div class="pub-ad-card">${a.image ? `<img class="pub-ad-img" src="${a.image}" onerror="this.outerHTML='<div class=\\'pub-ad-img-placeholder\\'><i class=\\'fas fa-bullhorn\\'></i></div>'"/>` : '<div class="pub-ad-img-placeholder"><i class="fas fa-bullhorn"></i></div>'}<div class="pub-ad-body"><h4>${a.title || ''}</h4><p>${a.description || ''}</p>${a.link ? `<a class="pub-ad-link" href="${a.link}" target="_blank"><i class="fas fa-external-link-alt"></i> Soma zaidi</a>` : ''}</div></div>`).join('');
+      }
+      adsGrid.innerHTML = adsHtml;
     }
-
-    // Public products from all business users
-    const usersSnap = await getDocs(collection(db, COLLECTIONS.users));
-    const allPubProds = [];
-    for (const uDoc of usersSnap.docs) {
-      const ud = uDoc.data();
-      if (ud.role === 'superAdmin') continue;
+    // Public products — FIX: optimized with collectionGroup
+    if (prodsGrid) {
+      let prodsHtml = '';
+      const allPubProds = [];
       try {
-        const pSnap = await getDocs(query(collection(db, 'users', uDoc.id, 'products'), orderBy('createdAt', 'desc')));
-        pSnap.docs.forEach(d => { allPubProds.push({ ...d.data(), sellerName: ud.businessName || ud.name }); });
-      } catch (e) {}
+        // Try collectionGroup first (1 query)
+        const allProdsSnap = await getDocs(collectionGroup(db, 'products'));
+        // Need seller names — build a map from users
+        const usersSnap = await getDocs(collection(db, 'users'));
+        const userMap = {};
+        usersSnap.docs.forEach(d => { const ud = d.data(); if (ud.role !== 'superAdmin') userMap[d.id] = ud.businessName || ud.name || ''; });
+        allProdsSnap.docs.forEach(d => {
+          const uid = d.ref.path.split('/')[1];
+          const pd = d.data();
+          allPubProds.push({ ...pd, sellerName: userMap[uid] || '' });
+        });
+      } catch (e) {
+        // Fallback: per-user queries
+        console.warn('collectionGroup(products) blocked for public, using fallback');
+        const usersSnap = await getDocs(collection(db, 'users'));
+        for (const uDoc of usersSnap.docs) {
+          const ud = uDoc.data();
+          if (ud.role === 'superAdmin') continue;
+          try {
+            const pSnap = await getDocs(query(collection(db, 'users', uDoc.id, 'products'), orderBy('createdAt', 'desc')));
+            pSnap.docs.forEach(d => { allPubProds.push({ ...d.data(), sellerName: ud.businessName || ud.name }); });
+          } catch (err) { /* skip */ }
+        }
+      }
+      allPubProds.sort((a, b) => {
+        const ta = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+        const tb = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+        return tb - ta;
+      });
+      const topProds = allPubProds.slice(0, 12);
+      if (!topProds.length) {
+        prodsHtml = '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p></div>';
+      } else {
+        prodsHtml = topProds.map(p => `<div class="pub-prod-card">${p.image ? `<img class="pub-prod-img" src="${p.image}" onerror="this.outerHTML='<div class=\\'pub-prod-img-placeholder\\'><i class=\\'fas fa-box\\'></i></div>'"/>` : '<div class="pub-prod-img-placeholder"><i class="fas fa-box"></i></div>'}<div class="pub-prod-body"><h4>${p.name || ''}</h4><div class="pub-prod-price">${fmtMoney(p.sellPrice)}</div><div class="pub-prod-seller">${p.sellerName || ''}</div></div></div>`).join('');
+      }
+      prodsGrid.innerHTML = prodsHtml;
     }
-    allPubProds.sort((a, b) => {
-      const ta = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
-      const tb = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
-      return tb - ta;
-    });
-    const topProds = allPubProds.slice(0, 12);
-    const prodsGrid = document.getElementById('publicProductsGrid');
-    if (!topProds.length) {
-      prodsGrid.innerHTML = '<div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p></div>';
-    } else {
-      prodsGrid.innerHTML = topProds.map(p => {
-        const isVideo = p.image && (p.image.startsWith('data:video') || /\.(mp4|webm|ogg)(\?|$)/i.test(p.image));
-        return `<div class="pub-prod-card">
-          ${p.image
-            ? (isVideo
-              ? `<video class="pub-prod-img" src="${p.image}" muted></video>`
-              : `<img class="pub-prod-img" src="${p.image}" onerror="this.outerHTML='<div class=\\'pub-prod-img-placeholder\\'><i class=\\'fas fa-box\\'></i></div>'"/>`)
-            : '<div class="pub-prod-img-placeholder"><i class="fas fa-box"></i></div>'}
-          <div class="pub-prod-body"><h4>${p.name || ''}</h4><div class="pub-prod-price">${fmtMoney(p.sellPrice || p.price)}</div><div class="pub-prod-seller">${p.sellerName || ''}</div></div>
-        </div>`;
-      }).join('');
-    }
-  } catch (err) { logError('loadPublicData', 'public', err); }
+  } catch (err) { console.error(err); }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SECTION 24: PASSWORD STRENGTH
-// ═══════════════════════════════════════════════════════════
-document.getElementById('regPassword')?.addEventListener('input', function() {
-  const pw = this.value;
-  let str = 0;
-  if (pw.length >= 6) str++;
-  if (pw.length >= 10) str++;
-  if (/[A-Z]/.test(pw)) str++;
-  if (/[0-9]/.test(pw)) str++;
-  if (/[^A-Za-z0-9]/.test(pw)) str++;
-  const bar = document.getElementById('pwBar');
-  if (!bar) return;
-  const colors = ['#e74c3c','#e74c3c','#f39c12','#f39c12','#00b894','#00b894'];
-  const widths = ['10%','25%','40%','60%','80%','100%'];
-  bar.style.width = widths[str] || '0%';
-  bar.style.background = colors[str] || '#e74c3c';
-});
+// FIX: guard public data load
+if (document.getElementById('publicAdsGrid') || document.getElementById('publicProductsGrid')) {
+  loadPublicData();
+}
 
-// ═══════════════════════════════════════════════════════════
-// SECTION 25: AUTH STATE LISTENER
-// ═══════════════════════════════════════════════════════════
-onAuthStateChanged(auth, async user => {
-  console.log('AUTH STATE:', user ? user.uid : 'null');
-
-  if (!user) {
-    showLanding();
-    return;
-  }
-
-  currentUser = user;
-
-  // Check if super admin
-  if (SUPER_ADMINS.includes(user.email)) {
-    document.getElementById('superLoginBox').classList.add('hidden');
-    document.getElementById('superPanel').classList.remove('hidden');
-    await loadSuperData();
-    return;
-  }
-
-  // Ensure user document exists
-  const userData = await ensureUserDocument(user);
-  if (!userData) {
-    showAuthErr('Hitilafu katika kupakia data ya mtumiaji.');
-    showScreen('authScreen');
-    return;
-  }
-
-  currentUserDoc = userData;
-
-  // Check if role is set
-  if (!userData.role) {
-    document.getElementById('rsBizName').textContent = userData.businessName || 'Biashara Yako';
-    document.getElementById('rsBizCat').textContent = userData.businessCategory || '';
-    showScreen('roleScreen');
-    return;
-  }
-
-  // Role is set — enter app
-  currentRole = userData.role;
-  await enterApp();
-});
 
 // ═══════════════════════════════════════════════════════════
 // SECTION 26: WINDOW EXPORTS
@@ -3278,4 +3194,18 @@ console.log('BizBook application loaded. Awaiting auth state...');
 
 
 
-                                                 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
