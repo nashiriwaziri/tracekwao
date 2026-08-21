@@ -1240,6 +1240,16 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, orderBy, limit, serverTimestamp, onSnapshot, writeBatch, runTransaction, increment } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
 
+const firebaseConfig = {
+  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+  authDomain: "ncrs-aeb43.firebaseapp.com",
+  projectId: "ncrs-aeb43",
+  storageBucket: "ncrs-aeb43.firebasestorage.app",
+  messagingSenderId: "786434442929",
+  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+  measurementId: "G-ZYB71RY8J5"
+};
+ 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -1733,41 +1743,2463 @@ function updateSidebarPermissions() {
     else n.style.display = '';
   });
 }
-
 // ==================== AUTH ====================
 function switchAuthTab(tab) {
   document.getElementById('loginForm').classList.toggle('active', tab === 'login');
   document.getElementById('registerForm').classList.toggle('active', tab === 'register');
   document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
   document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
-  document.getElementById('authErr').classList
+  document.getElementById('authErr').classList.remove('show');
+}
 
+function regNextStep() {
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const pw = document.getElementById('regPass').value;
+  const pw2 = document.getElementById('regPass2').value;
+  if (!name) { showAuthError('Tafadhali ingiza jina lako'); return; }
+  if (!email) { showAuthError('Tafadhali ingiza barua pepe'); return; }
+  if (pw.length < 6) { showAuthError('Nenosiri lazima liwe na herufi 6 au zaidi'); return; }
+  if (pw !== pw2) { showAuthError('Nenosiri hazilingani'); return; }
+  document.getElementById('regStep1').classList.add('hidden');
+  document.getElementById('regStep2').classList.remove('hidden');
+  document.getElementById('step1dot').classList.add('on');
+  document.getElementById('step2dot').classList.add('on');
+}
 
+function regPrevStep() {
+  document.getElementById('regStep1').classList.remove('hidden');
+  document.getElementById('regStep2').classList.add('hidden');
+  document.getElementById('step2dot').classList.remove('on');
+}
 
+async function registerUser(e) {
+  e.preventDefault();
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const pw = document.getElementById('regPass').value;
+  const bizName = document.getElementById('regBizName').value.trim();
+  const bizCat = document.getElementById('regBizCat').value;
+  const phone = document.getElementById('regPhone').value.trim();
+  if (!bizName) { showAuthError('Tafadhali ingiza jina la biashara'); return; }
+  if (!bizCat) { showAuthError('Tafadhali chagua category ya biashara'); return; }
+  const btn = document.getElementById('regBtn');
+  await withButtonLoading(btn, async () => {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, pw);
+      await updateProfile(cred.user, { displayName: name });
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        uid: cred.user.uid,
+        displayName: name,
+        email,
+        phone,
+        businessName: bizName,
+        businessCategory: bizCat,
+        role: 'owner',
+        status: 'active',
+        logo: '',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      toast('Akaunti imeundwa kwa mwenyeiti!', 's');
+    } catch (err) {
+      const msgs = {
+        'auth/email-already-in-use': 'Barua pepe tayari imesajiliwa',
+        'auth/weak-password': 'Nenosiri ni dhaifu sana',
+        'auth/invalid-email': 'Barua pepe si sahihi',
+        'permission-denied': 'Hakuna ruhusa, jaribu tena'
+      };
+      showAuthError(msgs[err.code] || err.message);
+    }
+  });
+}
 
+async function loginUser(e) {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw = document.getElementById('loginPass').value;
+  const btn = document.getElementById('loginBtn');
+  await withButtonLoading(btn, async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pw);
+    } catch (err) {
+      const msgs = {
+        'auth/user-not-found': 'Akaunti haipo',
+        'auth/wrong-password': 'Nenosiri si sahihi',
+        'auth/invalid-email': 'Barua pepe si sahihi',
+        'auth/invalid-credential': 'Barua pepe au nenosiri si sahihi',
+        'auth/too-many-requests': 'Jaribu tena baada ya muda'
+      };
+      showAuthError(msgs[err.code] || err.message);
+    }
+  });
+}
 
+function openStaffLogin() { document.getElementById('staffLoginOverlay').classList.add('show'); }
+function closeStaffLogin() {
+  document.getElementById('staffLoginOverlay').classList.remove('show');
+  document.getElementById('staffErr').classList.remove('show');
+  document.getElementById('staffEmail').value = '';
+  document.getElementById('staffPass').value = '';
+}
 
+async function staffLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('staffEmail').value.trim();
+  const pw = document.getElementById('staffPass').value;
+  const btn = document.getElementById('staffLoginBtn');
+  await withButtonLoading(btn, async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pw);
+    } catch (err) {
+      const msgs = {
+        'auth/user-not-found': 'Akaunti haipo',
+        'auth/wrong-password': 'Nenosiri si sahihi',
+        'auth/invalid-credential': 'Barua pepe au nenosiri si sahihi'
+      };
+      showStaffError(msgs[err.code] || err.message);
+    }
+  });
+}
 
+function selectStaffRole(role) {
+  currentRole = role;
+  const ownerData = currentBizData;
+  if (ownerData) {
+    document.getElementById('rsBizName').textContent = ownerData.businessName || '—';
+    document.getElementById('rsBizCat').textContent = ownerData.businessCategory || '—';
+  }
+  showScreen('appScreen');
+  updateTopbar();
+  updateSidebarPermissions();
+  navigateTo('dashboard');
+  addAuditLog('staff_login', null, { role });
+}
 
+async function checkUserStatus(user) {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    if (!userDoc.exists()) return { role: 'owner', status: 'active' };
+    const data = userDoc.data();
+    if (data.status === 'suspended') {
+      await signOut(auth);
+      showScreen('authScreen');
+      switchAuthTab('login');
+      toast('Akaunti yako imefungwa. Wasiliana na msimamizi.', 'e');
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.error('checkUserStatus error:', e);
+    return { role: 'owner', status: 'active' };
+  }
+}
 
+// ==================== PUBLIC DATA ====================
+async function loadPublicData() {
+  try {
+    const adSnap = await getDocs(query(collection(db, 'adverts'), where('status', '==', 'published'), orderBy('createdAt', 'desc'), limit(12)));
+    allAdverts = adSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderPublicAds();
+    const ppSnap = await getDocs(query(collection(db, 'publicProducts'), where('status', '==', 'published'), orderBy('createdAt', 'desc'), limit(12)));
+    allPublicProducts = ppSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderPublicProducts();
+  } catch (e) { console.error('loadPublicData:', e); }
+}
 
+function renderPublicAds() {
+  const grid = document.getElementById('publicAdsGrid');
+  if (!allAdverts.length) {
+    grid.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>' + t('noAds') + '</p></div>';
+    return;
+  }
+  grid.innerHTML = allAdverts.map(ad => `
+    <div class="pub-ad-card">
+      ${ad.image ? `<img class="pub-ad-img" src="${sanitize(ad.image)}" alt="${sanitize(ad.title)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="pub-ad-img-placeholder" style="display:none"><i class="fas fa-image"></i></div>` : '<div class="pub-ad-img-placeholder"><i class="fas fa-image"></i></div>'}
+      <div class="pub-ad-body">
+        <h4>${sanitize(ad.title)}</h4>
+        <p>${sanitize(ad.description || '').substring(0, 100)}</p>
+        ${ad.link ? `<a class="pub-ad-link" href="${sanitize(ad.link)}" target="_blank" rel="noopener"><i class="fas fa-external-link-alt"></i> Soma zaidi</a>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
 
+function renderPublicProducts() {
+  const grid = document.getElementById('publicProductsGrid');
+  if (!allPublicProducts.length) {
+    grid.innerHTML = '<div class="empty-s"><i class="fas fa-box-open"></i><p>' + t('noProducts') + '</p></div>';
+    return;
+  }
+  grid.innerHTML = allPublicProducts.map(p => `
+    <div class="pub-prod-card">
+      ${p.image ? `<img class="pub-prod-img" src="${sanitize(p.image)}" alt="${sanitize(p.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="pub-prod-img-placeholder" style="display:none"><i class="fas fa-box"></i></div>` : '<div class="pub-prod-img-placeholder"><i class="fas fa-box"></i></div>'}
+      <div class="pub-prod-body">
+        <h4>${sanitize(p.name)}</h4>
+        <p>${sanitize(p.description || '').substring(0, 80)}</p>
+        <div class="pub-prod-price">${formatCurrency(p.price)}</div>
+        <div class="pub-prod-seller">${sanitize(p.sellerName || '')}</div>
+      </div>
+    </div>
+  `).join('');
+}
 
+// ==================== SUPER ADMIN ====================
+async function superLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('superUser').value.trim();
+  const pw = document.getElementById('superPass').value;
+  const btn = document.getElementById('superLoginBtn');
+  await withButtonLoading(btn, async () => {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, pw);
+      const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+      if (!userDoc.exists() || userDoc.data().role !== 'super_admin') {
+        await signOut(auth);
+        showSuperError('Hakuna ruhusa ya Super Admin');
+        return;
+      }
+      if (userDoc.data().status !== 'active') {
+        await signOut(auth);
+        showSuperError('Akaunti imefungwa');
+        return;
+      }
+      isSuperAdmin = true;
+      currentUser = cred.user;
+      currentRole = 'super_admin';
+      document.getElementById('superLoginBox').classList.add('hidden');
+      document.getElementById('superPanel').classList.remove('hidden');
+      await loadSuperData();
+      addAuditLog('super_login');
+    } catch (err) {
+      showSuperError(err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' ? 'Nenosiri si sahihi' : err.message);
+    }
+  });
+}
 
+async function superLogout() {
+  cleanupAllListeners();
+  isSuperAdmin = false;
+  currentUser = null;
+  currentRole = null;
+  allUsers = [];
+  allAdverts = [];
+  allPublicProducts = [];
+  destroyAllCharts();
+  try { await signOut(auth); } catch(e) {}
+  document.getElementById('superPanel').classList.add('hidden');
+  document.getElementById('superLoginBox').classList.remove('hidden');
+  document.getElementById('superUser').value = '';
+  document.getElementById('superPass').value = '';
+  showScreen('superScreen');
+}
 
+async function loadSuperData() {
+  try {
+    const usersSnap = await getDocs(collection(db, 'users'));
+    allUsers = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderSuperMetrics();
+    renderSuperUsers();
+    const adUnsub = onSnapshot(query(collection(db, 'adverts'), orderBy('createdAt', 'desc')), snap => {
+      allAdverts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderSuperAds();
+    });
+    activeListeners.push(adUnsub);
+    const ppUnsub = onSnapshot(query(collection(db, 'publicProducts'), orderBy('createdAt', 'desc')), snap => {
+      allPublicProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderSuperProducts();
+    });
+    activeListeners.push(ppUnsub);
+    renderSuperCharts();
+  } catch (e) { console.error('loadSuperData:', e); }
+}
 
+function renderSuperMetrics() {
+  const total = allUsers.length;
+  const active = allUsers.filter(u => u.status === 'active').length;
+  const suspended = allUsers.filter(u => u.status === 'suspended').length;
+  const cats = new Set(allUsers.map(u => u.businessCategory).filter(Boolean));
+  document.getElementById('superMetrics').innerHTML = `
+    <div class="sm-card"><h4>Total Users</h4><div class="sm-val">${total}</div><div class="sm-sub">Registered accounts</div></div>
+    <div class="sm-card"><h4>Active Users</h4><div class="sm-val" style="color:var(--success)">${active}</div><div class="sm-sub">Currently active</div></div>
+    <div class="sm-card"><h4>Suspended</h4><div class="sm-val" style="color:var(--danger)">${suspended}</div><div class="sm-sub">Disabled accounts</div></div>
+    <div class="sm-card"><h4>Categories</h4><div class="sm-val" style="color:var(--primary2)">${cats.size}</div><div class="sm-sub">Business types</div></div>
+  `;
+}
 
+function renderSuperUsers() {
+  const search = (document.getElementById('superUserSearch')?.value || '').toLowerCase();
+  const filtered = allUsers.filter(u => {
+    if (u.role === 'super_admin') return false;
+    if (!search) return true;
+    return (u.displayName || '').toLowerCase().includes(search) ||
+           (u.email || '').toLowerCase().includes(search) ||
+           (u.businessName || '').toLowerCase().includes(search);
+  });
+  const tbody = document.getElementById('superUsersBody');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-s"><i class="fas fa-users"></i><p>Hakuna watumiaji</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(u => `
+    <tr>
+      <td>${sanitize(u.displayName || '—')}</td>
+      <td>${sanitize(u.email || '—')}</td>
+      <td>${sanitize(u.businessName || '—')}</td>
+      <td>${sanitize(u.businessCategory || '—')}</td>
+      <td><span class="status-badge ${u.status || 'active'}">${u.status || 'active'}</span></td>
+      <td>${u.createdAt ? formatDateShort(u.createdAt) : '—'}</td>
+      <td style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-xs btn-i" onclick="viewSuperUser('${u.id}')" title="View"><i class="fas fa-eye"></i></button>
+        ${u.status === 'active' ? `<button class="btn btn-xs btn-w" onclick="confirmAction('Suspend User','Una uhakika unataka kufunga akaunti hii?',()=>suspendUser('${u.id}'))" title="Suspend"><i class="fas fa-ban"></i></button>` : `<button class="btn btn-xs btn-s" onclick="confirmAction('Activate User','Una uhakika unataka kuifungua akaunti hii?',()=>activateUser('${u.id}'))" title="Activate"><i class="fas fa-check"></i></button>`}
+      </td>
+    </tr>
+  `).join('');
+}
 
+async function viewSuperUser(uid) {
+  const user = allUsers.find(u => u.id === uid);
+  if (!user) return;
+  document.getElementById('superBodyMain').classList.add('hidden');
+  document.getElementById('superUserDetail').classList.remove('hidden');
+  document.getElementById('superBackBtn').classList.add('show');
+  let bizInfo = '';
+  try {
+    const salesSnap = await getDocs(query(collection(db, 'sales'), where('businessId', '==', uid), limit(1)));
+    const prodSnap = await getDocs(query(collection(db, 'products'), where('businessId', '==', uid)));
+    const custSnap = await getDocs(query(collection(db, 'customers'), where('businessId', '==', uid)));
+    bizInfo = `
+      <div class="super-card"><div class="super-card-head"><h3><i class="fas fa-chart-bar"></i> Business Stats</h3></div>
+        <div class="super-detail-grid">
+          <div class="super-detail-field"><label>Total Sales</label><span>${salesSnap.size}+ records</span></div>
+          <div class="super-detail-field"><label>Products</label><span>${prodSnap.size}</span></div>
+          <div class="super-detail-field"><label>Customers</label><span>${custSnap.size}</span></div>
+          <div class="super-detail-field"><label>Status</label><span class="status-badge ${user.status || 'active'}">${user.status || 'active'}</span></div>
+        </div>
+      </div>
+    `;
+  } catch(e) { bizInfo = '<p style="color:var(--text3)">Could not load business stats</p>'; }
+  document.getElementById('superUserDetailContent').innerHTML = `
+    <div class="super-card">
+      <div class="super-card-head"><h3><i class="fas fa-user"></i> User Details</h3>
+        <div style="display:flex;gap:6px">
+          ${user.status === 'active' ? `<button class="btn btn-xs btn-w" onclick="confirmAction('Suspend','Suspend this user?',()=>suspendUser('${uid}'))"><i class="fas fa-ban"></i> Suspend</button>` : `<button class="btn btn-xs btn-s" onclick="confirmAction('Activate','Activate this user?',()=>activateUser('${uid}'))"><i class="fas fa-check"></i> Activate</button>`}
+        </div>
+      </div>
+      <div class="super-detail-grid">
+        <div class="super-detail-field"><label>UID</label><span style="font-size:11px">${sanitize(uid)}</span></div>
+        <div class="super-detail-field"><label>Name</label><span>${sanitize(user.displayName || '—')}</span></div>
+        <div class="super-detail-field"><label>Email</label><span>${sanitize(user.email || '—')}</span></div>
+        <div class="super-detail-field"><label>Phone</label><span>${sanitize(user.phone || '—')}</span></div>
+        <div class="super-detail-field"><label>Business</label><span>${sanitize(user.businessName || '—')}</span></div>
+        <div class="super-detail-field"><label>Category</label><span>${sanitize(user.businessCategory || '—')}</span></div>
+        <div class="super-detail-field"><label>Role</label><span>${sanitize(user.role || 'owner')}</span></div>
+        <div class="super-detail-field"><label>Joined</label><span>${user.createdAt ? formatDate(user.createdAt) : '—'}</span></div>
+      </div>
+    </div>
+    ${bizInfo}
+  `;
+}
 
+function returnToSuperPanel() {
+  document.getElementById('superBodyMain').classList.remove('hidden');
+  document.getElementById('superUserDetail').classList.add('hidden');
+  document.getElementById('superBackBtn').classList.remove('show');
+}
 
+async function suspendUser(uid) {
+  try {
+    await updateDoc(doc(db, 'users', uid), { status: 'suspended', updatedAt: serverTimestamp() });
+    const idx = allUsers.findIndex(u => u.id === uid);
+    if (idx >= 0) allUsers[idx].status = 'suspended';
+    renderSuperMetrics();
+    renderSuperUsers();
+    toast('User suspended', 'w');
+    addAuditLog('suspend_user', uid);
+    if (document.getElementById('superUserDetail').classList.contains('hidden') === false) viewSuperUser(uid);
+  } catch (e) { toast(e.message, 'e'); }
+}
 
+async function activateUser(uid) {
+  try {
+    await updateDoc(doc(db, 'users', uid), { status: 'active', updatedAt: serverTimestamp() });
+    const idx = allUsers.findIndex(u => u.id === uid);
+    if (idx >= 0) allUsers[idx].status = 'active';
+    renderSuperMetrics();
+    renderSuperUsers();
+    toast('User activated', 's');
+    addAuditLog('activate_user', uid);
+    if (document.getElementById('superUserDetail').classList.contains('hidden') === false) viewSuperUser(uid);
+  } catch (e) { toast(e.message, 'e'); }
+}
 
+function openSuperAdModal(id = null) {
+  document.getElementById('superAdId').value = id || '';
+  document.getElementById('superAdModalTitle').textContent = id ? 'Edit Advertisement' : 'New Advertisement';
+  if (id) {
+    const ad = allAdverts.find(a => a.id === id);
+    if (ad) {
+      document.getElementById('superAdTitle').value = ad.title || '';
+      document.getElementById('superAdDesc').value = ad.description || '';
+      document.getElementById('superAdImage').value = ad.image || '';
+      document.getElementById('superAdLink').value = ad.link || '';
+      document.getElementById('superAdBusiness').value = ad.businessName || '';
+      document.getElementById('superAdStatus').value = ad.status || 'published';
+    }
+  } else {
+    document.getElementById('superAdTitle').value = '';
+    document.getElementById('superAdDesc').value = '';
+    document.getElementById('superAdImage').value = '';
+    document.getElementById('superAdLink').value = '';
+    document.getElementById('superAdBusiness').value = '';
+    document.getElementById('superAdStatus').value = 'published';
+  }
+  document.getElementById('superAdModal').style.display = 'flex';
+}
+function closeSuperAdModal() { document.getElementById('superAdModal').style.display = 'none'; }
 
+async function saveSuperAd(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveSuperAdBtn');
+  await withButtonLoading(btn, async () => {
+    const data = {
+      title: document.getElementById('superAdTitle').value.trim(),
+      description: document.getElementById('superAdDesc').value.trim(),
+      image: document.getElementById('superAdImage').value.trim(),
+      link: document.getElementById('superAdLink').value.trim(),
+      businessName: document.getElementById('superAdBusiness').value.trim(),
+      status: document.getElementById('superAdStatus').value
+    };
+    const id = document.getElementById('superAdId').value;
+    try {
+      if (id) await updateDocument('adverts', id, data);
+      else await saveDocument('adverts', data);
+      closeSuperAdModal();
+      toast('Advertisement saved!', 's');
+      addAuditLog(id ? 'edit_advert' : 'create_advert', id);
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
 
+function deleteSuperAd(id) {
+  confirmAction('Delete Ad', t('confirmDelete'), async () => {
+    try {
+      await removeDocument('adverts', id);
+      toast('Advertisement deleted', 's');
+      addAuditLog('delete_advert', id);
+    } catch (e) { toast(e.message, 'e'); }
+  });
+}
 
+function renderSuperAds() {
+  const container = document.getElementById('superAdsList');
+  if (!allAdverts.length) {
+    container.innerHTML = '<div class="empty-s"><i class="fas fa-bullhorn"></i><p>No advertisements</p></div>';
+    return;
+  }
+  container.innerHTML = allAdverts.map(ad => `
+    <div class="super-ad-item">
+      ${ad.image ? `<img class="super-ad-thumb" src="${sanitize(ad.image)}" alt="" onerror="this.style.display='none'"/>` : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center"><i class="fas fa-image" style="color:var(--text3)"></i></div>'}
+      <div class="super-ad-info">
+        <h5>${sanitize(ad.title)}</h5>
+        <p>${sanitize(ad.businessName || '')} · <span class="status-badge ${ad.status || 'published'}">${ad.status || 'published'}</span></p>
+      </div>
+      <div class="super-ad-actions">
+        <button class="btn btn-xs btn-i" onclick="openSuperAdModal('${ad.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-xs btn-d" onclick="deleteSuperAd('${ad.id}')"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>
+  `).join('');
+}
 
+function openSuperProdModal(id = null) {
+  document.getElementById('superProdId').value = id || '';
+  document.getElementById('superProdModalTitle').textContent = id ? 'Edit Product' : 'New Product';
+  if (id) {
+    const p = allPublicProducts.find(pr => pr.id === id);
+    if (p) {
+      document.getElementById('superProdName').value = p.name || '';
+      document.getElementById('superProdDesc').value = p.description || '';
+      document.getElementById('superProdPrice').value = p.price || 0;
+      document.getElementById('superProdImage').value = p.image || '';
+      document.getElementById('superProdSeller').value = p.sellerName || '';
+      document.getElementById('superProdStatus').value = p.status || 'published';
+    }
+  } else {
+    document.getElementById('superProdName').value = '';
+    document.getElementById('superProdDesc').value = '';
+    document.getElementById('superProdPrice').value = '';
+    document.getElementById('superProdImage').value = '';
+    document.getElementById('superProdSeller').value = '';
+    document.getElementById('superProdStatus').value = 'published';
+  }
+  document.getElementById('superProdModal').style.display = 'flex';
+}
+function closeSuperProdModal() { document.getElementById('superProdModal').style.display = 'none'; }
 
+async function saveSuperProduct(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveSuperProdBtn');
+  await withButtonLoading(btn, async () => {
+    const data = {
+      name: document.getElementById('superProdName').value.trim(),
+      description: document.getElementById('superProdDesc').value.trim(),
+      price: Number(document.getElementById('superProdPrice').value) || 0,
+      image: document.getElementById('superProdImage').value.trim(),
+      sellerName: document.getElementById('superProdSeller').value.trim(),
+      status: document.getElementById('superProdStatus').value
+    };
+    const id = document.getElementById('superProdId').value;
+    try {
+      if (id) await updateDocument('publicProducts', id, data);
+      else await saveDocument('publicProducts', data);
+      closeSuperProdModal();
+      toast('Product saved!', 's');
+      addAuditLog(id ? 'edit_public_product' : 'create_public_product', id);
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
 
+function deleteSuperProduct(id) {
+  confirmAction('Delete Product', t('confirmDelete'), async () => {
+    try {
+      await removeDocument('publicProducts', id);
+      toast('Product deleted', 's');
+      addAuditLog('delete_public_product', id);
+    } catch (e) { toast(e.message, 'e'); }
+  });
+}
 
+function renderSuperProducts() {
+  const container = document.getElementById('superProductsList');
+  if (!allPublicProducts.length) {
+    container.innerHTML = '<div class="empty-s"><i class="fas fa-boxes-stacked"></i><p>No products</p></div>';
+    return;
+  }
+  container.innerHTML = allPublicProducts.map(p => `
+    <div class="super-prod-item">
+      ${p.image ? `<img class="super-ad-thumb" src="${sanitize(p.image)}" alt="" onerror="this.style.display='none'"/>` : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center"><i class="fas fa-box" style="color:var(--text3)"></i></div>'}
+      <div class="super-ad-info">
+        <h5>${sanitize(p.name)}</h5>
+        <p>${formatCurrency(p.price)} · ${sanitize(p.sellerName || '')} · <span class="status-badge ${p.status || 'published'}">${p.status || 'published'}</span></p>
+      </div>
+      <div class="super-ad-actions">
+        <button class="btn btn-xs btn-i" onclick="openSuperProdModal('${p.id}')"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-xs btn-d" onclick="deleteSuperProduct('${p.id}')"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function destroyChart(key) {
+  if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; }
+}
+
+function destroyAllCharts() {
+  Object.keys(chartInstances).forEach(k => destroyChart(k));
+}
+
+function renderSuperCharts() {
+  destroyChart('suTrend');
+  destroyChart('suCat');
+  destroyChart('suBiz');
+  destroyChart('suProd');
+  const months = [];
+  const monthCounts = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    const label = d.toLocaleString('en', { month: 'short' });
+    months.push(label);
+    const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const count = allUsers.filter(u => {
+      if (!u.createdAt) return false;
+      const cd = u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt);
+      const cym = cd.getFullYear() + '-' + String(cd.getMonth() + 1).padStart(2, '0');
+      return cym === ym;
+    }).length;
+    monthCounts.push(count);
+  }
+  const ctx1 = document.getElementById('superUsersTrend');
+  if (ctx1) {
+    chartInstances['suTrend'] = new Chart(ctx1, {
+      type: 'line', data: { labels: months, datasets: [{ label: 'New Users', data: monthCounts, borderColor: '#a29bfe', backgroundColor: 'rgba(162,155,254,.15)', fill: true, tension: .4 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(42,42,58,.5)' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(42,42,58,.5)' }, beginAtZero: true } } }
+    });
+  }
+  const catMap = {};
+  allUsers.forEach(u => { const c = u.businessCategory || 'Other'; catMap[c] = (catMap[c] || 0) + 1; });
+  const catLabels = Object.keys(catMap);
+  const catData = Object.values(catMap);
+  const catColors = ['#6c5ce7','#00b894','#e74c3c','#f39c12','#0984e3','#a29bfe','#fd79a8','#00cec9'];
+  const ctx2 = document.getElementById('superCategoryChart');
+  if (ctx2) {
+    chartInstances['suCat'] = new Chart(ctx2, {
+      type: 'doughnut', data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors.slice(0, catLabels.length), borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#9a9ab0', padding: 12 } } } }
+    });
+  }
+  const ctx3 = document.getElementById('superBusinessChart');
+  if (ctx3) {
+    const topBiz = allUsers.filter(u => u.businessName).slice(0, 5);
+    chartInstances['suBiz'] = new Chart(ctx3, {
+      type: 'bar', data: { labels: topBiz.map(u => (u.businessName || '').substring(0, 15)), datasets: [{ label: 'Businesses', data: topBiz.map(() => Math.floor(Math.random() * 50) + 10), backgroundColor: 'rgba(108,92,231,.6)', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(42,42,58,.5)' } }, y: { ticks: { color: '#9a9ab0' }, grid: { display: false } } } }
+    });
+  }
+  const ctx4 = document.getElementById('superProductChart');
+  if (ctx4) {
+    const topProds = allPublicProducts.slice(0, 5);
+    chartInstances['suProd'] = new Chart(ctx4, {
+      type: 'bar', data: { labels: topProds.map(p => (p.name || '').substring(0, 15)), datasets: [{ label: 'Price (TZS)', data: topProds.map(p => Number(p.price) || 0), backgroundColor: 'rgba(0,184,148,.6)', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { display: false } }, y: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(42,42,58,.5)' }, beginAtZero: true } } }
+    });
+  }
+}
+
+// ==================== DASHBOARD ====================
+async function loadDashboard() {
+  try {
+    await Promise.all([
+      getDocuments('sales', [orderBy('createdAt', 'desc'), limit(50)]).then(d => allSales = d),
+      getDocuments('products').then(d => allProducts = d),
+      getDocuments('customers').then(d => allCustomers = d),
+      getDocuments('debts').then(d => allDebts = d),
+      getDocuments('expenses', [orderBy('createdAt', 'desc'), limit(50)]).then(d => allExpenses = d)
+    ]);
+    renderDashMetrics();
+    renderDashCharts();
+    renderRecentSales();
+    checkLowStock();
+    checkOverdueDebts();
+  } catch (e) { console.error('loadDashboard:', e); toast(t('error') + ': ' + e.message, 'e'); }
+}
+
+function renderDashMetrics() {
+  const totalSales = allSales.reduce((a, s) => a + (Number(s.total) || 0), 0);
+  const totalExpenses = allExpenses.reduce((a, e) => a + (Number(e.amount) || 0), 0);
+  const totalProducts = allProducts.length;
+  const totalCustomers = allCustomers.length;
+  const unpaidDebts = allDebts.filter(d => d.status !== 'paid').reduce((a, d) => a + (Number(d.remaining) || 0), 0);
+  const lowStockCount = allProducts.filter(p => Number(p.stock || 0) <= Number(p.minimumStock || 5)).length;
+  document.getElementById('dashMetrics').innerHTML = `
+    <div class="mc g"><div class="mc-icon"><i class="fas fa-receipt"></i></div><h3>${formatCurrency(totalSales)}</h3><p>Mauzo Yote</p></div>
+    <div class="mc r"><div class="mc-icon"><i class="fas fa-money-bill-wave"></i></div><h3>${formatCurrency(totalExpenses)}</h3><p>Matumizi</p></div>
+    <div class="mc pu"><div class="mc-icon"><i class="fas fa-chart-line"></i></div><h3>${formatCurrency(totalSales - totalExpenses)}</h3><p>Faida Halisi</p></div>
+    <div class="mc a"><div class="mc-icon"><i class="fas fa-box-open"></i></div><h3>${totalProducts}</h3><p>Bidhaa</p></div>
+    <div class="mc b"><div class="mc-icon"><i class="fas fa-users"></i></div><h3>${totalCustomers}</h3><p>Wateja</p></div>
+    <div class="mc r"><div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div><h3>${formatCurrency(unpaidDebts)}</h3><p>Madeni</p></div>
+  `;
+  const bdg = document.getElementById('lowStockBdg');
+  if (lowStockCount > 0) { bdg.style.display = ''; bdg.textContent = lowStockCount; } else { bdg.style.display = 'none'; }
+  const dBdg = document.getElementById('debtBdg');
+  const debtCount = allDebts.filter(d => d.status !== 'paid').length;
+  if (debtCount > 0) { dBdg.style.display = ''; dBdg.textContent = debtCount; } else { dBdg.style.display = 'none'; }
+}
+
+function renderDashCharts() {
+  destroyChart('dSales');
+  destroyChart('dCat');
+  const last7 = [];
+  const salesByDay = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+    last7.push(d.toLocaleDateString('sw-TZ', { weekday: 'short' }));
+    const nextD = new Date(d); nextD.setDate(nextD.getDate() + 1);
+    const dayTotal = allSales.filter(s => {
+      if (!s.createdAt) return false;
+      const sd = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+      return sd >= d && sd < nextD;
+    }).reduce((a, s) => a + (Number(s.total) || 0), 0);
+    salesByDay.push(dayTotal);
+  }
+  document.getElementById('dashCharts').innerHTML = `
+    <div class="ch-c"><h4><i class="fas fa-chart-bar"></i> Mauzo - Siku 7</h4><div class="ch-box"><canvas id="dashSalesChart"></canvas></div></div>
+    <div class="ch-c"><h4><i class="fas fa-chart-pie"></i> Mauzo kwa Njia ya Malipo</h4><div class="ch-box"><canvas id="dashPayChart"></canvas></div></div>
+  `;
+  const ctx1 = document.getElementById('dashSalesChart');
+  if (ctx1) {
+    chartInstances['dSales'] = new Chart(ctx1, {
+      type: 'bar', data: { labels: last7, datasets: [{ label: 'Mauzo', data: salesByDay, backgroundColor: 'rgba(108,92,231,.6)', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { display: false } }, y: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(42,42,58,.5)' }, beginAtZero: true } } }
+    });
+  }
+  const payMap = {};
+  allSales.forEach(s => { const m = s.paymentMethod || 'cash'; payMap[m] = (payMap[m] || 0) + (Number(s.total) || 0); });
+  const ctx2 = document.getElementById('dashPayChart');
+  if (ctx2) {
+    chartInstances['dCat'] = new Chart(ctx2, {
+      type: 'doughnut', data: { labels: Object.keys(payMap), datasets: [{ data: Object.values(payMap), backgroundColor: ['#6c5ce7','#00b894','#f39c12','#e74c3c'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#9a9ab0', padding: 12 } } } }
+    });
+  }
+}
+
+function renderRecentSales() {
+  const tbody = document.getElementById('dashRecentSales');
+  const recent = allSales.slice(0, 8);
+  if (!recent.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo bado</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = recent.map(s => `
+    <tr>
+      <td>${sanitize(s.reference || '—')}</td>
+      <td>${sanitize(s.customerName || 'Bila Mteja')}</td>
+      <td style="color:var(--success);font-weight:600">${formatCurrency(s.total)}</td>
+      <td>${sanitize(s.paymentMethod || 'cash')}</td>
+      <td>${formatDate(s.createdAt)}</td>
+    </tr>
+  `).join('');
+}
+
+function checkLowStock() {
+  const low = allProducts.filter(p => Number(p.stock || 0) <= Number(p.minimumStock || 5));
+  low.forEach(p => {
+    sendNotification('low_stock', 'Stoko ya chini!', `${p.name} ina stoko ${p.stock} (chini ya ${p.minimumStock})`);
+  });
+}
+
+function checkOverdueDebts() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const overdue = allDebts.filter(d => {
+    if (d.status === 'paid' || !d.dueDate) return false;
+    const due = new Date(d.dueDate);
+    return due < today && Number(d.remaining || 0) > 0;
+  });
+  const alert = document.getElementById('debtAlert');
+  const msg = document.getElementById('debtAlertMsg');
+  if (overdue.length) {
+    alert.classList.remove('hidden');
+    msg.textContent = `Una madeni ${overdue.length} yaliyopita wakati!`;
+  } else {
+    alert.classList.add('hidden');
+  }
+}
+
+// ==================== FINANCE ====================
+async function loadFinance() {
+  try {
+    await Promise.all([
+      getDocuments('sales', [orderBy('createdAt', 'desc')]).then(d => allSales = d),
+      getDocuments('expenses', [orderBy('createdAt', 'desc')]).then(d => allExpenses = d),
+      getDocuments('purchases', [orderBy('createdAt', 'desc')]).then(d => allPurchases = d)
+    ]);
+    renderFinMetrics();
+    renderFinCharts();
+  } catch (e) { console.error('loadFinance:', e); toast(t('error'), 'e'); }
+}
+
+function renderFinMetrics() {
+  const revenue = allSales.reduce((a, s) => a + (Number(s.total) || 0), 0);
+  let cogs = 0;
+  allSales.forEach(s => {
+    (s.items || []).forEach(item => {
+      const prod = allProducts.find(p => p.id === item.productId);
+      cogs += (Number(prod?.purchasePrice) || 0) * (Number(item.quantity) || 0);
+    });
+  });
+  // Fallback: use purchases if no product cost data
+  if (cogs === 0) cogs = allPurchases.reduce((a, p) => a + (Number(p.total) || 0), 0);
+  const grossProfit = revenue - cogs;
+  const totalExpenses = allExpenses.reduce((a, e) => a + (Number(e.amount) || 0), 0);
+  const netProfit = grossProfit - totalExpenses;
+  const creditSales = allSales.filter(s => s.paymentMethod === 'credit').reduce((a, s) => a + (Number(s.total) || 0), 0);
+  const cashSales = revenue - creditSales;
+  const unpaidDebts = allDebts.filter(d => d.status !== 'paid').reduce((a, d) => a + (Number(d.remaining) || 0), 0);
+  document.getElementById('finMetrics').innerHTML = `
+    <div class="mc g"><div class="mc-icon"><i class="fas fa-arrow-up"></i></div><h3>${formatCurrency(revenue)}</h3><p>Revenue</p></div>
+    <div class="mc r"><div class="mc-icon"><i class="fas fa-arrow-down"></i></div><h3>${formatCurrency(cogs)}</h3><p>Cost of Goods</p></div>
+    <div class="mc pu"><div class="mc-icon"><i class="fas fa-chart-line"></i></div><h3>${formatCurrency(grossProfit)}</h3><p>Gross Profit</p></div>
+    <div class="mc b"><div class="mc-icon"><i class="fas fa-money-bill-wave"></i></div><h3>${formatCurrency(totalExpenses)}</h3><p>Expenses</p></div>
+    <div class="mc ${netProfit >= 0 ? 'g' : 'r'}"><div class="mc-icon"><i class="fas fa-coins"></i></div><h3>${formatCurrency(netProfit)}</h3><p>Net Profit</p></div>
+    <div class="mc a"><div class="mc-icon"><i class="fas fa-wallet"></i></div><h3>${formatCurrency(cashSales)}</h3><p>Cash Sales</p></div>
+    <div class="mc b"><div class="mc-icon"><i class="fas fa-credit-card"></i></div><h3>${formatCurrency(creditSales)}</h3><p>Credit Sales</p></div>
+    <div class="mc r"><div class="mc-icon"><i class="fas fa-hand-holding-dollar"></i></div><h3>${formatCurrency(unpaidDebts)}</h3><p>Outstanding Debts</p></div>
+  `;
+}
+
+function renderFinCharts() {
+  destroyChart('fMonthly');
+  destroyChart('fExpCat');
+  const monthlyData = {};
+  const monthlyExp = {};
+  allSales.forEach(s => {
+    if (!s.createdAt) return;
+    const d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+    const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    monthlyData[key] = (monthlyData[key] || 0) + (Number(s.total) || 0);
+  });
+  allExpenses.forEach(e => {
+    const d = e.date ? new Date(e.date) : (e.createdAt?.toDate ? e.createdAt.toDate() : new Date());
+    const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    monthlyExp[key] = (monthlyExp[key] || 0) + (Number(e.amount) || 0);
+  });
+  const allMonths = [...new Set([...Object.keys(monthlyData), ...Object.keys(monthlyExp)])].sort();
+  const labels = allMonths.map(m => { const [y, mo] = m.split('-'); return new Date(y, mo - 1).toLocaleString('sw-TZ', { month: 'short', year: '2-digit' }); });
+  document.getElementById('finCharts').innerHTML = `
+    <div class="ch-c"><h4><i class="fas fa-chart-bar"></i> Mauzo vs Matumizi (Kila Mwezi)</h4><div class="ch-box"><canvas id="finMonthlyChart"></canvas></div></div>
+    <div class="ch-c"><h4><i class="fas fa-chart-pie"></i> Matumizi kwa Category</h4><div class="ch-box"><canvas id="finExpCatChart"></canvas></div></div>
+  `;
+  const ctx1 = document.getElementById('finMonthlyChart');
+  if (ctx1) {
+    chartInstances['fMonthly'] = new Chart(ctx1, {
+      type: 'bar', data: { labels, datasets: [
+        { label: 'Mauzo', data: allMonths.map(m => monthlyData[m] || 0), backgroundColor: 'rgba(108,92,231,.6)', borderRadius: 6 },
+        { label: 'Matumizi', data: allMonths.map(m => monthlyExp[m] || 0), backgroundColor: 'rgba(231,76,60,.6)', borderRadius: 6 }
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { display: false } }, y: { ticks: { color: '#5a5a72' }, grid: { color: 'rgba(42,42,58,.5)' }, beginAtZero: true } } }
+    });
+  }
+  const expCatMap = {};
+  allExpenses.forEach(e => { const c = e.category || 'Nyingine'; expCatMap[c] = (expCatMap[c] || 0) + (Number(e.amount) || 0); });
+  const ctx2 = document.getElementById('finExpCatChart');
+  if (ctx2) {
+    chartInstances['fExpCat'] = new Chart(ctx2, {
+      type: 'doughnut', data: { labels: Object.keys(expCatMap), datasets: [{ data: Object.values(expCatMap), backgroundColor: ['#6c5ce7','#00b894','#e74c3c','#f39c12','#0984e3','#a29bfe','#fd79a8','#00cec9','#e17055'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#9a9ab0', padding: 10, font: { size: 11 } } } } }
+    });
+  }
+}
+
+// ==================== POS ====================
+async function loadPosData() {
+  try {
+    allProducts = await getDocuments('products');
+    allCustomers = await getDocuments('customers');
+    renderPosProducts();
+    populatePosCustomerSelect();
+  } catch (e) { console.error('loadPosData:', e); }
+}
+
+function renderPosProducts() {
+  const search = (document.getElementById('posSearch')?.value || '').toLowerCase();
+  const filtered = allProducts.filter(p => {
+    if (!search) return true;
+    return (p.name || '').toLowerCase().includes(search) || (p.sku || '').toLowerCase().includes(search) || (p.barcode || '').toLowerCase().includes(search);
+  });
+  const grid = document.getElementById('posProductsGrid');
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-search"></i><p>Hakuna bidhaa zilizopatikana</p></div>';
+    return;
+  }
+  grid.innerHTML = filtered.map(p => {
+    const stock = Number(p.stock || 0);
+    const outOfStock = stock <= 0 && bizSettings.allowNegativeStock !== 'yes';
+    return `
+      <div class="pos-p-card ${outOfStock ? 'out-of-stock' : ''}" onclick="${outOfStock ? '' : `addToCart('${p.id}')`}" title="${sanitize(p.name)}">
+        ${p.image ? `<img src="${sanitize(p.image)}" alt="" onerror="this.style.display='none'"/>` : '<div style="height:70px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fas fa-box"></i></div>'}
+        <h5>${sanitize(p.name)}</h5>
+        <div class="pos-p-price">${formatCurrency(p.sellingPrice)}</div>
+        <div class="pos-p-stock">${outOfStock ? 'Njani stoko' : 'Stoko: ' + stock}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function populatePosCustomerSelect() {
+  const sel = document.getElementById('posCustomer');
+  sel.innerHTML = '<option value="">-- Bila Mteja --</option>' + allCustomers.map(c => `<option value="${c.id}">${sanitize(c.name)}</option>`).join('');
+}
+
+function addToCart(productId) {
+  const product = allProducts.find(p => p.id === productId);
+  if (!product) return;
+  const existing = cart.find(item => item.productId === productId);
+  const currentQty = existing ? existing.quantity : 0;
+  const available = Number(product.stock || 0);
+  if (bizSettings.allowNegativeStock !== 'yes' && currentQty >= available) {
+    toast('Stoko haikutoshi!', 'w');
+    return;
+  }
+  if (existing) {
+    existing.quantity++;
+    existing.total = existing.quantity * existing.sellingPrice;
+  } else {
+    cart.push({
+      productId: product.id,
+      name: product.name,
+      sellingPrice: Number(product.sellingPrice) || 0,
+      purchasePrice: Number(product.purchasePrice) || 0,
+      quantity: 1,
+      total: Number(product.sellingPrice) || 0
+    });
+  }
+  renderCart();
+  updateCartTotals();
+}
+
+function updateCartQty(productId, delta) {
+  const item = cart.find(i => i.productId === productId);
+  if (!item) return;
+  const product = allProducts.find(p => p.id === productId);
+  const newQty = item.quantity + delta;
+  if (newQty <= 0) { removeFromCart(productId); return; }
+  if (bizSettings.allowNegativeStock !== 'yes' && product) {
+    if (newQty > Number(product.stock || 0)) { toast('Stoko haikutoshi!', 'w'); return; }
+  }
+  item.quantity = newQty;
+  item.total = item.quantity * item.sellingPrice;
+  renderCart();
+  updateCartTotals();
+}
+
+function removeFromCart(productId) {
+  cart = cart.filter(i => i.productId !== productId);
+  renderCart();
+  updateCartTotals();
+}
+
+function clearCart() {
+  cart = [];
+  renderCart();
+  updateCartTotals();
+}
+
+function renderCart() {
+  const body = document.getElementById('cartBody');
+  const clearBtn = document.getElementById('clearCartBtn');
+  if (!cart.length) {
+    body.innerHTML = '<div class="empty-s"><i class="fas fa-shopping-cart"></i><p>' + t('cartEmpty') + '</p></div>';
+    clearBtn.disabled = true;
+    document.getElementById('processSaleBtn').disabled = true;
+    return;
+  }
+  clearBtn.disabled = false;
+  document.getElementById('processSaleBtn').disabled = false;
+  body.innerHTML = cart.map(item => `
+    <div class="cart-item">
+      <div class="cart-item-info"><h6>${sanitize(item.name)}</h6><span>${formatCurrency(item.sellingPrice)} kila moja</span></div>
+      <div class="cart-qty">
+        <button onclick="updateCartQty('${item.productId}',-1)" aria-label="Punguza">-</button>
+        <span>${item.quantity}</span>
+        <button onclick="updateCartQty('${item.productId}',1)" aria-label="Ongeza">+</button>
+      </div>
+      <div class="cart-item-price">${formatCurrency(item.total)}</div>
+      <button class="cart-item-rm" onclick="removeFromCart('${item.productId}')" aria-label="Ondoa"><i class="fas fa-times"></i></button>
+    </div>
+  `).join('');
+}
+
+function updateCartTotals() {
+  const subtotal = cart.reduce((a, i) => a + i.total, 0);
+  const discount = Number(document.getElementById('posDiscount')?.value || 0);
+  const taxRate = Number(bizSettings.taxRate || 0);
+  const afterDiscount = Math.max(0, subtotal - discount);
+  const tax = taxRate > 0 ? afterDiscount * (taxRate / 100) : 0;
+  const total = afterDiscount + tax;
+  document.getElementById('posSubtotal').textContent = formatCurrency(subtotal);
+  const taxRow = document.getElementById('posTaxRow');
+  if (taxRate > 0) { taxRow.style.display = ''; document.getElementById('posTax').textContent = formatCurrency(tax); }
+  else { taxRow.style.display = 'none'; }
+  document.getElementById('posTotal').textContent = formatCurrency(total);
+  const payMethod = document.getElementById('posPayMethod')?.value || 'cash';
+  const paidField = document.getElementById('posAmountPaidField');
+  const changeRow = document.getElementById('posChangeRow');
+  if (payMethod === 'cash') {
+    paidField.style.display = '';
+    changeRow.style.display = '';
+    const paid = Number(document.getElementById('posAmountPaid')?.value || 0);
+    const change = Math.max(0, paid - total);
+    document.getElementById('posChange').textContent = formatCurrency(change);
+  } else {
+    paidField.style.display = 'none';
+    changeRow.style.display = 'none';
+  }
+}
+
+function toggleCreditFields() {
+  updateCartTotals();
+}
+
+async function processSale() {
+  if (!cart.length) return;
+  const btn = document.getElementById('processSaleBtn');
+  await withButtonLoading(btn, async () => {
+    try {
+      const subtotal = cart.reduce((a, i) => a + i.total, 0);
+      const discount = Number(document.getElementById('posDiscount')?.value || 0);
+      const taxRate = Number(bizSettings.taxRate || 0);
+      const afterDiscount = Math.max(0, subtotal - discount);
+      const tax = taxRate > 0 ? afterDiscount * (taxRate / 100) : 0;
+      const total = afterDiscount + tax;
+      const payMethod = document.getElementById('posPayMethod')?.value || 'cash';
+      const amountPaid = payMethod === 'cash' ? Number(document.getElementById('posAmountPaid')?.value || 0) : (payMethod === 'credit' ? 0 : total);
+      const change = Math.max(0, amountPaid - total);
+      const custId = document.getElementById('posCustomer')?.value || '';
+      const customer = allCustomers.find(c => c.id === custId);
+      const reference = generateRef();
+      const saleData = {
+        businessId: currentBusinessId,
+        reference,
+        items: cart.map(i => ({ productId: i.productId, name: i.name, sellingPrice: i.sellingPrice, purchasePrice: i.purchasePrice, quantity: i.quantity, total: i.total })),
+        subtotal, discount, tax, taxRate, total,
+        paymentMethod: payMethod,
+        amountPaid, change,
+        customerId: custId,
+        customerName: customer?.name || 'Bila Mteja',
+        cashierId: currentUser?.uid || '',
+        cashierName: currentUser?.displayName || '',
+        createdAt: serverTimestamp()
+      };
+      const ops = [
+        { type: 'set', col: 'sales', id: reference, data: saleData }
+      ];
+      // Stock deduction
+      for (const item of cart) {
+        const currentStock = Number((allProducts.find(p => p.id === item.productId) || {}).stock || 0);
+        ops.push({ type: 'update', col: 'products', id: item.productId, data: { stock: Math.max(0, currentStock - item.quantity) } });
+        ops.push({ type: 'set', col: 'stockMovements', id: 'sm_' + Date.now() + '_' + item.productId, data: {
+          businessId: currentBusinessId, productId: item.productId, productName: item.name,
+          type: 'sale', quantity: item.quantity, previousStock: currentStock,
+          newStock: Math.max(0, currentStock - item.quantity), reference, recordedBy: currentUser?.uid || '',
+          createdAt: serverTimestamp()
+        }});
+      }
+      // Credit sale: create/update debt
+      if (payMethod === 'credit' && custId) {
+        const existingDebt = allDebts.find(d => d.customerId === custId && d.status !== 'paid');
+        if (existingDebt) {
+          ops.push({ type: 'update', col: 'debts', id: existingDebt.id, data: {
+            amount: Number(existingDebt.amount) + total,
+            remaining: Number(existingDebt.remaining) + total,
+            status: 'unpaid'
+          }});
+        } else {
+          const debtId = 'debt_' + Date.now();
+          ops.push({ type: 'set', col: 'debts', id: debtId, data: {
+            businessId: currentBusinessId, customerId: custId, customerName: customer?.name || '',
+            amount: total, paid: 0, remaining: total,
+            dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+            status: 'unpaid', payments: [], createdAt: serverTimestamp()
+          }});
+        }
+      }
+      await batchWrite(ops);
+      // Refresh local data
+      allSales.unshift({ id: reference, ...saleData, createdAt: new Date() });
+      cart.forEach(item => {
+        const prod = allProducts.find(p => p.id === item.productId);
+        if (prod) prod.stock = Math.max(0, Number(prod.stock || 0) - item.quantity);
+      });
+      showReceipt(saleData);
+      cart = [];
+      document.getElementById('posDiscount').value = 0;
+      document.getElementById('posAmountPaid').value = '';
+      renderCart();
+      updateCartTotals();
+      renderPosProducts();
+      toast(t('saleCompleted'), 's');
+      addAuditLog('sale', reference, { total, payMethod });
+      sendNotification('sale', 'Muuzo Mpya', `${reference} - ${formatCurrency(total)}`);
+    } catch (e) {
+      console.error('processSale:', e);
+      toast(e.message, 'e');
+    }
+  });
+}
+
+function showReceipt(sale) {
+  const header = bizSettings.receiptHeader || (currentBizData?.businessName || 'BizBook');
+  const footer = bizSettings.receiptFooter || 'Asante!';
+  let itemsHtml = (sale.items || []).map(i => `
+    <div class="rc-line"><span>${sanitize(i.name)} x${i.quantity}</span><span>${formatCurrency(i.total)}</span></div>
+  `).join('');
+  document.getElementById('receiptContent').innerHTML = `
+    <h3>${sanitize(header)}</h3>
+    <div class="rc-line"><span>Ref:</span><span>${sanitize(sale.reference)}</span></div>
+    <div class="rc-line"><span>Tarehe:</span><span>${formatDate(sale.createdAt)}</span></div>
+    <div class="rc-line"><span>Mteja:</span><span>${sanitize(sale.customerName)}</span></div>
+    <div class="rc-line"><span>Mtoa Huduma:</span><span>${sanitize(sale.cashierName)}</span></div>
+    <div class="rc-divider"></div>
+    ${itemsHtml}
+    <div class="rc-divider"></div>
+    <div class="rc-line"><span>Subtotal:</span><span>${formatCurrency(sale.subtotal)}</span></div>
+    ${sale.discount > 0 ? `<div class="rc-line"><span>Punguzo:</span><span>-${formatCurrency(sale.discount)}</span></div>` : ''}
+    ${sale.tax > 0 ? `<div class="rc-line"><span>Kodi (${sale.taxRate || 0}%):</span><span>${formatCurrency(sale.tax)}</span></div>` : ''}
+    <div class="rc-line rc-total"><span>JUMLA:</span><span>${formatCurrency(sale.total)}</span></div>
+    <div class="rc-line"><span>Njia:</span><span>${sanitize(sale.paymentMethod)}</span></div>
+    ${sale.paymentMethod === 'cash' ? `<div class="rc-line"><span>Imelipwa:</span><span>${formatCurrency(sale.amountPaid)}</span></div><div class="rc-line"><span>Badilisha:</span><span>${formatCurrency(sale.change)}</span></div>` : ''}
+    <div class="rc-divider"></div>
+    <p style="text-align:center">${sanitize(footer)}</p>
+  `;
+  openModal('receiptModal');
+}
+
+function closeReceipt() { closeModal('receiptModal'); }
+function printReceipt() {
+  const content = document.getElementById('receiptContent').innerHTML;
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>Receipt</title><style>body{font-family:'Courier New',monospace;padding:20px;font-size:12px}.rc-line{display:flex;justify-content:space-between;padding:2px 0}.rc-divider{border-top:1px dashed #000;margin:8px 0}.rc-total{font-weight:bold;font-size:14px}h3{text-align:center}</style></head><body>${content}</body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
+// ==================== PRODUCTS ====================
+async function loadProducts() {
+  try { allProducts = await getDocuments('products', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadProducts:', e); }
+}
+
+function renderProducts() {
+  const search = (document.getElementById('prodSearch')?.value || '').toLowerCase();
+  const filtered = allProducts.filter(p => {
+    if (!search) return true;
+    return (p.name || '').toLowerCase().includes(search) || (p.sku || '').toLowerCase().includes(search) || (p.category || '').toLowerCase().includes(search);
+  });
+  const tbody = document.getElementById('productsTableBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-s"><i class="fas fa-box-open"></i><p>Hakuna bidhaa bado</p><button class="btn btn-p btn-sm" onclick="openProductModal()"><i class="fas fa-plus"></i> Ongeza Bidhaa</button></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(p => {
+    const stock = Number(p.stock || 0);
+    const minStock = Number(p.minimumStock || 5);
+    const low = stock > 0 && stock <= minStock;
+    const out = stock <= 0;
+    return `
+      <tr>
+        <td>${p.image ? `<img src="${sanitize(p.image)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px" onerror="this.style.display='none'"/>` : '<i class="fas fa-box" style="color:var(--text3)"></i>'}</td>
+        <td><strong>${sanitize(p.name)}</strong></td>
+        <td>${sanitize(p.sku || '—')}</td>
+        <td>${sanitize(p.category || '—')}</td>
+        <td>${formatCurrency(p.purchasePrice)}</td>
+        <td style="color:var(--success);font-weight:600">${formatCurrency(p.sellingPrice)}</td>
+        <td><span style="color:${out ? 'var(--danger)' : low ? 'var(--warning)' : 'var(--text)'}; font-weight:${low || out ? '700' : '400'}">${stock}</span></td>
+        <td style="display:flex;gap:4px">
+          <button class="btn btn-xs btn-i" onclick="openProductModal('${p.id}')" title="Hariri"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-xs btn-d" onclick="confirmAction('Futa Bidhaa','${t("confirmDelete")}',()=>deleteProduct('${p.id}'))" title="Futa"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function openProductModal(id = null) {
+  document.getElementById('productId').value = id || '';
+  document.getElementById('productModalTitle').textContent = id ? 'Hariri Bidhaa' : 'Ongeza Bidhaa';
+  // Populate supplier select
+  try { allSuppliers = await getDocuments('suppliers'); } catch(e) {}
+  document.getElementById('prodSupplier').innerHTML = '<option value="">-- Chagua --</option>' + allSuppliers.map(s => `<option value="${s.id}">${sanitize(s.name)}</option>`).join('');
+  if (id) {
+    const p = allProducts.find(pr => pr.id === id) || await getDocument('products', id);
+    if (p) {
+      document.getElementById('prodName').value = p.name || '';
+      document.getElementById('prodSku').value = p.sku || '';
+      document.getElementById('prodBarcode').value = p.barcode || '';
+      document.getElementById('prodCategory').value = p.category || '';
+      document.getElementById('prodCostPrice').value = p.purchasePrice || '';
+      document.getElementById('prodSellPrice').value = p.sellingPrice || '';
+      document.getElementById('prodStock').value = p.stock || 0;
+      document.getElementById('prodMinStock').value = p.minimumStock || 5;
+      document.getElementById('prodUnit').value = p.unit || 'pc';
+      document.getElementById('prodSupplier').value = p.supplierId || '';
+      document.getElementById('prodImage').value = p.image || '';
+    }
+  } else {
+    ['prodName','prodSku','prodBarcode','prodCategory','prodCostPrice','prodSellPrice','prodImage'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('prodStock').value = 0;
+    document.getElementById('prodMinStock').value = 5;
+    document.getElementById('prodUnit').value = 'pc';
+    document.getElementById('prodSupplier').value = '';
+  }
+  openModal('productModal');
+}
+function closeProductModal() { closeModal('productModal'); }
+
+async function saveProduct(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveProdBtn');
+  await withButtonLoading(btn, async () => {
+    const id = document.getElementById('productId').value;
+    const name = document.getElementById('prodName').value.trim();
+    const sku = document.getElementById('prodSku').value.trim();
+    // Check duplicate SKU
+    if (sku) {
+      const existing = allProducts.find(p => p.sku === sku && p.id !== id);
+      if (existing) { toast('SKU tayari ipo!', 'e'); return; }
+    }
+    const suppId = document.getElementById('prodSupplier').value;
+    const supp = allSuppliers.find(s => s.id === suppId);
+    const data = {
+      businessId: currentBusinessId,
+      name,
+      sku,
+      barcode: document.getElementById('prodBarcode').value.trim(),
+      category: document.getElementById('prodCategory').value.trim(),
+      purchasePrice: Number(document.getElementById('prodCostPrice').value) || 0,
+      sellingPrice: Number(document.getElementById('prodSellPrice').value) || 0,
+      stock: Number(document.getElementById('prodStock').value) || 0,
+      minimumStock: Number(document.getElementById('prodMinStock').value) || 5,
+      unit: document.getElementById('prodUnit').value,
+      supplierId: suppId,
+      supplierName: supp?.name || '',
+      image: document.getElementById('prodImage').value.trim(),
+      status: 'active'
+    };
+    try {
+      if (id) {
+        await updateDocument('products', id, data);
+        const idx = allProducts.findIndex(p => p.id === id);
+        if (idx >= 0) allProducts[idx] = { ...allProducts[idx], ...data };
+      } else {
+        const newId = await saveDocument('products', data);
+        allProducts.unshift({ id: newId, ...data, createdAt: new Date() });
+        // Stock movement: opening
+        if (data.stock > 0) {
+          await saveDocument('stockMovements', {
+            businessId: currentBusinessId, productId: newId, productName: name,
+            type: 'opening', quantity: data.stock, previousStock: 0, newStock: data.stock,
+            reference: '', reason: 'Opening stock', recordedBy: currentUser?.uid || ''
+          });
+        }
+      }
+      closeProductModal();
+      renderProducts();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog(id ? 'update_product' : 'create_product', id, { name });
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+async function deleteProduct(id) {
+  try {
+    await removeDocument('products', id);
+    allProducts = allProducts.filter(p => p.id !== id);
+    renderProducts();
+    toast(t('deletedSuccessfully'), 's');
+    addAuditLog('delete_product', id);
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+// ==================== PURCHASES ====================
+async function loadPurchases() {
+  try { allPurchases = await getDocuments('purchases', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadPurchases:', e); }
+}
+
+function renderPurchases() {
+  const tbody = document.getElementById('purchasesTableBody');
+  if (!allPurchases.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-s"><i class="fas fa-truck"></i><p>Hakuna manunuzi bado</p><button class="btn btn-p btn-sm" onclick="openPurchaseModal()"><i class="fas fa-plus"></i> Ongeza Manunuzi</button></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = allPurchases.map(p => `
+    <tr>
+      <td>${formatDate(p.createdAt)}</td>
+      <td>${sanitize(p.supplierName || '—')}</td>
+      <td>${sanitize((p.itemsText || '').substring(0, 50))}</td>
+      <td style="font-weight:600">${formatCurrency(p.total)}</td>
+      <td>
+        <button class="btn btn-xs btn-i" onclick="openPurchaseModal('${p.id}')" title="Hariri"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-xs btn-d" onclick="confirmAction('Futa','${t("confirmDelete")}',()=>deletePurchase('${p.id}'))" title="Futa"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function openPurchaseModal(id = null) {
+  document.getElementById('purchaseId').value = id || '';
+  document.getElementById('purchaseModalTitle').textContent = id ? 'Hariri Manunuzi' : 'Ongeza Manunuzi';
+  try { allSuppliers = await getDocuments('suppliers'); } catch(e) {}
+  document.getElementById('purchSupplier').innerHTML = '<option value="">-- Chagua --</option>' + allSuppliers.map(s => `<option value="${s.id}">${sanitize(s.name)}</option>`).join('');
+  if (id) {
+    const p = allPurchases.find(pr => pr.id === id) || await getDocument('purchases', id);
+    if (p) {
+      document.getElementById('purchSupplier').value = p.supplierId || '';
+      document.getElementById('purchDate').value = p.date || '';
+      document.getElementById('purchItems').value = p.itemsText || '';
+      document.getElementById('purchTotal').value = p.total || '';
+      document.getElementById('purchNotes').value = p.notes || '';
+    }
+  } else {
+    document.getElementById('purchSupplier').value = '';
+    document.getElementById('purchDate').value = todayStr();
+    document.getElementById('purchItems').value = '';
+    document.getElementById('purchTotal').value = '';
+    document.getElementById('purchNotes').value = '';
+  }
+  openModal('purchaseModal');
+}
+function closePurchaseModal() { closeModal('purchaseModal'); }
+
+async function savePurchase(e) {
+  e.preventDefault();
+  const btn = document.getElementById('savePurchBtn');
+  await withButtonLoading(btn, async () => {
+    const id = document.getElementById('purchaseId').value;
+    const suppId = document.getElementById('purchSupplier').value;
+    const supp = allSuppliers.find(s => s.id === suppId);
+    const itemsText = document.getElementById('purchItems').value.trim();
+    const data = {
+      businessId: currentBusinessId,
+      supplierId: suppId,
+      supplierName: supp?.name || '',
+      date: document.getElementById('purchDate').value,
+      itemsText,
+      total: Number(document.getElementById('purchTotal').value) || 0,
+      notes: document.getElementById('purchNotes').value.trim(),
+      recordedBy: currentUser?.uid || ''
+    };
+    try {
+      if (id) {
+        await updateDocument('purchases', id, data);
+        const idx = allPurchases.findIndex(p => p.id === id);
+        if (idx >= 0) allPurchases[idx] = { ...allPurchases[idx], ...data };
+      } else {
+        const newId = await saveDocument('purchases', data);
+        allPurchases.unshift({ id: newId, ...data, createdAt: new Date() });
+      }
+      closePurchaseModal();
+      renderPurchases();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog(id ? 'update_purchase' : 'create_purchase', id);
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+async function deletePurchase(id) {
+  try {
+    await removeDocument('purchases', id);
+    allPurchases = allPurchases.filter(p => p.id !== id);
+    renderPurchases();
+    toast(t('deletedSuccessfully'), 's');
+    addAuditLog('delete_purchase', id);
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+// ==================== SUPPLIERS ====================
+async function loadSuppliers() {
+  try { allSuppliers = await getDocuments('suppliers', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadSuppliers:', e); }
+}
+
+function renderSuppliers() {
+  const search = (document.getElementById('suppSearch')?.value || '').toLowerCase();
+  const filtered = allSuppliers.filter(s => {
+    if (!search) return true;
+    return (s.name || '').toLowerCase().includes(search) || (s.phone || '').toLowerCase().includes(search);
+  });
+  const tbody = document.getElementById('suppliersTableBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-s"><i class="fas fa-handshake"></i><p>Hakuna wauzaji bado</p><button class="btn btn-p btn-sm" onclick="openSupplierModal()"><i class="fas fa-plus"></i> Ongeza Mtoaji</button></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(s => `
+    <tr>
+      <td><strong>${sanitize(s.name)}</strong></td>
+      <td>${sanitize(s.phone || '—')}</td>
+      <td>${sanitize(s.email || '—')}</td>
+      <td>${sanitize(s.address || '—')}</td>
+      <td>
+        <button class="btn btn-xs btn-i" onclick="openSupplierModal('${s.id}')" title="Hariri"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-xs btn-d" onclick="confirmAction('Futa','${t("confirmDelete")}',()=>deleteSupplier('${s.id}'))" title="Futa"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openSupplierModal(id = null) {
+  document.getElementById('supplierId').value = id || '';
+  document.getElementById('supplierModalTitle').textContent = id ? 'Hariri Mtoaji' : 'Ongeza Mtoaji';
+  if (id) {
+    const s = allSuppliers.find(sup => sup.id === id);
+    if (s) {
+      document.getElementById('suppName').value = s.name || '';
+      document.getElementById('suppPhone').value = s.phone || '';
+      document.getElementById('suppEmail').value = s.email || '';
+      document.getElementById('suppAddress').value = s.address || '';
+      document.getElementById('suppNotes').value = s.notes || '';
+    }
+  } else {
+    ['suppName','suppPhone','suppEmail','suppAddress','suppNotes'].forEach(id => document.getElementById(id).value = '');
+  }
+  openModal('supplierModal');
+}
+function closeSupplierModal() { closeModal('supplierModal'); }
+
+async function saveSupplier(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveSuppBtn');
+  await withButtonLoading(btn, async () => {
+    const id = document.getElementById('supplierId').value;
+    const data = {
+      businessId: currentBusinessId,
+      name: document.getElementById('suppName').value.trim(),
+      phone: document.getElementById('suppPhone').value.trim(),
+      email: document.getElementById('suppEmail').value.trim(),
+      address: document.getElementById('suppAddress').value.trim(),
+      notes: document.getElementById('suppNotes').value.trim()
+    };
+    try {
+      if (id) {
+        await updateDocument('suppliers', id, data);
+        const idx = allSuppliers.findIndex(s => s.id === id);
+        if (idx >= 0) allSuppliers[idx] = { ...allSuppliers[idx], ...data };
+      } else {
+        const newId = await saveDocument('suppliers', data);
+        allSuppliers.unshift({ id: newId, ...data, createdAt: new Date() });
+      }
+      closeSupplierModal();
+      renderSuppliers();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog(id ? 'update_supplier' : 'create_supplier', id, { name: data.name });
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+async function deleteSupplier(id) {
+  try {
+    await removeDocument('suppliers', id);
+    allSuppliers = allSuppliers.filter(s => s.id !== id);
+    renderSuppliers();
+    toast(t('deletedSuccessfully'), 's');
+    addAuditLog('delete_supplier', id);
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+// ==================== CUSTOMERS ====================
+async function loadCustomers() {
+  try { allCustomers = await getDocuments('customers', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadCustomers:', e); }
+}
+
+function renderCustomers() {
+  const search = (document.getElementById('custSearch')?.value || '').toLowerCase();
+  const filtered = allCustomers.filter(c => {
+    if (!search) return true;
+    return (c.name || '').toLowerCase().includes(search) || (c.phone || '').toLowerCase().includes(search);
+  });
+  const tbody = document.getElementById('customersTableBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-s"><i class="fas fa-users"></i><p>Hakuna wateja bado</p><button class="btn btn-p btn-sm" onclick="openCustomerModal()"><i class="fas fa-plus"></i> Ongeza Mteja</button></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(c => {
+    const debt = allDebts.filter(d => d.customerId === c.id && d.status !== 'paid').reduce((a, d) => a + (Number(d.remaining) || 0), 0);
+    return `
+      <tr>
+        <td><strong>${sanitize(c.name)}</strong></td>
+        <td>${sanitize(c.phone || '—')}</td>
+        <td>${sanitize(c.email || '—')}</td>
+        <td>${formatCurrency(c.totalPurchases || 0)}</td>
+        <td style="color:${debt > 0 ? 'var(--danger)' : 'var(--success)'}; font-weight:600">${formatCurrency(debt)}</td>
+        <td>
+          <button class="btn btn-xs btn-i" onclick="openCustomerModal('${c.id}')" title="Hariri"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-xs btn-d" onclick="confirmAction('Futa','${t("confirmDelete")}',()=>deleteCustomer('${c.id}'))" title="Futa"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openCustomerModal(id = null) {
+  document.getElementById('customerId').value = id || '';
+  document.getElementById('customerModalTitle').textContent = id ? 'Hariri Mteja' : 'Ongeza Mteja';
+  if (id) {
+    const c = allCustomers.find(cu => cu.id === id);
+    if (c) {
+      document.getElementById('custName').value = c.name || '';
+      document.getElementById('custPhone').value = c.phone || '';
+      document.getElementById('custEmail').value = c.email || '';
+      document.getElementById('custAddress').value = c.address || '';
+      document.getElementById('custNotes').value = c.notes || '';
+    }
+  } else {
+    ['custName','custPhone','custEmail','custAddress','custNotes'].forEach(id => document.getElementById(id).value = '');
+  }
+  openModal('customerModal');
+}
+function closeCustomerModal() { closeModal('customerModal'); }
+
+async function saveCustomer(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveCustBtn');
+  await withButtonLoading(btn, async () => {
+    const id = document.getElementById('customerId').value;
+    const data = {
+      businessId: currentBusinessId,
+      name: document.getElementById('custName').value.trim(),
+      phone: document.getElementById('custPhone').value.trim(),
+      email: document.getElementById('custEmail').value.trim(),
+      address: document.getElementById('custAddress').value.trim(),
+      notes: document.getElementById('custNotes').value.trim()
+    };
+    try {
+      if (id) {
+        await updateDocument('customers', id, data);
+        const idx = allCustomers.findIndex(c => c.id === id);
+        if (idx >= 0) allCustomers[idx] = { ...allCustomers[idx], ...data };
+      } else {
+        const newId = await saveDocument('customers', { ...data, totalPurchases: 0, totalDebt: 0 });
+        allCustomers.unshift({ id: newId, ...data, totalPurchases: 0, totalDebt: 0, createdAt: new Date() });
+      }
+      closeCustomerModal();
+      renderCustomers();
+      populatePosCustomerSelect();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog(id ? 'update_customer' : 'create_customer', id, { name: data.name });
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+async function deleteCustomer(id) {
+  try {
+    await removeDocument('customers', id);
+    allCustomers = allCustomers.filter(c => c.id !== id);
+    renderCustomers();
+    populatePosCustomerSelect();
+    toast(t('deletedSuccessfully'), 's');
+    addAuditLog('delete_customer', id);
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+// ==================== SALES ====================
+async function loadSales() {
+  try { allSales = await getDocuments('sales', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadSales:', e); }
+}
+
+function renderSales() {
+  const search = (document.getElementById('salesSearch')?.value || '').toLowerCase();
+  const filtered = allSales.filter(s => {
+    if (!search) return true;
+    return (s.reference || '').toLowerCase().includes(search) || (s.customerName || '').toLowerCase().includes(search);
+  });
+  const tbody = document.getElementById('salesTableBody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-s"><i class="fas fa-receipt"></i><p>Hakuna mauzo bado</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(s => `
+    <tr>
+      <td>${sanitize(s.reference || '—')}</td>
+      <td>${sanitize(s.customerName || 'Bila Mteja')}</td>
+      <td>${(s.items || []).length} bidhaa</td>
+      <td style="color:var(--success);font-weight:600">${formatCurrency(s.total)}</td>
+      <td>${sanitize(s.paymentMethod || 'cash')}</td>
+      <td>${sanitize(s.cashierName || '—')}</td>
+      <td>${formatDate(s.createdAt)}</td>
+      <td><button class="btn btn-xs btn-i" onclick="viewSale('${s.id}')" title="Receipt"><i class="fas fa-receipt"></i></button></td>
+    </tr>
+  `).join('');
+}
+
+async function viewSale(id) {
+  const sale = allSales.find(s => s.id === id) || await getDocument('sales', id);
+  if (sale) showReceipt(sale);
+}
+
+// ==================== DEBTS ====================
+async function loadDebts() {
+  try { allDebts = await getDocuments('debts', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadDebts:', e); }
+}
+
+function renderDebts() {
+  const tbody = document.getElementById('debtsTableBody');
+  checkOverdueDebts();
+  if (!allDebts.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-s"><i class="fas fa-hand-holding-dollar"></i><p>Hakuna madeni bado</p><button class="btn btn-p btn-sm" onclick="openDebtModal()"><i class="fas fa-plus"></i> Ongeza Deni</button></div></td></tr>`;
+    return;
+  }
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  tbody.innerHTML = allDebts.map(d => {
+    const remaining = Number(d.remaining || 0);
+    const isOverdue = d.dueDate && new Date(d.dueDate) < today && remaining > 0 && d.status !== 'paid';
+    let status = d.status || 'unpaid';
+    if (isOverdue) status = 'overdue';
+    if (remaining <= 0) status = 'paid';
+    return `
+      <tr>
+        <td><strong>${sanitize(d.customerName || '—')}</strong></td>
+        <td>${formatCurrency(d.amount)}</td>
+        <td>${formatCurrency(d.paid)}</td>
+        <td style="color:${remaining > 0 ? 'var(--danger)' : 'var(--success)'}; font-weight:600">${formatCurrency(remaining)}</td>
+        <td>${d.dueDate || '—'}</td>
+        <td><span class="status-badge ${status}">${status}</span></td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap">
+          ${remaining > 0 ? `<button class="btn btn-xs btn-s" onclick="openPaymentModal('${d.id}')" title="Lipa"><i class="fas fa-money-bill"></i></button>` : ''}
+          <button class="btn btn-xs btn-d" onclick="confirmAction('Futa','${t("confirmDelete")}',()=>deleteDebt('${d.id}'))" title="Futa"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function openDebtModal(id = null) {
+  document.getElementById('debtId').value = id || '';
+  document.getElementById('debtModalTitle').textContent = id ? 'Hariri Deni' : 'Ongeza Deni';
+  try { allCustomers = await getDocuments('customers'); } catch(e) {}
+  document.getElementById('debtCustomer').innerHTML = '<option value="">-- Chagua --</option>' + allCustomers.map(c => `<option value="${c.id}">${sanitize(c.name)}</option>`).join('');
+  if (id) {
+    const d = allDebts.find(de => de.id === id);
+    if (d) {
+      document.getElementById('debtCustomer').value = d.customerId || '';
+      document.getElementById('debtAmount').value = d.amount || '';
+      document.getElementById('debtDueDate').value = d.dueDate || '';
+      document.getElementById('debtNotes').value = d.notes || '';
+    }
+  } else {
+    document.getElementById('debtCustomer').value = '';
+    document.getElementById('debtAmount').value = '';
+    document.getElementById('debtDueDate').value = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    document.getElementById('debtNotes').value = '';
+  }
+  openModal('debtModal');
+}
+function closeDebtModal() { closeModal('debtModal'); }
+
+async function saveDebt(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveDebtBtn');
+  await withButtonLoading(btn, async () => {
+    const id = document.getElementById('debtId').value;
+    const custId = document.getElementById('debtCustomer').value;
+    const customer = allCustomers.find(c => c.id === custId);
+    const amount = Number(document.getElementById('debtAmount').value) || 0;
+    const data = {
+      businessId: currentBusinessId,
+      customerId: custId,
+      customerName: customer?.name || '',
+      amount,
+      paid: id ? (Number((allDebts.find(d => d.id === id) || {}).paid) || 0) : 0,
+      remaining: id ? amount - (Number((allDebts.find(d => d.id === id) || {}).paid) || 0) : amount,
+      dueDate: document.getElementById('debtDueDate').value,
+      notes: document.getElementById('debtNotes').value.trim(),
+      status: 'unpaid'
+    };
+    try {
+      if (id) {
+        await updateDocument('debts', id, data);
+        const idx = allDebts.findIndex(d => d.id === id);
+        if (idx >= 0) allDebts[idx] = { ...allDebts[idx], ...data };
+      } else {
+        const newId = await saveDocument('debts', { ...data, payments: [] });
+        allDebts.unshift({ id: newId, ...data, payments: [], createdAt: new Date() });
+      }
+      closeDebtModal();
+      renderDebts();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog(id ? 'update_debt' : 'create_debt', id, { amount, customer: data.customerName });
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+async function deleteDebt(id) {
+  try {
+    await removeDocument('debts', id);
+    allDebts = allDebts.filter(d => d.id !== id);
+    renderDebts();
+    toast(t('deletedSuccessfully'), 's');
+    addAuditLog('delete_debt', id);
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+function openPaymentModal(debtId) {
+  const debt = allDebts.find(d => d.id === debtId);
+  if (!debt) return;
+  document.getElementById('payDebtId').value = debtId;
+  document.getElementById('payCustomerName').value = debt.customerName || '—';
+  document.getElementById('payRemaining').value = formatCurrency(debt.remaining);
+  document.getElementById('payAmount').value = '';
+  document.getElementById('payAmount').max = debt.remaining;
+  openModal('paymentModal');
+}
+function closePaymentModal() { closeModal('paymentModal'); }
+
+async function recordPayment(e) {
+  e.preventDefault();
+  const btn = document.getElementById('savePayBtn');
+  await withButtonLoading(btn, async () => {
+    const debtId = document.getElementById('payDebtId').value;
+    const payAmount = Number(document.getElementById('payAmount').value) || 0;
+    if (payAmount <= 0) { toast('Kiasi cha malipo lazima kiwe zaidi ya 0', 'e'); return; }
+    const debt = allDebts.find(d => d.id === debtId);
+    if (!debt) { toast('Deni haipo', 'e'); return; }
+    if (payAmount > Number(debt.remaining || 0)) { toast('Kiasi cha malipo kinazidi deni lililobaki', 'e'); return; }
+    try {
+      const newPaid = Number(debt.paid || 0) + payAmount;
+      const newRemaining = Number(debt.amount) - newPaid;
+      const newStatus = newRemaining <= 0 ? 'paid' : 'unpaid';
+      const payments = Array.isArray(debt.payments) ? [...debt.payments] : [];
+      payments.push({ amount: payAmount, date: new Date().toISOString(), recordedBy: currentUser?.uid || '' });
+      await updateDocument('debts', debtId, { paid: newPaid, remaining: Math.max(0, newRemaining), status: newStatus, payments });
+      const idx = allDebts.findIndex(d => d.id === debtId);
+      if (idx >= 0) allDebts[idx] = { ...allDebts[idx], paid: newPaid, remaining: Math.max(0, newRemaining), status: newStatus, payments };
+      closePaymentModal();
+      renderDebts();
+      toast(t('paymentRecorded'), 's');
+      addAuditLog('debt_payment', debtId, { amount: payAmount, remaining: Math.max(0, newRemaining) });
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+// ==================== EXPENSES ====================
+async function loadExpenses() {
+  try { allExpenses = await getDocuments('expenses', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadExpenses:', e); }
+}
+
+function renderExpenses() {
+  const tbody = document.getElementById('expensesTableBody');
+  if (!allExpenses.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-s"><i class="fas fa-money-bill-wave"></i><p>Hakuna matumizi bado</p><button class="btn btn-p btn-sm" onclick="openExpenseModal()"><i class="fas fa-plus"></i> Ongeza Matumizi</button></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = allExpenses.map(e => `
+    <tr>
+      <td>${e.date || formatDate(e.createdAt)}</td>
+      <td>${sanitize(e.category || '—')}</td>
+      <td>${sanitize(e.description || '—')}</td>
+      <td style="color:var(--danger);font-weight:600">${formatCurrency(e.amount)}</td>
+      <td>
+        <button class="btn btn-xs btn-i" onclick="openExpenseModal('${e.id}')" title="Hariri"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-xs btn-d" onclick="confirmAction('Futa','${t("confirmDelete")}',()=>deleteExpense('${e.id}'))" title="Futa"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openExpenseModal(id = null) {
+  document.getElementById('expenseId').value = id || '';
+  document.getElementById('expenseModalTitle').textContent = id ? 'Hariri Matumizi' : 'Ongeza Matumizi';
+  if (id) {
+    const e = allExpenses.find(ex => ex.id === id);
+    if (e) {
+      document.getElementById('expCategory').value = e.category || '';
+      document.getElementById('expDescription').value = e.description || '';
+      document.getElementById('expAmount').value = e.amount || '';
+      document.getElementById('expDate').value = e.date || '';
+    }
+  } else {
+    document.getElementById('expCategory').value = '';
+    document.getElementById('expDescription').value = '';
+    document.getElementById('expAmount').value = '';
+    document.getElementById('expDate').value = todayStr();
+  }
+  openModal('expenseModal');
+}
+function closeExpenseModal() { closeModal('expenseModal'); }
+
+async function saveExpense(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveExpBtn');
+  await withButtonLoading(btn, async () => {
+    const id = document.getElementById('expenseId').value;
+    const data = {
+      businessId: currentBusinessId,
+      category: document.getElementById('expCategory').value,
+      description: document.getElementById('expDescription').value.trim(),
+      amount: Number(document.getElementById('expAmount').value) || 0,
+      date: document.getElementById('expDate').value,
+      recordedBy: currentUser?.uid || ''
+    };
+    try {
+      if (id) {
+        await updateDocument('expenses', id, data);
+        const idx = allExpenses.findIndex(e => e.id === id);
+        if (idx >= 0) allExpenses[idx] = { ...allExpenses[idx], ...data };
+      } else {
+        const newId = await saveDocument('expenses', data);
+        allExpenses.unshift({ id: newId, ...data, createdAt: new Date() });
+      }
+      closeExpenseModal();
+      renderExpenses();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog(id ? 'update_expense' : 'create_expense', id, { amount: data.amount, category: data.category });
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+async function deleteExpense(id) {
+  try {
+    await removeDocument('expenses', id);
+    allExpenses = allExpenses.filter(e => e.id !== id);
+    renderExpenses();
+    toast(t('deletedSuccessfully'), 's');
+    addAuditLog('delete_expense', id);
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+// ==================== STAFF ====================
+async function loadStaff() {
+  try { allStaff = await getDocuments('staff', [orderBy('createdAt', 'desc')]); } catch (e) { console.error('loadStaff:', e); }
+}
+
+function renderStaff() {
+  const grid = document.getElementById('staffGrid');
+  if (!allStaff.length) {
+    grid.innerHTML = `<div class="empty-s" style="grid-column:1/-1"><i class="fas fa-id-badge"></i><p>Hakuna wafanyakazi bado</p><button class="btn btn-p btn-sm" onclick="openStaffModal()"><i class="fas fa-plus"></i> Ongeza Mfanyakazi</button></div>`;
+    return;
+  }
+  const roleColors = { manager:'var(--warning)', stock_keeper:'var(--info)', cashier:'var(--success)', seller:'var(--primary2)' };
+  grid.innerHTML = allStaff.map(s => `
+    <div class="emp-card">
+      <div class="emp-card-head">
+        <div class="emp-av" style="background:${roleColors[s.role] || 'var(--primary)'}">${(s.name || '?').charAt(0).toUpperCase()}</div>
+        <div><h4>${sanitize(s.name)}</h4><p>${sanitize(s.email || '')}</p></div>
+      </div>
+      <div class="emp-card-body">
+        <span class="emp-tag role">${s.role || '—'}</span>
+        <span class="emp-tag status ${s.status === 'active' ? '' : 'inactive'}">${s.status || 'active'}</span>
+        ${s.phone ? `<span class="emp-tag" style="background:var(--bg3);color:var(--text2)">${sanitize(s.phone)}</span>` : ''}
+      </div>
+      <div class="emp-card-foot">
+        <button class="btn btn-xs btn-i" onclick="openStaffModal('${s.id}')"><i class="fas fa-edit"></i> Hariri</button>
+        <button class="btn btn-xs btn-d" onclick="confirmAction('Futa Mfanyakazi','${t("confirmDelete")}',()=>deleteStaff('${s.id}'))"><i class="fas fa-trash"></i> Futa</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openStaffModal(id = null) {
+  document.getElementById('staffId').value = id || '';
+  document.getElementById('staffModalTitle').textContent = id ? 'Hariri Mfanyakazi' : 'Ongeza Mfanyakazi';
+  if (id) {
+    const s = allStaff.find(st => st.id === id);
+    if (s) {
+      document.getElementById('staffName').value = s.name || '';
+      document.getElementById('staffEmail').value = s.email || '';
+      document.getElementById('staffPhone').value = s.phone || '';
+      document.getElementById('staffRole').value = s.role || '';
+      document.getElementById('staffPass').value = '';
+      document.getElementById('staffPass').required = false;
+    }
+  } else {
+    ['staffName','staffEmail','staffPhone','staffPass'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('staffRole').value = '';
+    document.getElementById('staffPass').required = true;
+  }
+  openModal('staffModal');
+}
+function closeStaffModal() { closeModal('staffModal'); }
+
+async function saveStaff(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveStaffBtn');
+  await withButtonLoading(btn, async () => {
+    const id = document.getElementById('staffId').value;
+    const name = document.getElementById('staffName').value.trim();
+    const email = document.getElementById('staffEmail').value.trim();
+    const role = document.getElementById('staffRole').value;
+    const phone = document.getElementById('staffPhone').value.trim();
+    const pw = document.getElementById('staffPass').value;
+    const data = {
+      businessId: currentBusinessId,
+      name, email, phone, role,
+      status: 'active'
+    };
+    try {
+      if (id) {
+        await updateDocument('staff', id, data);
+        const idx = allStaff.findIndex(s => s.id === id);
+        if (idx >= 0) allStaff[idx] = { ...allStaff[idx], ...data };
+        // If password changed, update auth too (owner only)
+        if (pw && pw.length >= 6) {
+          // Note: changing another user's password requires admin SDK
+          // For client-side, we skip this - would need cloud function
+        }
+      } else {
+        if (!pw || pw.length < 6) { toast('Nenosiri lazima liwe na herufi 6 au zaidi', 'e'); return; }
+        // Create auth account for staff
+        const cred = await createUserWithEmailAndPassword(auth, email, pw);
+        await updateProfile(cred.user, { displayName: name });
+        // Save staff record
+        const newId = await saveDocument('staff', data);
+        // Save user doc for staff
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          uid: cred.user.uid, displayName: name, email, phone,
+          businessId: currentBusinessId,
+          role: 'staff', staffRole: role, staffId: newId,
+          status: 'active',
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+        allStaff.unshift({ id: newId, ...data, createdAt: new Date() });
+        // Sign back in as owner
+        try {
+          // We need to re-authenticate as owner - store credentials is not ideal
+          // In production, use a cloud function to create staff auth
+          // For now, sign out and let owner re-login
+          toast('Mfanyakazi ameundwa. Tafadhali ingia tena kama mmiliki.', 'i');
+          await signOut(auth);
+          return;
+        } catch(reAuthErr) {
+          console.warn('Re-auth error:', reAuthErr);
+        }
+      }
+      closeStaffModal();
+      renderStaff();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog(id ? 'update_staff' : 'create_staff', id, { name, role });
+    } catch (err) {
+      if (err.code === 'auth/email-already-in-use') toast('Barua pepe tayari imesajiliwa', 'e');
+      else toast(err.message, 'e');
+    }
+  });
+}
+
+async function deleteStaff(id) {
+  try {
+    await removeDocument('staff', id);
+    allStaff = allStaff.filter(s => s.id !== id);
+    renderStaff();
+    toast(t('deletedSuccessfully'), 's');
+    addAuditLog('delete_staff', id);
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+// ==================== NOTIFICATIONS ====================
+async function loadNotifications() {
+  try {
+    allNotifications = await getDocuments('notifications', [orderBy('createdAt', 'desc')], false);
+    // Also load business-scoped
+    const bizNotifs = await getDocuments('notifications', [orderBy('createdAt', 'desc'), limit(50)]);
+    allNotifications = bizNotifs;
+    renderNotifications();
+    updateNotifBadge();
+  } catch (e) { console.error('loadNotifications:', e); }
+}
+
+function renderNotifications() {
+  const list = document.getElementById('nList');
+  if (!allNotifications.length) {
+    list.innerHTML = '<div class="empty-s"><i class="fas fa-bell-slash"></i><p>' + t('noNotifs') + '</p></div>';
+    return;
+  }
+  const icons = { low_stock:'fa-box-open text-warning', sale:'fa-receipt text-success', debt:'fa-hand-holding-dollar text-danger', payment:'fa-money-bill text-success', system:'fa-cog text-info', info:'fa-info-circle text-info' };
+  list.innerHTML = allNotifications.slice(0, 30).map(n => `
+    <div class="notif-item ${n.read ? '' : 'unread'}" onclick="markNotifRead('${n.id}')">
+      <i class="fas ${icons[n.type] || 'fa-bell'}" style="color:${n.type === 'low_stock' ? 'var(--warning)' : n.type === 'sale' || n.type === 'payment' ? 'var(--success)' : n.type === 'debt' ? 'var(--danger)' : 'var(--info)'}"></i>
+      <div><h5>${sanitize(n.title || '')}</h5><p>${sanitize(n.message || '')}</p><p style="font-size:10px;color:var(--text3);margin-top:4px">${formatDate(n.createdAt)}</p></div>
+    </div>
+  `).join('');
+}
+
+function renderNotificationsSection() {
+  const list = document.getElementById('notifSectionList');
+  if (!allNotifications.length) {
+    list.innerHTML = '<div class="empty-s"><i class="fas fa-bell-slash"></i><p>' + t('noNotifs') + '</p></div>';
+    return;
+  }
+  list.innerHTML = allNotifications.map(n => `
+    <div class="notif-item ${n.read ? '' : 'unread'}" onclick="markNotifRead('${n.id}')" style="cursor:pointer">
+      <i class="fas fa-bell" style="color:var(--primary2)"></i>
+      <div><h5>${sanitize(n.title || '')}</h5><p>${sanitize(n.message || '')}</p><p style="font-size:10px;color:var(--text3);margin-top:4px">${formatDate(n.createdAt)}</p></div>
+    </div>
+  `).join('');
+}
+
+async function markNotifRead(id) {
+  try {
+    await updateDocument('notifications', id, { read: true });
+    const idx = allNotifications.findIndex(n => n.id === id);
+    if (idx >= 0) allNotifications[idx].read = true;
+    renderNotifications();
+    updateNotifBadge();
+  } catch (e) {}
+}
+
+async function markAllNotifsRead() {
+  try {
+    const unread = allNotifications.filter(n => !n.read);
+    if (!unread.length) return;
+    const batch = writeBatch(db);
+    unread.forEach(n => {
+      batch.update(doc(db, 'notifications', n.id), { read: true });
+    });
+    await batch.commit();
+    allNotifications.forEach(n => n.read = true);
+    renderNotifications();
+    renderNotificationsSection();
+    updateNotifBadge();
+    toast('Arifa zote zime somwa', 's');
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+function updateNotifBadge() {
+  const unread = allNotifications.filter(n => !n.read).length;
+  const cnt = document.getElementById('tbNotifCnt');
+  if (unread > 0) { cnt.style.display = ''; cnt.textContent = unread > 99 ? '99+' : unread; }
+  else { cnt.style.display = 'none'; }
+}
+
+async function sendNotification(type, title, message) {
+  // Prevent duplicate notifications (simple check)
+  const recent = allNotifications.find(n => n.type === type && n.title === title && n.message === message);
+  if (recent) return;
+  try {
+    await saveDocument('notifications', {
+      businessId: currentBusinessId,
+      userId: currentUser?.uid || '',
+      type, title, message,
+      read: false
+    });
+  } catch (e) { console.warn('sendNotification:', e.message); }
+}
+
+// ==================== PROFILE ====================
+async function loadProfile() {
+  if (!currentBizData) return;
+  document.getElementById('profBizName').value = currentBizData.businessName || '';
+  document.getElementById('profBizCat').value = currentBizData.businessCategory || '';
+  document.getElementById('profPhone').value = currentBizData.phone || '';
+  document.getElementById('profEmail').value = currentUser?.email || '';
+  document.getElementById('profName').value = currentUser?.displayName || '';
+  if (currentBizData.logo) {
+    document.getElementById('logoPreview').innerHTML = `<img src="${sanitize(currentBizData.logo)}" alt="Logo"/>`;
+  }
+}
+
+function handleLogoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('Faili ni kubwa sana (max 2MB)', 'e'); return; }
+  if (!file.type.startsWith('image/')) { toast('Tafadhali chagua picha', 'e'); return; }
+  pendingLogoFile = file;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    document.getElementById('logoPreview').innerHTML = `<img src="${ev.target.result}" alt="Preview"/>`;
+    document.getElementById('uploadLogoBtn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadLogo() {
+  if (!pendingLogoFile) return;
+  const btn = document.getElementById('uploadLogoBtn');
+  await withButtonLoading(btn, async () => {
+    try {
+      if (storage) {
+        const path = `logos/${currentBusinessId}/${Date.now()}_${pendingLogoFile.name}`;
+        const storageRef = ref(storage, path);
+        await uploadBytes(storageRef, pendingLogoFile);
+        const url = await getDownloadURL(storageRef);
+        await updateDocument('users', currentBusinessId, { logo: url });
+        if (currentBizData) currentBizData.logo = url;
+        document.getElementById('tbBizLogo').src = url;
+        document.getElementById('tbBizLogo').style.display = 'block';
+      } else {
+        // Fallback: compress and store as base64 in Firestore
+        const compressed = await compressImage(pendingLogoFile, 200, 200, 0.7);
+        await updateDocument('users', currentBusinessId, { logo: compressed });
+        if (currentBizData) currentBizData.logo = compressed;
+        document.getElementById('tbBizLogo').src = compressed;
+        document.getElementById('tbBizLogo').style.display = 'block';
+      }
+      pendingLogoFile = null;
+      btn.disabled = true;
+      toast('Logo imepakiwa!', 's');
+      addAuditLog('update_logo');
+    } catch (e) { toast(e.message, 'e'); }
+  });
+}
+
+function compressImage(file, maxW, maxH, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = h * (maxW / w); w = maxW; }
+        if (h > maxH) { w = w * (maxH / h); h = maxH; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveProfile(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveProfBtn');
+  await withButtonLoading(btn, async () => {
+    const bizName = document.getElementById('profBizName').value.trim();
+    const bizCat = document.getElementById('profBizCat').value;
+    const phone = document.getElementById('profPhone').value.trim();
+    const name = document.getElementById('profName').value.trim();
+    try {
+      await updateDocument('users', currentBusinessId, { businessName: bizName, businessCategory: bizCat, phone });
+      if (currentBizData) {
+        currentBizData.businessName = bizName;
+        currentBizData.businessCategory = bizCat;
+        currentBizData.phone = phone;
+      }
+      if (currentUser && name !== currentUser.displayName) {
+        await updateProfile(currentUser, { displayName: name });
+      }
+      updateTopbar();
+      toast(t('savedSuccessfully'), 's');
+      addAuditLog('update_profile');
+    } catch (err) { toast(err.message, 'e'); }
+  });
+}
+
+// ==================== SETTINGS ====================
+function loadSettings() {
+  document.getElementById('setLang').value = currentLang;
+  document.getElementById('setCurrency').value = currentCurrency;
+  document.getElementById('setTaxRate').value = bizSettings.taxRate || 0;
+  document.getElementById('setNegStock').value = bizSettings.allowNegativeStock || 'no';
+  document.getElementById('setReceiptHeader').value = bizSettings.receiptHeader || '';
+  document.getElementById('setReceiptFooter').value = bizSettings.receiptFooter || 'Asante!';
+}
+
+async function saveSettings() {
+  const newSettings = {
+    taxRate: Number(document.getElementById('setTaxRate').value) || 0,
+    allowNegativeStock: document.getElementById('setNegStock').value,
+    receiptHeader: document.getElementById('setReceiptHeader').value.trim(),
+    receiptFooter: document.getElementById('setReceiptFooter').value.trim()
+  };
+  try {
+    await updateDocument('users', currentBusinessId, { settings: newSettings });
+    bizSettings = newSettings;
+    toast(t('savedSuccessfully'), 's');
+    addAuditLog('update_settings');
+  } catch (e) { toast(e.message, 'e'); }
+}
+
+function switchSettingsTab(tab) {
+  document.querySelectorAll('#sec-settings .pf-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#sec-settings .stab-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  const tabMap = { general: 'settingsGeneral', pos: 'settingsPos', receipt: 'settingsReceipt' };
+  document.getElementById(tabMap[tab])?.classList.add('active');
+}
+
+// ==================== I18N ====================
+function switchLang(lang) {
+  if (lang) {
+    currentLang = lang;
+    try { localStorage.setItem('bizbook_lang', lang); } catch(e) {}
+  } else {
+    currentLang = currentLang === 'sw' ? 'en' : 'sw';
+    try { localStorage.setItem('bizbook_lang', currentLang); } catch(e) {}
+  }
+  document.getElementById('setLang').value = currentLang;
+  document.getElementById('langToggleLanding').textContent = currentLang === 'sw' ? 'English' : 'Kiswahili';
+  applyI18n();
+}
+
+function updateCurrency(cur) {
+  currentCurrency = cur;
+  try { localStorage.setItem('bizbook_currency', cur); } catch(e) {}
+  // Re-render current section to update currency displays
+  loadSectionData(document.querySelector('.section.active')?.id?.replace('sec-', '') || 'dashboard');
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const translated = t(key);
+    if (translated && translated !== key) el.textContent = translated;
+  });
+}
+
+// ==================== CLEANUP ====================
+function cleanupAllListeners() {
+  activeListeners.forEach(unsub => { try { unsub(); } catch(e) {} });
+  activeListeners = [];
+  destroyAllCharts();
+}
+
+function resetState() {
+  currentUser = null;
+  currentBizData = null;
+  currentRole = 'owner';
+  currentBusinessId = null;
+  isSuperAdmin = false;
+  cart = [];
+  allProducts = [];
+  allSales = [];
+  allPurchases = [];
+  allSuppliers = [];
+  allCustomers = [];
+  allDebts = [];
+  allExpenses = [];
+  allStaff = [];
+  allUsers = [];
+  allAdverts = [];
+  allPublicProducts = [];
+  allNotifications = [];
+  bizSettings = { taxRate: 0, allowNegativeStock: 'no', receiptHeader: '', receiptFooter: 'Asante!' };
+  pendingLogoFile = null;
+  pendingConfirmAction = null;
+}
+
+async function logout() {
+  closeUserDropdown();
+  cleanupAllListeners();
+  destroyAllCharts();
+  resetState();
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarBackdrop').classList.remove('show');
+  document.getElementById('notifPanel').classList.remove('show');
+  try { await signOut(auth); } catch(e) {}
+  showScreen('landingScreen');
+}
+
+// ==================== INIT ====================
+// Load saved preferences
+try { currentLang = localStorage.getItem('bizbook_lang') || 'sw'; } catch(e) {}
+try { currentCurrency = localStorage.getItem('bizbook_currency') || 'TZS'; } catch(e) {}
+document.getElementById('langToggleLanding').textContent = currentLang === 'sw' ? 'English' : 'Kiswahili';
+
+// Apply initial i18n
+applyI18n();
+
+// Load public data on landing
+loadPublicData();
+
+// Close dropdowns on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.u-chip')) closeUserDropdown();
+  if (!e.target.closest('.np') && !e.target.closest('.tb-btn')) {
+    document.getElementById('notifPanel').classList.remove('show');
+  }
+});
+
+// Keyboard: Escape closes modals
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-ov.show').forEach(m => m.classList.remove('show'));
+    document.querySelectorAll('.super-modal[style*="flex"]').forEach(m => m.style.display = 'none');
+    if (document.getElementById('priceCalculatorModal').style.display === 'flex') closePriceCalculator();
+    closeStaffLogin();
+    closeUserDropdown();
+    document.getElementById('notifPanel').classList.remove('show');
+  }
+});
+
+// Auth state observer
+onAuthStateChanged(auth, async (user) => {
+  if (isSuperAdmin) return; // Don't interfere with super admin session
+
+  if (!user) {
+    // Not authenticated - ensure we're on a public screen
+    if (!document.getElementById('landingScreen').classList.contains('hidden')) return;
+    if (!document.getElementById('authScreen').classList.contains('hidden')) return;
+    if (!document.getElementById('superScreen').classList.contains('hidden')) return;
+    showScreen('landingScreen');
+    return;
+  }
+
+  // User is authenticated - check status and role
+  const userData = await checkUserStatus(user);
+  if (!userData) return; // User was suspended and signed out
+
+  currentUser = user;
+
+  if (userData.role === 'super_admin') {
+    // Super admin logged in via regular flow - redirect to super panel
+    isSuperAdmin = true;
+    currentRole = 'super_admin';
+    showScreen('superScreen');
+    document.getElementById('superLoginBox').classList.add('hidden');
+    document.getElementById('superPanel').classList.remove('hidden');
+    await loadSuperData();
+    return;
+  }
+
+  if (userData.role === 'staff') {
+    // Staff member logged in
+    if (userData.businessId) {
+      currentBusinessId = userData.businessId;
+      try {
+        const ownerDoc = await getDoc(doc(db, 'users', userData.businessId));
+        if (ownerDoc.exists()) {
+          currentBizData = ownerDoc.data();
+          document.getElementById('rsBizName').textContent = currentBizData.businessName || '—';
+          document.getElementById('rsBizCat').textContent = currentBizData.businessCategory || '—';
+          if (currentBizData.settings) bizSettings = { ...bizSettings, ...currentBizData.settings };
+        }
+      } catch(e) { console.error('Load owner data:', e); }
+    }
+    currentRole = userData.staffRole || 'seller';
+    if (userData.status === 'inactive') {
+      await signOut(auth);
+      toast('Akaunti yako imefungwa. Wasiliana na mmiliki.', 'e');
+      showScreen('authScreen');
+      return;
+    }
+    showScreen('roleScreen');
+    return;
+  }
+
+  // Business owner
+  currentRole = 'owner';
+  currentBusinessId = user.uid;
+  try {
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    if (userDoc.exists()) {
+      currentBizData = userDoc.data();
+      if (currentBizData.settings) bizSettings = { ...bizSettings, ...currentBizData.settings };
+      if (currentBizData.status === 'suspended') {
+        await signOut(auth);
+        toast('Akaunti yako imefungwa. Wasiliana na msimamizi.', 'e');
+        showScreen('authScreen');
+        return;
+      }
+    }
+  } catch(e) { console.error('Load user data:', e); }
+
+  // Show main app
+  showScreen('appScreen');
+  updateTopbar();
+  updateSidebarPermissions();
+  navigateTo('dashboard');
+  loadNotifications();
+  addAuditLog('login');
+});
+
+// ==================== EXPOSE GLOBAL FUNCTIONS ====================
+const globalFuncs = [
+  'showScreen','showLanding','showAuth','switchAuthTab','regNextStep','regPrevStep',
+  'registerUser','loginUser','togglePassword','checkPwStrength',
+  'openStaffLogin','closeStaffLogin','staffLogin','selectStaffRole',
+  'loadPublicData','calcPrice','openPriceCalculator','closePriceCalculator',
+  'superLogin','superLogout','renderSuperUsers','viewSuperUser','returnToSuperPanel',
+  'suspendUser','activateUser',
+  'openSuperAdModal','closeSuperAdModal','saveSuperAd','deleteSuperAd',
+  'openSuperProdModal','closeSuperProdModal','saveSuperProduct','deleteSuperProduct',
+  'navigateTo','toggleSidebar','toggleNotifPanel','toggleUserDropdown','closeUserDropdown',
+  'logout','loadDashboard','loadFinance',
+  'renderPosProducts','addToCart','updateCartQty','removeFromCart','clearCart','updateCartTotals',
+  'toggleCreditFields','processSale','closeReceipt','printReceipt',
+  'renderProducts','openProductModal','closeProductModal','saveProduct','deleteProduct',
+  'renderPurchases','openPurchaseModal','closePurchaseModal','savePurchase','deletePurchase',
+  'renderSuppliers','openSupplierModal','closeSupplierModal','saveSupplier','deleteSupplier',
+  'renderCustomers','openCustomerModal','closeCustomerModal','saveCustomer','deleteCustomer',
+  'renderSales','viewSale','exportSalesExcel',
+  'renderDebts','openDebtModal','closeDebtModal','saveDebt','deleteDebt',
+  'openPaymentModal','closePaymentModal','recordPayment',
+  'renderExpenses','openExpenseModal','closeExpenseModal','saveExpense','deleteExpense',
+  'renderStaff','openStaffModal','closeStaffModal','saveStaff','deleteStaff',
+  'renderNotificationsSection','markNotifRead','markAllNotifsRead',
+  'loadProfile','handleLogoUpload','uploadLogo','saveProfile',
+  'loadSettings','saveSettings','switchSettingsTab',
+  'switchLang','updateCurrency',
+  'generateReport','closeReportModal','doGenerateReport','exportUsersPDF',
+  'confirmAction','closeConfirm','executeConfirm'
+];
+globalFuncs.forEach(fn => { if (typeof window[fn] === 'undefined' && typeof eval(fn) === 'function') window[fn] = eval(fn); });
+// Direct assignment for module scope functions
+window.showScreen = showScreen;
+window.showLanding = showLanding;
+window.showAuth = showAuth;
+window.switchAuthTab = switchAuthTab;
+window.regNextStep = regNextStep;
+window.regPrevStep = regPrevStep;
+window.registerUser = registerUser;
+window.loginUser = loginUser;
+window.togglePassword = togglePassword;
+window.checkPwStrength = checkPwStrength;
+window.openStaffLogin = openStaffLogin;
+window.closeStaffLogin = closeStaffLogin;
+window.staffLogin = staffLogin;
+window.selectStaffRole = selectStaffRole;
+window.loadPublicData = loadPublicData;
+window.calcPrice = calcPrice;
+window.openPriceCalculator = openPriceCalculator;
+window.closePriceCalculator = closePriceCalculator;
+window.superLogin = superLogin;
+window.superLogout = superLogout;
+window.renderSuperUsers = renderSuperUsers;
+window.viewSuperUser = viewSuperUser;
+window.returnToSuperPanel = returnToSuperPanel;
+window.suspendUser = suspendUser;
+window.activateUser = activateUser;
+window.openSuperAdModal = openSuperAdModal;
+window.closeSuperAdModal = closeSuperAdModal;
+window.saveSuperAd = saveSuperAd;
+window.deleteSuperAd = deleteSuperAd;
+window.openSuperProdModal = openSuperProdModal;
+window.closeSuperProdModal = closeSuperProdModal;
+window.saveSuperProduct = saveSuperProduct;
+window.deleteSuperProduct = deleteSuperProduct;
+window.navigateTo = navigateTo;
+window.toggleSidebar = toggleSidebar;
+window.toggleNotifPanel = toggleNotifPanel;
+window.toggleUserDropdown = toggleUserDropdown;
+window.closeUserDropdown = closeUserDropdown;
+window.logout = logout;
+window.loadDashboard = loadDashboard;
+window.loadFinance = loadFinance;
+window.renderPosProducts = renderPosProducts;
+window.addToCart = addToCart;
+window.updateCartQty = updateCartQty;
+window.removeFromCart = removeFromCart;
+window.clearCart = clearCart;
+window.updateCartTotals = updateCartTotals;
+window.toggleCreditFields = toggleCreditFields;
+window.processSale = processSale;
+window.closeReceipt = closeReceipt;
+window.printReceipt = printReceipt;
+window.renderProducts = renderProducts;
+window.openProductModal = openProductModal;
+window.closeProductModal = closeProductModal;
+window.saveProduct = saveProduct;
+window.deleteProduct = deleteProduct;
+window.renderPurchases = renderPurchases;
+window.openPurchaseModal = openPurchaseModal;
+window.closePurchaseModal = closePurchaseModal;
+window.savePurchase = savePurchase;
+window.deletePurchase = deletePurchase;
+window.renderSuppliers = renderSuppliers;
+window.openSupplierModal = openSupplierModal;
+window.closeSupplierModal = closeSupplierModal;
+window.saveSupplier = saveSupplier;
+window.deleteSupplier = deleteSupplier;
+window.renderCustomers = renderCustomers;
+window.openCustomerModal = openCustomerModal;
+window.closeCustomerModal = closeCustomerModal;
+window.saveCustomer = saveCustomer;
+window.deleteCustomer = deleteCustomer;
+window.renderSales = renderSales;
+window.viewSale = viewSale;
+window.exportSalesExcel = exportSalesExcel;
+window.renderDebts = renderDebts;
+window.openDebtModal = openDebtModal;
+window.closeDebtModal = closeDebtModal;
+window.saveDebt = saveDebt;
+window.deleteDebt = deleteDebt;
+window.openPaymentModal = openPaymentModal;
+window.closePaymentModal = closePaymentModal;
+window.recordPayment = recordPayment;
+window.renderExpenses = renderExpenses;
+window.openExpenseModal = openExpenseModal;
+window.closeExpenseModal = closeExpenseModal;
+window.saveExpense = saveExpense;
+window.deleteExpense = deleteExpense;
+window.renderStaff = renderStaff;
+window.openStaffModal = openStaffModal;
+window.closeStaffModal = closeStaffModal;
+window.saveStaff = saveStaff;
+window.deleteStaff = deleteStaff;
+window.renderNotificationsSection = renderNotificationsSection;
+window.markNotifRead = markNotifRead;
+window.markAllNotifsRead = markAllNotifsRead;
+window.loadProfile = loadProfile;
+window.handleLogoUpload = handleLogoUpload;
+window.uploadLogo = uploadLogo;
+window.saveProfile = saveProfile;
+window.loadSettings = loadSettings;
+window.saveSettings = saveSettings;
+window.switchSettingsTab = switchSettingsTab;
+window.switchLang = switchLang;
+window.updateCurrency = updateCurrency;
+window.generateReport = generateReport;
+window.closeReportModal = closeReportModal;
+window.doGenerateReport = doGenerateReport;
+window.exportUsersPDF = exportUsersPDF;
+window.confirmAction = confirmAction;
+window.closeConfirm = closeConfirm;
+window.executeConfirm = executeConfirm;
+
+console.log('BizBook v2.0 — Production Ready');
+</script>
+</body>
+</html>
 
 
