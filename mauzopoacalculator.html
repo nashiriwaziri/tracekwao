@@ -2014,55 +2014,691 @@ function renderSuperProductsList() {
   `).join("");
 }
 
+// ================================================================
+// SUPER ADMIN — PUBLISH / UPDATE PUBLIC PRODUCT
+// FIRESTORE + STORAGE SAFE SAVE
+// ================================================================
+
 async function handleSuperProductForm(e) {
   e.preventDefault();
-  const editId = document.getElementById("superProdId").value;
-  const name = document.getElementById("superProdName").value.trim();
-  const category = document.getElementById("superProdCategory").value.trim();
-  const seller = document.getElementById("superProdSeller").value.trim();
-  const shop = document.getElementById("superProdShop").value.trim();
-  const phone = document.getElementById("superProdPhone").value.trim();
-  const location = document.getElementById("superProdLocation").value.trim();
-  const price = Number(document.getElementById("superProdPrice").value) || 0;
-  const desc = document.getElementById("superProdDesc").value.trim();
-  const fileInput = document.getElementById("superProdImage");
-  const file = fileInput.files ? fileInput.files[0] : null;
 
-  if (!name || !category || !seller) { toast("Name, category and seller are required.", "e"); return; }
+  const form = e.currentTarget || e.target;
 
-  const submitBtn = e.target.querySelector('button[type="submit"]');
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Saving...';
+  const submitBtn = form.querySelector(
+    'button[type="submit"]'
+  );
+
+  const originalBtnText =
+    submitBtn?.innerHTML || "Publish Product";
+
+  // ------------------------------------------------------------
+  // PREVENT DOUBLE SUBMISSION
+  // ------------------------------------------------------------
+
+  if (submitBtn?.disabled) {
+    return;
+  }
+
+  // ------------------------------------------------------------
+  // HELPER — TIMEOUT
+  // ------------------------------------------------------------
+
+  const withTimeout = (promise, ms, operation) => {
+
+    return Promise.race([
+
+      promise,
+
+      new Promise((_, reject) => {
+
+        setTimeout(() => {
+
+          reject(
+            new Error(
+              `${operation} timed out after ${ms / 1000} seconds.`
+            )
+          );
+
+        }, ms);
+
+      })
+
+    ]);
+
+  };
+
+  // ------------------------------------------------------------
+  // GET FORM VALUES
+  // ------------------------------------------------------------
+
+  const getValue = (id) => {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : "";
+  };
+
+  const editId =
+    getValue("superProdId");
+
+  const name =
+    getValue("superProdName");
+
+  const category =
+    getValue("superProdCategory");
+
+  const seller =
+    getValue("superProdSeller");
+
+  const shop =
+    getValue("superProdShop");
+
+  const phone =
+    getValue("superProdPhone");
+
+  const location =
+    getValue("superProdLocation");
+
+  const desc =
+    getValue("superProdDesc");
+
+  const priceInput =
+    document.getElementById("superProdPrice");
+
+  const price =
+    Number(priceInput?.value || 0);
+
+  const fileInput =
+    document.getElementById("superProdImage");
+
+  const file =
+    fileInput?.files?.[0] || null;
+
+  // ------------------------------------------------------------
+  // VALIDATION
+  // ------------------------------------------------------------
+
+  if (!name) {
+    toast("Product name is required.", "e");
+    return;
+  }
+
+  if (!category) {
+    toast("Product category is required.", "e");
+    return;
+  }
+
+  if (!seller) {
+    toast("Seller is required.", "e");
+    return;
+  }
+
+  if (price < 0 || Number.isNaN(price)) {
+    toast("Product price is invalid.", "e");
+    return;
+  }
+
+  // ------------------------------------------------------------
+  // FIREBASE CHECK
+  // ------------------------------------------------------------
+
+  if (typeof db === "undefined") {
+
+    toast(
+      "Firestore haija-initialize.",
+      "e"
+    );
+
+    console.error(
+      "[SUPER PRODUCT] db is undefined"
+    );
+
+    return;
+  }
+
+  if (typeof auth !== "undefined" &&
+      !auth.currentUser) {
+
+    toast(
+      "Super Admin session haijapatikana.",
+      "e"
+    );
+
+    return;
+  }
+
+  // ------------------------------------------------------------
+  // BUTTON LOADING
+  // ------------------------------------------------------------
+
+  if (submitBtn) {
+
+    submitBtn.disabled = true;
+
+    submitBtn.innerHTML =
+      '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Saving...';
+
+  }
 
   try {
-    let imageUrl = "";
+
+    console.log(
+      "[SUPER PRODUCT] Save started"
+    );
+
+    console.log(
+      "[SUPER PRODUCT] Edit ID:",
+      editId || "NEW PRODUCT"
+    );
+
+    console.log(
+      "[SUPER PRODUCT] Image:",
+      file ? file.name : "NO IMAGE"
+    );
+
+    // ----------------------------------------------------------
+    // PRODUCT DATA
+    // ----------------------------------------------------------
+
+    const data = {
+
+      name: name,
+
+      category: category,
+
+      seller: seller,
+
+      shopName: shop || "",
+
+      phone: phone || "",
+
+      location: location || "",
+
+      price: price,
+
+      description: desc || "",
+
+      currency: "TZS",
+
+      updatedAt:
+        typeof serverTimestamp === "function"
+          ? serverTimestamp()
+          : new Date()
+
+    };
+
+    // ----------------------------------------------------------
+    // IMAGE UPLOAD — OPTIONAL
+    // ----------------------------------------------------------
+
     if (file) {
-      const path = `publicProducts/${Date.now()}_${file.name}`;
-      imageUrl = await uploadFile(file, path);
+
+      console.log(
+        "[SUPER PRODUCT] Image upload started:",
+        file.name
+      );
+
+      // Validate image
+      if (!file.type.startsWith("image/")) {
+
+        throw new Error(
+          "Please select a valid image file."
+        );
+
+      }
+
+      // 10MB browser-side protection
+      if (file.size > 10 * 1024 * 1024) {
+
+        throw new Error(
+          "Image is too large. Maximum allowed size is 10MB."
+        );
+
+      }
+
+      // --------------------------------------------------------
+      // USE EXISTING uploadFile IF AVAILABLE
+      // --------------------------------------------------------
+
+      if (typeof uploadFile === "function") {
+
+        const safeName =
+          file.name
+            .replace(/[^a-zA-Z0-9._-]/g, "_");
+
+        const path =
+          `publicProducts/${Date.now()}_${safeName}`;
+
+        imageUrl =
+          await withTimeout(
+            uploadFile(file, path),
+            60000,
+            "Image upload"
+          );
+
+      }
+
+      // --------------------------------------------------------
+      // DIRECT FIREBASE STORAGE FALLBACK
+      // --------------------------------------------------------
+
+      else {
+
+        if (typeof storage === "undefined") {
+
+          throw new Error(
+            "Firebase Storage haija-initialize."
+          );
+
+        }
+
+        const safeName =
+          file.name
+            .replace(/[^a-zA-Z0-9._-]/g, "_");
+
+        const storagePath =
+          `publicProducts/${Date.now()}_${safeName}`;
+
+        const storageRef =
+          ref(
+            storage,
+            storagePath
+          );
+
+        const uploadResult =
+          await withTimeout(
+            uploadBytes(
+              storageRef,
+              file,
+              {
+                contentType:
+                  file.type
+              }
+            ),
+            60000,
+            "Firebase Storage upload"
+          );
+
+        imageUrl =
+          await withTimeout(
+            getDownloadURL(
+              uploadResult.ref
+            ),
+            30000,
+            "Getting image URL"
+          );
+
+      }
+
+      if (!imageUrl) {
+
+        throw new Error(
+          "Image uploaded but download URL was not returned."
+        );
+
+      }
+
+      data.image = imageUrl;
+
+      console.log(
+        "[SUPER PRODUCT] Image upload completed"
+      );
+
     }
 
-    const data = { name, category, seller, shopName: shop, phone, location, price, description: desc, currency: "TZS" };
-    if (imageUrl) data.image = imageUrl;
+    // ----------------------------------------------------------
+    // CREATED AT FOR NEW PRODUCTS
+    // ----------------------------------------------------------
+
+    if (!editId) {
+
+      data.createdAt =
+        typeof serverTimestamp === "function"
+          ? serverTimestamp()
+          : new Date();
+
+    }
+
+    // ----------------------------------------------------------
+    // SAVE / UPDATE FIRESTORE
+    // ----------------------------------------------------------
 
     if (editId) {
-      await updateDocById("publicProducts", editId, data);
-      toast("Product updated.");
+
+      console.log(
+        "[SUPER PRODUCT] Updating Firestore:",
+        editId
+      );
+
+      const productRef =
+        doc(
+          db,
+          "publicProducts",
+          editId
+        );
+
+      const existingSnap =
+        await withTimeout(
+          getDoc(productRef),
+          30000,
+          "Checking existing product"
+        );
+
+      if (!existingSnap.exists()) {
+
+        throw new Error(
+          "Product to update was not found in Firestore."
+        );
+
+      }
+
+      await withTimeout(
+        updateDoc(
+          productRef,
+          data
+        ),
+        30000,
+        "Updating product in Firestore"
+      );
+
+      console.log(
+        "[SUPER PRODUCT] Product updated:",
+        editId
+      );
+
+      toast(
+        "Product updated successfully.",
+        "s"
+      );
+
     } else {
-      await createDoc("publicProducts", data);
-      toast("Product published.");
+
+      console.log(
+        "[SUPER PRODUCT] Creating Firestore document"
+      );
+
+      const productRef =
+        await withTimeout(
+          addDoc(
+            collection(
+              db,
+              "publicProducts"
+            ),
+            data
+          ),
+          30000,
+          "Saving product to Firestore"
+        );
+
+      console.log(
+        "[SUPER PRODUCT] Product created:",
+        productRef.id
+      );
+
+      // --------------------------------------------------------
+      // VERIFY FIRESTORE SAVE
+      // --------------------------------------------------------
+
+      const verifyRef =
+        doc(
+          db,
+          "publicProducts",
+          productRef.id
+        );
+
+      const verifySnap =
+        await withTimeout(
+          getDoc(verifyRef),
+          30000,
+          "Verifying product"
+        );
+
+      if (!verifySnap.exists()) {
+
+        throw new Error(
+          "Product save could not be verified in Firestore."
+        );
+
+      }
+
+      console.log(
+        "[SUPER PRODUCT] Firestore verification successful:",
+        productRef.id
+      );
+
+      toast(
+        "Product published successfully.",
+        "s"
+      );
+
     }
 
-    document.getElementById("superProductForm").reset();
-    document.getElementById("superProdId").value = "";
-    document.getElementById("superProductModal").style.display = "none";
-    await loadSuperPublicProducts();
-    await loadPublicData();
+    // ----------------------------------------------------------
+    // RESET FORM
+    // ----------------------------------------------------------
+
+    const productForm =
+      document.getElementById(
+        "superProductForm"
+      );
+
+    if (productForm) {
+      productForm.reset();
+    }
+
+    const idInput =
+      document.getElementById(
+        "superProdId"
+      );
+
+    if (idInput) {
+      idInput.value = "";
+    }
+
+    // ----------------------------------------------------------
+    // CLOSE MODAL
+    // ----------------------------------------------------------
+
+    const modal =
+      document.getElementById(
+        "superProductModal"
+      );
+
+    if (modal) {
+      modal.style.display = "none";
+    }
+
+    // ----------------------------------------------------------
+    // REFRESH UI
+    // IMPORTANT:
+    // REFRESHING UI MUST NOT MAKE SAVE BUTTON STUCK
+    // ----------------------------------------------------------
+
+    try {
+
+      if (
+        typeof loadSuperPublicProducts ===
+        "function"
+      ) {
+
+        console.log(
+          "[SUPER PRODUCT] Reloading Super Admin products..."
+        );
+
+        await withTimeout(
+          loadSuperPublicProducts(),
+          30000,
+          "Reloading public products"
+        );
+
+      }
+
+    } catch (refreshError) {
+
+      console.error(
+        "[SUPER PRODUCT REFRESH ERROR]",
+        refreshError
+      );
+
+      // IMPORTANT:
+      // Product is already saved.
+      // Do NOT tell the user that saving failed.
+      toast(
+        "Product saved, but the product list could not be refreshed automatically.",
+        "w"
+      );
+
+    }
+
+    // ----------------------------------------------------------
+    // PUBLIC DATA REFRESH
+    // ----------------------------------------------------------
+
+    try {
+
+      if (
+        typeof loadPublicData ===
+        "function"
+      ) {
+
+        console.log(
+          "[SUPER PRODUCT] Reloading public data..."
+        );
+
+        await withTimeout(
+          loadPublicData(),
+          30000,
+          "Reloading public data"
+        );
+
+      }
+
+    } catch (publicError) {
+
+      console.error(
+        "[SUPER PRODUCT PUBLIC DATA ERROR]",
+        publicError
+      );
+
+      // Product has already been saved.
+      // This should NOT convert a successful save
+      // into a failed save message.
+
+    }
+
+    console.log(
+      "[SUPER PRODUCT] COMPLETE"
+    );
+
   } catch (err) {
-    console.error("[SUPER PROD SAVE ERROR]", err.message);
-    toast("Failed to save product: " + err.message, "e");
+
+    console.error(
+      "[SUPER PRODUCT SAVE ERROR]",
+      err
+    );
+
+    console.error(
+      "[SUPER PRODUCT SAVE ERROR CODE]",
+      err?.code
+    );
+
+    console.error(
+      "[SUPER PRODUCT SAVE ERROR MESSAGE]",
+      err?.message
+    );
+
+    let message =
+      err?.message ||
+      "Failed to save product.";
+
+    // ----------------------------------------------------------
+    // FIREBASE ERROR TRANSLATION
+    // ----------------------------------------------------------
+
+    if (
+      err?.code ===
+      "permission-denied"
+    ) {
+
+      message =
+        "Huna ruhusa ya kuhifadhi product hii.";
+
+    }
+
+    else if (
+      err?.code ===
+      "storage/unauthorized"
+    ) {
+
+      message =
+        "Huna ruhusa ya kupakia picha kwenye Firebase Storage.";
+
+    }
+
+    else if (
+      err?.code ===
+      "storage/canceled"
+    ) {
+
+      message =
+        "Upload ya picha imeghairiwa.";
+
+    }
+
+    else if (
+      err?.code ===
+      "storage/retry-limit-exceeded"
+    ) {
+
+      message =
+        "Upload ya picha imefeli baada ya majaribio kadhaa.";
+
+    }
+
+    else if (
+      err?.code ===
+      "unavailable"
+    ) {
+
+      message =
+        "Firebase haipatikani kwa sasa. Angalia internet yako.";
+
+    }
+
+    else if (
+      err?.code ===
+      "failed-precondition"
+    ) {
+
+      message =
+        "Firebase operation haikuweza kukamilika.";
+
+    }
+
+    toast(
+      "Failed to save product: " + message,
+      "e"
+    );
+
   } finally {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = "Publish Product";
+
+    // ==========================================================
+    // CRITICAL
+    // BUTTON MUST ALWAYS RETURN TO NORMAL
+    // ==========================================================
+
+    if (submitBtn) {
+
+      submitBtn.disabled = false;
+
+      submitBtn.innerHTML =
+        originalBtnText ||
+        "Publish Product";
+
+    }
+
+    console.log(
+      "[SUPER PRODUCT] Save process finished."
+    );
+
   }
 }
 
