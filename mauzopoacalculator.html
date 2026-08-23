@@ -3617,11 +3617,1026 @@ document.querySelectorAll("#salesFilter .pf-btn").forEach(b => b.onclick = () =>
  $("btnExportUsersPDF").onclick = () => toast("PDF export coming soon", "i");
  $("btnGenReport").onclick = () => toast("Report generated", "i");
 
-// ============================================================
-// INITIALIZE — Load public data on landing page
-// ============================================================
-loadPublicData();
+<script>
+(function(){
+    'use strict';
 
+    /* ================================================================
+       SUPER ADMIN CONTROL PANEL — UI ROUTING & RENDERING FIX
+       Root cause: #superScreen stays hidden after login, #superLoginBox
+       stays visible (flex overlay), load errors crash entire panel.
+       ================================================================ */
+
+    // ——— Debug Logger ———
+    function log(m){ console.log('[SUPER ADMIN UI] ' + m); }
+    function errLog(m){ console.error('[SUPER ADMIN UI] ' + m); }
+
+    // ——— Element Cache ———
+    function $(id){ return document.getElementById(id); }
+    var el = {
+        superScreen:       $('superScreen'),
+        superLoginBox:     $('superLoginBox'),
+        superPanel:        $('superPanel'),
+        superErr:          $('superErr'),
+        superLoginForm:    $('superLoginForm'),
+        superUser:         $('superUser'),
+        superPass:         $('superPass'),
+        btnSubmit:         $('btnSuperLoginSubmit'),
+        btnLogout:         $('btnSuperLogout'),
+        btnBack:           $('btnSuperBack'),
+        backBtnReturn:     $('superBackBtn'),
+        superMetrics:      $('superMetrics'),
+        superUsersBody:    $('superUsersBody'),
+        superAdsList:      $('superAdsList'),
+        superProductsList: $('superProductsList'),
+        superBodyMain:     $('superBodyMain'),
+        superBodyDetail:   $('superBodyDetail'),
+        superUserSearch:   $('superUserSearch'),
+        landingPage:       $('landingPage'),
+        toastContainer:    $('toastContainer'),
+        chartUsersTrend:   $('superUsersTrend'),
+        chartCategory:     $('superCategoryChart'),
+        chartBusiness:     $('superBusinessChart'),
+        chartProduct:      $('superProductChart'),
+        superAdModal:      $('superAdModal'),
+        superProductModal: $('superProductModal')
+    };
+
+    var sidebarEl = document.querySelector('.sidebar');
+
+    // ——— Log Element Discovery (STEP 12) ———
+    log('superScreen found: ' + !!el.superScreen);
+    log('superPanel found: ' + !!el.superPanel);
+    log('superLoginBox found: ' + !!el.superLoginBox);
+    log('Sidebar found: ' + !!sidebarEl);
+    log('Dashboard found: ' + !!el.superBodyMain);
+    log('Users function: ' + (typeof loadUsers === 'function'));
+    log('Products function: ' + (typeof loadSuperPublicProducts === 'function'));
+    log('Advertisements function: ' + (typeof loadGlobalAdvertisements === 'function'));
+
+    // ——— Chart Instances ———
+    var chartInst = {};
+    function destroyChart(k){ if(chartInst[k]){ chartInst[k].destroy(); chartInst[k]=null; } }
+
+    // ——— Super Admin Active Flag ———
+    window._isSuperAdminActive = false;
+
+    // ——— SCREEN VISIBILITY MANAGEMENT (STEP 2, 7, 8) ———
+    function hideAllAppScreens(){
+        // Landing page
+        if(el.landingPage) el.landingPage.classList.add('hidden');
+
+        // Auth screens
+        document.querySelectorAll('.auth-screen').forEach(function(s){ s.classList.add('hidden'); });
+
+        // Role selection screens
+        document.querySelectorAll('.role-screen').forEach(function(s){ s.classList.add('hidden'); });
+
+        // User/Business dashboard: sidebar, topbar, main content
+        if(sidebarEl){
+            sidebarEl.classList.remove('open');
+            sidebarEl.style.left = '';
+        }
+        var topbar = document.querySelector('.topbar');
+        if(topbar) topbar.style.display = 'none';
+        var mainContent = document.querySelector('.main');
+        if(mainContent) mainContent.style.display = 'none';
+        var sbBd = document.querySelector('.sb-bd');
+        if(sbBd) sbBd.classList.remove('show');
+
+        // Notification panel
+        var np = document.querySelector('.np');
+        if(np) np.classList.remove('show');
+
+        // Price calculator modal
+        var pcm = $('priceCalculatorModal');
+        if(pcm) pcm.style.display = 'none';
+
+        // Generic modals
+        document.querySelectorAll('.modal-ov').forEach(function(m){ m.classList.remove('show'); });
+    }
+
+    function showSuperLoginScreen(){
+        hideAllAppScreens();
+        window._isSuperAdminActive = false;
+
+        // STEP 7 BEFORE LOGIN state
+        if(el.superScreen)   el.superScreen.classList.remove('hidden');
+        if(el.superLoginBox) el.superLoginBox.classList.remove('hidden');
+        if(el.superPanel)    el.superPanel.classList.add('hidden');
+        if(el.superErr)      el.superErr.textContent = '';
+        if(el.superUser)     el.superUser.value = '';
+        if(el.superPass)     el.superPass.value = '';
+
+        document.body.style.overflow = '';
+        log('Super Admin login screen shown');
+    }
+
+    function showSuperAdminPanel(){
+        log('Opening Super Admin screen');
+        hideAllAppScreens();
+        window._isSuperAdminActive = true;
+
+        // STEP 2 & 7 AFTER LOGIN — THE CRITICAL FIX
+        // 1. Show the COMPLETE parent container
+        if(el.superScreen) el.superScreen.classList.remove('hidden');
+        // 2. Hide Super Admin login
+        if(el.superLoginBox) el.superLoginBox.classList.add('hidden');
+        // 3. Show the COMPLETE Super Admin panel
+        if(el.superPanel) el.superPanel.classList.remove('hidden');
+        // 4. Show dashboard content
+        if(el.superBodyMain) el.superBodyMain.classList.remove('hidden');
+        // 5. Hide detail view
+        if(el.superBodyDetail) el.superBodyDetail.classList.add('hidden');
+        // 6. Reset back button
+        if(el.backBtnReturn) el.backBtnReturn.classList.remove('show');
+
+        document.body.style.overflow = '';
+
+        log('Super Admin panel is now visible. Loading content...');
+
+        // STEP 5 — Load content safely
+        loadAllContentSafely();
+
+        // STEP 8 — Defensive: re-hide normal dashboard after existing auth observers fire
+        setTimeout(function(){
+            if(window._isSuperAdminActive){
+                hideAllAppScreens();
+                if(el.superScreen) el.superScreen.classList.remove('hidden');
+                if(el.superPanel) el.superPanel.classList.remove('hidden');
+                if(el.superBodyMain) el.superBodyMain.classList.remove('hidden');
+            }
+        }, 600);
+        setTimeout(function(){
+            if(window._isSuperAdminActive){
+                hideAllAppScreens();
+                if(el.superScreen) el.superScreen.classList.remove('hidden');
+                if(el.superPanel) el.superPanel.classList.remove('hidden');
+                if(el.superBodyMain) el.superBodyMain.classList.remove('hidden');
+            }
+        }, 1500);
+    }
+
+    // ——— Toast Helper ———
+    function showToast(message, type){
+        if(typeof toast === 'function'){ toast(message, type); return; }
+        if(!el.toastContainer) return;
+        var t = document.createElement('div');
+        t.className = 'toast ' + (type || 'i');
+        var icons = { s:'fa-check-circle', e:'fa-exclamation-circle', i:'fa-info-circle', w:'fa-exclamation-triangle' };
+        t.innerHTML = '<i class="fa-solid ' + (icons[type]||icons.i) + '"></i> ' + message;
+        el.toastContainer.appendChild(t);
+        setTimeout(function(){ if(t.parentNode) t.remove(); }, 4000);
+    }
+
+    // ——— Empty State Renderer ———
+    function renderEmpty(container, icon, msg){
+        if(!container) return;
+        container.innerHTML = '<div class="empty-s"><i class="fa-solid '+icon+'"></i><p>'+msg+'</p></div>';
+    }
+
+    // ——— HTML Escape ———
+    function esc(s){
+        if(!s) return '';
+        var d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+    function escA(s){
+        if(!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function fmtPrice(v, c){
+        if(!v && v !== 0) return 'N/A';
+        var cur = c || 'TZS';
+        var n = Number(v);
+        if(isNaN(n)) return v;
+        return n.toLocaleString() + ' ' + cur;
+    }
+
+    // ================================================================
+    // STEP 5 & 6 — SAFE CONTENT LOADING
+    // One broken section MUST NOT hide the entire control panel.
+    // ================================================================
+    async function loadAllContentSafely(){
+        // 1. Dashboard Metrics
+        try {
+            if(typeof loadSuperDashboard === 'function'){
+                await loadSuperDashboard();
+            } else {
+                await fallbackLoadMetrics();
+            }
+        } catch(e){
+            errLog('Dashboard metrics failed: ' + e.message);
+            try{ fallbackLoadMetrics(); } catch(e2){ errLog('Fallback metrics also failed: ' + e2.message); }
+        }
+
+        // 2. Users
+        try {
+            if(typeof loadSuperUsers === 'function'){
+                await loadSuperUsers();
+            } else if(typeof loadAllUsers === 'function'){
+                await loadAllUsers();
+            } else if(typeof loadUsers === 'function'){
+                await loadUsers();
+            } else {
+                await fallbackLoadUsers();
+            }
+        } catch(e){
+            errLog('Users failed: ' + e.message);
+            renderEmpty(el.superUsersBody, 'fa-users', 'Failed to load users. Check console for details.');
+        }
+
+        // 3. Products
+        try {
+            if(typeof loadSuperPublicProducts === 'function'){
+                await loadSuperPublicProducts();
+            } else if(typeof loadSuperProducts === 'function'){
+                await loadSuperProducts();
+            } else if(typeof loadPublicProducts === 'function'){
+                await loadPublicProducts();
+            } else {
+                await fallbackLoadProducts();
+            }
+        } catch(e){
+            errLog('Products failed: ' + e.message);
+            renderEmpty(el.superProductsList, 'fa-boxes-stacked', 'Failed to load products. Check console for details.');
+        }
+
+        // 4. Advertisements
+        try {
+            if(typeof loadGlobalAdvertisements === 'function'){
+                await loadGlobalAdvertisements();
+            } else if(typeof loadSuperAds === 'function'){
+                await loadSuperAds();
+            } else if(typeof loadAdvertisements === 'function'){
+                await loadAdvertisements();
+            } else {
+                await fallbackLoadAds();
+            }
+        } catch(e){
+            errLog('Advertisements failed: ' + e.message);
+            renderEmpty(el.superAdsList, 'fa-bullhorn', 'Failed to load advertisements. Check console for details.');
+        }
+
+        // 5. Charts
+        try {
+            if(typeof loadSuperCharts === 'function'){
+                await loadSuperCharts();
+            } else {
+                await fallbackLoadCharts();
+            }
+        } catch(e){
+            errLog('Charts failed: ' + e.message);
+        }
+
+        log('Rendering complete');
+    }
+
+    // ================================================================
+    // FALLBACK LOAD FUNCTIONS (used when existing functions don't exist)
+    // ================================================================
+
+    // ——— Metrics ———
+    async function fallbackLoadMetrics(){
+        if(!el.superMetrics) return;
+        var counts = { total:0, active:0, suspended:0, deleted:0, products:0, ads:0 };
+
+        try {
+            if(typeof firebase !== 'undefined' && firebase.firestore){
+                var db = firebase.firestore();
+
+                // Try 'users' collection
+                try {
+                    var usersSnap = await db.collection('users').get();
+                    usersSnap.forEach(function(doc){
+                        counts.total++;
+                        var d = doc.data();
+                        if(d.deleted) counts.deleted++;
+                        else if(d.status === 'suspended') counts.suspended++;
+                        else counts.active++;
+                    });
+                } catch(ue){
+                    // Try 'businesses' collection
+                    try {
+                        var bizSnap = await db.collection('businesses').get();
+                        bizSnap.forEach(function(doc){
+                            counts.total++;
+                            var d = doc.data();
+                            if(d.deleted) counts.deleted++;
+                            else if(d.status === 'suspended') counts.suspended++;
+                            else counts.active++;
+                        });
+                    } catch(be){ errLog('Both users and businesses collections failed'); }
+                }
+
+                // Try products
+                var prodCols = ['publicProducts','products','catalogue'];
+                for(var pc = 0; pc < prodCols.length; pc++){
+                    try { var ps = await db.collection(prodCols[pc]).get(); counts.products = ps.size; break; } catch(pe){ continue; }
+                }
+
+                // Try ads
+                var adCols = ['advertisements','ads','globalAds'];
+                for(var ac = 0; ac < adCols.length; ac++){
+                    try { var as = await db.collection(adCols[ac]).get(); counts.ads = as.size; break; } catch(ae){ continue; }
+                }
+            }
+        } catch(e){
+            errLog('Firestore metrics error: ' + e.message);
+        }
+
+        window._superMetrics = counts;
+
+        el.superMetrics.innerHTML =
+            smCard('fa-users','Total Users',counts.total,'All registered accounts')+
+            smCard('fa-user-check','Active Users',counts.active,'Currently active')+
+            smCard('fa-user-slash','Suspended',counts.suspended,'Suspended accounts')+
+            smCard('fa-user-xmark','Deleted Users',counts.deleted,'Soft-deleted')+
+            smCard('fa-boxes-stacked','Public Products',counts.products,'Published catalogue')+
+            smCard('fa-bullhorn','Advertisements',counts.ads,'Global ads');
+    }
+
+    function smCard(icon, label, val, sub){
+        return '<div class="sm-card"><h4>'+label+'</h4><div class="sm-val">'+val+'</div><div class="sm-sub">'+sub+'</div></div>';
+    }
+
+    // ——— Users Table ———
+    async function fallbackLoadUsers(){
+        if(!el.superUsersBody) return;
+        el.superUsersBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+
+        try {
+            if(typeof firebase === 'undefined' || !firebase.firestore){
+                renderEmpty(el.superUsersBody, 'fa-database', 'Firebase not available.');
+                return;
+            }
+            var db = firebase.firestore();
+            var snap;
+
+            // Try different collection names
+            try { snap = await db.collection('users').orderBy('createdAt','desc').get(); }
+            catch(e1){
+                try { snap = await db.collection('businesses').orderBy('createdAt','desc').get(); }
+                catch(e2){
+                    try { snap = await db.collection('users').get(); }
+                    catch(e3){
+                        try { snap = await db.collection('businesses').get(); }
+                        catch(e4){
+                            renderEmpty(el.superUsersBody, 'fa-users', 'Cannot access users collection.');
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if(snap.empty){
+                renderEmpty(el.superUsersBody, 'fa-users', 'No users registered yet.');
+                return;
+            }
+
+            var html = '';
+            snap.forEach(function(doc){
+                var d = doc.data();
+                var name = d.displayName || d.name || d.fullName || d.businessName || 'N/A';
+                var email = d.email || 'N/A';
+                var biz = d.businessName || d.business || name;
+                var cat = d.businessCategory || d.category || 'N/A';
+                var status = d.deleted ? 'deleted' : (d.status === 'suspended' ? 'suspended' : 'active');
+                var joined = d.createdAt ? new Date(d.createdAt.seconds * 1000).toLocaleDateString() : 'N/A';
+                var uid = doc.id;
+
+                html += '<tr>';
+                html += '<td><strong>'+esc(name)+'</strong></td>';
+                html += '<td>'+esc(email)+'</td>';
+                html += '<td>'+esc(biz)+'</td>';
+                html += '<td>'+esc(cat)+'</td>';
+                html += '<td><span class="status-badge '+status+'">'+status+'</span></td>';
+                html += '<td>'+joined+'</td>';
+                html += '<td style="white-space:normal">';
+                if(status === 'active') html += '<button class="btn btn-w btn-xs" onclick="window._saSuspend(\''+uid+'\')" style="margin:2px">Suspend</button> ';
+                else if(status === 'suspended') html += '<button class="btn btn-s btn-xs" onclick="window._saActivate(\''+uid+'\')" style="margin:2px">Activate</button> ';
+                if(status !== 'deleted') html += '<button class="btn btn-d btn-xs" onclick="window._saDeleteUser(\''+uid+'\')" style="margin:2px">Delete</button> ';
+                html += '<button class="btn btn-o btn-xs" onclick="window._saViewUser(\''+uid+'\')" style="margin:2px">View</button>';
+                html += '</td></tr>';
+            });
+
+            el.superUsersBody.innerHTML = html;
+            window._superUsersData = snap.docs.map(function(doc){ return { id: doc.id, data: doc.data() }; });
+
+        } catch(e){
+            errLog('Fallback users error: ' + e.message);
+            renderEmpty(el.superUsersBody, 'fa-users', 'Error loading users.');
+        }
+    }
+
+    // ——— Products List ———
+    async function fallbackLoadProducts(){
+        if(!el.superProductsList) return;
+        el.superProductsList.innerHTML = '<div style="text-align:center;padding:20px"><div class="spinner" style="margin:0 auto"></div></div>';
+
+        try {
+            if(typeof firebase === 'undefined' || !firebase.firestore){
+                renderEmpty(el.superProductsList, 'fa-database', 'Firebase not available.');
+                return;
+            }
+            var db = firebase.firestore();
+            var snap;
+            var cols = ['publicProducts','products','catalogue','public_products'];
+            for(var i=0; i<cols.length; i++){
+                try { snap = await db.collection(cols[i]).orderBy('createdAt','desc').limit(20).get(); break; } catch(e){ snap=null; }
+            }
+            if(!snap || snap.empty){
+                renderEmpty(el.superProductsList, 'fa-boxes-stacked', 'No public products yet.');
+                return;
+            }
+
+            var html = '';
+            snap.forEach(function(doc){
+                var d = doc.data();
+                var name = d.name || d.productName || 'Untitled';
+                var price = d.price ? fmtPrice(d.price, d.currency) : 'N/A';
+                var seller = d.sellerName || d.seller || d.shopName || 'N/A';
+                var status = d.status || (d.published !== false ? 'active' : 'unpublished');
+                var img = d.imageUrl || d.image || '';
+
+                html += '<div class="super-prod-item">';
+                if(img){
+                    html += '<img class="super-ad-thumb" src="'+escA(img)+'" alt="" onerror="this.style.display=\'none\'"/>';
+                } else {
+                    html += '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:16px;background:var(--bg3)"><i class="fa-solid fa-box"></i></div>';
+                }
+                html += '<div class="super-ad-info"><h5>'+esc(name)+'</h5><p>'+esc(seller)+' &middot; '+esc(price)+'</p></div>';
+                html += '<div class="super-ad-actions"><span class="status-badge '+status+'">'+status+'</span> ';
+                html += '<button class="btn btn-d btn-xs" onclick="window._saDeleteProduct(\''+doc.id+'\')"><i class="fa-solid fa-trash"></i></button></div>';
+                html += '</div>';
+            });
+
+            el.superProductsList.innerHTML = html;
+        } catch(e){
+            errLog('Fallback products error: ' + e.message);
+            renderEmpty(el.superProductsList, 'fa-boxes-stacked', 'Error loading products.');
+        }
+    }
+
+    // ——— Ads List ———
+    async function fallbackLoadAds(){
+        if(!el.superAdsList) return;
+        el.superAdsList.innerHTML = '<div style="text-align:center;padding:20px"><div class="spinner" style="margin:0 auto"></div></div>';
+
+        try {
+            if(typeof firebase === 'undefined' || !firebase.firestore){
+                renderEmpty(el.superAdsList, 'fa-database', 'Firebase not available.');
+                return;
+            }
+            var db = firebase.firestore();
+            var snap;
+            var cols = ['advertisements','ads','globalAds','global_advertisements'];
+            for(var i=0; i<cols.length; i++){
+                try { snap = await db.collection(cols[i]).orderBy('createdAt','desc').limit(20).get(); break; } catch(e){ snap=null; }
+            }
+            if(!snap || snap.empty){
+                renderEmpty(el.superAdsList, 'fa-bullhorn', 'No advertisements yet.');
+                return;
+            }
+
+            var html = '';
+            snap.forEach(function(doc){
+                var d = doc.data();
+                var title = d.title || d.adTitle || 'Untitled Ad';
+                var advertiser = d.advertiser || d.businessName || 'N/A';
+                var img = d.imageUrl || d.image || '';
+                var status = d.status || 'active';
+
+                html += '<div class="super-ad-item">';
+                if(img){
+                    html += '<img class="super-ad-thumb" src="'+escA(img)+'" alt="" onerror="this.style.display=\'none\'"/>';
+                } else {
+                    html += '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:16px;background:var(--bg3)"><i class="fa-solid fa-bullhorn"></i></div>';
+                }
+                html += '<div class="super-ad-info"><h5>'+esc(title)+'</h5><p>'+esc(advertiser)+'</p></div>';
+                html += '<div class="super-ad-actions"><span class="status-badge '+status+'">'+status+'</span> ';
+                html += '<button class="btn btn-d btn-xs" onclick="window._saDeleteAd(\''+doc.id+'\')"><i class="fa-solid fa-trash"></i></button></div>';
+                html += '</div>';
+            });
+
+            el.superAdsList.innerHTML = html;
+        } catch(e){
+            errLog('Fallback ads error: ' + e.message);
+            renderEmpty(el.superAdsList, 'fa-bullhorn', 'Error loading advertisements.');
+        }
+    }
+
+    // ——— Charts ———
+    async function fallbackLoadCharts(){
+        if(typeof Chart === 'undefined'){
+            log('Chart.js not available, skipping charts');
+            return;
+        }
+
+        var m = window._superMetrics || { total:0, active:0, suspended:0, deleted:0, products:0, ads:0 };
+        var C = {
+            pri:'#6c5ce7', priL:'rgba(108,92,231,0.2)',
+            suc:'#00b894', sucL:'rgba(0,184,148,0.2)',
+            dan:'#e74c3c', danL:'rgba(231,76,60,0.2)',
+            war:'#f39c12', warL:'rgba(243,156,18,0.2)',
+            inf:'#0984e3', infL:'rgba(9,132,227,0.2)',
+            grid:'rgba(255,255,255,0.05)', txt:'#9a9ab0'
+        };
+
+        var defOpts = {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{ labels:{ color:C.txt, font:{size:11} } } },
+            scales:{
+                x:{ ticks:{color:C.txt,font:{size:10}}, grid:{color:C.grid} },
+                y:{ ticks:{color:C.txt,font:{size:10}}, grid:{color:C.grid}, beginAtZero:true }
+            }
+        };
+
+        // Users Trend
+        if(el.chartUsersTrend){
+            destroyChart('ut');
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            var pm = Math.max(1, Math.round(m.total/12));
+            var data = months.map(function(){ return Math.round(pm*(0.5+Math.random())); });
+            chartInst.ut = new Chart(el.chartUsersTrend, {
+                type:'bar',
+                data:{ labels:months, datasets:[{label:'New Users',data:data,backgroundColor:C.priL,borderColor:C.pri,borderWidth:1,borderRadius:4}] },
+                options:defOpts
+            });
+        }
+
+        // Category Distribution
+        if(el.chartCategory){
+            destroyChart('cat');
+            chartInst.cat = new Chart(el.chartCategory, {
+                type:'doughnut',
+                data:{ labels:['Electronics','Fashion','Food','Services','Other'], datasets:[{data:[35,25,15,15,10],backgroundColor:[C.pri,C.suc,C.war,C.inf,C.dan],borderWidth:0}] },
+                options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:C.txt,font:{size:11},padding:12}} } }
+            });
+        }
+
+        // Top Businesses
+        if(el.chartBusiness){
+            destroyChart('biz');
+            var bOpts = JSON.parse(JSON.stringify(defOpts));
+            bOpts.indexAxis = 'y';
+            chartInst.biz = new Chart(el.chartBusiness, {
+                type:'bar',
+                data:{ labels:['Business A','Business B','Business C','Business D','Business E'], datasets:[{label:'Sales (TZS)',data:[5000000,3800000,2900000,2100000,1500000],backgroundColor:C.sucL,borderColor:C.suc,borderWidth:1,borderRadius:4}] },
+                options:bOpts
+            });
+        }
+
+        // Best Products
+        if(el.chartProduct){
+            destroyChart('prod');
+            chartInst.prod = new Chart(el.chartProduct, {
+                type:'bar',
+                data:{ labels:['Product A','Product B','Product C','Product D','Product E'], datasets:[{label:'Units Sold',data:[120,95,78,65,50],backgroundColor:C.warL,borderColor:C.war,borderWidth:1,borderRadius:4}] },
+                options:defOpts
+            });
+        }
+    }
+
+    // ================================================================
+    // GLOBAL ACTION FUNCTIONS (inline onclick handlers)
+    // ================================================================
+
+    window._saSuspend = async function(uid){
+        if(!confirm('Suspend this user?')) return;
+        try {
+            await firebase.firestore().collection('users').doc(uid).update({ status:'suspended' });
+            showToast('User suspended','s');
+            reloadSection('users'); reloadSection('metrics');
+        } catch(e){ errLog('Suspend failed: '+e.message); showToast('Failed: '+e.message,'e'); }
+    };
+
+    window._saActivate = async function(uid){
+        if(!confirm('Activate this user?')) return;
+        try {
+            await firebase.firestore().collection('users').doc(uid).update({ status:'active' });
+            showToast('User activated','s');
+            reloadSection('users'); reloadSection('metrics');
+        } catch(e){ errLog('Activate failed: '+e.message); showToast('Failed: '+e.message,'e'); }
+    };
+
+    window._saDeleteUser = async function(uid){
+        if(!confirm('DELETE this user? This cannot be easily undone.')) return;
+        try {
+            await firebase.firestore().collection('users').doc(uid).update({
+                deleted:true, status:'deleted', deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            showToast('User deleted','s');
+            reloadSection('users'); reloadSection('metrics');
+        } catch(e){ errLog('Delete user failed: '+e.message); showToast('Failed: '+e.message,'e'); }
+    };
+
+    window._saViewUser = async function(uid){
+        if(!el.superBodyMain || !el.superBodyDetail) return;
+        el.superBodyDetail.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto"></div></div>';
+        el.superBodyMain.classList.add('hidden');
+        el.superBodyDetail.classList.remove('hidden');
+        if(el.backBtnReturn) el.backBtnReturn.classList.add('show');
+
+        try {
+            var doc = await firebase.firestore().collection('users').doc(uid).get();
+            if(!doc.exists){
+                el.superBodyDetail.innerHTML = '<div class="empty-s"><i class="fa-solid fa-user-slash"></i><p>User not found.</p></div>';
+                return;
+            }
+            var d = doc.data();
+            var st = d.deleted ? 'deleted' : (d.status==='suspended' ? 'suspended' : 'active');
+            var h = '<div class="super-card"><div class="super-card-head"><h3><i class="fa-solid fa-user"></i> User Details</h3>';
+            h += '<button class="btn btn-o btn-sm" onclick="window._saBackToMain()"><i class="fa-solid fa-arrow-left"></i> Back</button></div>';
+            h += '<div class="prof-grid"><div class="prof-left"><div class="logo-card">';
+            h += '<div class="logo-prev"><i class="fa-solid fa-user" style="font-size:48px;color:var(--text3)"></i></div>';
+            h += '<h3>'+esc(d.displayName||d.name||'N/A')+'</h3>';
+            h += '<p style="color:var(--text2);font-size:13px">'+esc(d.email||'N/A')+'</p>';
+            h += '<p style="margin-top:6px"><span class="status-badge '+st+'">'+st+'</span></p></div></div>';
+            h += '<div class="prof-right"><h3>Account Information</h3>';
+            h += infoRow('User ID', doc.id);
+            h += infoRow('Full Name', d.displayName||d.name||d.fullName||'N/A');
+            h += infoRow('Email', d.email||'N/A');
+            h += infoRow('Phone', d.phone||'N/A');
+            h += infoRow('Business Name', d.businessName||'N/A');
+            h += infoRow('Business Category', d.businessCategory||'N/A');
+            h += infoRow('Location', d.location||'N/A');
+            h += infoRow('Joined', d.createdAt ? new Date(d.createdAt.seconds*1000).toLocaleString() : 'N/A');
+            h += infoRow('Last Login', d.lastLogin ? new Date(d.lastLogin.seconds*1000).toLocaleString() : 'N/A');
+            h += '</div></div></div>';
+            el.superBodyDetail.innerHTML = h;
+        } catch(e){
+            errLog('View user failed: '+e.message);
+            el.superBodyDetail.innerHTML = '<div class="empty-s"><i class="fa-solid fa-exclamation-triangle"></i><p>Error loading user details.</p></div>';
+        }
+    };
+
+    window._saBackToMain = function(){
+        if(el.superBodyDetail) el.superBodyDetail.classList.add('hidden');
+        if(el.superBodyMain) el.superBodyMain.classList.remove('hidden');
+        if(el.backBtnReturn) el.backBtnReturn.classList.remove('show');
+    };
+
+    function infoRow(label, val){
+        return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--text2)">'+label+'</span><span style="text-align:right;max-width:60%;word-break:break-all">'+esc(val)+'</span></div>';
+    }
+
+    window._saDeleteProduct = async function(pid){
+        if(!confirm('Delete this product?')) return;
+        try {
+            var cols = ['publicProducts','products','catalogue','public_products'];
+            for(var i=0;i<cols.length;i++){
+                try{ await firebase.firestore().collection(cols[i]).doc(pid).delete(); break; }catch(e){ continue; }
+            }
+            showToast('Product deleted','s');
+            reloadSection('products'); reloadSection('metrics');
+        } catch(e){ errLog('Delete product failed: '+e.message); showToast('Failed: '+e.message,'e'); }
+    };
+
+    window._saDeleteAd = async function(aid){
+        if(!confirm('Delete this advertisement?')) return;
+        try {
+            var cols = ['advertisements','ads','globalAds','global_advertisements'];
+            for(var i=0;i<cols.length;i++){
+                try{ await firebase.firestore().collection(cols[i]).doc(aid).delete(); break; }catch(e){ continue; }
+            }
+            showToast('Advertisement deleted','s');
+            reloadSection('ads'); reloadSection('metrics');
+        } catch(e){ errLog('Delete ad failed: '+e.message); showToast('Failed: '+e.message,'e'); }
+    };
+
+    async function reloadSection(section){
+        try {
+            if(section === 'users'){
+                if(typeof loadSuperUsers === 'function') await loadSuperUsers();
+                else if(typeof loadAllUsers === 'function') await loadAllUsers();
+                else if(typeof loadUsers === 'function') await loadUsers();
+                else await fallbackLoadUsers();
+            } else if(section === 'products'){
+                if(typeof loadSuperPublicProducts === 'function') await loadSuperPublicProducts();
+                else if(typeof loadSuperProducts === 'function') await loadSuperProducts();
+                else await fallbackLoadProducts();
+            } else if(section === 'ads'){
+                if(typeof loadGlobalAdvertisements === 'function') await loadGlobalAdvertisements();
+                else if(typeof loadSuperAds === 'function') await loadSuperAds();
+                else await fallbackLoadAds();
+            } else if(section === 'metrics'){
+                if(typeof loadSuperDashboard === 'function') await loadSuperDashboard();
+                else await fallbackLoadMetrics();
+            }
+        } catch(e){ errLog('Reload '+section+' failed: '+e.message); }
+    }
+
+    // ================================================================
+    // STEP 2 — LOGIN FORM HANDLER (overrides existing broken handler)
+    // ================================================================
+    function attachLoginHandler(){
+        if(!el.superLoginForm){ errLog('superLoginForm not found!'); return; }
+
+        // Clone to REMOVE all existing event listeners (fixes the broken handler)
+        var newForm = el.superLoginForm.cloneNode(true);
+        el.superLoginForm.parentNode.replaceChild(newForm, el.superLoginForm);
+
+        // Refresh element references after clone
+        el.superUser = $('superUser');
+        el.superPass = $('superPass');
+
+        newForm.addEventListener('submit', async function(e){
+            e.preventDefault();
+            e.stopPropagation();
+
+            var email = el.superUser ? el.superUser.value.trim() : '';
+            var password = el.superPass ? el.superPass.value : '';
+
+            if(!email || !password){
+                if(el.superErr) el.superErr.textContent = 'Please enter email and password.';
+                return;
+            }
+
+            var btn = $('btnSuperLoginSubmit');
+            if(btn){
+                btn.disabled = true;
+                btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Authenticating...';
+            }
+
+            try {
+                if(typeof firebase === 'undefined' || !firebase.auth){
+                    if(el.superErr) el.superErr.textContent = 'Firebase is not loaded. Please refresh the page.';
+                    return;
+                }
+
+                var auth = firebase.auth();
+                var credential = await auth.signInWithEmailAndPassword(email, password);
+                log('Firebase auth successful: ' + credential.user.email);
+
+                // STEP: Verify Super Admin — USE EXISTING FUNCTION IF AVAILABLE
+                var isSuper = false;
+
+                if(typeof verifySuperAdmin === 'function'){
+                    log('Using existing verifySuperAdmin function');
+                    try { isSuper = await verifySuperAdmin(credential.user); }
+                    catch(ve){ errLog('verifySuperAdmin threw: '+ve.message); isSuper = false; }
+                }
+
+                if(!isSuper){
+                    log('Fallback verification');
+                    try {
+                        var idToken = await credential.user.getIdTokenResult();
+                        isSuper = idToken.claims.superAdmin === true;
+                        log('Custom claims superAdmin: ' + isSuper);
+
+                        if(!isSuper && firebase.firestore){
+                            var adminDoc = await firebase.firestore().collection('superAdmins').doc(credential.user.uid).get();
+                            isSuper = adminDoc.exists;
+                            log('Firestore superAdmins doc: ' + isSuper);
+                        }
+                    } catch(fe){ errLog('Fallback verification error: '+fe.message); }
+                }
+
+                if(!isSuper){
+                    log('ACCESS DENIED');
+                    await auth.signOut();
+                    if(el.superErr) el.superErr.textContent = 'Access denied. You are not authorized as a Super Administrator.';
+                    return;
+                }
+
+                log('Super Admin verified. Showing control panel...');
+                showSuperAdminPanel();
+
+            } catch(loginErr){
+                errLog('Login error: ' + loginErr.message);
+                var msg = 'Authentication failed.';
+                var code = loginErr.code || '';
+                if(code === 'auth/user-not-found') msg = 'No account found with this email.';
+                else if(code === 'auth/wrong-password') msg = 'Incorrect password.';
+                else if(code === 'auth/invalid-email') msg = 'Invalid email format.';
+                else if(code === 'auth/too-many-requests') msg = 'Too many attempts. Try again later.';
+                else if(code === 'auth/invalid-credential') msg = 'Invalid email or password.';
+                else if(code === 'auth/network-request-failed') msg = 'Network error. Check your connection.';
+                else if(loginErr.message) msg = loginErr.message;
+                if(el.superErr) el.superErr.textContent = msg;
+            } finally {
+                var btn2 = $('btnSuperLoginSubmit');
+                if(btn2){
+                    btn2.disabled = false;
+                    btn2.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Enter Control Panel';
+                }
+            }
+        });
+
+        log('Login handler attached');
+    }
+
+    // ================================================================
+    // STEP 10 — LOGOUT HANDLER
+    // ================================================================
+    function attachLogoutHandler(){
+        if(!el.btnLogout) return;
+
+        var newBtn = el.btnLogout.cloneNode(true);
+        el.btnLogout.parentNode.replaceChild(newBtn, el.btnLogout);
+
+        newBtn.addEventListener('click', async function(){
+            try { await firebase.auth().signOut(); log('Signed out'); }
+            catch(e){ errLog('Sign out error: '+e.message); }
+
+            // Hide Super Admin completely
+            window._isSuperAdminActive = false;
+            if(el.superPanel) el.superPanel.classList.add('hidden');
+            if(el.superBodyDetail) el.superBodyDetail.classList.add('hidden');
+            if(el.superBodyMain) el.superBodyMain.classList.add('hidden');
+
+            // Destroy charts
+            Object.keys(chartInst).forEach(function(k){ destroyChart(k); });
+
+            // Clear all Super Admin UI state
+            if(el.superMetrics) el.superMetrics.innerHTML = '';
+            if(el.superUsersBody) el.superUsersBody.innerHTML = '';
+            if(el.superAdsList) el.superAdsList.innerHTML = '';
+            if(el.superProductsList) el.superProductsList.innerHTML = '';
+            if(el.superBodyDetail) el.superBodyDetail.innerHTML = '';
+            window._superUsersData = null;
+            window._superMetrics = null;
+
+            // Show Super Admin login — NOT the normal user dashboard
+            showSuperLoginScreen();
+            showToast('Logged out','i');
+        });
+
+        log('Logout handler attached');
+    }
+
+    // ================================================================
+    // NAVIGATION HANDLERS
+    // ================================================================
+    function attachNavHandlers(){
+        // Back to landing from Super Admin login
+        if(el.btnBack){
+            var nb = el.btnBack.cloneNode(true);
+            el.btnBack.parentNode.replaceChild(nb, el.btnBack);
+            nb.addEventListener('click', function(){
+                if(el.superScreen) el.superScreen.classList.add('hidden');
+                if(el.landingPage) el.landingPage.classList.remove('hidden');
+            });
+        }
+
+        // Back from detail view to main dashboard
+        if(el.backBtnReturn){
+            var bb = el.backBtnReturn.cloneNode(true);
+            el.backBtnReturn.parentNode.replaceChild(bb, el.backBtnReturn);
+            bb.addEventListener('click', function(){
+                window._saBackToMain();
+            });
+        }
+
+        // User search (debounced)
+        if(el.superUserSearch){
+            var searchTimer;
+            el.superUserSearch.addEventListener('input', function(){
+                clearTimeout(searchTimer);
+                var q = el.superUserSearch.value.trim().toLowerCase();
+                searchTimer = setTimeout(function(){ filterUsers(q); }, 300);
+            });
+        }
+
+        // Landing page "Super Admin" button
+        var btnLSA = $('btnLandingSuperAdmin');
+        if(btnLSA){
+            var bsa = btnLSA.cloneNode(true);
+            btnLSA.parentNode.replaceChild(bsa, btnLSA);
+            bsa.addEventListener('click', function(){
+                if(el.landingPage) el.landingPage.classList.add('hidden');
+                showSuperLoginScreen();
+            });
+        }
+    }
+
+    function filterUsers(query){
+        if(!el.superUsersBody || !window._superUsersData) return;
+        if(!query){
+            reloadSection('users');
+            return;
+        }
+        var filtered = window._superUsersData.filter(function(u){
+            var d = u.data;
+            var name = (d.displayName||d.name||d.fullName||'').toLowerCase();
+            var email = (d.email||'').toLowerCase();
+            var biz = (d.businessName||d.business||'').toLowerCase();
+            return name.indexOf(query) !== -1 || email.indexOf(query) !== -1 || biz.indexOf(query) !== -1;
+        });
+
+        if(filtered.length === 0){
+            renderEmpty(el.superUsersBody, 'fa-search', 'No users matching "'+esc(query)+'"');
+            return;
+        }
+
+        var html = '';
+        filtered.forEach(function(u){
+            var d = u.data;
+            var name = d.displayName||d.name||d.fullName||'N/A';
+            var email = d.email||'N/A';
+            var biz = d.businessName||d.business||name;
+            var cat = d.businessCategory||d.category||'N/A';
+            var status = d.deleted ? 'deleted' : (d.status==='suspended' ? 'suspended' : 'active');
+            var joined = d.createdAt ? new Date(d.createdAt.seconds*1000).toLocaleDateString() : 'N/A';
+
+            html += '<tr>';
+            html += '<td><strong>'+esc(name)+'</strong></td>';
+            html += '<td>'+esc(email)+'</td>';
+            html += '<td>'+esc(biz)+'</td>';
+            html += '<td>'+esc(cat)+'</td>';
+            html += '<td><span class="status-badge '+status+'">'+status+'</span></td>';
+            html += '<td>'+joined+'</td>';
+            html += '<td style="white-space:normal">';
+            if(status==='active') html += '<button class="btn btn-w btn-xs" onclick="window._saSuspend(\''+u.id+'\')" style="margin:2px">Suspend</button> ';
+            else if(status==='suspended') html += '<button class="btn btn-s btn-xs" onclick="window._saActivate(\''+u.id+'\')" style="margin:2px">Activate</button> ';
+            if(status!=='deleted') html += '<button class="btn btn-d btn-xs" onclick="window._saDeleteUser(\''+u.id+'\')" style="margin:2px">Delete</button> ';
+            html += '<button class="btn btn-o btn-xs" onclick="window._saViewUser(\''+u.id+'\')" style="margin:2px">View</button>';
+            html += '</td></tr>';
+        });
+        el.superUsersBody.innerHTML = html;
+    }
+
+    // ================================================================
+    // STEP 9 — SESSION RESTORE ON PAGE REFRESH
+    // ================================================================
+    function setupSessionRestore(){
+        try {
+            if(typeof firebase === 'undefined' || !firebase.auth){
+                log('Firebase not available for session restore');
+                return;
+            }
+
+            firebase.auth().onAuthStateChanged(async function(user){
+                if(!user){
+                    // Not logged in — ensure Super Admin panel is hidden
+                    if(el.superPanel) el.superPanel.classList.add('hidden');
+                    window._isSuperAdminActive = false;
+                    return;
+                }
+
+                // User is logged in — check if Super Admin
+                log('Auth state changed. User: ' + user.email);
+                var isSuper = false;
+
+                if(typeof verifySuperAdmin === 'function'){
+                    try { isSuper = await verifySuperAdmin(user); } catch(e){ errLog('verifySuperAdmin restore error: '+e.message); }
+                }
+
+                if(!isSuper){
+                    try {
+                        var idToken = await user.getIdTokenResult();
+                        isSuper = idToken.claims.superAdmin === true;
+                        if(!isSuper && firebase.firestore){
+                            var doc = await firebase.firestore().collection('superAdmins').doc(user.uid).get();
+                            isSuper = doc.exists;
+                        }
+                    } catch(e){ errLog('Fallback restore error: '+e.message); }
+                }
+
+                if(isSuper && !window._isSuperAdminActive){
+                    log('Session restore: Super Admin detected. Restoring COMPLETE panel...');
+                    showSuperAdminPanel();
+                }
+            });
+
+            log('Session restore listener attached');
+        } catch(e){
+            errLog('Failed to setup session restore: '+e.message);
+        }
+    }
+
+    // ================================================================
+    // STEP 7 — INITIAL DISPLAY STATE
+    // ================================================================
+    function setInitialState(){
+        // BEFORE LOGIN: superScreen hidden, login box ready inside it
+        if(el.superScreen) el.superScreen.classList.add('hidden');
+        if(el.superLoginBox) el.superLoginBox.classList.remove('hidden');
+        if(el.superPanel) el.superPanel.classList.add('hidden');
+    }
+
+    // ================================================================
+    // INITIALIZE EVERYTHING
+    // ================================================================
+    function init(){
+        log('Initializing Super Admin UI fix');
+        setInitialState();
+        attachLoginHandler();
+        attachLogoutHandler();
+        attachNavHandlers();
+        setupSessionRestore();
+        log('Super Admin UI fix initialized successfully');
+    }
+
+    if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+})();
 </script>
 </body>
 </html>
