@@ -5159,29 +5159,834 @@ function renderSuperProductsList() {
 
 // ================================================================
 // SUPER ADMIN — PUBLISH / UPDATE PUBLIC PRODUCT
-// FIRESTORE + STORAGE SAFE SAVE
+// DIRECT FIRESTORE + STORAGE
+// NO PERMANENT "SAVING..."
 // ================================================================
 
 async function handleSuperProductForm(e) {
-  e.preventDefault();
 
-  const form = e.currentTarget || e.target;
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
-  const submitBtn = form.querySelector(
-    'button[type="submit"]'
-  );
+  const form =
+    e?.currentTarget ||
+    document.getElementById("superProductForm");
+
+  if (!form) {
+    console.error("[PRODUCT] Form not found.");
+    return;
+  }
+
+  const submitBtn =
+    form.querySelector('button[type="submit"]');
 
   const originalBtnText =
-    submitBtn?.innerHTML || "Publish Product";
+    submitBtn?.innerHTML ||
+    "Publish Product";
 
-  // ------------------------------------------------------------
-  // PREVENT DOUBLE SUBMISSION
-  // ------------------------------------------------------------
-
+  // Prevent double click
   if (submitBtn?.disabled) {
     return;
   }
 
+  // ==============================================================
+  // SAFE TIMEOUT
+  // ==============================================================
+
+  function timeoutPromise(promise, ms, operation) {
+
+    return Promise.race([
+
+      promise,
+
+      new Promise((_, reject) => {
+
+        setTimeout(() => {
+
+          reject(
+            new Error(
+              operation +
+              " timed out after " +
+              (ms / 1000) +
+              " seconds."
+            )
+          );
+
+        }, ms);
+
+      })
+
+    ]);
+
+  }
+
+
+  // ==============================================================
+  // GET VALUE SAFELY
+  // ==============================================================
+
+  function value(id) {
+
+    const el =
+      document.getElementById(id);
+
+    return el
+      ? String(el.value || "").trim()
+      : "";
+
+  }
+
+
+  // ==============================================================
+  // GET FORM VALUES
+  // ==============================================================
+
+  const editId =
+    value("superProdId");
+
+  const name =
+    value("superProdName");
+
+  const category =
+    value("superProdCategory");
+
+  const seller =
+    value("superProdSeller");
+
+  const shop =
+    value("superProdShop");
+
+  const phone =
+    value("superProdPhone");
+
+  const location =
+    value("superProdLocation");
+
+  const description =
+    value("superProdDesc");
+
+  const priceElement =
+    document.getElementById(
+      "superProdPrice"
+    );
+
+  const price =
+    Number(priceElement?.value || 0);
+
+  const fileInput =
+    document.getElementById(
+      "superProdImage"
+    );
+
+  const file =
+    fileInput?.files?.[0] || null;
+
+
+  // ==============================================================
+  // VALIDATION
+  // ==============================================================
+
+  if (!name) {
+    toast("Product name is required.", "e");
+    return;
+  }
+
+  if (!category) {
+    toast("Product category is required.", "e");
+    return;
+  }
+
+  if (!seller) {
+    toast("Seller is required.", "e");
+    return;
+  }
+
+  if (!Number.isFinite(price) || price < 0) {
+    toast("Invalid product price.", "e");
+    return;
+  }
+
+
+  // ==============================================================
+  // FIREBASE CHECK
+  // ==============================================================
+
+  if (typeof db === "undefined") {
+
+    toast(
+      "Firestore haija-initialize.",
+      "e"
+    );
+
+    console.error(
+      "[PRODUCT] db is undefined."
+    );
+
+    return;
+  }
+
+
+  // ==============================================================
+  // AUTH CHECK
+  // ==============================================================
+
+  if (
+    typeof auth !== "undefined" &&
+    !auth.currentUser
+  ) {
+
+    toast(
+      "Super Admin session haijapatikana.",
+      "e"
+    );
+
+    return;
+  }
+
+
+  // ==============================================================
+  // LOADING STATE
+  // ==============================================================
+
+  if (submitBtn) {
+
+    submitBtn.disabled = true;
+
+    submitBtn.innerHTML =
+      '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+
+  }
+
+
+  let saveCompleted = false;
+
+
+  try {
+
+    console.log(
+      "================================================"
+    );
+
+    console.log(
+      "[PRODUCT] STARTING SAVE"
+    );
+
+    console.log(
+      "[PRODUCT] editId:",
+      editId || "NEW"
+    );
+
+    console.log(
+      "[PRODUCT] name:",
+      name
+    );
+
+    console.log(
+      "[PRODUCT] image:",
+      file?.name || "NONE"
+    );
+
+
+    // ============================================================
+    // BUILD DATA
+    // ============================================================
+
+    const data = {
+
+      name: name,
+
+      category: category,
+
+      seller: seller,
+
+      shopName: shop,
+
+      phone: phone,
+
+      location: location,
+
+      price: price,
+
+      description: description,
+
+      currency: "TZS",
+
+      updatedAt:
+        serverTimestamp()
+
+    };
+
+
+    // ============================================================
+    // IMAGE UPLOAD
+    // ============================================================
+
+    if (file) {
+
+      console.log(
+        "[PRODUCT] STEP 1: IMAGE UPLOAD START"
+      );
+
+
+      if (
+        !file.type ||
+        !file.type.startsWith("image/")
+      ) {
+
+        throw new Error(
+          "Selected file is not a valid image."
+        );
+
+      }
+
+
+      if (
+        file.size >
+        10 * 1024 * 1024
+      ) {
+
+        throw new Error(
+          "Image is too large. Maximum size is 10MB."
+        );
+
+      }
+
+
+      if (
+        typeof storage === "undefined"
+      ) {
+
+        throw new Error(
+          "Firebase Storage haija-initialize."
+        );
+
+      }
+
+
+      const safeFileName =
+        file.name
+          .replace(
+            /[^a-zA-Z0-9._-]/g,
+            "_"
+          );
+
+
+      const storagePath =
+        "publicProducts/" +
+        Date.now() +
+        "_" +
+        safeFileName;
+
+
+      console.log(
+        "[PRODUCT] Storage path:",
+        storagePath
+      );
+
+
+      const storageReference =
+        ref(
+          storage,
+          storagePath
+        );
+
+
+      console.log(
+        "[PRODUCT] Uploading image..."
+      );
+
+
+      const uploadResult =
+        await timeoutPromise(
+          uploadBytes(
+            storageReference,
+            file
+          ),
+          60000,
+          "Image upload"
+        );
+
+
+      console.log(
+        "[PRODUCT] IMAGE UPLOAD COMPLETE"
+      );
+
+
+      const imageUrl =
+        await timeoutPromise(
+          getDownloadURL(
+            uploadResult.ref
+          ),
+          30000,
+          "Getting image URL"
+        );
+
+
+      if (!imageUrl) {
+
+        throw new Error(
+          "Firebase did not return an image URL."
+        );
+
+      }
+
+
+      data.image =
+        imageUrl;
+
+
+      console.log(
+        "[PRODUCT] IMAGE URL RECEIVED"
+      );
+
+    } else {
+
+      console.log(
+        "[PRODUCT] No image selected."
+      );
+
+    }
+
+
+    // ============================================================
+    // FIRESTORE SAVE
+    // ============================================================
+
+    if (editId) {
+
+      // ==========================================================
+      // UPDATE EXISTING PRODUCT
+      // ==========================================================
+
+      console.log(
+        "[PRODUCT] STEP 2: CHECKING EXISTING PRODUCT"
+      );
+
+
+      const productRef =
+        doc(
+          db,
+          "publicProducts",
+          editId
+        );
+
+
+      const existing =
+        await timeoutPromise(
+          getDoc(productRef),
+          30000,
+          "Checking product"
+        );
+
+
+      if (!existing.exists()) {
+
+        throw new Error(
+          "Product does not exist in Firestore."
+        );
+
+      }
+
+
+      console.log(
+        "[PRODUCT] STEP 3: UPDATING FIRESTORE"
+      );
+
+
+      await timeoutPromise(
+        updateDoc(
+          productRef,
+          data
+        ),
+        30000,
+        "Updating product"
+      );
+
+
+      // VERIFY
+      const verify =
+        await timeoutPromise(
+          getDoc(productRef),
+          30000,
+          "Verifying product update"
+        );
+
+
+      if (!verify.exists()) {
+
+        throw new Error(
+          "Product update could not be verified."
+        );
+
+      }
+
+
+      console.log(
+        "[PRODUCT] UPDATE SUCCESS:",
+        editId
+      );
+
+
+      saveCompleted = true;
+
+
+      toast(
+        "Product updated successfully.",
+        "s"
+      );
+
+
+    } else {
+
+      // ==========================================================
+      // CREATE NEW PRODUCT
+      // ==========================================================
+
+      data.createdAt =
+        serverTimestamp();
+
+
+      console.log(
+        "[PRODUCT] STEP 2: CREATING FIRESTORE DOCUMENT"
+      );
+
+
+      const collectionRef =
+        collection(
+          db,
+          "publicProducts"
+        );
+
+
+      const newDocument =
+        await timeoutPromise(
+          addDoc(
+            collectionRef,
+            data
+          ),
+          30000,
+          "Saving product to Firestore"
+        );
+
+
+      if (
+        !newDocument ||
+        !newDocument.id
+      ) {
+
+        throw new Error(
+          "Firestore did not return a document ID."
+        );
+
+      }
+
+
+      console.log(
+        "[PRODUCT] DOCUMENT CREATED:",
+        newDocument.id
+      );
+
+
+      // ==========================================================
+      // VERIFY FIRESTORE
+      // ==========================================================
+
+      console.log(
+        "[PRODUCT] STEP 3: VERIFYING FIRESTORE SAVE"
+      );
+
+
+      const savedDocumentRef =
+        doc(
+          db,
+          "publicProducts",
+          newDocument.id
+        );
+
+
+      const savedDocument =
+        await timeoutPromise(
+          getDoc(
+            savedDocumentRef
+          ),
+          30000,
+          "Verifying Firestore save"
+        );
+
+
+      if (
+        !savedDocument.exists()
+      ) {
+
+        throw new Error(
+          "Product was created but verification failed."
+        );
+
+      }
+
+
+      console.log(
+        "[PRODUCT] FIRESTORE SAVE VERIFIED:",
+        newDocument.id
+      );
+
+
+      saveCompleted = true;
+
+
+      toast(
+        "Product published successfully.",
+        "s"
+      );
+
+    }
+
+
+    // ============================================================
+    // RESET ONLY AFTER SUCCESS
+    // ============================================================
+
+    if (saveCompleted) {
+
+      const productForm =
+        document.getElementById(
+          "superProductForm"
+        );
+
+      if (productForm) {
+        productForm.reset();
+      }
+
+
+      const idInput =
+        document.getElementById(
+          "superProdId"
+        );
+
+      if (idInput) {
+        idInput.value = "";
+      }
+
+
+      // ==========================================================
+      // CLOSE MODAL
+      // ==========================================================
+
+      const modal =
+        document.getElementById(
+          "superProductModal"
+        );
+
+      if (modal) {
+
+        modal.style.display =
+          "none";
+
+      }
+
+
+      // ==========================================================
+      // REFRESH UI
+      //
+      // IMPORTANT:
+      // UI REFRESH FAILURE MUST NOT MAKE SAVE FAIL
+      // ==========================================================
+
+      try {
+
+        if (
+          typeof loadSuperPublicProducts ===
+          "function"
+        ) {
+
+          console.log(
+            "[PRODUCT] Refreshing Super Admin product list..."
+          );
+
+
+          await timeoutPromise(
+            loadSuperPublicProducts(),
+            30000,
+            "Refreshing products"
+          );
+
+        }
+
+      } catch (refreshError) {
+
+        console.error(
+          "[PRODUCT] REFRESH ERROR:",
+          refreshError
+        );
+
+        console.warn(
+          "[PRODUCT] Product was already saved."
+        );
+
+      }
+
+
+      try {
+
+        if (
+          typeof loadPublicData ===
+          "function"
+        ) {
+
+          console.log(
+            "[PRODUCT] Refreshing public data..."
+          );
+
+
+          await timeoutPromise(
+            loadPublicData(),
+            30000,
+            "Refreshing public data"
+          );
+
+        }
+
+      } catch (refreshError) {
+
+        console.error(
+          "[PRODUCT] PUBLIC REFRESH ERROR:",
+          refreshError
+        );
+
+      }
+
+
+      console.log(
+        "[PRODUCT] SAVE PROCESS COMPLETED"
+      );
+
+    }
+
+
+  } catch (error) {
+
+    // ==========================================================
+    // REAL ERROR
+    // ==========================================================
+
+    console.error(
+      "================================================"
+    );
+
+    console.error(
+      "[PRODUCT SAVE ERROR]",
+      error
+    );
+
+    console.error(
+      "[PRODUCT SAVE ERROR CODE]",
+      error?.code
+    );
+
+    console.error(
+      "[PRODUCT SAVE ERROR MESSAGE]",
+      error?.message
+    );
+
+
+    let message =
+      error?.message ||
+      "Failed to publish product.";
+
+
+    if (
+      error?.code ===
+      "permission-denied"
+    ) {
+
+      message =
+        "Firebase imekataa operation. Angalia Firestore/Storage Rules.";
+
+    }
+
+    else if (
+      error?.code ===
+      "unauthenticated"
+    ) {
+
+      message =
+        "Session yako imekwisha. Ingia tena.";
+
+    }
+
+    else if (
+      error?.code ===
+      "storage/unauthorized"
+    ) {
+
+      message =
+        "Huna ruhusa ya kupakia picha kwenye Firebase Storage.";
+
+    }
+
+    else if (
+      error?.code ===
+      "storage/network-request-failed"
+    ) {
+
+      message =
+        "Upload imeshindwa kwa sababu ya mtandao.";
+
+    }
+
+    else if (
+      error?.code ===
+      "unavailable"
+    ) {
+
+      message =
+        "Firebase haipatikani kwa sasa.";
+
+    }
+
+
+    toast(
+      "Failed: " + message,
+      "e"
+    );
+
+
+  } finally {
+
+    // ==========================================================
+    // THIS MUST ALWAYS RUN
+    // ==========================================================
+
+    if (submitBtn) {
+
+      submitBtn.disabled =
+        false;
+
+      submitBtn.innerHTML =
+        originalBtnText ||
+        "Publish Product";
+
+    }
+
+
+    console.log(
+      "[PRODUCT] BUTTON RESTORED"
+    );
+
+  }
+
+}
+
+
+// ================================================================
+// MAKE AVAILABLE TO HTML
+// IMPORTANT FOR <script type="module">
+// ================================================================
+
+window.handleSuperProductForm =
+  handleSuperProductForm;
   // ------------------------------------------------------------
   // HELPER — TIMEOUT
   // ------------------------------------------------------------
