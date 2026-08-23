@@ -922,10 +922,25 @@ tr:hover td{background:var(--bg3)}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 
-<script>
-/* ============================================================
-   FIREBASE INITIALIZATION
-   ============================================================ */
+<script type="module">
+
+// ================================================================
+// 1. FIREBASE CONFIGURATION & INITIALIZATION (SINGLE INSTANCE)
+// ================================================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  onAuthStateChanged, signOut, updatePassword, sendPasswordResetEmail
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc,
+  updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp,
+  writeBatch, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+  getStorage, ref, uploadBytes, getDownloadURL, deleteObject
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
 const firebaseConfig = {
   apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
   authDomain: "ncrs-aeb43.firebaseapp.com",
@@ -935,32 +950,46 @@ const firebaseConfig = {
   appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
   measurementId: "G-ZYB71RY8J5"
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-/* ============================================================
-   GLOBAL STATE
-   ============================================================ */
-let currentUser = null;
-let currentBizData = null;
-let currentRole = 'manager';
-let allUsersCache = [];
-let allProductsCache = [];
-let allAdsCache = [];
-let superChartInstances = {};
-let posCart = [];
-let confirmCallback = null;
-let superConfirmCallback = null;
+// Expose to window for any legacy references
+window._fbAuth = auth;
+window._fbDb = db;
+window._fbStorage = storage;
 
-/* ============================================================
-   SUPER ADMIN EMAIL WHITELIST
-   ============================================================ */
-const SUPER_ADMIN_EMAILS = [
-  "admin@soboo.co.tz",
-  "superadmin@bizbook.app"
-];
+// ================================================================
+// 2. GLOBAL STATE
+// ================================================================
+let currentUser = null;       // Firebase Auth user
+let currentUserData = null;   // Firestore user doc
+let currentBusiness = null;   // Firestore business doc
+let currentBusinessId = null;
+let currentRole = null;       // owner, manager, cashier, etc.
+
+// Data arrays (always reloaded from Firestore after operations)
+let allProducts = [];
+let allCustomers = [];
+let allSuppliers = [];
+let allSales = [];
+let allExpenses = [];
+let allPurchases = [];
+let allStaff = [];
+let allNotifications = [];
+let allPublicAds = [];
+let allPublicProducts = [];
+let allSuperUsers = [];
+
+// POS Cart
+let cart = [];
+
+// Chart instances (to destroy before redrawing)
+let chartInstances = {};
+
+// Super Admin confirmed emails
+const SUPER_ADMIN_EMAILS = ["nashiri2waziri29@gmail.com"];
 
 /* ============================================================
    UTILITY: TOAST NOTIFICATIONS
