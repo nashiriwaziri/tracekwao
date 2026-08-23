@@ -1071,6 +1071,107 @@ window.addEventListener('error', function(event) {
 window.addEventListener('unhandledrejection', function(event) {
     console.error('[UNHANDLED PROMISE]', event.reason);
 });
+/* ============================================================
+   AUTH STATE OBSERVER — THE CRITICAL INITIALIZATION CHAIN
+   This is where the business ID flow MUST be correct.
+
+   Sequence:
+   1. Firebase Auth user detected
+   2. Check if Super Admin → route to Super Admin Panel (NO bizId needed)
+   3. Load users/{uid} document
+   4. Resolve business ID from user data
+   5. Load businesses/{bizId} document
+   6. Update AppState
+   7. Route to appropriate dashboard based on role
+   8. Load business data (products, sales, etc.)
+   ============================================================ */
+auth.onAuthStateChanged(async (user) => {
+    console.log('[AUTH STATE] Changed. User:', user ? user.uid : 'null');
+
+    if (!user) {
+        window.AppState.authReady = false;
+        window.AppState.currentUser = null;
+        return;
+    }
+
+    window.AppState.authReady = true;
+    window.AppState.currentUser = user;
+
+    /* Check if this is a Super Admin */
+    const superAdminEmails = [
+        'nashiri2waziri29@gmail.com',
+        'super@mauzopoa.app',
+        'soboo@mauzopoa.app'
+    ];
+
+    if (superAdminEmails.includes(user.email)) {
+        console.log('[AUTH STATE] Super Admin detected:', user.email);
+        window.AppState.isSuperAdmin = true;
+        window.AppState.currentRole = 'superAdmin';
+        showScreen('superScreen');
+        document.getElementById('superLoginBox').classList.add('hidden');
+        document.getElementById('superPanel').classList.remove('hidden');
+        await loadSuperAdminData();
+        return;
+    }
+
+    window.AppState.isSuperAdmin = false;
+
+    /* REGULAR USER FLOW: Resolve business ID */
+    try {
+        const result = await resolveBusinessId(user);
+
+        /* Update AppState — the single source of truth */
+        window.AppState.currentUserData = result.userData;
+        window.AppState.bizId = result.bizId;
+        window.AppState.businessData = result.businessData;
+
+        console.log('[AUTH STATE] AppState updated:');
+        console.log('  bizId:', window.AppState.bizId);
+        console.log('  role:', result.userData.role);
+        console.log('  businessName:', result.businessData ? (result.businessData.name || result.businessData.businessName) : 'N/A');
+
+        /* Determine where to route the user */
+        const userRole = result.userData.role;
+
+        if (userRole === 'owner' && !window.AppState.currentRole) {
+            /* Owner who hasn't selected a role session yet — show role selection or go straight to dashboard */
+            if (window.AppState.currentRole !== 'owner' && window.AppState.currentRole !== 'manager' && window.AppState.currentRole !== 'cashier' && window.AppState.currentRole !== 'seller') {
+                /* Auto-select owner role for business owners */
+                window.AppState.currentRole = 'owner';
+            }
+        } else if (userRole === 'staff' || userRole === 'manager' || userRole === 'cashier' || userRole === 'seller') {
+            /* Staff accounts use their assigned role */
+            window.AppState.currentRole = userRole;
+        } else if (!window.AppState.currentRole) {
+            window.AppState.currentRole = userRole || 'owner';
+        }
+
+        /* Show the dashboard */
+        await enterDashboard();
+
+    } catch (err) {
+        console.error('[AUTH STATE] Business resolution failed:', err);
+
+        /* Show a USEFUL error message instead of the generic one */
+        let errorMsg = err.message || 'Tatizo limejitokeza.';
+
+        if (errorMsg.includes('User profile not found')) {
+            errorMsg = 'Profaili yako haipatikani. Usajili haukukamilika. Tafadhali jaribu kusajili tena.';
+        } else if (errorMsg.includes('Permission denied')) {
+            errorMsg = 'Hakuna ruhusa ya kusoma data. Wasiliana na msimamizi.';
+        } else if (errorMsg.includes('Business ID is not stored')) {
+            errorMsg = 'Profaili yako hauna ID ya biashara. Usajili haukukamilika vibaya. Tafadhali wasiliana na msimamizi.';
+        } else {
+            errorMsg = 'ID ya biashara haipatikani: ' + errorMsg;
+        }
+
+        showScreen('authScreen');
+        switchAuthTab('login');
+        showAuthErr(errorMsg);
+        toast(errorMsg, 'e');
+    }
+});
 
 // ============================================================
 // FUNCTION ZA MSAADA (UTILITIES)
