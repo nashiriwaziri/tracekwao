@@ -988,71 +988,42 @@ tr:hover td{background:var(--bg3)}
   </div>
 </div>
 
-<!-- ==================== FIREBASE APPLICATION SCRIPT ==================== -->
+<!-- BADILISHA script yako yote iliyokatika na hii script kamili hapo chini -->
+<!-- Hii inaanza kutoka handleLogoRemove hadi mwisho wa programu -->
+
 <script type="module">
 // ============================================================
-// FIREBASE MODULAR SDK IMPORTS — ALL FUNCTIONS DECLARED HERE
+// FIREBASE MODULAR SDK IMPORTS — KILA KITU KINACHOHITAJIKA
 // ============================================================
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
-    getAuth,
-    onAuthStateChanged,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    signOut,
-    sendPasswordResetEmail,
-    updatePassword
+    getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+    createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, updatePassword
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
-    getFirestore,
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    addDoc,
-    setDoc,
-    updateDoc,
-    deleteDoc,
-    query,
-    where,
-    orderBy,
-    limit,
-    serverTimestamp,
-    onSnapshot
+    getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc,
+    updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, onSnapshot
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {
-    getStorage,
-    ref,
-    uploadBytes,
-    getDownloadURL,
-    deleteObject
+    getStorage, ref, uploadBytes, getDownloadURL, deleteObject
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 // ============================================================
-// FIREBASE CONFIGURATION
-// ⚠️ PASTE YOUR EXISTING FIREBASE CONFIGURATION BELOW ⚠️
-// DO NOT leave these as placeholder values — replace with your
-// actual project configuration from the Firebase Console.
+// FIREBASE CONFIG — WEKA CONFIG YAKO HALISI HAPA
 // ============================================================
 const firebaseConfig = {
-  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-  authDomain: "ncrs-aeb43.firebaseapp.com",
-  projectId: "ncrs-aeb43",
-  storageBucket: "ncrs-aeb43.firebasestorage.app",
-  messagingSenderId: "786434442929",
-  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-  measurementId: "G-ZYB71RY8J5"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
 };
 
 // ============================================================
-// SINGLE FIREBASE INITIALIZATION — EXECUTED EXACTLY ONCE
+// INITIALIZATION MOJA NA MOJA TU
 // ============================================================
-let firebaseApp = null;
-let auth = null;
-let db = null;
-let storage = null;
-let firebaseReady = false;
-
+let firebaseApp, auth, db, storage, firebaseReady = false;
 try {
     firebaseApp = initializeApp(firebaseConfig);
     auth = getAuth(firebaseApp);
@@ -1061,20 +1032,17 @@ try {
     firebaseReady = true;
     console.log('[SYSTEM] Firebase initialized successfully.');
 } catch (err) {
-    console.error('[SYSTEM] Firebase initialization FAILED:', err);
-    showInitError('Firebase could not be initialized. Please check your configuration and reload.');
+    console.error('[SYSTEM] Firebase init FAILED:', err);
 }
 
 // ============================================================
-// CENTRAL APPLICATION STATE
+// HALI KUU YA PROGRAMU
 // ============================================================
 let authReady = false;
 let currentUser = null;
 let currentUserData = null;
 let bizId = null;
 let currentSection = 'dashboard';
-
-// Data caches
 let productsCache = [];
 let salesCache = [];
 let customersCache = [];
@@ -1082,54 +1050,41 @@ let suppliersCache = [];
 let staffCache = [];
 let inventoryCache = [];
 let notificationsCache = [];
-
-// POS cart state
 let posCart = [];
-
-// Chart instances (to destroy before re-creating)
 let chartInstances = {};
-
-// Pagination state
-let paginationState = {};
-
-// Confirm callback
 let confirmCallback = null;
+let productPage = 1;
+let salePage = 1;
+let customerPage = 1;
+let saleStatusFilter = 'all';
+let superUsersCache = [];
+let superAdsCache = [];
+let superProductsCache = [];
+const PER_PAGE = 15;
 
 // ============================================================
-// GLOBAL ERROR HANDLERS
+// VINJARI GLOBAL ERROR HANDLERS
 // ============================================================
-window.addEventListener('error', event => {
+window.addEventListener('error', function(event) {
     console.error('[GLOBAL JS ERROR]', event.error || event.message);
 });
-
-window.addEventListener('unhandledrejection', event => {
+window.addEventListener('unhandledrejection', function(event) {
     console.error('[UNHANDLED PROMISE]', event.reason);
 });
 
 // ============================================================
-// INIT ERROR DISPLAY
+// FUNCTION ZA MSAADA (UTILITIES)
 // ============================================================
-function showInitError(msg) {
-    const el = document.getElementById('initErrOverlay');
-    const msgEl = document.getElementById('initErrMsg');
-    if (el && msgEl) {
-        msgEl.textContent = msg;
-        el.classList.remove('hidden');
-    }
-}
-
-// ============================================================
-// UTILITY FUNCTIONS
-// ============================================================
-function toast(message, type = 'i') {
-    const tc = document.getElementById('toastContainer');
+function toast(msg, type) {
+    type = type || 'i';
+    var tc = document.getElementById('toastContainer');
     if (!tc) return;
-    const icons = { s: 'fa-check-circle', e: 'fa-circle-exclamation', i: 'fa-circle-info', w: 'fa-triangle-exclamation' };
-    const t = document.createElement('div');
-    t.className = `toast ${type}`;
-    t.innerHTML = `<i class="fa-solid ${icons[type] || icons.i}"></i><span>${message}</span>`;
+    var icons = { s: 'fa-check-circle', e: 'fa-circle-exclamation', i: 'fa-circle-info', w: 'fa-triangle-exclamation' };
+    var t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.innerHTML = '<i class="fa-solid ' + (icons[type] || icons.i) + '"></i><span>' + msg + '</span>';
     tc.appendChild(t);
-    setTimeout(() => { if (t.parentNode) t.remove(); }, 4000);
+    setTimeout(function() { if (t.parentNode) t.remove(); }, 4000);
 }
 
 function fmt(n) {
@@ -1138,99 +1093,96 @@ function fmt(n) {
 }
 
 function fmtDate(ts) {
-    if (!ts) return '—';
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    if (!ts) return '\u2014';
+    var d = ts.toDate ? ts.toDate() : new Date(ts);
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function fmtDateTime(ts) {
-    if (!ts) return '—';
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    if (!ts) return '\u2014';
+    var d = ts.toDate ? ts.toDate() : new Date(ts);
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function genId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 function escHtml(s) {
     if (!s) return '';
-    const div = document.createElement('div');
-    div.textContent = s;
-    return div.innerHTML;
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
 }
 
+function el(id) { return document.getElementById(id); }
+
 // ============================================================
-// IMAGE COMPRESSION UTILITY
+// IMAGE COMPRESSION
 // ============================================================
-function compressImage(file, maxKB = 500) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let w = img.width, h = img.height;
-                const maxDim = 1200;
+function compressImage(file, maxKB) {
+    maxKB = maxKB || 500;
+    return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var img = new Image();
+            img.onload = function() {
+                var canvas = document.createElement('canvas');
+                var w = img.width, h = img.height, maxDim = 1200;
                 if (w > maxDim || h > maxDim) {
                     if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
                     else { w = Math.round(w * maxDim / h); h = maxDim; }
                 }
-                canvas.width = w; canvas.height = h;
+                canvas.width = w;
+                canvas.height = h;
                 canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                let quality = 0.8;
-                const tryCompress = () => {
-                    canvas.toBlob(blob => {
+                var q = 0.8;
+                function tryQ() {
+                    canvas.toBlob(function(blob) {
                         if (!blob) { reject(new Error('Compression failed')); return; }
-                        if (blob.size / 1024 > maxKB && quality > 0.1) {
-                            quality -= 0.1;
-                            tryCompress();
-                        } else {
-                            resolve(new File([blob], file.name, { type: 'image/jpeg' }));
-                        }
-                    }, 'image/jpeg', quality);
-                };
-                tryCompress();
+                        if (blob.size / 1024 > maxKB && q > 0.1) { q -= 0.1; tryQ(); }
+                        else { resolve(new File([blob], file.name, { type: 'image/jpeg' })); }
+                    }, 'image/jpeg', q);
+                }
+                tryQ();
             };
-            img.onerror = () => reject(new Error('Image load failed'));
+            img.onerror = function() { reject(new Error('Image load failed')); };
             img.src = e.target.result;
         };
-        reader.onerror = () => reject(new Error('File read failed'));
+        reader.onerror = function() { reject(new Error('File read failed')); };
         reader.readAsDataURL(file);
     });
 }
 
 async function uploadImage(file, path) {
-    const compressed = await compressImage(file);
-    const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, compressed);
-    return getDownloadURL(storageRef);
+    var compressed = await compressImage(file);
+    var sr = ref(storage, path);
+    await uploadBytes(sr, compressed);
+    return getDownloadURL(sr);
 }
 
 // ============================================================
 // MODAL HELPERS
 // ============================================================
 function openModal(id) {
-    const el = document.getElementById(id);
-    if (el) { el.style.display = 'flex'; requestAnimationFrame(() => el.classList.add('show')); }
+    var m = el(id);
+    if (m) { m.style.display = 'flex'; requestAnimationFrame(function() { m.classList.add('show'); }); }
 }
+
 function closeModal(id) {
-    const el = document.getElementById(id);
-    if (el) { el.classList.remove('show'); setTimeout(() => { el.style.display = 'none'; }, 200); }
+    var m = el(id);
+    if (m) { m.classList.remove('show'); setTimeout(function() { m.style.display = 'none'; }, 200); }
 }
 
 function openMainModal(title, bodyHtml, actionsHtml) {
-    document.getElementById('mainModalTitle').textContent = title;
-    document.getElementById('mainModalBody').innerHTML = bodyHtml;
-    document.getElementById('mainModalActions').innerHTML = actionsHtml || '';
+    el('mainModalTitle').textContent = title;
+    el('mainModalBody').innerHTML = bodyHtml;
+    el('mainModalActions').innerHTML = actionsHtml || '';
     openModal('mainModal');
 }
+
 function closeMainModal() { closeModal('mainModal'); }
 
-function showConfirm(title, msg, callback) {
-    document.getElementById('confirmTitle').textContent = title;
-    document.getElementById('confirmMsg').textContent = msg;
-    confirmCallback = callback;
+function showConfirm(title, msg, cb) {
+    el('confirmTitle').textContent = title;
+    el('confirmMsg').textContent = msg;
+    confirmCallback = cb;
     openModal('confirmModal');
 }
 
@@ -1238,29 +1190,25 @@ function showConfirm(title, msg, callback) {
 // SCREEN NAVIGATION
 // ============================================================
 function showScreen(id) {
-    ['landingPage', 'authScreen', 'roleScreen', 'superScreen', 'appLayout', 'initErrOverlay'].forEach(s => {
-        const el = document.getElementById(s);
-        if (el) el.classList.add('hidden');
+    ['landingPage', 'authScreen', 'roleScreen', 'superScreen', 'appLayout'].forEach(function(s) {
+        var e = el(s);
+        if (e) e.classList.add('hidden');
     });
-    const target = document.getElementById(id);
-    if (target) target.classList.remove('hidden');
+    var t = el(id);
+    if (t) t.classList.remove('hidden');
 }
 
 function navigateSection(section) {
     currentSection = section;
-    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    const sec = document.getElementById('sec' + section.charAt(0).toUpperCase() + section.slice(1));
+    document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+    var secId = 'sec' + section.charAt(0).toUpperCase() + section.slice(1);
+    var sec = el(secId);
     if (sec) sec.classList.add('active');
-
-    document.querySelectorAll('.ni[data-section]').forEach(n => {
+    document.querySelectorAll('.ni[data-section]').forEach(function(n) {
         n.classList.toggle('active', n.dataset.section === section);
     });
-
-    // Close sidebar on mobile
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('sbBackdrop').classList.remove('show');
-
-    // Load section data
+    el('sidebar').classList.remove('open');
+    el('sbBackdrop').classList.remove('show');
     loadSectionData(section);
 }
 
@@ -1281,42 +1229,38 @@ async function loadSectionData(section) {
             case 'profile': loadProfile(); break;
         }
     } catch (err) {
-        console.error(`[SECTION: ${section}]`, err);
-        toast('Failed to load section data', 'e');
+        console.error('[SECTION:' + section + ']', err);
+        toast('Failed to load section', 'e');
     }
 }
 
-// ============================================================
-// CHART HELPER
-// ============================================================
 function renderChart(canvasId, config) {
-    if (chartInstances[canvasId]) { chartInstances[canvasId].destroy(); delete chartInstances[canvasId]; }
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-    chartInstances[canvasId] = new Chart(canvas, config);
+    if (chartInstances[canvasId]) {
+        chartInstances[canvasId].destroy();
+        delete chartInstances[canvasId];
+    }
+    var c = el(canvasId);
+    if (c) chartInstances[canvasId] = new Chart(c, config);
 }
 
-// ============================================================
-// PAGINATION HELPER
-// ============================================================
-function renderPagination(containerId, totalItems, currentPage, perPage, callback) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    const totalPages = Math.ceil(totalItems / perPage) || 1;
-    if (totalPages <= 1) { container.innerHTML = ''; return; }
-    let html = `<button ${currentPage <= 1 ? 'disabled' : ''} data-p="${currentPage - 1}"><i class="fa-solid fa-chevron-left"></i></button>`;
-    for (let i = 1; i <= totalPages; i++) {
-        if (totalPages > 7 && Math.abs(i - currentPage) > 2 && i !== 1 && i !== totalPages) {
-            if (i === currentPage - 3 || i === currentPage + 3) html += `<span>...</span>`;
+function renderPagination(containerId, total, page, perPage, cb) {
+    var c = el(containerId);
+    if (!c) return;
+    var tp = Math.ceil(total / perPage) || 1;
+    if (tp <= 1) { c.innerHTML = ''; return; }
+    var h = '<button ' + (page <= 1 ? 'disabled' : '') + ' data-p="' + (page - 1) + '"><i class="fa-solid fa-chevron-left"></i></button>';
+    for (var i = 1; i <= tp; i++) {
+        if (tp > 7 && Math.abs(i - page) > 2 && i !== 1 && i !== tp) {
+            if (i === page - 3 || i === page + 3) h += '<span>...</span>';
             continue;
         }
-        html += `<button class="${i === currentPage ? 'active' : ''}" data-p="${i}">${i}</button>`;
+        h += '<button class="' + (i === page ? 'active' : '') + '" data-p="' + i + '">' + i + '</button>';
     }
-    html += `<button ${currentPage >= totalPages ? 'disabled' : ''} data-p="${currentPage + 1}"><i class="fa-solid fa-chevron-right"></i></button>`;
-    html += `<span>${totalItems} item${totalItems !== 1 ? 's' : ''}</span>`;
-    container.innerHTML = html;
-    container.querySelectorAll('button[data-p]').forEach(btn => {
-        btn.addEventListener('click', () => callback(parseInt(btn.dataset.p)));
+    h += '<button ' + (page >= tp ? 'disabled' : '') + ' data-p="' + (page + 1) + '"><i class="fa-solid fa-chevron-right"></i></button>';
+    h += '<span>' + total + ' items</span>';
+    c.innerHTML = h;
+    c.querySelectorAll('button[data-p]').forEach(function(b) {
+        b.addEventListener('click', function() { cb(parseInt(b.dataset.p)); });
     });
 }
 
@@ -1324,36 +1268,34 @@ function renderPagination(containerId, totalItems, currentPage, perPage, callbac
 // AUTHENTICATION
 // ============================================================
 function showAuthError(msg) {
-    const el = document.getElementById('authErr');
-    const txt = document.getElementById('authErrText');
-    if (el && txt) { txt.textContent = msg; el.classList.add('show'); }
+    var e = el('authErr'), t = el('authErrText');
+    if (e && t) { t.textContent = msg; e.classList.add('show'); }
 }
+
 function hideAuthError() {
-    const el = document.getElementById('authErr');
-    if (el) el.classList.remove('show');
+    var e = el('authErr');
+    if (e) e.classList.remove('show');
 }
 
 async function handleLogin(e) {
     e.preventDefault();
     hideAuthError();
-    const email = document.getElementById('loginEmail').value.trim();
-    const password = document.getElementById('loginPassword').value;
-    const btn = document.getElementById('btnLoginSubmit');
+    var email = el('loginEmail').value.trim();
+    var pw = el('loginPassword').value;
+    var btn = el('btnLoginSubmit');
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Logging in...';
     try {
-        await signInWithEmailAndPassword(auth, email, password);
-        // Auth state listener will handle the rest
+        await signInWithEmailAndPassword(auth, email, pw);
     } catch (err) {
-        console.error('[LOGIN ERROR]', err);
-        const msgs = {
+        var m = {
             'auth/user-not-found': 'No account found with this email.',
             'auth/wrong-password': 'Incorrect password.',
             'auth/invalid-credential': 'Invalid email or password.',
-            'auth/too-many-requests': 'Too many attempts. Please try again later.',
+            'auth/too-many-requests': 'Too many attempts. Try again later.',
             'auth/invalid-email': 'Invalid email format.'
         };
-        showAuthError(msgs[err.code] || err.message);
+        showAuthError(m[err.code] || err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Login';
@@ -1363,69 +1305,46 @@ async function handleLogin(e) {
 async function handleSignup(e) {
     e.preventDefault();
     hideAuthError();
-    const name = document.getElementById('signupName').value.trim();
-    const email = document.getElementById('signupEmail').value.trim();
-    const phone = document.getElementById('signupPhone').value.trim();
-    const password = document.getElementById('signupPassword').value;
-    const bizName = document.getElementById('signupBizName').value.trim();
-    const bizCategory = document.getElementById('signupBizCategory').value;
-    const bizPhone = document.getElementById('signupBizPhone').value.trim();
-    const bizAddress = document.getElementById('signupBizAddress').value.trim();
+    var name = el('signupName').value.trim();
+    var email = el('signupEmail').value.trim();
+    var phone = el('signupPhone').value.trim();
+    var pw = el('signupPassword').value;
+    var bizName = el('signupBizName').value.trim();
+    var bizCat = el('signupBizCategory').value;
+    var bizPhone = el('signupBizPhone').value.trim();
+    var bizAddr = el('signupBizAddress').value.trim();
 
-    if (!name || !email || !password || !bizName || !bizCategory) {
+    if (!name || !email || !pw || !bizName || !bizCat) {
         showAuthError('Please fill all required fields.');
         return;
     }
-    if (password.length < 6) {
+    if (pw.length < 6) {
         showAuthError('Password must be at least 6 characters.');
         return;
     }
 
-    const btn = document.getElementById('btnSignupSubmit');
+    var btn = el('btnSignupSubmit');
     btn.disabled = true;
-    btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Creating account...';
-
+    btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Creating...';
     try {
-        // 1. Create auth user
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        const uid = cred.user.uid;
-
-        // 2. Create business document
-        const bizRef = doc(db, 'businesses', uid);
-        await setDoc(bizRef, {
-            name: bizName,
-            category: bizCategory,
-            phone: bizPhone,
-            email: email,
-            address: bizAddress,
-            ownerUid: uid,
-            logo: '',
-            status: 'active',
-            createdAt: serverTimestamp()
+        var cred = await createUserWithEmailAndPassword(auth, email, pw);
+        var uid = cred.user.uid;
+        await setDoc(doc(db, 'businesses', uid), {
+            name: bizName, category: bizCat, phone: bizPhone, email: email,
+            address: bizAddr, ownerUid: uid, logo: '', status: 'active', createdAt: serverTimestamp()
         });
-
-        // 3. Create user profile
         await setDoc(doc(db, 'users', uid), {
-            name: name,
-            email: email,
-            phone: phone,
-            bizId: uid,
-            role: 'owner',
-            workingRole: '',
-            status: 'active',
-            createdAt: serverTimestamp()
+            name: name, email: email, phone: phone, bizId: uid,
+            role: 'owner', workingRole: '', status: 'active', createdAt: serverTimestamp()
         });
-
         toast('Account created successfully!', 's');
-        // Auth state listener handles navigation
     } catch (err) {
-        console.error('[SIGNUP ERROR]', err);
-        const msgs = {
+        var m = {
             'auth/email-already-in-use': 'An account with this email already exists.',
             'auth/weak-password': 'Password is too weak.',
             'auth/invalid-email': 'Invalid email format.'
         };
-        showAuthError(msgs[err.code] || err.message);
+        showAuthError(m[err.code] || err.message);
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Create Account';
@@ -1433,57 +1352,45 @@ async function handleSignup(e) {
 }
 
 async function handleLogout() {
-    try {
-        await signOut(auth);
-    } catch (err) {
-        console.error('[LOGOUT ERROR]', err);
-        toast('Logout failed', 'e');
-    }
+    try { await signOut(auth); }
+    catch (e) { console.error('[LOGOUT ERROR]', e); toast('Logout failed', 'e'); }
 }
 
-async function handleForgotPassword() {
-    const email = document.getElementById('loginEmail').value.trim();
+async function handleForgotPw() {
+    var email = el('loginEmail').value.trim();
     if (!email) { showAuthError('Enter your email above first.'); return; }
-    try {
-        await sendPasswordResetEmail(auth, email);
-        toast('Password reset email sent!', 's');
-    } catch (err) {
-        console.error('[FORGOT PW ERROR]', err);
-        showAuthError(err.message);
-    }
+    try { await sendPasswordResetEmail(auth, email); toast('Password reset email sent!', 's'); }
+    catch (e) { showAuthError(e.message); }
 }
 
-// Password strength indicator
 function checkPwStrength(pw) {
-    const bar = document.getElementById('pwBarInner');
-    const hint = document.getElementById('pwHint');
+    var bar = el('pwBarInner'), hint = el('pwHint');
     if (!bar || !hint) return;
-    let score = 0;
-    if (pw.length >= 6) score++;
-    if (pw.length >= 10) score++;
-    if (/[A-Z]/.test(pw)) score++;
-    if (/[0-9]/.test(pw)) score++;
-    if (/[^A-Za-z0-9]/.test(pw)) score++;
-    const colors = ['var(--danger)', 'var(--danger)', 'var(--warning)', 'var(--warning)', 'var(--success)', 'var(--success)'];
-    const labels = ['', 'Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
-    bar.style.width = (score * 20) + '%';
-    bar.style.background = colors[score] || 'var(--bg3)';
-    hint.textContent = pw ? labels[score] || '' : '';
+    var s = 0;
+    if (pw.length >= 6) s++;
+    if (pw.length >= 10) s++;
+    if (/[A-Z]/.test(pw)) s++;
+    if (/[0-9]/.test(pw)) s++;
+    if (/[^A-Za-z0-9]/.test(pw)) s++;
+    var cols = ['var(--danger)', 'var(--danger)', 'var(--warning)', 'var(--warning)', 'var(--success)', 'var(--success)'];
+    var lbls = ['', 'Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
+    bar.style.width = (s * 20) + '%';
+    bar.style.background = cols[s] || 'var(--bg3)';
+    hint.textContent = pw ? (lbls[s] || '') : '';
 }
 
-// Signup step navigation
 function showSignupStep(step) {
-    document.getElementById('signupStep1').classList.toggle('hidden', step !== 1);
-    document.getElementById('signupStep2').classList.toggle('hidden', step !== 2);
-    document.querySelectorAll('#signupSteps .sdot').forEach(d => {
+    el('signupStep1').classList.toggle('hidden', step !== 1);
+    el('signupStep2').classList.toggle('hidden', step !== 2);
+    document.querySelectorAll('#signupSteps .sdot').forEach(function(d) {
         d.classList.toggle('on', parseInt(d.dataset.step) <= step);
     });
 }
 
 // ============================================================
-// AUTH STATE LISTENER — CENTRAL ROUTING
+// AUTH STATE LISTENER — KITOVU CHA ROUTING
 // ============================================================
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, async function(user) {
     console.log('[AUTH STATE]', user ? user.uid : 'null');
     currentUser = user || null;
 
@@ -1492,58 +1399,46 @@ onAuthStateChanged(auth, async (user) => {
         currentUserData = null;
         bizId = null;
         posCart = [];
-        // Destroy all charts
-        Object.keys(chartInstances).forEach(k => { chartInstances[k].destroy(); delete chartInstances[k]; });
+        Object.keys(chartInstances).forEach(function(k) {
+            chartInstances[k].destroy();
+            delete chartInstances[k];
+        });
         showScreen('landingPage');
         loadPublicData();
         return;
     }
 
     try {
-        // Load user profile
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-
+        var userSnap = await getDoc(doc(db, 'users', user.uid));
         if (!userSnap.exists()) {
-            console.warn('[AUTH] User profile not found, showing role screen');
-            // Profile might not exist yet if signup just completed
-            // Wait a moment and retry
-            await new Promise(r => setTimeout(r, 2000));
-            const retrySnap = await getDoc(userRef);
-            if (!retrySnap.exists()) {
-                toast('User profile not found. Please contact support.', 'e');
-                await signOut(auth);
-                return;
-            }
-            currentUserData = retrySnap.data();
-        } else {
-            currentUserData = userSnap.data();
+            console.warn('[AUTH] Profile not found, retrying...');
+            await new Promise(function(r) { setTimeout(r, 2000); });
+            userSnap = await getDoc(doc(db, 'users', user.uid));
         }
-
-        // Resolve business ID
+        if (!userSnap.exists()) {
+            toast('User profile not found. Please contact support.', 'e');
+            await signOut(auth);
+            return;
+        }
+        currentUserData = userSnap.data();
         bizId = currentUserData.bizId || currentUserData.businessId || null;
         if (!bizId) {
             toast('Business ID not found. Please contact support.', 'e');
             await signOut(auth);
             return;
         }
+        console.log('[AUTH] User:', currentUserData.name, '| BizID:', bizId, '| Role:', currentUserData.role);
 
-        console.log('[AUTH] User:', currentUserData.name, '| Business ID:', bizId, '| Role:', currentUserData.role);
-
-        // Determine where to send the user
         if (currentUserData.role === 'super_admin') {
             showScreen('superScreen');
-            document.getElementById('superLoginBox').classList.add('hidden');
-            document.getElementById('superPanel').classList.remove('hidden');
+            el('superLoginBox').classList.add('hidden');
+            el('superPanel').classList.remove('hidden');
             await loadSuperAdminData();
         } else if (!currentUserData.workingRole && currentUserData.role === 'owner') {
-            // New owner — show role selection
             loadRoleScreen();
         } else {
-            // Regular user or owner with role set — show dashboard
             showAppLayout();
         }
-
         authReady = true;
     } catch (err) {
         console.error('[AUTH STATE ERROR]', err);
@@ -1557,15 +1452,13 @@ onAuthStateChanged(auth, async (user) => {
 // ============================================================
 function loadRoleScreen() {
     showScreen('roleScreen');
-    // Try to load business info for display
     if (bizId) {
-        getDoc(doc(db, 'businesses', bizId)).then(snap => {
-            if (snap.exists()) {
-                const b = snap.data();
-                document.getElementById('rsBizName').textContent = b.name || 'Business';
-                document.getElementById('rsBizCat').textContent = b.category || '';
+        getDoc(doc(db, 'businesses', bizId)).then(function(s) {
+            if (s.exists()) {
+                el('rsBizName').textContent = s.data().name || 'Business';
+                el('rsBizCat').textContent = s.data().category || '';
             }
-        }).catch(() => {});
+        }).catch(function() {});
     }
 }
 
@@ -1576,8 +1469,8 @@ async function selectRole(role) {
         currentUserData.workingRole = role;
         toast('Role set successfully!', 's');
         showAppLayout();
-    } catch (err) {
-        console.error('[ROLE SELECT ERROR]', err);
+    } catch (e) {
+        console.error('[ROLE SELECT ERROR]', e);
         toast('Failed to set role', 'e');
     }
 }
@@ -1587,41 +1480,36 @@ async function selectRole(role) {
 // ============================================================
 function showAppLayout() {
     showScreen('appLayout');
-    // Set user info in UI
-    const name = currentUserData?.name || 'User';
-    const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    const role = currentUserData?.workingRole || currentUserData?.role || 'User';
-    const roleLabel = role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    var name = currentUserData ? currentUserData.name : 'User';
+    var initials = name.split(' ').map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+    var role = (currentUserData ? (currentUserData.workingRole || currentUserData.role) : 'User') || 'User';
+    var roleLabel = role.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
 
-    document.getElementById('uAv').textContent = initials;
-    document.getElementById('ucName').textContent = name;
-    document.getElementById('ucRole').textContent = roleLabel;
-    document.getElementById('profAv').textContent = initials;
-    document.getElementById('profName').textContent = name;
-    document.getElementById('profEmail').textContent = currentUser?.email || '';
-    document.getElementById('profRole').textContent = roleLabel;
+    el('uAv').textContent = initials;
+    el('ucName').textContent = name;
+    el('ucRole').textContent = roleLabel;
+    el('profAv').textContent = initials;
+    el('profName').textContent = name;
+    el('profEmail').textContent = currentUser ? currentUser.email : '';
+    el('profRole').textContent = roleLabel;
 
-    // Load business info for topbar/sidebar
     if (bizId) {
-        getDoc(doc(db, 'businesses', bizId)).then(snap => {
-            if (snap.exists()) {
-                const b = snap.data();
-                document.getElementById('tbBizName').textContent = b.name || 'Business';
+        getDoc(doc(db, 'businesses', bizId)).then(function(s) {
+            if (s.exists()) {
+                var b = s.data();
+                el('tbBizName').textContent = b.name || 'Business';
                 if (b.logo) {
-                    const tbLogo = document.getElementById('tbBizLogo');
-                    const sbLogo = document.getElementById('sbBizLogo');
-                    if (tbLogo) { tbLogo.src = b.logo; tbLogo.style.display = 'block'; }
-                    if (sbLogo) { sbLogo.src = b.logo; sbLogo.style.display = 'block'; }
+                    ['tbBizLogo', 'sbBizLogo'].forEach(function(id) {
+                        var e = el(id);
+                        if (e) { e.src = b.logo; e.style.display = 'block'; }
+                    });
                 }
             }
-        }).catch(() => {});
+        }).catch(function() {});
     }
 
-    // Load notifications
     loadNotifications();
-
-    // Navigate to default section
-    const defaultSection = currentUserData?.workingRole === 'cashier' ? 'pos' : 'dashboard';
+    var defaultSection = currentUserData && currentUserData.workingRole === 'cashier' ? 'pos' : 'dashboard';
     navigateSection(defaultSection);
 }
 
@@ -1631,37 +1519,32 @@ function showAppLayout() {
 function loadNotifications() {
     if (!bizId) return;
     try {
-        const q = query(collection(db, 'businesses', bizId, 'notifications'), orderBy('createdAt', 'desc'), limit(20));
-        onSnapshot(q, snap => {
-            notificationsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var q = query(collection(db, 'businesses', bizId, 'notifications'), orderBy('createdAt', 'desc'), limit(20));
+        onSnapshot(q, function(snap) {
+            notificationsCache = snap.docs.map(function(d) { return { id: d.id, _data: d.data() }; });
+            notificationsCache.forEach(function(n) { Object.assign(n, n._data); delete n._data; });
             renderNotifications();
-        }, err => console.error('[NOTIFS LISTENER]', err));
-    } catch (err) {
-        console.error('[NOTIFS INIT ERROR]', err);
-    }
+        }, function(err) { console.error('[NOTIFS LISTENER]', err); });
+    } catch (e) { console.error('[NOTIFS INIT ERROR]', e); }
 }
 
 function renderNotifications() {
-    const list = document.getElementById('nList');
-    const cnt = document.getElementById('notifCnt');
+    var list = el('nList');
+    var cnt = el('notifCnt');
     if (!list) return;
-    const unread = notificationsCache.filter(n => !n.read).length;
-    if (cnt) {
-        cnt.textContent = unread;
-        cnt.classList.toggle('hidden', unread === 0);
-    }
-    if (notificationsCache.length === 0) {
+    var unread = notificationsCache.filter(function(n) { return !n.read; }).length;
+    if (cnt) { cnt.textContent = unread; cnt.classList.toggle('hidden', unread === 0); }
+    if (!notificationsCache.length) {
         list.innerHTML = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>No notifications</p></div>';
         return;
     }
-    const typeIcons = { info: 'fa-circle-info', warning: 'fa-triangle-exclamation', success: 'fa-check-circle', danger: 'fa-circle-exclamation' };
-    const typeColors = { info: 'var(--info)', warning: 'var(--warning)', success: 'var(--success)', danger: 'var(--danger)' };
-    list.innerHTML = notificationsCache.map(n => `
-        <div class="notif-item" style="${n.read ? 'opacity:.6' : ''}">
-            <i class="fa-solid ${typeIcons[n.type] || typeIcons.info}" style="color:${typeColors[n.type] || typeColors.info}"></i>
-            <div><h5>${escHtml(n.title)}</h5><p>${escHtml(n.message)} &middot; ${fmtDateTime(n.createdAt)}</p></div>
-        </div>
-    `).join('');
+    var ti = { info: 'fa-circle-info', warning: 'fa-triangle-exclamation', success: 'fa-check-circle', danger: 'fa-circle-exclamation' };
+    var tc = { info: 'var(--info)', warning: 'var(--warning)', success: 'var(--success)', danger: 'var(--danger)' };
+    list.innerHTML = notificationsCache.map(function(n) {
+        return '<div class="notif-item" style="' + (n.read ? 'opacity:.6' : '') + '">' +
+            '<i class="fa-solid ' + (ti[n.type] || ti.info) + '" style="color:' + (tc[n.type] || tc.info) + '"></i>' +
+            '<div><h5>' + escHtml(n.title) + '</h5><p>' + escHtml(n.message) + ' &middot; ' + fmtDateTime(n.createdAt) + '</p></div></div>';
+    }).join('');
 }
 
 // ============================================================
@@ -1670,349 +1553,276 @@ function renderNotifications() {
 async function loadDashboard() {
     if (!bizId) return;
     try {
-        // Load products
-        const prodSnap = await getDocs(collection(db, 'businesses', bizId, 'products'));
-        productsCache = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var pSnap = await getDocs(collection(db, 'businesses', bizId, 'products'));
+        productsCache = pSnap.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
 
-        // Load sales
-        const salesSnap = await getDocs(query(collection(db, 'businesses', bizId, 'sales'), orderBy('createdAt', 'desc'), limit(50)));
-        salesCache = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var sSnap = await getDocs(query(collection(db, 'businesses', bizId, 'sales'), orderBy('createdAt', 'desc'), limit(50)));
+        salesCache = sSnap.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
 
-        // Metrics
-        const totalRevenue = salesCache.filter(s => s.status === 'paid').reduce((sum, s) => sum + (s.total || 0), 0);
-        const totalSales = salesCache.length;
-        const totalProducts = productsCache.length;
-        const lowStockCount = productsCache.filter(p => p.stock <= (p.minStock || 5)).length;
+        var totalRev = salesCache.filter(function(s) { return s.status === 'paid'; }).reduce(function(s, x) { return s + (x.total || 0); }, 0);
+        var lowStock = productsCache.filter(function(p) { return p.stock <= (p.minStock || 5); }).length;
 
-        document.getElementById('dashMetrics').innerHTML = `
-            <div class="mc g"><div class="mc-icon"><i class="fa-solid fa-money-bill-wave"></i></div><h3>${fmt(totalRevenue)}</h3><p>Total Revenue (TZS)</p></div>
-            <div class="mc a"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>${totalSales}</h3><p>Total Sales</p></div>
-            <div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-box"></i></div><h3>${totalProducts}</h3><p>Products</p></div>
-            <div class="mc ${lowStockCount > 0 ? 'r' : 'b'}"><div class="mc-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><h3>${lowStockCount}</h3><p>Low Stock Items</p></div>
-        `;
+        el('dashMetrics').innerHTML =
+            '<div class="mc g"><div class="mc-icon"><i class="fa-solid fa-money-bill-wave"></i></div><h3>' + fmt(totalRev) + '</h3><p>Total Revenue (TZS)</p></div>' +
+            '<div class="mc a"><div class="mc-icon"><i class="fa-solid fa-receipt"></i></div><h3>' + salesCache.length + '</h3><p>Total Sales</p></div>' +
+            '<div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-box"></i></div><h3>' + productsCache.length + '</h3><p>Products</p></div>' +
+            '<div class="mc ' + (lowStock > 0 ? 'r' : 'b') + '"><div class="mc-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><h3>' + lowStock + '</h3><p>Low Stock Items</p></div>';
 
         // Sales trend chart
-        const monthlyData = {};
-        salesCache.forEach(s => {
+        var md = {};
+        salesCache.forEach(function(s) {
             if (s.createdAt) {
-                const d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
-                const key = d.toLocaleString('en-US', { month: 'short', year: '2-digit' });
-                monthlyData[key] = (monthlyData[key] || 0) + (s.total || 0);
+                var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+                var k = d.toLocaleString('en-US', { month: 'short', year: '2-digit' });
+                md[k] = (md[k] || 0) + (s.total || 0);
             }
         });
-        const mLabels = Object.keys(monthlyData).slice(-6);
-        const mValues = mLabels.map(k => monthlyData[k]);
-
+        var mL = Object.keys(md).slice(-6);
+        var mV = mL.map(function(k) { return md[k]; });
         renderChart('salesTrendChart', {
             type: 'line',
-            data: { labels: mLabels.length ? mLabels : ['No Data'], datasets: [{ label: 'Revenue', data: mValues.length ? mValues : [0], borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,.1)', fill: true, tension: .4 }] },
+            data: { labels: mL.length ? mL : ['No Data'], datasets: [{ label: 'Revenue', data: mV.length ? mV : [0], borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,.1)', fill: true, tension: .4 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } } } }
         });
 
-        // Category pie chart
-        const catData = {};
-        productsCache.forEach(p => { if (p.category) catData[p.category] = (catData[p.category] || 0) + 1; });
-        const catLabels = Object.keys(catData);
-        const catValues = catLabels.map(k => catData[k]);
-        const pieColors = ['#6c5ce7', '#00b894', '#e74c3c', '#f39c12', '#0984e3', '#a29bfe', '#fd79a8', '#00cec9'];
-
+        // Category pie
+        var cd = {};
+        productsCache.forEach(function(p) { if (p.category) cd[p.category] = (cd[p.category] || 0) + 1; });
+        var cL = Object.keys(cd), cV = cL.map(function(k) { return cd[k]; });
+        var pC = ['#6c5ce7', '#00b894', '#e74c3c', '#f39c12', '#0984e3', '#a29bfe', '#fd79a8', '#00cec9'];
         renderChart('categoryPieChart', {
             type: 'doughnut',
-            data: { labels: catLabels.length ? catLabels : ['No Data'], datasets: [{ data: catValues.length ? catValues : [1], backgroundColor: catLabels.length ? pieColors.slice(0, catLabels.length) : ['#252538'] }] },
+            data: { labels: cL.length ? cL : ['No Data'], datasets: [{ data: cV.length ? cV : [1], backgroundColor: cL.length ? pC.slice(0, cL.length) : ['#252538'] }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#9a9ab0', padding: 12 } } } }
         });
 
         // Recent sales table
-        const recentBody = document.getElementById('recentSalesBody');
-        if (salesCache.length === 0) {
-            recentBody.innerHTML = '<tr><td colspan="5" class="empty-s"><p>No sales yet</p></td></tr>';
+        var rb = el('recentSalesBody');
+        if (!salesCache.length) {
+            rb.innerHTML = '<tr><td colspan="5" class="empty-s"><p>No sales yet</p></td></tr>';
         } else {
-            recentBody.innerHTML = salesCache.slice(0, 10).map(s => `
-                <tr><td>${fmtDateTime(s.createdAt)}</td><td>${escHtml(s.customerName || 'Walk-in')}</td>
-                <td>${s.items ? s.items.length : 0}</td><td>${fmt(s.total)}</td>
-                <td><span class="status-badge ${s.status || 'unpaid'}">${s.status || 'unpaid'}</span></td></tr>
-            `).join('');
+            rb.innerHTML = salesCache.slice(0, 10).map(function(s) {
+                return '<tr><td>' + fmtDateTime(s.createdAt) + '</td><td>' + escHtml(s.customerName || 'Walk-in') + '</td>' +
+                    '<td>' + (s.items ? s.items.length : 0) + '</td><td>' + fmt(s.total) + '</td>' +
+                    '<td><span class="status-badge ' + (s.status || 'unpaid') + '">' + (s.status || 'unpaid') + '</span></td></tr>';
+            }).join('');
         }
 
         // Low stock table
-        const lowProducts = productsCache.filter(p => p.stock <= (p.minStock || 5));
-        const lowBody = document.getElementById('lowStockBody');
-        if (lowProducts.length === 0) {
-            lowBody.innerHTML = '<tr><td colspan="4" class="empty-s"><p>All stock levels are healthy</p></td></tr>';
+        var lp = productsCache.filter(function(p) { return p.stock <= (p.minStock || 5); });
+        var lb = el('lowStockBody');
+        if (!lp.length) {
+            lb.innerHTML = '<tr><td colspan="4" class="empty-s"><p>All stock levels are healthy</p></td></tr>';
         } else {
-            lowBody.innerHTML = lowProducts.map(p => `
-                <tr><td>${escHtml(p.name)}</td><td>${p.stock || 0}</td><td>${p.minStock || 5}</td>
-                <td><span class="status-badge ${p.stock <= 0 ? 'suspended' : 'pending'}">${p.stock <= 0 ? 'Out of Stock' : 'Low'}</span></td></tr>
-            `).join('');
+            lb.innerHTML = lp.map(function(p) {
+                return '<tr><td>' + escHtml(p.name) + '</td><td>' + (p.stock || 0) + '</td><td>' + (p.minStock || 5) + '</td>' +
+                    '<td><span class="status-badge ' + (p.stock <= 0 ? 'suspended' : 'pending') + '">' + (p.stock <= 0 ? 'Out of Stock' : 'Low') + '</span></td></tr>';
+            }).join('');
         }
-
-    } catch (err) {
-        console.error('[DASHBOARD ERROR]', err);
-    }
+    } catch (e) { console.error('[DASHBOARD ERROR]', e); }
 }
 
 // ============================================================
 // PRODUCTS MODULE
 // ============================================================
-let productPage = 1;
-const productPerPage = 15;
-let productFilter = '';
-
 async function loadProducts() {
     if (!bizId) return;
     try {
-        const snap = await getDocs(collection(db, 'businesses', bizId, 'products'));
-        productsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var s = await getDocs(collection(db, 'businesses', bizId, 'products'));
+        productsCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         renderProducts();
-    } catch (err) {
-        console.error('[PRODUCTS LOAD ERROR]', err);
-        toast('Failed to load products', 'e');
-    }
+    } catch (e) { console.error('[PRODUCTS LOAD ERROR]', e); toast('Failed to load products', 'e'); }
 }
 
 function renderProducts() {
-    let filtered = productsCache;
-    if (productFilter) {
-        const f = productFilter.toLowerCase();
-        filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(f) || (p.category || '').toLowerCase().includes(f));
-    }
-    const total = filtered.length;
-    const start = (productPage - 1) * productPerPage;
-    const page = filtered.slice(start, start + productPerPage);
-    const body = document.getElementById('productsBody');
-
-    if (page.length === 0) {
+    var f = (el('productSearch') ? el('productSearch').value : '').toLowerCase();
+    var filtered = productsCache;
+    if (f) filtered = filtered.filter(function(p) { return (p.name || '').toLowerCase().indexOf(f) !== -1 || (p.category || '').toLowerCase().indexOf(f) !== -1; });
+    var total = filtered.length;
+    var start = (productPage - 1) * PER_PAGE;
+    var page = filtered.slice(start, start + PER_PAGE);
+    var body = el('productsBody');
+    if (!page.length) {
         body.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fa-solid fa-box-open"></i><p>No products found</p></td></tr>';
     } else {
-        body.innerHTML = page.map(p => `
-            <tr>
-                <td>${p.image ? `<img src="${p.image}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;background:var(--bg3)"/>` : '<div style="width:40px;height:40px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>'}</td>
-                <td><strong>${escHtml(p.name)}</strong></td>
-                <td>${escHtml(p.category || '—')}</td>
-                <td>${fmt(p.costPrice)}</td>
-                <td style="color:var(--success);font-weight:600">${fmt(p.sellingPrice)}</td>
-                <td><span style="color:${(p.stock || 0) <= (p.minStock || 5) ? 'var(--danger)' : 'var(--text)'}">${p.stock || 0}</span></td>
-                <td><span class="status-badge ${(p.stock || 0) > 0 ? 'active' : 'suspended'}">${(p.stock || 0) > 0 ? 'In Stock' : 'Out of Stock'}</span></td>
-                <td>
-                    <button class="btn btn-o btn-xs" onclick="window._editProduct('${p.id}')"><i class="fa-solid fa-pen"></i></button>
-                    <button class="btn btn-d btn-xs" onclick="window._deleteProduct('${p.id}','${escHtml(p.name)}')"><i class="fa-solid fa-trash"></i></button>
-                </td>
-            </tr>
-        `).join('');
+        body.innerHTML = page.map(function(p) {
+            var imgHtml = p.image
+                ? '<img src="' + p.image + '" style="width:40px;height:40px;object-fit:cover;border-radius:6px;background:var(--bg3)"/>'
+                : '<div style="width:40px;height:40px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>';
+            var stockColor = (p.stock || 0) <= (p.minStock || 5) ? 'var(--danger)' : 'var(--text)';
+            var statusClass = (p.stock || 0) > 0 ? 'active' : 'suspended';
+            var statusText = (p.stock || 0) > 0 ? 'In Stock' : 'Out of Stock';
+            return '<tr><td>' + imgHtml + '</td><td><strong>' + escHtml(p.name) + '</strong></td><td>' + escHtml(p.category || '\u2014') +
+                '</td><td>' + fmt(p.costPrice) + '</td><td style="color:var(--success);font-weight:600">' + fmt(p.sellingPrice) +
+                '</td><td style="color:' + stockColor + '">' + (p.stock || 0) + '</td><td><span class="status-badge ' + statusClass + '">' + statusText +
+                '</span></td><td><button class="btn btn-o btn-xs" onclick="window._editProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button> ' +
+                '<button class="btn btn-d btn-xs" onclick="window._deleteProduct(\'' + p.id + '\',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+        }).join('');
     }
-    renderPagination('productsPagination', total, productPage, productPerPage, p => { productPage = p; renderProducts(); });
+    renderPagination('productsPagination', total, productPage, PER_PAGE, function(p) { productPage = p; renderProducts(); });
 }
 
 window._editProduct = function(id) {
-    const p = productsCache.find(x => x.id === id);
+    var p = productsCache.find(function(x) { return x.id === id; });
     if (!p) return;
-    openMainModal('Edit Product', `
-        <form id="editProductForm">
-            <div class="fg"><label>Product Name *</label><input class="fi" id="epName" value="${escHtml(p.name)}" required/></div>
-            <div class="fg"><label>Category</label><input class="fi" id="epCategory" value="${escHtml(p.category || '')}"/></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div class="fg"><label>Cost Price *</label><input class="fi" id="epCost" type="number" min="0" step="0.01" value="${p.costPrice || 0}" required/></div>
-                <div class="fg"><label>Selling Price *</label><input class="fi" id="epPrice" type="number" min="0" step="0.01" value="${p.sellingPrice || 0}" required/></div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div class="fg"><label>Stock</label><input class="fi" id="epStock" type="number" min="0" value="${p.stock || 0}"/></div>
-                <div class="fg"><label>Min Stock Alert</label><input class="fi" id="epMinStock" type="number" min="0" value="${p.minStock || 5}"/></div>
-            </div>
-            <div class="fg"><label>Unit</label><input class="fi" id="epUnit" value="${escHtml(p.unit || 'pcs')}"/></div>
-            <div class="fg"><label>Description</label><textarea class="fi" id="epDesc" rows="2">${escHtml(p.description || '')}</textarea></div>
-            <div class="fg"><label>Change Image</label><input class="fi" type="file" id="epImage" accept="image/*"/></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveProduct('${id}')"><i class="fa-solid fa-save"></i> Save</button>`);
+    openMainModal('Edit Product',
+        '<div class="fg"><label>Name *</label><input class="fi" id="epName" value="' + escHtml(p.name) + '" required/></div>' +
+        '<div class="fg"><label>Category</label><input class="fi" id="epCategory" value="' + escHtml(p.category || '') + '"/></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="fg"><label>Cost Price *</label><input class="fi" id="epCost" type="number" min="0" step="0.01" value="' + (p.costPrice || 0) + '" required/></div>' +
+        '<div class="fg"><label>Selling Price *</label><input class="fi" id="epPrice" type="number" min="0" step="0.01" value="' + (p.sellingPrice || 0) + '" required/></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="fg"><label>Stock</label><input class="fi" id="epStock" type="number" min="0" value="' + (p.stock || 0) + '"/></div>' +
+        '<div class="fg"><label>Min Stock</label><input class="fi" id="epMinStock" type="number" min="0" value="' + (p.minStock || 5) + '"/></div></div>' +
+        '<div class="fg"><label>Unit</label><input class="fi" id="epUnit" value="' + escHtml(p.unit || 'pcs') + '"/></div>' +
+        '<div class="fg"><label>Description</label><textarea class="fi" id="epDesc" rows="2">' + escHtml(p.description || '') + '</textarea></div>' +
+        '<div class="fg"><label>Change Image</label><input class="fi" type="file" id="epImage" accept="image/*"/></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveProduct(\'' + id + '\')"><i class="fa-solid fa-save"></i> Save</button>'
+    );
 };
 
 window._saveProduct = async function(id) {
-    const data = {
-        name: document.getElementById('epName').value.trim(),
-        category: document.getElementById('epCategory').value.trim(),
-        costPrice: parseFloat(document.getElementById('epCost').value) || 0,
-        sellingPrice: parseFloat(document.getElementById('epPrice').value) || 0,
-        stock: parseInt(document.getElementById('epStock').value) || 0,
-        minStock: parseInt(document.getElementById('epMinStock').value) || 5,
-        unit: document.getElementById('epUnit').value.trim() || 'pcs',
-        description: document.getElementById('epDesc').value.trim()
+    var data = {
+        name: el('epName').value.trim(),
+        category: el('epCategory').value.trim(),
+        costPrice: parseFloat(el('epCost').value) || 0,
+        sellingPrice: parseFloat(el('epPrice').value) || 0,
+        stock: parseInt(el('epStock').value) || 0,
+        minStock: parseInt(el('epMinStock').value) || 5,
+        unit: el('epUnit').value.trim() || 'pcs',
+        description: el('epDesc').value.trim()
     };
     if (!data.name) { toast('Product name is required', 'e'); return; }
     try {
-        const imageFile = document.getElementById('epImage').files[0];
-        if (imageFile) {
-            data.image = await uploadImage(imageFile, `businesses/${bizId}/products/${id}`);
-        }
+        var imgFile = el('epImage').files[0];
+        if (imgFile) data.image = await uploadImage(imgFile, 'businesses/' + bizId + '/products/' + id);
         await updateDoc(doc(db, 'businesses', bizId, 'products', id), data);
         toast('Product updated!', 's');
         closeMainModal();
         await loadProducts();
-    } catch (err) {
-        console.error('[SAVE PRODUCT ERROR]', err);
-        toast('Failed to save product', 'e');
-    }
+    } catch (e) { console.error('[SAVE PRODUCT ERROR]', e); toast('Failed to save product', 'e'); }
 };
 
 function openAddProduct() {
-    openMainModal('Add Product', `
-        <form id="addProductForm">
-            <div class="fg"><label>Product Name *</label><input class="fi" id="apName" required/></div>
-            <div class="fg"><label>Category</label><input class="fi" id="apCategory"/></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div class="fg"><label>Cost Price *</label><input class="fi" id="apCost" type="number" min="0" step="0.01" value="0" required/></div>
-                <div class="fg"><label>Selling Price *</label><input class="fi" id="apPrice" type="number" min="0" step="0.01" value="0" required/></div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div class="fg"><label>Stock</label><input class="fi" id="apStock" type="number" min="0" value="0"/></div>
-                <div class="fg"><label>Min Stock Alert</label><input class="fi" id="apMinStock" type="number" min="0" value="5"/></div>
-            </div>
-            <div class="fg"><label>Unit</label><input class="fi" id="apUnit" value="pcs"/></div>
-            <div class="fg"><label>Description</label><textarea class="fi" id="apDesc" rows="2"></textarea></div>
-            <div class="fg"><label>Product Image</label><input class="fi" type="file" id="apImage" accept="image/*"/></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._createProduct()"><i class="fa-solid fa-plus"></i> Add Product</button>`);
+    openMainModal('Add Product',
+        '<div class="fg"><label>Name *</label><input class="fi" id="apName" required/></div>' +
+        '<div class="fg"><label>Category</label><input class="fi" id="apCategory"/></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="fg"><label>Cost Price *</label><input class="fi" id="apCost" type="number" min="0" step="0.01" value="0" required/></div>' +
+        '<div class="fg"><label>Selling Price *</label><input class="fi" id="apPrice" type="number" min="0" step="0.01" value="0" required/></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="fg"><label>Stock</label><input class="fi" id="apStock" type="number" min="0" value="0"/></div>' +
+        '<div class="fg"><label>Min Stock</label><input class="fi" id="apMinStock" type="number" min="0" value="5"/></div></div>' +
+        '<div class="fg"><label>Unit</label><input class="fi" id="apUnit" value="pcs"/></div>' +
+        '<div class="fg"><label>Description</label><textarea class="fi" id="apDesc" rows="2"></textarea></div>' +
+        '<div class="fg"><label>Image</label><input class="fi" type="file" id="apImage" accept="image/*"/></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._createProduct()"><i class="fa-solid fa-plus"></i> Add Product</button>'
+    );
 }
 
 window._createProduct = async function() {
-    const data = {
-        name: document.getElementById('apName').value.trim(),
-        category: document.getElementById('apCategory').value.trim(),
-        costPrice: parseFloat(document.getElementById('apCost').value) || 0,
-        sellingPrice: parseFloat(document.getElementById('apPrice').value) || 0,
-        stock: parseInt(document.getElementById('apStock').value) || 0,
-        minStock: parseInt(document.getElementById('apMinStock').value) || 5,
-        unit: document.getElementById('apUnit').value.trim() || 'pcs',
-        description: document.getElementById('apDesc').value.trim(),
-        image: '',
-        status: 'active',
-        createdAt: serverTimestamp()
+    var data = {
+        name: el('apName').value.trim(),
+        category: el('apCategory').value.trim(),
+        costPrice: parseFloat(el('apCost').value) || 0,
+        sellingPrice: parseFloat(el('apPrice').value) || 0,
+        stock: parseInt(el('apStock').value) || 0,
+        minStock: parseInt(el('apMinStock').value) || 5,
+        unit: el('apUnit').value.trim() || 'pcs',
+        description: el('apDesc').value.trim(),
+        image: '', status: 'active', createdAt: serverTimestamp()
     };
     if (!data.name) { toast('Product name is required', 'e'); return; }
     try {
-        const imageFile = document.getElementById('apImage').files[0];
-        const docRef = await addDoc(collection(db, 'businesses', bizId, 'products'), data);
-        if (imageFile) {
-            const url = await uploadImage(imageFile, `businesses/${bizId}/products/${docRef.id}`);
+        var imgFile = el('apImage').files[0];
+        var docRef = await addDoc(collection(db, 'businesses', bizId, 'products'), data);
+        if (imgFile) {
+            var url = await uploadImage(imgFile, 'businesses/' + bizId + '/products/' + docRef.id);
             await updateDoc(docRef, { image: url });
         }
         toast('Product added!', 's');
         closeMainModal();
         await loadProducts();
-    } catch (err) {
-        console.error('[ADD PRODUCT ERROR]', err);
-        toast('Failed to add product', 'e');
-    }
+    } catch (e) { console.error('[ADD PRODUCT ERROR]', e); toast('Failed to add product', 'e'); }
 };
 
 window._deleteProduct = function(id, name) {
-    showConfirm('Delete Product', `Are you sure you want to delete "${name}"?`, async () => {
+    showConfirm('Delete Product', 'Are you sure you want to delete "' + name + '"?', async function() {
         try {
-            const p = productsCache.find(x => x.id === id);
-            if (p?.image) {
-                try { await deleteObject(ref(storage, p.image)); } catch (e) { console.warn('[DELETE IMAGE]', e); }
+            var p = productsCache.find(function(x) { return x.id === id; });
+            if (p && p.image) {
+                try { await deleteObject(ref(storage, p.image)); } catch (ex) { console.warn('[DELETE IMG]', ex); }
             }
             await deleteDoc(doc(db, 'businesses', bizId, 'products', id));
             toast('Product deleted', 's');
             await loadProducts();
-        } catch (err) {
-            console.error('[DELETE PRODUCT ERROR]', err);
-            toast('Failed to delete product', 'e');
-        }
+        } catch (e) { console.error('[DELETE PRODUCT ERROR]', e); toast('Failed to delete product', 'e'); }
     });
 };
 
 // ============================================================
 // SALES MODULE
 // ============================================================
-let salePage = 1;
-const salePerPage = 15;
-let saleSearchFilter = '';
-let saleStatusFilter = 'all';
-
 async function loadSales() {
     if (!bizId) return;
     try {
-        const snap = await getDocs(query(collection(db, 'businesses', bizId, 'sales'), orderBy('createdAt', 'desc')));
-        salesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var s = await getDocs(query(collection(db, 'businesses', bizId, 'sales'), orderBy('createdAt', 'desc')));
+        salesCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         renderSales();
-    } catch (err) {
-        console.error('[SALES LOAD ERROR]', err);
-        toast('Failed to load sales', 'e');
-    }
+    } catch (e) { console.error('[SALES LOAD ERROR]', e); toast('Failed to load sales', 'e'); }
 }
 
 function renderSales() {
-    let filtered = salesCache;
-    if (saleSearchFilter) {
-        const f = saleSearchFilter.toLowerCase();
-        filtered = filtered.filter(s => (s.customerName || '').toLowerCase().includes(f) || (s.invoiceNo || '').toLowerCase().includes(f));
-    }
-    if (saleStatusFilter !== 'all') {
-        filtered = filtered.filter(s => (s.status || 'unpaid') === saleStatusFilter);
-    }
-    const total = filtered.length;
-    const start = (salePage - 1) * salePerPage;
-    const page = filtered.slice(start, start + salePerPage);
-    const body = document.getElementById('salesBody');
-
-    if (page.length === 0) {
+    var sf = (el('saleSearch') ? el('saleSearch').value : '').toLowerCase();
+    var filtered = salesCache;
+    if (sf) filtered = filtered.filter(function(s) { return (s.customerName || '').toLowerCase().indexOf(sf) !== -1 || (s.invoiceNo || '').toLowerCase().indexOf(sf) !== -1; });
+    if (saleStatusFilter !== 'all') filtered = filtered.filter(function(s) { return (s.status || 'unpaid') === saleStatusFilter; });
+    var total = filtered.length;
+    var start = (salePage - 1) * PER_PAGE;
+    var page = filtered.slice(start, start + PER_PAGE);
+    var body = el('salesBody');
+    if (!page.length) {
         body.innerHTML = '<tr><td colspan="8" class="empty-s"><i class="fa-solid fa-receipt"></i><p>No sales found</p></td></tr>';
     } else {
-        body.innerHTML = page.map(s => `
-            <tr>
-                <td>${fmtDateTime(s.createdAt)}</td>
-                <td style="font-weight:600">${escHtml(s.invoiceNo || s.id.slice(0, 8))}</td>
-                <td>${escHtml(s.customerName || 'Walk-in')}</td>
-                <td>${s.items ? s.items.length : 0}</td>
-                <td style="color:var(--success);font-weight:600">${fmt(s.total)}</td>
-                <td>${escHtml(s.paymentMethod || 'Cash')}</td>
-                <td><span class="status-badge ${s.status || 'unpaid'}">${s.status || 'unpaid'}</span></td>
-                <td><button class="btn btn-o btn-xs" onclick="window._viewSale('${s.id}')"><i class="fa-solid fa-eye"></i></button>
-                <button class="btn btn-d btn-xs" onclick="window._deleteSale('${s.id}')"><i class="fa-solid fa-trash"></i></button></td>
-            </tr>
-        `).join('');
+        body.innerHTML = page.map(function(s) {
+            return '<tr><td>' + fmtDateTime(s.createdAt) + '</td><td style="font-weight:600">' + escHtml(s.invoiceNo || s.id.slice(0, 8)) +
+                '</td><td>' + escHtml(s.customerName || 'Walk-in') + '</td><td>' + (s.items ? s.items.length : 0) +
+                '</td><td style="color:var(--success);font-weight:600">' + fmt(s.total) + '</td><td>' + escHtml(s.paymentMethod || 'Cash') +
+                '</td><td><span class="status-badge ' + (s.status || 'unpaid') + '">' + (s.status || 'unpaid') +
+                '</span></td><td><button class="btn btn-o btn-xs" onclick="window._viewSale(\'' + s.id + '\')"><i class="fa-solid fa-eye"></i></button> ' +
+                '<button class="btn btn-d btn-xs" onclick="window._deleteSale(\'' + s.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+        }).join('');
     }
-    renderPagination('salesPagination', total, salePage, salePerPage, p => { salePage = p; renderSales(); });
+    renderPagination('salesPagination', total, salePage, PER_PAGE, function(p) { salePage = p; renderSales(); });
 }
 
 window._viewSale = function(id) {
-    const s = salesCache.find(x => x.id === id);
+    var s = salesCache.find(function(x) { return x.id === id; });
     if (!s) return;
-    const items = s.items || [];
-    let html = `<div class="receipt-content"><h3>${escHtml(currentUserData?.bizName || 'Business')}</h3><p style="text-align:center;font-size:10px;margin-bottom:8px">Receipt</p><div class="rc-divider"></div>`;
-    html += `<div class="rc-line"><span>Invoice:</span><span>${escHtml(s.invoiceNo || s.id.slice(0, 8))}</span></div>`;
-    html += `<div class="rc-line"><span>Date:</span><span>${fmtDateTime(s.createdAt)}</span></div>`;
-    html += `<div class="rc-line"><span>Customer:</span><span>${escHtml(s.customerName || 'Walk-in')}</span></div>`;
-    html += `<div class="rc-line"><span>Payment:</span><span>${escHtml(s.paymentMethod || 'Cash')}</span></div>`;
-    html += `<div class="rc-divider"></div>`;
-    items.forEach(item => {
-        html += `<div class="rc-line"><span>${escHtml(item.name)} x${item.qty}</span><span>${fmt(item.price * item.qty)}</span></div>`;
+    var items = s.items || [];
+    var h = '<div class="receipt-content"><h3>' + escHtml(currentUserData ? currentUserData.bizName : 'Business') + '</h3>' +
+        '<p style="text-align:center;font-size:10px;margin-bottom:8px">Receipt</p><div class="rc-divider"></div>' +
+        '<div class="rc-line"><span>Invoice:</span><span>' + escHtml(s.invoiceNo || s.id.slice(0, 8)) + '</span></div>' +
+        '<div class="rc-line"><span>Date:</span><span>' + fmtDateTime(s.createdAt) + '</span></div>' +
+        '<div class="rc-line"><span>Customer:</span><span>' + escHtml(s.customerName || 'Walk-in') + '</span></div>' +
+        '<div class="rc-line"><span>Payment:</span><span>' + escHtml(s.paymentMethod || 'Cash') + '</span></div>' +
+        '<div class="rc-divider"></div>';
+    items.forEach(function(item) {
+        h += '<div class="rc-line"><span>' + escHtml(item.name) + ' x' + item.qty + '</span><span>' + fmt(item.price * item.qty) + '</span></div>';
     });
-    html += `<div class="rc-divider"></div>`;
-    if (s.discount > 0) html += `<div class="rc-line"><span>Discount:</span><span>-${fmt(s.discount)}</span></div>`;
-    html += `<div class="rc-line rc-total"><span>TOTAL:</span><span>${fmt(s.total)} TZS</span></div>`;
-    html += `<div class="rc-divider"></div><p style="text-align:center;font-size:10px">Thank you for your purchase!</p></div>`;
-    document.getElementById('receiptContent').innerHTML = html;
+    h += '<div class="rc-divider"></div>';
+    if (s.discount > 0) h += '<div class="rc-line"><span>Discount:</span><span>-' + fmt(s.discount) + '</span></div>';
+    h += '<div class="rc-line rc-total"><span>TOTAL:</span><span>' + fmt(s.total) + ' TZS</span></div>' +
+        '<div class="rc-divider"></div><p style="text-align:center;font-size:10px">Thank you for your purchase!</p></div>';
+    el('receiptContent').innerHTML = h;
     openModal('receiptModal');
 };
 
 window._deleteSale = function(id) {
-    showConfirm('Delete Sale', 'Are you sure you want to delete this sale record?', async () => {
+    showConfirm('Delete Sale', 'Are you sure you want to delete this sale record?', async function() {
         try {
             await deleteDoc(doc(db, 'businesses', bizId, 'sales', id));
             toast('Sale deleted', 's');
             await loadSales();
-        } catch (err) {
-            console.error('[DELETE SALE ERROR]', err);
-            toast('Failed to delete sale', 'e');
-        }
+        } catch (e) { console.error('[DELETE SALE ERROR]', e); toast('Failed to delete sale', 'e'); }
     });
 };
-
-function openAddSale() {
-    // Redirect to POS for new sales
-    navigateSection('pos');
-    toast('Use the Point of Sale to record new sales', 'i');
-}
 
 // ============================================================
 // POS MODULE
@@ -2020,171 +1830,143 @@ function openAddSale() {
 async function loadPOS() {
     if (!bizId) return;
     try {
-        // Load products if not cached
-        if (productsCache.length === 0) {
-            const snap = await getDocs(collection(db, 'businesses', bizId, 'products'));
-            productsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (!productsCache.length) {
+            var s = await getDocs(collection(db, 'businesses', bizId, 'products'));
+            productsCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         }
-        // Load customers for dropdown
-        if (customersCache.length === 0) {
-            const cSnap = await getDocs(collection(db, 'businesses', bizId, 'customers'));
-            customersCache = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (!customersCache.length) {
+            var c = await getDocs(collection(db, 'businesses', bizId, 'customers'));
+            customersCache = c.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         }
-        const sel = document.getElementById('posCustomer');
-        sel.innerHTML = '<option value="">Walk-in Customer</option>' + customersCache.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+        var sel = el('posCustomer');
+        sel.innerHTML = '<option value="">Walk-in Customer</option>' + customersCache.map(function(c) {
+            return '<option value="' + c.id + '">' + escHtml(c.name) + '</option>';
+        }).join('');
         renderPOSProducts();
         renderCart();
-    } catch (err) {
-        console.error('[POS LOAD ERROR]', err);
-    }
+    } catch (e) { console.error('[POS LOAD ERROR]', e); }
 }
 
-function renderPOSProducts(filter = '') {
-    const grid = document.getElementById('posProductsGrid');
-    let prods = productsCache;
+function renderPOSProducts(filter) {
+    filter = filter || '';
+    var grid = el('posProductsGrid');
+    var prods = productsCache;
     if (filter) {
-        const f = filter.toLowerCase();
-        prods = prods.filter(p => (p.name || '').toLowerCase().includes(f));
+        var f = filter.toLowerCase();
+        prods = prods.filter(function(p) { return (p.name || '').toLowerCase().indexOf(f) !== -1; });
     }
-    if (prods.length === 0) {
+    if (!prods.length) {
         grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>No products available</p></div>';
         return;
     }
-    grid.innerHTML = prods.map(p => `
-        <div class="pos-p-card ${(p.stock || 0) <= 0 ? 'out-of-stock' : ''}" onclick="window._addToCart('${p.id}')">
-            ${p.image ? `<img src="${p.image}" alt="${escHtml(p.name)}"/>` : '<div style="width:100%;height:80px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>'}
-            <h5>${escHtml(p.name)}</h5>
-            <div class="pos-p-price">${fmt(p.sellingPrice)}</div>
-            <div class="pos-p-stock">Stock: ${p.stock || 0} ${escHtml(p.unit || 'pcs')}</div>
-        </div>
-    `).join('');
+    grid.innerHTML = prods.map(function(p) {
+        var imgHtml = p.image
+            ? '<img src="' + p.image + '" alt="' + escHtml(p.name) + '"/>'
+            : '<div style="width:100%;height:80px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>';
+        var oosClass = (p.stock || 0) <= 0 ? ' out-of-stock' : '';
+        return '<div class="pos-p-card' + oosClass + '" onclick="window._addToCart(\'' + p.id + '\')">' +
+            imgHtml + '<h5>' + escHtml(p.name) + '</h5><div class="pos-p-price">' + fmt(p.sellingPrice) + '</div>' +
+            '<div class="pos-p-stock">Stock: ' + (p.stock || 0) + '</div></div>';
+    }).join('');
 }
 
-window._addToCart = function(productId) {
-    const p = productsCache.find(x => x.id === productId);
+window._addToCart = function(pid) {
+    var p = productsCache.find(function(x) { return x.id === pid; });
     if (!p || (p.stock || 0) <= 0) return;
-    const existing = posCart.find(c => c.productId === productId);
+    var existing = posCart.find(function(c) { return c.productId === pid; });
     if (existing) {
         if (existing.qty >= p.stock) { toast('Not enough stock', 'w'); return; }
         existing.qty++;
     } else {
-        posCart.push({ productId, name: p.name, price: p.sellingPrice, qty: 1, maxStock: p.stock });
+        posCart.push({ productId: pid, name: p.name, price: p.sellingPrice, qty: 1, maxStock: p.stock });
     }
     renderCart();
 };
 
-window._updateCartQty = function(productId, delta) {
-    const item = posCart.find(c => c.productId === productId);
+window._updateCartQty = function(pid, delta) {
+    var item = posCart.find(function(c) { return c.productId === pid; });
     if (!item) return;
     item.qty += delta;
-    if (item.qty <= 0) posCart = posCart.filter(c => c.productId !== productId);
+    if (item.qty <= 0) posCart = posCart.filter(function(c) { return c.productId !== pid; });
     else if (item.qty > item.maxStock) { item.qty = item.maxStock; toast('Not enough stock', 'w'); }
     renderCart();
 };
 
-window._removeFromCart = function(productId) {
-    posCart = posCart.filter(c => c.productId !== productId);
+window._removeFromCart = function(pid) {
+    posCart = posCart.filter(function(c) { return c.productId !== pid; });
     renderCart();
 };
 
 function renderCart() {
-    const body = document.getElementById('cartBody');
-    const countEl = document.getElementById('cartCount');
-    const subtotalEl = document.getElementById('posSubtotal');
-    const discountEl = document.getElementById('posDiscount');
-    const totalEl = document.getElementById('posTotal');
-    const checkoutBtn = document.getElementById('btnPosCheckout');
-
-    countEl.textContent = posCart.length;
-    const subtotal = posCart.reduce((s, c) => s + c.price * c.qty, 0);
-    const discount = parseFloat(document.getElementById('posDiscInput')?.value) || 0;
-    const total = Math.max(0, subtotal - discount);
-
-    subtotalEl.textContent = fmt(subtotal);
-    discountEl.textContent = fmt(discount);
-    totalEl.textContent = fmt(total);
-    checkoutBtn.disabled = posCart.length === 0;
-
-    if (posCart.length === 0) {
+    var body = el('cartBody');
+    var cnt = el('cartCount');
+    var sub = el('posSubtotal');
+    var disc = el('posDiscount');
+    var tot = el('posTotal');
+    var btn = el('btnPosCheckout');
+    cnt.textContent = posCart.length;
+    var subtotal = posCart.reduce(function(s, c) { return s + c.price * c.qty; }, 0);
+    var discount = parseFloat(el('posDiscInput') ? el('posDiscInput').value : 0) || 0;
+    var total = Math.max(0, subtotal - discount);
+    sub.textContent = fmt(subtotal);
+    disc.textContent = fmt(discount);
+    tot.textContent = fmt(total);
+    btn.disabled = posCart.length === 0;
+    if (!posCart.length) {
         body.innerHTML = '<div class="empty-s"><i class="fa-solid fa-cart-shopping"></i><p>Cart is empty</p></div>';
         return;
     }
-    body.innerHTML = posCart.map(c => `
-        <div class="cart-item">
-            <div class="cart-item-info"><h6>${escHtml(c.name)}</h6><span>${fmt(c.price)} each</span></div>
-            <div class="cart-qty">
-                <button onclick="window._updateCartQty('${c.productId}',-1)">-</button>
-                <span>${c.qty}</span>
-                <button onclick="window._updateCartQty('${c.productId}',1)">+</button>
-            </div>
-            <div class="cart-item-price">${fmt(c.price * c.qty)}</div>
-            <button class="cart-item-rm" onclick="window._removeFromCart('${c.productId}')"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-    `).join('');
+    body.innerHTML = posCart.map(function(c) {
+        return '<div class="cart-item"><div class="cart-item-info"><h6>' + escHtml(c.name) + '</h6><span>' + fmt(c.price) + ' each</span></div>' +
+            '<div class="cart-qty"><button onclick="window._updateCartQty(\'' + c.productId + '\',-1)">-</button><span>' + c.qty + '</span>' +
+            '<button onclick="window._updateCartQty(\'' + c.productId + '\',1)">+</button></div>' +
+            '<div class="cart-item-price">' + fmt(c.price * c.qty) + '</div>' +
+            '<button class="cart-item-rm" onclick="window._removeFromCart(\'' + c.productId + '\')"><i class="fa-solid fa-xmark"></i></button></div>';
+    }).join('');
 }
 
 async function handlePosCheckout() {
-    if (posCart.length === 0 || !bizId) return;
-    const customerId = document.getElementById('posCustomer').value;
-    const paymentMethod = document.getElementById('posPayMethod').value;
-    const discount = parseFloat(document.getElementById('posDiscInput').value) || 0;
-    const subtotal = posCart.reduce((s, c) => s + c.price * c.qty, 0);
-    const total = Math.max(0, subtotal - discount);
-    const customerName = customerId ? (customersCache.find(c => c.id === customerId)?.name || 'Customer') : 'Walk-in';
-    const invoiceNo = 'INV-' + Date.now().toString(36).toUpperCase();
-
-    const btn = document.getElementById('btnPosCheckout');
+    if (!posCart.length || !bizId) return;
+    var cid = el('posCustomer').value;
+    var pm = el('posPayMethod').value;
+    var discount = parseFloat(el('posDiscInput').value) || 0;
+    var subtotal = posCart.reduce(function(s, c) { return s + c.price * c.qty; }, 0);
+    var total = Math.max(0, subtotal - discount);
+    var cname = cid ? (customersCache.find(function(c) { return c.id === cid; }) || {}).name || 'Customer' : 'Walk-in';
+    var invNo = 'INV-' + Date.now().toString(36).toUpperCase();
+    var btn = el('btnPosCheckout');
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Processing...';
-
     try {
-        const saleData = {
-            invoiceNo,
-            customerId: customerId || null,
-            customerName,
-            items: posCart.map(c => ({ productId: c.productId, name: c.name, price: c.price, qty: c.qty })),
-            subtotal,
-            discount,
-            total,
-            paymentMethod,
-            status: 'paid',
-            createdBy: currentUser.uid,
-            createdAt: serverTimestamp()
-        };
-
-        await addDoc(collection(db, 'businesses', bizId, 'sales'), saleData);
-
-        // Update stock
-        for (const item of posCart) {
-            const prod = productsCache.find(p => p.id === item.productId);
+        await addDoc(collection(db, 'businesses', bizId, 'sales'), {
+            invoiceNo: invNo, customerId: cid || null, customerName: cname,
+            items: posCart.map(function(c) { return { productId: c.productId, name: c.name, price: c.price, qty: c.qty }; }),
+            subtotal: subtotal, discount: discount, total: total, paymentMethod: pm,
+            status: 'paid', createdBy: currentUser.uid, createdAt: serverTimestamp()
+        });
+        for (var i = 0; i < posCart.length; i++) {
+            var item = posCart[i];
+            var prod = productsCache.find(function(p) { return p.id === item.productId; });
             if (prod) {
-                const newStock = Math.max(0, (prod.stock || 0) - item.qty);
-                await updateDoc(doc(db, 'businesses', bizId, 'products', item.productId), { stock: newStock });
-                prod.stock = newStock;
+                var ns = Math.max(0, (prod.stock || 0) - item.qty);
+                await updateDoc(doc(db, 'businesses', bizId, 'products', item.productId), { stock: ns });
+                prod.stock = ns;
             }
         }
-
-        // Update customer purchase total
-        if (customerId) {
-            const cRef = doc(db, 'businesses', bizId, 'customers', customerId);
-            const cSnap = await getDoc(cRef);
-            if (cSnap.exists()) {
-                const cData = cSnap.data();
-                await updateDoc(cRef, { totalPurchases: (cData.totalPurchases || 0) + total });
-            }
+        if (cid) {
+            var cr = doc(db, 'businesses', bizId, 'customers', cid);
+            var cs = await getDoc(cr);
+            if (cs.exists()) await updateDoc(cr, { totalPurchases: (cs.data().totalPurchases || 0) + total });
         }
-
         posCart = [];
         renderCart();
         toast('Sale completed successfully!', 's');
-
-        // Refresh products cache
-        const snap = await getDocs(collection(db, 'businesses', bizId, 'products'));
-        productsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderPOSProducts(document.getElementById('posSearch')?.value || '');
-    } catch (err) {
-        console.error('[POS CHECKOUT ERROR]', err);
-        toast('Sale failed: ' + err.message, 'e');
+        var snap = await getDocs(collection(db, 'businesses', bizId, 'products'));
+        productsCache = snap.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
+        renderPOSProducts(el('posSearch') ? el('posSearch').value : '');
+    } catch (e) {
+        console.error('[POS CHECKOUT ERROR]', e);
+        toast('Sale failed: ' + e.message, 'e');
     } finally {
         btn.disabled = posCart.length === 0;
         btn.innerHTML = '<i class="fa-solid fa-check-circle"></i> Complete Sale';
@@ -2197,166 +1979,134 @@ async function handlePosCheckout() {
 async function loadInventory() {
     if (!bizId) return;
     try {
-        const snap = await getDocs(query(collection(db, 'businesses', bizId, 'inventory'), orderBy('createdAt', 'desc')));
-        inventoryCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var s = await getDocs(query(collection(db, 'businesses', bizId, 'inventory'), orderBy('createdAt', 'desc')));
+        inventoryCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         renderInventory();
-    } catch (err) {
-        console.error('[INVENTORY LOAD ERROR]', err);
-        toast('Failed to load inventory', 'e');
-    }
+    } catch (e) { console.error('[INVENTORY LOAD ERROR]', e); toast('Failed to load inventory', 'e'); }
 }
 
 function renderInventory() {
-    const filter = document.getElementById('inventorySearch')?.value?.toLowerCase() || '';
-    let filtered = inventoryCache;
-    if (filter) filtered = filtered.filter(i => (i.productName || '').toLowerCase().includes(filter));
-    const body = document.getElementById('inventoryBody');
-    if (filtered.length === 0) {
+    var f = (el('inventorySearch') ? el('inventorySearch').value : '').toLowerCase();
+    var filtered = inventoryCache;
+    if (f) filtered = filtered.filter(function(i) { return (i.productName || '').toLowerCase().indexOf(f) !== -1; });
+    var body = el('inventoryBody');
+    if (!filtered.length) {
         body.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-warehouse"></i><p>No inventory records</p></td></tr>';
         return;
     }
-    body.innerHTML = filtered.map(i => `
-        <tr>
-            <td>${fmtDateTime(i.createdAt)}</td>
-            <td>${escHtml(i.productName || '—')}</td>
-            <td><span class="status-badge ${i.type === 'in' ? 'active' : i.type === 'out' ? 'suspended' : 'pending'}">${i.type || 'adjustment'}</span></td>
-            <td style="font-weight:600">${i.type === 'out' ? '-' : '+'}${i.quantity || 0}</td>
-            <td>${escHtml(i.note || '—')}</td>
-            <td>${escHtml(i.createdByName || '—')}</td>
-        </tr>
-    `).join('');
+    body.innerHTML = filtered.map(function(i) {
+        var typeClass = i.type === 'in' ? 'active' : i.type === 'out' ? 'suspended' : 'pending';
+        var prefix = i.type === 'out' ? '-' : '+';
+        return '<tr><td>' + fmtDateTime(i.createdAt) + '</td><td>' + escHtml(i.productName || '\u2014') +
+            '</td><td><span class="status-badge ' + typeClass + '">' + (i.type || 'adjustment') +
+            '</span></td><td style="font-weight:600">' + prefix + (i.quantity || 0) +
+            '</td><td>' + escHtml(i.note || '\u2014') + '</td><td>' + escHtml(i.createdByName || '\u2014') + '</td></tr>';
+    }).join('');
 }
 
 function openAddAdjustment() {
-    if (productsCache.length === 0) {
-        toast('Please add products first', 'w');
-        return;
-    }
-    const opts = productsCache.map(p => `<option value="${p.id}">${escHtml(p.name)} (Stock: ${p.stock || 0})</option>`).join('');
-    openMainModal('New Stock Adjustment', `
-        <form id="adjustForm">
-            <div class="fg"><label>Product *</label><select class="fi" id="adjProduct" required><option value="">Select product</option>${opts}</select></div>
-            <div class="fg"><label>Type *</label><select class="fi" id="adjType" required><option value="in">Stock In (Add)</option><option value="out">Stock Out (Remove)</option><option value="adjustment">Adjustment</option></select></div>
-            <div class="fg"><label>Quantity *</label><input class="fi" id="adjQty" type="number" min="1" value="1" required/></div>
-            <div class="fg"><label>Note</label><input class="fi" id="adjNote" placeholder="Reason for adjustment"/></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveAdjustment()"><i class="fa-solid fa-save"></i> Save</button>`);
+    if (!productsCache.length) { toast('Please add products first', 'w'); return; }
+    var opts = productsCache.map(function(p) {
+        return '<option value="' + p.id + '">' + escHtml(p.name) + ' (Stock: ' + (p.stock || 0) + ')</option>';
+    }).join('');
+    openMainModal('New Stock Adjustment',
+        '<div class="fg"><label>Product *</label><select class="fi" id="adjProduct" required><option value="">Select product</option>' + opts + '</select></div>' +
+        '<div class="fg"><label>Type *</label><select class="fi" id="adjType"><option value="in">Stock In (Add)</option><option value="out">Stock Out (Remove)</option><option value="adjustment">Adjustment</option></select></div>' +
+        '<div class="fg"><label>Quantity *</label><input class="fi" id="adjQty" type="number" min="1" value="1" required/></div>' +
+        '<div class="fg"><label>Note</label><input class="fi" id="adjNote" placeholder="Reason for adjustment"/></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveAdjustment()"><i class="fa-solid fa-save"></i> Save</button>'
+    );
 }
 
 window._saveAdjustment = async function() {
-    const productId = document.getElementById('adjProduct').value;
-    const type = document.getElementById('adjType').value;
-    const quantity = parseInt(document.getElementById('adjQty').value) || 0;
-    const note = document.getElementById('adjNote').value.trim();
-    if (!productId || quantity <= 0) { toast('Please fill all required fields', 'e'); return; }
-
-    const product = productsCache.find(p => p.id === productId);
+    var pid = el('adjProduct').value;
+    var type = el('adjType').value;
+    var qty = parseInt(el('adjQty').value) || 0;
+    var note = el('adjNote').value.trim();
+    if (!pid || qty <= 0) { toast('Please fill all required fields', 'e'); return; }
+    var product = productsCache.find(function(p) { return p.id === pid; });
     if (!product) { toast('Product not found', 'e'); return; }
-
     try {
-        let newStock = product.stock || 0;
-        if (type === 'in') newStock += quantity;
-        else if (type === 'out') {
-            if (newStock < quantity) { toast('Not enough stock', 'e'); return; }
-            newStock -= quantity;
-        } else {
-            newStock = quantity;
-        }
-
-        await updateDoc(doc(db, 'businesses', bizId, 'products', productId), { stock: newStock });
+        var ns = product.stock || 0;
+        if (type === 'in') ns += qty;
+        else if (type === 'out') { if (ns < qty) { toast('Not enough stock', 'e'); return; } ns -= qty; }
+        else ns = qty;
+        await updateDoc(doc(db, 'businesses', bizId, 'products', pid), { stock: ns });
         await addDoc(collection(db, 'businesses', bizId, 'inventory'), {
-            productId, productName: product.name, type, quantity, note,
-            createdBy: currentUser.uid, createdByName: currentUserData?.name || 'User',
+            productId: pid, productName: product.name, type: type, quantity: qty, note: note,
+            createdBy: currentUser.uid, createdByName: currentUserData ? currentUserData.name : 'User',
             createdAt: serverTimestamp()
         });
-
-        product.stock = newStock;
+        product.stock = ns;
         toast('Stock adjusted!', 's');
         closeMainModal();
         await loadInventory();
-    } catch (err) {
-        console.error('[ADJUSTMENT ERROR]', err);
-        toast('Failed to save adjustment', 'e');
-    }
+    } catch (e) { console.error('[ADJUSTMENT ERROR]', e); toast('Failed to save adjustment', 'e'); }
 };
 
 // ============================================================
 // CUSTOMERS MODULE
 // ============================================================
-let customerPage = 1;
-const customerPerPage = 15;
-
 async function loadCustomers() {
     if (!bizId) return;
     try {
-        const snap = await getDocs(collection(db, 'businesses', bizId, 'customers'));
-        customersCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var s = await getDocs(collection(db, 'businesses', bizId, 'customers'));
+        customersCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         renderCustomers();
-    } catch (err) {
-        console.error('[CUSTOMERS LOAD ERROR]', err);
-        toast('Failed to load customers', 'e');
-    }
+    } catch (e) { console.error('[CUSTOMERS LOAD ERROR]', e); toast('Failed to load customers', 'e'); }
 }
 
 function renderCustomers() {
-    const filter = document.getElementById('customerSearch')?.value?.toLowerCase() || '';
-    let filtered = customersCache;
-    if (filter) filtered = filtered.filter(c => (c.name || '').toLowerCase().includes(filter) || (c.phone || '').includes(filter));
-    const total = filtered.length;
-    const start = (customerPage - 1) * customerPerPage;
-    const page = filtered.slice(start, start + customerPerPage);
-    const body = document.getElementById('customersBody');
-
-    if (page.length === 0) {
+    var f = (el('customerSearch') ? el('customerSearch').value : '').toLowerCase();
+    var filtered = customersCache;
+    if (f) filtered = filtered.filter(function(c) { return (c.name || '').toLowerCase().indexOf(f) !== -1 || (c.phone || '').indexOf(f) !== -1; });
+    var total = filtered.length;
+    var start = (customerPage - 1) * PER_PAGE;
+    var page = filtered.slice(start, start + PER_PAGE);
+    var body = el('customersBody');
+    if (!page.length) {
         body.innerHTML = '<tr><td colspan="6" class="empty-s"><i class="fa-solid fa-users"></i><p>No customers found</p></td></tr>';
     } else {
-        body.innerHTML = page.map(c => `
-            <tr>
-                <td><strong>${escHtml(c.name)}</strong></td>
-                <td>${escHtml(c.phone || '—')}</td>
-                <td>${escHtml(c.email || '—')}</td>
-                <td>${fmt(c.totalPurchases || 0)}</td>
-                <td style="color:${(c.debt || 0) > 0 ? 'var(--danger)' : 'var(--text)'}">${fmt(c.debt || 0)}</td>
-                <td>
-                    <button class="btn btn-o btn-xs" onclick="window._editCustomer('${c.id}')"><i class="fa-solid fa-pen"></i></button>
-                    <button class="btn btn-d btn-xs" onclick="window._deleteCustomer('${c.id}','${escHtml(c.name)}')"><i class="fa-solid fa-trash"></i></button>
-                </td>
-            </tr>
-        `).join('');
+        body.innerHTML = page.map(function(c) {
+            var debtColor = (c.debt || 0) > 0 ? 'var(--danger)' : 'var(--text)';
+            return '<tr><td><strong>' + escHtml(c.name) + '</strong></td><td>' + escHtml(c.phone || '\u2014') +
+                '</td><td>' + escHtml(c.email || '\u2014') + '</td><td>' + fmt(c.totalPurchases || 0) +
+                '</td><td style="color:' + debtColor + '">' + fmt(c.debt || 0) +
+                '</td><td><button class="btn btn-o btn-xs" onclick="window._editCustomer(\'' + c.id + '\')"><i class="fa-solid fa-pen"></i></button> ' +
+                '<button class="btn btn-d btn-xs" onclick="window._deleteCustomer(\'' + c.id + '\',\'' + escHtml(c.name).replace(/'/g, "\\'") + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+        }).join('');
     }
-    renderPagination('customersPagination', total, customerPage, customerPerPage, p => { customerPage = p; renderCustomers(); });
+    renderPagination('customersPagination', total, customerPage, PER_PAGE, function(p) { customerPage = p; renderCustomers(); });
 }
 
 function openAddCustomer() {
-    openMainModal('Add Customer', `
-        <form id="custForm">
-            <div class="fg"><label>Name *</label><input class="fi" id="acName" required/></div>
-            <div class="fg"><label>Phone</label><input class="fi" id="acPhone" type="tel"/></div>
-            <div class="fg"><label>Email</label><input class="fi" id="acEmail" type="email"/></div>
-            <div class="fg"><label>Address</label><input class="fi" id="acAddress"/></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveCustomer()"><i class="fa-solid fa-plus"></i> Add Customer</button>`);
+    openMainModal('Add Customer',
+        '<div class="fg"><label>Name *</label><input class="fi" id="acName" required/></div>' +
+        '<div class="fg"><label>Phone</label><input class="fi" id="acPhone" type="tel"/></div>' +
+        '<div class="fg"><label>Email</label><input class="fi" id="acEmail" type="email"/></div>' +
+        '<div class="fg"><label>Address</label><input class="fi" id="acAddress"/></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveCustomer()"><i class="fa-solid fa-plus"></i> Add Customer</button>'
+    );
 }
 
 window._editCustomer = function(id) {
-    const c = customersCache.find(x => x.id === id);
+    var c = customersCache.find(function(x) { return x.id === id; });
     if (!c) return;
-    openMainModal('Edit Customer', `
-        <form id="custForm">
-            <div class="fg"><label>Name *</label><input class="fi" id="acName" value="${escHtml(c.name)}" required/></div>
-            <div class="fg"><label>Phone</label><input class="fi" id="acPhone" type="tel" value="${escHtml(c.phone || '')}"/></div>
-            <div class="fg"><label>Email</label><input class="fi" id="acEmail" type="email" value="${escHtml(c.email || '')}"/></div>
-            <div class="fg"><label>Address</label><input class="fi" id="acAddress" value="${escHtml(c.address || '')}"/></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveCustomer('${id}')"><i class="fa-solid fa-save"></i> Save</button>`);
+    openMainModal('Edit Customer',
+        '<div class="fg"><label>Name *</label><input class="fi" id="acName" value="' + escHtml(c.name) + '" required/></div>' +
+        '<div class="fg"><label>Phone</label><input class="fi" id="acPhone" type="tel" value="' + escHtml(c.phone || '') + '"/></div>' +
+        '<div class="fg"><label>Email</label><input class="fi" id="acEmail" type="email" value="' + escHtml(c.email || '') + '"/></div>' +
+        '<div class="fg"><label>Address</label><input class="fi" id="acAddress" value="' + escHtml(c.address || '') + '"/></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveCustomer(\'' + id + '\')"><i class="fa-solid fa-save"></i> Save</button>'
+    );
 };
 
 window._saveCustomer = async function(editId) {
-    const data = {
-        name: document.getElementById('acName').value.trim(),
-        phone: document.getElementById('acPhone').value.trim(),
-        email: document.getElementById('acEmail').value.trim(),
-        address: document.getElementById('acAddress').value.trim()
+    var data = {
+        name: el('acName').value.trim(),
+        phone: el('acPhone').value.trim(),
+        email: el('acEmail').value.trim(),
+        address: el('acAddress').value.trim()
     };
     if (!data.name) { toast('Customer name is required', 'e'); return; }
     try {
@@ -2372,22 +2122,13 @@ window._saveCustomer = async function(editId) {
         }
         closeMainModal();
         await loadCustomers();
-    } catch (err) {
-        console.error('[SAVE CUSTOMER ERROR]', err);
-        toast('Failed to save customer', 'e');
-    }
+    } catch (e) { console.error('[SAVE CUSTOMER ERROR]', e); toast('Failed to save customer', 'e'); }
 };
 
 window._deleteCustomer = function(id, name) {
-    showConfirm('Delete Customer', `Delete "${name}"?`, async () => {
-        try {
-            await deleteDoc(doc(db, 'businesses', bizId, 'customers', id));
-            toast('Customer deleted', 's');
-            await loadCustomers();
-        } catch (err) {
-            console.error('[DELETE CUSTOMER ERROR]', err);
-            toast('Failed to delete customer', 'e');
-        }
+    showConfirm('Delete Customer', 'Delete "' + name + '"?', async function() {
+        try { await deleteDoc(doc(db, 'businesses', bizId, 'customers', id)); toast('Customer deleted', 's'); await loadCustomers(); }
+        catch (e) { console.error('[DELETE CUSTOMER ERROR]', e); toast('Failed to delete customer', 'e'); }
     });
 };
 
@@ -2397,100 +2138,70 @@ window._deleteCustomer = function(id, name) {
 async function loadSuppliers() {
     if (!bizId) return;
     try {
-        const snap = await getDocs(collection(db, 'businesses', bizId, 'suppliers'));
-        suppliersCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var s = await getDocs(collection(db, 'businesses', bizId, 'suppliers'));
+        suppliersCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         renderSuppliers();
-    } catch (err) {
-        console.error('[SUPPLIERS LOAD ERROR]', err);
-        toast('Failed to load suppliers', 'e');
-    }
+    } catch (e) { console.error('[SUPPLIERS LOAD ERROR]', e); toast('Failed to load suppliers', 'e'); }
 }
 
 function renderSuppliers() {
-    const filter = document.getElementById('supplierSearch')?.value?.toLowerCase() || '';
-    let filtered = suppliersCache;
-    if (filter) filtered = filtered.filter(s => (s.name || '').toLowerCase().includes(filter));
-    const body = document.getElementById('suppliersBody');
-    if (filtered.length === 0) {
+    var f = (el('supplierSearch') ? el('supplierSearch').value : '').toLowerCase();
+    var filtered = suppliersCache;
+    if (f) filtered = filtered.filter(function(s) { return (s.name || '').toLowerCase().indexOf(f) !== -1; });
+    var body = el('suppliersBody');
+    if (!filtered.length) {
         body.innerHTML = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-truck"></i><p>No suppliers found</p></td></tr>';
         return;
     }
-    body.innerHTML = filtered.map(s => `
-        <tr>
-            <td><strong>${escHtml(s.name)}</strong></td>
-            <td>${escHtml(s.phone || '—')}</td>
-            <td>${escHtml(s.email || '—')}</td>
-            <td>${escHtml(s.category || '—')}</td>
-            <td>
-                <button class="btn btn-o btn-xs" onclick="window._editSupplier('${s.id}')"><i class="fa-solid fa-pen"></i></button>
-                <button class="btn btn-d btn-xs" onclick="window._deleteSupplier('${s.id}','${escHtml(s.name)}')"><i class="fa-solid fa-trash"></i></button>
-            </td>
-        </tr>
-    `).join('');
+    body.innerHTML = filtered.map(function(s) {
+        return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + escHtml(s.phone || '\u2014') +
+            '</td><td>' + escHtml(s.email || '\u2014') + '</td><td>' + escHtml(s.category || '\u2014') +
+            '</td><td><button class="btn btn-o btn-xs" onclick="window._editSupplier(\'' + s.id + '\')"><i class="fa-solid fa-pen"></i></button> ' +
+            '<button class="btn btn-d btn-xs" onclick="window._deleteSupplier(\'' + s.id + '\',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+    }).join('');
 }
 
 function openAddSupplier() {
-    openMainModal('Add Supplier', `
-        <form id="supForm">
-            <div class="fg"><label>Name *</label><input class="fi" id="asName" required/></div>
-            <div class="fg"><label>Phone</label><input class="fi" id="asPhone" type="tel"/></div>
-            <div class="fg"><label>Email</label><input class="fi" id="asEmail" type="email"/></div>
-            <div class="fg"><label>Category</label><input class="fi" id="asCategory" placeholder="e.g. Electronics, Food"/></div>
-            <div class="fg"><label>Address</label><input class="fi" id="asAddress"/></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveSupplier()"><i class="fa-solid fa-plus"></i> Add Supplier</button>`);
+    openMainModal('Add Supplier',
+        '<div class="fg"><label>Name *</label><input class="fi" id="asName" required/></div>' +
+        '<div class="fg"><label>Phone</label><input class="fi" id="asPhone" type="tel"/></div>' +
+        '<div class="fg"><label>Email</label><input class="fi" id="asEmail" type="email"/></div>' +
+        '<div class="fg"><label>Category</label><input class="fi" id="asCategory" placeholder="e.g. Electronics, Food"/></div>' +
+        '<div class="fg"><label>Address</label><input class="fi" id="asAddress"/></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveSupplier()"><i class="fa-solid fa-plus"></i> Add Supplier</button>'
+    );
 }
 
 window._editSupplier = function(id) {
-    const s = suppliersCache.find(x => x.id === id);
+    var s = suppliersCache.find(function(x) { return x.id === id; });
     if (!s) return;
-    openMainModal('Edit Supplier', `
-        <form id="supForm">
-            <div class="fg"><label>Name *</label><input class="fi" id="asName" value="${escHtml(s.name)}" required/></div>
-            <div class="fg"><label>Phone</label><input class="fi" id="asPhone" type="tel" value="${escHtml(s.phone || '')}"/></div>
-            <div class="fg"><label>Email</label><input class="fi" id="asEmail" type="email" value="${escHtml(s.email || '')}"/></div>
-            <div class="fg"><label>Category</label><input class="fi" id="asCategory" value="${escHtml(s.category || '')}"/></div>
-            <div class="fg"><label>Address</label><input class="fi" id="asAddress" value="${escHtml(s.address || '')}"/></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveSupplier('${id}')"><i class="fa-solid fa-save"></i> Save</button>`);
+    openMainModal('Edit Supplier',
+        '<div class="fg"><label>Name *</label><input class="fi" id="asName" value="' + escHtml(s.name) + '" required/></div>' +
+        '<div class="fg"><label>Phone</label><input class="fi" id="asPhone" type="tel" value="' + escHtml(s.phone || '') + '"/></div>' +
+        '<div class="fg"><label>Email</label><input class="fi" id="asEmail" type="email" value="' + escHtml(s.email || '') + '"/></div>' +
+        '<div class="fg"><label>Category</label><input class="fi" id="asCategory" value="' + escHtml(s.category || '') + '"/></div>' +
+        '<div class="fg"><label>Address</label><input class="fi" id="asAddress" value="' + escHtml(s.address || '') + '"/></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveSupplier(\'' + id + '\')"><i class="fa-solid fa-save"></i> Save</button>'
+    );
 };
 
 window._saveSupplier = async function(editId) {
-    const data = {
-        name: document.getElementById('asName').value.trim(),
-        phone: document.getElementById('asPhone').value.trim(),
-        email: document.getElementById('asEmail').value.trim(),
-        category: document.getElementById('asCategory').value.trim(),
-        address: document.getElementById('asAddress').value.trim()
+    var data = {
+        name: el('asName').value.trim(), phone: el('asPhone').value.trim(),
+        email: el('asEmail').value.trim(), category: el('asCategory').value.trim(), address: el('asAddress').value.trim()
     };
     if (!data.name) { toast('Supplier name is required', 'e'); return; }
     try {
-        if (editId) {
-            await updateDoc(doc(db, 'businesses', bizId, 'suppliers', editId), data);
-            toast('Supplier updated!', 's');
-        } else {
-            data.createdAt = serverTimestamp();
-            await addDoc(collection(db, 'businesses', bizId, 'suppliers'), data);
-            toast('Supplier added!', 's');
-        }
-        closeMainModal();
-        await loadSuppliers();
-    } catch (err) {
-        console.error('[SAVE SUPPLIER ERROR]', err);
-        toast('Failed to save supplier', 'e');
-    }
+        if (editId) { await updateDoc(doc(db, 'businesses', bizId, 'suppliers', editId), data); toast('Supplier updated!', 's'); }
+        else { data.createdAt = serverTimestamp(); await addDoc(collection(db, 'businesses', bizId, 'suppliers'), data); toast('Supplier added!', 's'); }
+        closeMainModal(); await loadSuppliers();
+    } catch (e) { console.error('[SAVE SUPPLIER ERROR]', e); toast('Failed to save supplier', 'e'); }
 };
 
 window._deleteSupplier = function(id, name) {
-    showConfirm('Delete Supplier', `Delete "${name}"?`, async () => {
-        try {
-            await deleteDoc(doc(db, 'businesses', bizId, 'suppliers', id));
-            toast('Supplier deleted', 's');
-            await loadSuppliers();
-        } catch (err) {
-            console.error('[DELETE SUPPLIER ERROR]', err);
-            toast('Failed to delete supplier', 'e');
-        }
+    showConfirm('Delete Supplier', 'Delete "' + name + '"?', async function() {
+        try { await deleteDoc(doc(db, 'businesses', bizId, 'suppliers', id)); toast('Supplier deleted', 's'); await loadSuppliers(); }
+        catch (e) { console.error('[DELETE SUPPLIER ERROR]', e); toast('Failed to delete supplier', 'e'); }
     });
 };
 
@@ -2500,104 +2211,75 @@ window._deleteSupplier = function(id, name) {
 async function loadStaff() {
     if (!bizId) return;
     try {
-        const snap = await getDocs(collection(db, 'businesses', bizId, 'staff'));
-        staffCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var s = await getDocs(collection(db, 'businesses', bizId, 'staff'));
+        staffCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
         renderStaff();
-    } catch (err) {
-        console.error('[STAFF LOAD ERROR]', err);
-        toast('Failed to load staff', 'e');
-    }
+    } catch (e) { console.error('[STAFF LOAD ERROR]', e); toast('Failed to load staff', 'e'); }
 }
 
 function renderStaff() {
-    const grid = document.getElementById('staffGrid');
-    if (staffCache.length === 0) {
+    var grid = el('staffGrid');
+    if (!staffCache.length) {
         grid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-id-badge"></i><p>No staff members yet</p></div>';
         return;
     }
-    const colors = ['var(--primary)', 'var(--success)', 'var(--info)', 'var(--warning)', 'var(--danger)', '#a29bfe'];
-    grid.innerHTML = staffCache.map((s, i) => {
-        const initials = (s.name || 'S').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-        const color = colors[i % colors.length];
-        return `
-        <div class="emp-card">
-            <div class="emp-card-head">
-                <div class="emp-av" style="background:${color}">${initials}</div>
-                <div><h4>${escHtml(s.name)}</h4><p>${escHtml(s.email || '')}</p></div>
-            </div>
-            <div class="emp-card-body">
-                <span class="emp-tag role">${escHtml(s.role || 'Staff')}</span>
-                <span class="emp-tag status ${(s.status || 'active') === 'active' ? '' : 'inactive'}">${s.status || 'active'}</span>
-            </div>
-            <div class="emp-card-foot">
-                <button class="btn btn-o btn-xs" onclick="window._editStaff('${s.id}')"><i class="fa-solid fa-pen"></i> Edit</button>
-                <button class="btn btn-d btn-xs" onclick="window._deleteStaff('${s.id}','${escHtml(s.name)}')"><i class="fa-solid fa-trash"></i> Remove</button>
-            </div>
-        </div>`;
+    var cols = ['var(--primary)', 'var(--success)', 'var(--info)', 'var(--warning)', 'var(--danger)', '#a29bfe'];
+    grid.innerHTML = staffCache.map(function(s, i) {
+        var initials = (s.name || 'S').split(' ').map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+        var color = cols[i % cols.length];
+        var statusClass = (s.status || 'active') === 'active' ? '' : ' inactive';
+        return '<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:' + color + '">' + initials +
+            '</div><div><h4>' + escHtml(s.name) + '</h4><p>' + escHtml(s.email || '') + '</p></div></div>' +
+            '<div class="emp-card-body"><span class="emp-tag role">' + escHtml(s.role || 'Staff') + '</span>' +
+            '<span class="emp-tag status' + statusClass + '">' + (s.status || 'active') + '</span></div>' +
+            '<div class="emp-card-foot"><button class="btn btn-o btn-xs" onclick="window._editStaff(\'' + s.id + '\')"><i class="fa-solid fa-pen"></i> Edit</button> ' +
+            '<button class="btn btn-d btn-xs" onclick="window._deleteStaff(\'' + s.id + '\',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')"><i class="fa-solid fa-trash"></i> Remove</button></div></div>';
     }).join('');
 }
 
 function openAddStaff() {
-    openMainModal('Add Staff Member', `
-        <form id="staffForm">
-            <div class="fg"><label>Full Name *</label><input class="fi" id="stName" required/></div>
-            <div class="fg"><label>Email</label><input class="fi" id="stEmail" type="email"/></div>
-            <div class="fg"><label>Phone</label><input class="fi" id="stPhone" type="tel"/></div>
-            <div class="fg"><label>Role *</label><select class="fi" id="stRole" required><option value="">Select role</option><option>Manager</option><option>Cashier</option><option>Stock Keeper</option><option>Salesperson</option><option>Accountant</option><option>Inventory Manager</option></select></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveStaff()"><i class="fa-solid fa-plus"></i> Add Staff</button>`);
+    openMainModal('Add Staff Member',
+        '<div class="fg"><label>Full Name *</label><input class="fi" id="stName" required/></div>' +
+        '<div class="fg"><label>Email</label><input class="fi" id="stEmail" type="email"/></div>' +
+        '<div class="fg"><label>Phone</label><input class="fi" id="stPhone" type="tel"/></div>' +
+        '<div class="fg"><label>Role *</label><select class="fi" id="stRole" required><option value="">Select role</option><option>Manager</option><option>Cashier</option><option>Stock Keeper</option><option>Salesperson</option><option>Accountant</option><option>Inventory Manager</option></select></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveStaff()"><i class="fa-solid fa-plus"></i> Add Staff</button>'
+    );
 }
 
 window._editStaff = function(id) {
-    const s = staffCache.find(x => x.id === id);
+    var s = staffCache.find(function(x) { return x.id === id; });
     if (!s) return;
-    openMainModal('Edit Staff', `
-        <form id="staffForm">
-            <div class="fg"><label>Full Name *</label><input class="fi" id="stName" value="${escHtml(s.name)}" required/></div>
-            <div class="fg"><label>Email</label><input class="fi" id="stEmail" type="email" value="${escHtml(s.email || '')}"/></div>
-            <div class="fg"><label>Phone</label><input class="fi" id="stPhone" type="tel" value="${escHtml(s.phone || '')}"/></div>
-            <div class="fg"><label>Role *</label><select class="fi" id="stRole" required><option value="">Select role</option><option ${s.role==='Manager'?'selected':''}>Manager</option><option ${s.role==='Cashier'?'selected':''}>Cashier</option><option ${s.role==='Stock Keeper'?'selected':''}>Stock Keeper</option><option ${s.role==='Salesperson'?'selected':''}>Salesperson</option><option ${s.role==='Accountant'?'selected':''}>Accountant</option><option ${s.role==='Inventory Manager'?'selected':''}>Inventory Manager</option></select></div>
-            <div class="fg"><label>Status</label><select class="fi" id="stStatus"><option ${s.status!=='suspended'?'selected':''}>active</option><option ${s.status==='suspended'?'selected':''}>suspended</option></select></div>
-        </form>
-    `, `<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveStaff('${id}')"><i class="fa-solid fa-save"></i> Save</button>`);
+    var roles = ['Manager', 'Cashier', 'Stock Keeper', 'Salesperson', 'Accountant', 'Inventory Manager'];
+    var roleOpts = roles.map(function(r) { return '<option ' + (s.role === r ? 'selected' : '') + '>' + r + '</option>'; }).join('');
+    openMainModal('Edit Staff',
+        '<div class="fg"><label>Full Name *</label><input class="fi" id="stName" value="' + escHtml(s.name) + '" required/></div>' +
+        '<div class="fg"><label>Email</label><input class="fi" id="stEmail" type="email" value="' + escHtml(s.email || '') + '"/></div>' +
+        '<div class="fg"><label>Phone</label><input class="fi" id="stPhone" type="tel" value="' + escHtml(s.phone || '') + '"/></div>' +
+        '<div class="fg"><label>Role *</label><select class="fi" id="stRole" required><option value="">Select role</option>' + roleOpts + '</select></div>' +
+        '<div class="fg"><label>Status</label><select class="fi" id="stStatus"><option ' + ((s.status || 'active') === 'active' ? 'selected' : '') + '>active</option><option ' + (s.status === 'suspended' ? 'selected' : '') + '>suspended</option></select></div>',
+        '<button class="btn btn-o" onclick="closeMainModal()">Cancel</button><button class="btn btn-p" onclick="window._saveStaff(\'' + id + '\')"><i class="fa-solid fa-save"></i> Save</button>'
+    );
 };
 
 window._saveStaff = async function(editId) {
-    const data = {
-        name: document.getElementById('stName').value.trim(),
-        email: document.getElementById('stEmail').value.trim(),
-        phone: document.getElementById('stPhone').value.trim(),
-        role: document.getElementById('stRole').value,
-        status: document.getElementById('stStatus')?.value || 'active'
+    var data = {
+        name: el('stName').value.trim(), email: el('stEmail').value.trim(),
+        phone: el('stPhone').value.trim(), role: el('stRole').value,
+        status: el('stStatus') ? el('stStatus').value : 'active'
     };
     if (!data.name || !data.role) { toast('Name and role are required', 'e'); return; }
     try {
-        if (editId) {
-            await updateDoc(doc(db, 'businesses', bizId, 'staff', editId), data);
-            toast('Staff updated!', 's');
-        } else {
-            data.createdAt = serverTimestamp();
-            await addDoc(collection(db, 'businesses', bizId, 'staff'), data);
-            toast('Staff added!', 's');
-        }
-        closeMainModal();
-        await loadStaff();
-    } catch (err) {
-        console.error('[SAVE STAFF ERROR]', err);
-        toast('Failed to save staff', 'e');
-    }
+        if (editId) { await updateDoc(doc(db, 'businesses', bizId, 'staff', editId), data); toast('Staff updated!', 's'); }
+        else { data.createdAt = serverTimestamp(); await addDoc(collection(db, 'businesses', bizId, 'staff'), data); toast('Staff added!', 's'); }
+        closeMainModal(); await loadStaff();
+    } catch (e) { console.error('[SAVE STAFF ERROR]', e); toast('Failed to save staff', 'e'); }
 };
 
 window._deleteStaff = function(id, name) {
-    showConfirm('Remove Staff', `Remove "${name}" from staff?`, async () => {
-        try {
-            await deleteDoc(doc(db, 'businesses', bizId, 'staff', id));
-            toast('Staff removed', 's');
-            await loadStaff();
-        } catch (err) {
-            console.error('[DELETE STAFF ERROR]', err);
-            toast('Failed to remove staff', 'e');
-        }
+    showConfirm('Remove Staff', 'Remove "' + name + '" from staff?', async function() {
+        try { await deleteDoc(doc(db, 'businesses', bizId, 'staff', id)); toast('Staff removed', 's'); await loadStaff(); }
+        catch (e) { console.error('[DELETE STAFF ERROR]', e); toast('Failed to remove staff', 'e'); }
     });
 };
 
@@ -2607,65 +2289,53 @@ window._deleteStaff = function(id, name) {
 async function loadReports() {
     if (!bizId) return;
     try {
-        const salesSnap = await getDocs(collection(db, 'businesses', bizId, 'sales'));
-        const allSales = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        var ss = await getDocs(collection(db, 'businesses', bizId, 'sales'));
+        var all = ss.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
+        var rev = all.filter(function(s) { return s.status === 'paid'; }).reduce(function(s, x) { return s + (x.total || 0); }, 0);
+        var unpaid = all.filter(function(s) { return s.status === 'unpaid'; }).reduce(function(s, x) { return s + (x.total || 0); }, 0);
 
-        const totalRevenue = allSales.filter(s => s.status === 'paid').reduce((s, x) => s + (x.total || 0), 0);
-        const totalUnpaid = allSales.filter(s => s.status === 'unpaid').reduce((s, x) => s + (x.total || 0), 0);
-        const totalExpenses = 0; // Would need expenses collection
-        const profit = totalRevenue - totalExpenses;
+        el('reportMetrics').innerHTML =
+            '<div class="mc g"><div class="mc-icon"><i class="fa-solid fa-arrow-trend-up"></i></div><h3>' + fmt(rev) + '</h3><p>Total Revenue</p></div>' +
+            '<div class="mc r"><div class="mc-icon"><i class="fa-solid fa-clock"></i></div><h3>' + fmt(unpaid) + '</h3><p>Unpaid</p></div>' +
+            '<div class="mc b"><div class="mc-icon"><i class="fa-solid fa-arrow-down"></i></div><h3>0</h3><p>Expenses</p></div>' +
+            '<div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-chart-line"></i></div><h3>' + fmt(rev) + '</h3><p>Net Profit</p></div>';
 
-        document.getElementById('reportMetrics').innerHTML = `
-            <div class="mc g"><div class="mc-icon"><i class="fa-solid fa-arrow-trend-up"></i></div><h3>${fmt(totalRevenue)}</h3><p>Total Revenue</p></div>
-            <div class="mc r"><div class="mc-icon"><i class="fa-solid fa-clock"></i></div><h3>${fmt(totalUnpaid)}</h3><p>Unpaid</p></div>
-            <div class="mc b"><div class="mc-icon"><i class="fa-solid fa-arrow-down"></i></div><h3>${fmt(totalExpenses)}</h3><p>Expenses</p></div>
-            <div class="mc pu"><div class="mc-icon"><i class="fa-solid fa-chart-line"></i></div><h3>${fmt(profit)}</h3><p>Net Profit</p></div>
-        `;
-
-        // Monthly breakdown
-        const monthly = {};
-        allSales.forEach(s => {
+        var monthly = {};
+        all.forEach(function(s) {
             if (s.createdAt && s.status === 'paid') {
-                const d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
-                const key = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-                if (!monthly[key]) monthly[key] = { revenue: 0, expenses: 0 };
-                monthly[key].revenue += s.total || 0;
+                var d = s.createdAt.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
+                var k = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+                if (!monthly[k]) monthly[k] = { revenue: 0, expenses: 0 };
+                monthly[k].revenue += s.total || 0;
             }
         });
-
-        const mKeys = Object.keys(monthly).sort((a, b) => new Date(a) - new Date(b)).slice(-6);
-        const revenues = mKeys.map(k => monthly[k].revenue);
-        const expenses = mKeys.map(k => monthly[k].expenses);
+        var mK = Object.keys(monthly).sort(function(a, b) { return new Date(a) - new Date(b); }).slice(-6);
+        var rV = mK.map(function(k) { return monthly[k].revenue; });
+        var eV = mK.map(function(k) { return monthly[k].expenses; });
 
         renderChart('reportRevenueChart', {
             type: 'bar',
-            data: { labels: mKeys.length ? mKeys : ['No Data'], datasets: [
-                { label: 'Revenue', data: revenues.length ? revenues : [0], backgroundColor: 'rgba(108,92,231,.7)' },
-                { label: 'Expenses', data: expenses.length ? expenses : [0], backgroundColor: 'rgba(231,76,60,.7)' }
+            data: { labels: mK.length ? mK : ['No Data'], datasets: [
+                { label: 'Revenue', data: rV.length ? rV : [0], backgroundColor: 'rgba(108,92,231,.7)' },
+                { label: 'Expenses', data: eV.length ? eV : [0], backgroundColor: 'rgba(231,76,60,.7)' }
             ]},
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9a9ab0' } } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } } } }
         });
-
         renderChart('reportExpenseChart', {
             type: 'doughnut',
             data: { labels: ['No expense data yet'], datasets: [{ data: [1], backgroundColor: ['#252538'] }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#9a9ab0' } } } }
         });
 
-        // Table
-        const tbody = document.getElementById('reportTableBody');
-        if (mKeys.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="empty-s"><p>No data available</p></td></tr>';
-        } else {
-            tbody.innerHTML = mKeys.map(k => {
-                const r = monthly[k].revenue;
-                const e = monthly[k].expenses;
-                return `<tr><td>${k}</td><td style="color:var(--success)">${fmt(r)}</td><td style="color:var(--danger)">${fmt(e)}</td><td style="color:var(--primary2);font-weight:600">${fmt(r - e)}</td></tr>`;
+        var tb = el('reportTableBody');
+        if (!mK.length) { tb.innerHTML = '<tr><td colspan="4" class="empty-s"><p>No data available</p></td></tr>'; }
+        else {
+            tb.innerHTML = mK.map(function(k) {
+                var r = monthly[k].revenue, e = monthly[k].expenses;
+                return '<tr><td>' + k + '</td><td style="color:var(--success)">' + fmt(r) + '</td><td style="color:var(--danger)">' + fmt(e) + '</td><td style="color:var(--primary2);font-weight:600">' + fmt(r - e) + '</td></tr>';
             }).join('');
         }
-    } catch (err) {
-        console.error('[REPORTS ERROR]', err);
-    }
+    } catch (e) { console.error('[REPORTS ERROR]', e); }
 }
 
 // ============================================================
@@ -2674,23 +2344,20 @@ async function loadReports() {
 async function loadSettings() {
     if (!bizId) return;
     try {
-        const snap = await getDoc(doc(db, 'businesses', bizId));
-        if (snap.exists()) {
-            const b = snap.data();
-            document.getElementById('setBizName').value = b.name || '';
-            document.getElementById('setBizCategory').value = b.category || '';
-            document.getElementById('setBizPhone').value = b.phone || '';
-            document.getElementById('setBizEmail').value = b.email || '';
-            document.getElementById('setBizAddress').value = b.address || '';
+        var s = await getDoc(doc(db, 'businesses', bizId));
+        if (s.exists()) {
+            var b = s.data();
+            el('setBizName').value = b.name || '';
+            el('setBizCategory').value = b.category || '';
+            el('setBizPhone').value = b.phone || '';
+            el('setBizEmail').value = b.email || '';
+            el('setBizAddress').value = b.address || '';
             if (b.logo) {
-                const prev = document.getElementById('logoPrev');
-                prev.innerHTML = `<img src="${b.logo}" alt="Logo"/>`;
-                document.getElementById('btnRemoveLogo').style.display = 'inline-flex';
+                el('logoPrev').innerHTML = '<img src="' + b.logo + '" alt="Logo"/>';
+                el('btnRemoveLogo').style.display = 'inline-flex';
             }
         }
-    } catch (err) {
-        console.error('[SETTINGS LOAD ERROR]', err);
-    }
+    } catch (e) { console.error('[SETTINGS LOAD ERROR]', e); }
 }
 
 async function handleSettingsSave(e) {
@@ -2698,42 +2365,33 @@ async function handleSettingsSave(e) {
     if (!bizId) return;
     try {
         await updateDoc(doc(db, 'businesses', bizId), {
-            name: document.getElementById('setBizName').value.trim(),
-            category: document.getElementById('setBizCategory').value,
-            phone: document.getElementById('setBizPhone').value.trim(),
-            email: document.getElementById('setBizEmail').value.trim(),
-            address: document.getElementById('setBizAddress').value.trim()
+            name: el('setBizName').value.trim(), category: el('setBizCategory').value,
+            phone: el('setBizPhone').value.trim(), email: el('setBizEmail').value.trim(),
+            address: el('setBizAddress').value.trim()
         });
-        document.getElementById('tbBizName').textContent = document.getElementById('setBizName').value.trim();
+        el('tbBizName').textContent = el('setBizName').value.trim();
         toast('Settings saved!', 's');
-    } catch (err) {
-        console.error('[SETTINGS SAVE ERROR]', err);
-        toast('Failed to save settings', 'e');
-    }
+    } catch (e) { console.error('[SETTINGS SAVE ERROR]', e); toast('Failed to save settings', 'e'); }
 }
 
 async function handleLogoUpload() {
-    const input = document.getElementById('logoUpload');
+    var input = el('logoUpload');
     input.click();
-    input.onchange = async () => {
-        const file = input.files[0];
+    input.onchange = async function() {
+        var file = input.files[0];
         if (!file || !bizId) return;
         try {
             toast('Uploading logo...', 'i');
-            const url = await uploadImage(file, `businesses/${bizId}/logo`);
+            var url = await uploadImage(file, 'businesses/' + bizId + '/logo');
             await updateDoc(doc(db, 'businesses', bizId), { logo: url });
-            document.getElementById('logoPrev').innerHTML = `<img src="${url}" alt="Logo"/>`;
-            document.getElementById('btnRemoveLogo').style.display = 'inline-flex';
-            // Update topbar/sidebar
-            ['tbBizLogo', 'sbBizLogo'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) { el.src = url; el.style.display = 'block'; }
+            el('logoPrev').innerHTML = '<img src="' + url + '" alt="Logo"/>';
+            el('btnRemoveLogo').style.display = 'inline-flex';
+            ['tbBizLogo', 'sbBizLogo'].forEach(function(id) {
+                var e = el(id);
+                if (e) { e.src = url; e.style.display = 'block'; }
             });
             toast('Logo uploaded!', 's');
-        } catch (err) {
-            console.error('[LOGO UPLOAD ERROR]', err);
-            toast('Failed to upload logo', 'e');
-        }
+        } catch (e) { console.error('[LOGO UPLOAD ERROR]', e); toast('Failed to upload logo', 'e'); }
         input.value = '';
     };
 }
@@ -2741,25 +2399,680 @@ async function handleLogoUpload() {
 async function handleLogoRemove() {
     if (!bizId) return;
     try {
-        const snap = await getDoc(doc(db, 'businesses', bizId));
+        var snap = await getDoc(doc(db, 'businesses', bizId));
         if (snap.exists() && snap.data().logo) {
-            try { await deleteObject(ref(storage, snap.data().logo)); } catch (e) {}
+            try { await deleteObject(ref(storage, snap.data().logo)); }
+            catch (e) { console.warn('[DELETE LOGO IMAGE ERROR]', e); }
         }
         await updateDoc(doc(db, 'businesses', bizId), { logo: '' });
-        document.getElementById('logoPrev').innerHTML = '<i class="fa-solid fa-image"></i>';
-        document.getElementById('btnRemoveLogo').style.display = 'none';
-        ['tbBizLogo', 'sbBizLogo'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
+        el('logoPrev').innerHTML = '<i class="fa-solid fa-image"></i>';
+        el('btnRemoveLogo').style.display = 'none';
+        ['tbBizLogo', 'sbBizLogo'].forEach(function(id) {
+            var e = el(id);
+            if (e) e.style.display = 'none';
         });
         toast('Logo removed', 's');
     } catch (err) {
         console.error('[LOGO REMOVE ERROR]', err);
-        toast('Failed to
+        toast('Failed to remove logo', 'e');
+    }
+}
 
+// ============================================================
+// PROFILE MODULE
+// ============================================================
+function loadProfile() {
+    if (!currentUserData) return;
+    el('profNameInput').value = currentUserData.name || '';
+    el('profPhoneInput').value = currentUserData.phone || '';
+}
 
+async function handleProfileSave(e) {
+    e.preventDefault();
+    if (!currentUser) return;
+    try {
+        var data = { name: el('profNameInput').value.trim(), phone: el('profPhoneInput').value.trim() };
+        await updateDoc(doc(db, 'users', currentUser.uid), data);
+        currentUserData.name = data.name;
+        currentUserData.phone = data.phone;
+        el('profName').textContent = data.name;
+        var ini = data.name.split(' ').map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+        el('profAv').textContent = ini;
+        el('uAv').textContent = ini;
+        el('ucName').textContent = data.name;
+        toast('Profile updated!', 's');
+    } catch (e) { console.error('[PROFILE SAVE ERROR]', e); toast('Failed to save profile', 'e'); }
+}
 
+async function handleChangePw(e) {
+    e.preventDefault();
+    var curr = el('profCurrPw').value;
+    var newPw = el('profNewPw').value;
+    var conf = el('profConfPw').value;
+    if (!curr || !newPw || !conf) { toast('Fill all fields', 'e'); return; }
+    if (newPw !== conf) { toast('New passwords do not match', 'e'); return; }
+    if (newPw.length < 6) { toast('Password must be at least 6 characters', 'e'); return; }
+    try {
+        await updatePassword(currentUser, newPw);
+        toast('Password changed!', 's');
+        el('changePwForm').reset();
+    } catch (e) {
+        console.error('[CHANGE PW ERROR]', e);
+        var m = {
+            'auth/weak-password': 'Password is too weak.',
+            'auth/wrong-password': 'Current password is incorrect.',
+            'auth/requires-recent-login': 'Please log out and log in again before changing password.'
+        };
+        toast(m[e.code] || e.message, 'e');
+    }
+}
 
+// ============================================================
+// SUPER ADMIN MODULE
+// ============================================================
+async function handleSuperLogin(e) {
+    e.preventDefault();
+    var email = el('superUser').value.trim();
+    var pw = el('superPass').value;
+    var errEl = el('superErr');
+    errEl.textContent = '';
+    var btn = el('btnSuperLoginSubmit');
+    btn.disabled = true;
+    try {
+        var cred = await signInWithEmailAndPassword(auth, email, pw);
+        var uSnap = await getDoc(doc(db, 'users', cred.user.uid));
+        if (!uSnap.exists() || uSnap.data().role !== 'super_admin') {
+            await signOut(auth);
+            errEl.textContent = 'Access denied. Not a super admin.';
+            btn.disabled = false;
+            return;
+        }
+        el('superLoginBox').classList.add('hidden');
+        el('superPanel').classList.remove('hidden');
+        await loadSuperAdminData();
+    } catch (err) {
+        errEl.textContent = err.code === 'auth/invalid-credential' ? 'Invalid credentials.' : err.message;
+    }
+    btn.disabled = false;
+}
 
+async function loadSuperAdminData() {
+    try {
+        var uSnap = await getDocs(collection(db, 'users'));
+        superUsersCache = uSnap.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
+        renderSuperUsers();
+        renderSuperMetrics();
+        renderSuperCharts();
+        await loadSuperAds();
+        await loadSuperProducts();
+    } catch (e) { console.error('[SUPER LOAD ERROR]', e); }
+}
 
-              
+function renderSuperMetrics() {
+    var totalUsers = superUsersCache.length;
+    var bizSet = {};
+    superUsersCache.forEach(function(u) { if (u.bizId) bizSet[u.bizId] = true; });
+    var bizCount = Object.keys(bizSet).length;
+    var activeUsers = superUsersCache.filter(function(u) { return u.status === 'active'; }).length;
+    el('superMetrics').innerHTML =
+        '<div class="sm-card"><h4>Total Users</h4><div class="sm-val">' + totalUsers + '</div><div class="sm-sub">Registered accounts</div></div>' +
+        '<div class="sm-card"><h4>Businesses</h4><div class="sm-val">' + bizCount + '</div><div class="sm-sub">Active businesses</div></div>' +
+        '<div class="sm-card"><h4>Active Users</h4><div class="sm-val">' + activeUsers + '</div><div class="sm-sub">Currently active</div></div>' +
+        '<div class="sm-card"><h4>System Status</h4><div class="sm-val" style="color:var(--success)">Online</div><div class="sm-sub">All systems operational</div></div>';
+}
+
+function renderSuperUsers() {
+    var search = (el('superUserSearch') ? el('superUserSearch').value : '').toLowerCase();
+    var filtered = superUsersCache;
+    if (search) filtered = filtered.filter(function(u) { return (u.name || '').toLowerCase().indexOf(search) !== -1 || (u.email || '').toLowerCase().indexOf(search) !== -1; });
+    var body = el('superUsersBody');
+    if (!filtered.length) { body.innerHTML = '<tr><td colspan="7" class="empty-s"><p>No users found</p></td></tr>'; return; }
+    body.innerHTML = filtered.map(function(u) {
+        var statusClass = (u.status || 'active') === 'active' ? 'active' : 'suspended';
+        var toggleIcon = (u.status || 'active') === 'active' ? 'fa-ban' : 'fa-check';
+        return '<tr><td>' + escHtml(u.name || '\u2014') + '</td><td>' + escHtml(u.email || '\u2014') +
+            '</td><td>' + (u.bizId ? 'Business' : '\u2014') + '</td><td>' + escHtml(u.role || '\u2014') +
+            '</td><td><span class="status-badge ' + statusClass + '">' + (u.status || 'active') +
+            '</span></td><td>' + fmtDate(u.createdAt) +
+            '</td><td><button class="btn btn-o btn-xs" onclick="window._superToggleUser(\'' + u.id + '\',\'' + (u.status || 'active') + '\')"><i class="fa-solid ' + toggleIcon + '"></i></button></td></tr>';
+    }).join('');
+}
+
+window._superToggleUser = async function(uid, status) {
+    var newStatus = status === 'active' ? 'suspended' : 'active';
+    try {
+        await updateDoc(doc(db, 'users', uid), { status: newStatus });
+        toast('User ' + (newStatus === 'active' ? 'activated' : 'suspended'), 's');
+        await loadSuperAdminData();
+    } catch (e) { console.error('[TOGGLE USER ERROR]', e); toast('Failed', 'e'); }
+};
+
+function renderSuperCharts() {
+    var monthly = {};
+    superUsersCache.forEach(function(u) {
+        if (u.createdAt) {
+            var d = u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt);
+            var k = d.toLocaleString('en-US', { month: 'short', year: '2-digit' });
+            monthly[k] = (monthly[k] || 0) + 1;
+        }
+    });
+    var mK = Object.keys(monthly).slice(-12), mV = mK.map(function(k) { return monthly[k]; });
+    renderChart('superUsersTrend', {
+        type: 'line',
+        data: { labels: mK.length ? mK : ['No Data'], datasets: [{ label: 'New Users', data: mV.length ? mV : [0], borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,.15)', fill: true, tension: .4 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } } } }
+    });
+    renderChart('superCategoryChart', {
+        type: 'doughnut',
+        data: { labels: ['Retail', 'Food', 'Electronics', 'Fashion', 'Other'], datasets: [{ data: [30, 25, 20, 15, 10], backgroundColor: ['#6c5ce7', '#00b894', '#e74c3c', '#f39c12', '#0984e3'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#9a9ab0' } } } }
+    });
+    renderChart('superBusinessChart', {
+        type: 'bar',
+        data: { labels: ['Biz A', 'Biz B', 'Biz C', 'Biz D', 'Biz E'], datasets: [{ label: 'Sales', data: [1200000, 900000, 750000, 500000, 300000], backgroundColor: 'rgba(0,184,148,.7)' }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } } } }
+    });
+    renderChart('superProductChart', {
+        type: 'bar',
+        data: { labels: ['Product A', 'Product B', 'Product C', 'Product D', 'Product E'], datasets: [{ label: 'Units Sold', data: [450, 320, 280, 190, 150], backgroundColor: 'rgba(162,155,254,.7)' }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } }, y: { ticks: { color: '#5a5a72' }, grid: { color: '#252538' } } } }
+    });
+}
+
+// Super Admin Ads
+async function loadSuperAds() {
+    try {
+        var s = await getDocs(query(collection(db, 'advertisements'), orderBy('createdAt', 'desc')));
+        superAdsCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
+        renderSuperAds();
+    } catch (e) { console.error('[SUPER ADS ERROR]', e); }
+}
+
+function renderSuperAds() {
+    var el2 = el('superAdsList');
+    if (!superAdsCache.length) { el2.innerHTML = '<div class="empty-s"><p>No advertisements</p></div>'; return; }
+    el2.innerHTML = superAdsCache.map(function(a) {
+        var imgHtml = a.image
+            ? '<img src="' + a.image + '" style="width:50px;height:50px;object-fit:cover;border-radius:8px"/>'
+            : '<div style="width:50px;height:50px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>';
+        return '<div class="super-ad-item"><div class="super-ad-thumb">' + imgHtml + '</div>' +
+            '<div class="super-ad-info"><h5>' + escHtml(a.title) + '</h5><p>' + fmtDate(a.createdAt) + '</p></div>' +
+            '<div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="window._editSuperAd(\'' + a.id + '\')"><i class="fa-solid fa-pen"></i></button> ' +
+            '<button class="btn btn-d btn-xs" onclick="window._deleteSuperAd(\'' + a.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+    }).join('');
+}
+
+function openNewSuperAd() {
+    el('superAdId').value = '';
+    el('superAdTitle').value = '';
+    el('superAdText').value = '';
+    el('superAdImage').value = '';
+    el('superAdLink').value = '';
+    el('superAdModalTitle').textContent = 'Create Advertisement';
+    el('superAdModal').style.display = 'flex';
+}
+
+window._editSuperAd = function(id) {
+    var a = superAdsCache.find(function(x) { return x.id === id; });
+    if (!a) return;
+    el('superAdId').value = id;
+    el('superAdTitle').value = a.title || '';
+    el('superAdText').value = a.description || '';
+    el('superAdLink').value = a.link || '';
+    el('superAdModalTitle').textContent = 'Edit Advertisement';
+    el('superAdModal').style.display = 'flex';
+};
+
+async function handleSuperAdSave(e) {
+    e.preventDefault();
+    var id = el('superAdId').value;
+    var data = { title: el('superAdTitle').value.trim(), description: el('superAdText').value.trim(), link: el('superAdLink').value.trim() };
+    if (!data.title) { toast('Title required', 'e'); return; }
+    try {
+        var imgFile = el('superAdImage').files[0];
+        if (id) {
+            if (imgFile) data.image = await uploadImage(imgFile, 'advertisements/' + id);
+            await updateDoc(doc(db, 'advertisements', id), data);
+            toast('Ad updated!', 's');
+        } else {
+            data.createdAt = serverTimestamp();
+            data.image = '';
+            var ref = await addDoc(collection(db, 'advertisements'), data);
+            if (imgFile) { var url = await uploadImage(imgFile, 'advertisements/' + ref.id); await updateDoc(ref, { image: url }); }
+            toast('Ad created!', 's');
+        }
+        el('superAdModal').style.display = 'none';
+        await loadSuperAds();
+    } catch (e) { console.error('[SAVE AD ERROR]', e); toast('Failed', 'e'); }
+}
+
+window._deleteSuperAd = function(id) {
+    showConfirm('Delete Ad', 'Delete this advertisement?', async function() {
+        try {
+            var a = superAdsCache.find(function(x) { return x.id === id; });
+            if (a && a.image) { try { await deleteObject(ref(storage, a.image)); } catch (ex) {} }
+            await deleteDoc(doc(db, 'advertisements', id));
+            toast('Deleted', 's');
+            await loadSuperAds();
+        } catch (e) { console.error('[DEL AD ERROR]', e); toast('Failed', 'e'); }
+    });
+};
+
+// Super Admin Public Products
+async function loadSuperProducts() {
+    try {
+        var s = await getDocs(query(collection(db, 'public_products'), orderBy('createdAt', 'desc')));
+        superProductsCache = s.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
+        renderSuperProducts();
+    } catch (e) { console.error('[SUPER PRODS ERROR]', e); }
+}
+
+function renderSuperProducts() {
+    var el2 = el('superProductsList');
+    if (!superProductsCache.length) { el2.innerHTML = '<div class="empty-s"><p>No public products</p></div>'; return; }
+    el2.innerHTML = superProductsCache.map(function(p) {
+        var imgHtml = p.image
+            ? '<img src="' + p.image + '" style="width:50px;height:50px;object-fit:cover;border-radius:8px"/>'
+            : '<div style="width:50px;height:50px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>';
+        return '<div class="super-prod-item"><div class="super-ad-thumb">' + imgHtml + '</div>' +
+            '<div class="super-ad-info"><h5>' + escHtml(p.name) + '</h5><p>' + escHtml(p.seller || '') + ' \u2014 ' + fmt(p.price) + '</p></div>' +
+            '<div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="window._editSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button> ' +
+            '<button class="btn btn-d btn-xs" onclick="window._deleteSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+    }).join('');
+}
+
+function openNewSuperProduct() {
+    el('superProdId').value = '';
+    el('superProdName').value = '';
+    el('superProdCategory').value = '';
+    el('superProdSeller').value = '';
+    el('superProdShop').value = '';
+    el('superProdPhone').value = '';
+    el('superProdLocation').value = '';
+    el('superProdPrice').value = '';
+    el('superProdDesc').value = '';
+    el('superProdImage').value = '';
+    el('superProdModalTitle').textContent = 'Public Product';
+    el('superProductModal').style.display = 'flex';
+}
+
+window._editSuperProduct = function(id) {
+    var p = superProductsCache.find(function(x) { return x.id === id; });
+    if (!p) return;
+    el('superProdId').value = id;
+    el('superProdName').value = p.name || '';
+    el('superProdCategory').value = p.category || '';
+    el('superProdSeller').value = p.seller || '';
+    el('superProdShop').value = p.shopName || '';
+    el('superProdPhone').value = p.phone || '';
+    el('superProdLocation').value = p.location || '';
+    el('superProdPrice').value = p.price || '';
+    el('superProdDesc').value = p.description || '';
+    el('superProdModalTitle').textContent = 'Edit Product';
+    el('superProductModal').style.display = 'flex';
+};
+
+async function handleSuperProductSave(e) {
+    e.preventDefault();
+    var id = el('superProdId').value;
+    var data = {
+        name: el('superProdName').value.trim(), category: el('superProdCategory').value.trim(),
+        seller: el('superProdSeller').value.trim(), shopName: el('superProdShop').value.trim(),
+        phone: el('superProdPhone').value.trim(), location: el('superProdLocation').value.trim(),
+        price: parseFloat(el('superProdPrice').value) || 0, description: el('superProdDesc').value.trim()
+    };
+    if (!data.name) { toast('Name required', 'e'); return; }
+    try {
+        var imgFile = el('superProdImage').files[0];
+        if (id) {
+            if (imgFile) data.image = await uploadImage(imgFile, 'public_products/' + id);
+            await updateDoc(doc(db, 'public_products', id), data);
+            toast('Updated!', 's');
+        } else {
+            data.createdAt = serverTimestamp();
+            data.image = '';
+            var ref = await addDoc(collection(db, 'public_products'), data);
+            if (imgFile) { var url = await uploadImage(imgFile, 'public_products/' + ref.id); await updateDoc(ref, { image: url }); }
+            toast('Published!', 's');
+        }
+        el('superProductModal').style.display = 'none';
+        await loadSuperProducts();
+    } catch (e) { console.error('[SAVE PROD ERROR]', e); toast('Failed', 'e'); }
+}
+
+window._deleteSuperProduct = function(id) {
+    showConfirm('Delete Product', 'Delete this public product?', async function() {
+        try {
+            var p = superProductsCache.find(function(x) { return x.id === id; });
+            if (p && p.image) { try { await deleteObject(ref(storage, p.image)); } catch (ex) {} }
+            await deleteDoc(doc(db, 'public_products', id));
+            toast('Deleted', 's');
+            await loadSuperProducts();
+        } catch (e) { console.error('[DEL PROD ERROR]', e); toast('Failed', 'e'); }
+    });
+};
+
+// ============================================================
+// PUBLIC DATA (Landing Page)
+// ============================================================
+async function loadPublicData() {
+    try {
+        var aSnap = await getDocs(query(collection(db, 'advertisements'), orderBy('createdAt', 'desc'), limit(6)));
+        var ads = aSnap.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
+        var adGrid = el('publicAdsGrid');
+        if (!ads.length) { adGrid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-bullhorn"></i><p>No advertisements yet</p></div>'; }
+        else {
+            adGrid.innerHTML = ads.map(function(a) {
+                var imgHtml = a.image ? '<img class="pub-ad-img" src="' + a.image + '" alt="' + escHtml(a.title) + '"/>' : '<div class="pub-ad-img-placeholder"><i class="fa-solid fa-image"></i></div>';
+                var linkHtml = a.link ? '<a class="pub-ad-link" href="' + escHtml(a.link) + '" target="_blank">Learn more <i class="fa-solid fa-arrow-right"></i></a>' : '';
+                return '<div class="pub-ad-card">' + imgHtml + '<div class="pub-ad-body"><h4>' + escHtml(a.title) + '</h4><p>' + escHtml(a.description || '') + '</p>' + linkHtml + '</div></div>';
+            }).join('');
+        }
+
+        var pSnap = await getDocs(query(collection(db, 'public_products'), orderBy('createdAt', 'desc'), limit(12)));
+        var prods = pSnap.docs.map(function(d) { var o = { id: d.id }; Object.assign(o, d.data()); return o; });
+        var pGrid = el('publicProductsGrid');
+        if (!prods.length) { pGrid.innerHTML = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>No products listed yet</p></div>'; }
+        else {
+            pGrid.innerHTML = prods.map(function(p) {
+                var imgHtml = p.image ? '<img class="pub-prod-img" src="' + p.image + '" alt="' + escHtml(p.name) + '"/>' : '<div class="pub-prod-img-placeholder"><i class="fa-solid fa-image"></i></div>';
+                return '<div class="pub-prod-card">' + imgHtml + '<div class="pub-prod-body"><h4>' + escHtml(p.name) + '</h4>' +
+                    '<p>' + escHtml(p.description || '') + '</p><div class="pub-prod-price">' + fmt(p.price) + ' TZS</div>' +
+                    '<div class="pub-prod-seller">' + escHtml(p.shopName || p.seller || '') + (p.location ? ' \u2014 ' + escHtml(p.location) : '') + '</div></div></div>';
+            }).join('');
+        }
+    } catch (e) { console.error('[PUBLIC DATA ERROR]', e); }
+}
+
+// ============================================================
+// PRICE CALCULATOR
+// ============================================================
+function updatePriceCalc() {
+    var cost = parseFloat(el('pcCost') ? el('pcCost').value : 0) || 0;
+    var oh = parseFloat(el('pcOverhead') ? el('pcOverhead').value : 0) || 0;
+    var mg = parseFloat(el('pcMargin') ? el('pcMargin').value : 0) || 0;
+    var price = cost + (cost * oh / 100) + (cost * mg / 100);
+    var el2 = el('pcPrice');
+    if (el2) el2.textContent = fmt(Math.round(price));
+}
+
+// ============================================================
+// LANDING PAGE FEATURES GRID
+// ============================================================
+function renderFeatureGrid() {
+    var features = [
+        { icon: 'fa-chart-pie', title: 'Dashboard', desc: 'Business overview & analytics', lock: false },
+        { icon: 'fa-cash-register', title: 'Point of Sale', desc: 'Fast sales processing', lock: true },
+        { icon: 'fa-box', title: 'Products', desc: 'Manage your catalogue', lock: true },
+        { icon: 'fa-receipt', title: 'Sales', desc: 'Track all transactions', lock: true },
+        { icon: 'fa-warehouse', title: 'Inventory', desc: 'Stock level management', lock: true },
+        { icon: 'fa-users', title: 'Customers', desc: 'Customer database', lock: true },
+        { icon: 'fa-truck', title: 'Suppliers', desc: 'Supplier contacts', lock: true },
+        { icon: 'fa-id-badge', title: 'Staff', desc: 'Team management', lock: true },
+        { icon: 'fa-chart-line', title: 'Reports', desc: 'Financial analytics', lock: true },
+        { icon: 'fa-gear', title: 'Settings', desc: 'Business configuration', lock: true },
+        { icon: 'fa-bell', title: 'Notifications', desc: 'Real-time alerts', lock: true },
+        { icon: 'fa-calculator', title: 'Price Calculator', desc: 'Auto pricing tool', lock: true }
+    ];
+    el('featureGrid').innerHTML = features.map(function(f) {
+        var lockHtml = f.lock ? '<span class="ld-lock"><i class="fa-solid fa-lock"></i> Login</span>' : '';
+        return '<div class="ld-card">' + lockHtml + '<i class="fa-solid ' + f.icon + '"></i><h5>' + f.title + '</h5><p>' + f.desc + '</p></div>';
+    }).join('');
+}
+
+// ============================================================
+// SHARE CATALOGUE
+// ============================================================
+function shareCatalogue() {
+    var url = window.location.href;
+    if (navigator.share) {
+        navigator.share({ title: 'BizBook Product Catalogue', text: 'Check out these products!', url: url });
+    } else {
+        navigator.clipboard.writeText(url).then(function() { toast('Link copied!', 's'); }).catch(function() { toast('Failed to copy', 'e'); });
+    }
+}
+
+// ============================================================
+// EVENT LISTENERS — YOTE YANAYOWEKWA MARA MOJA
+// ============================================================
+function initEventListeners() {
+    // Landing page buttons
+    el('btnLandingLogin') && el('btnLandingLogin').addEventListener('click', function() { showScreen('authScreen'); });
+    el('btnLandingSignup') && el('btnLandingSignup').addEventListener('click', function() { showScreen('authScreen'); el('tabSignup').click(); });
+    el('btnLandingSuperAdmin') && el('btnLandingSuperAdmin').addEventListener('click', function() { showScreen('superScreen'); });
+    el('btnRefreshPublic') && el('btnRefreshPublic').addEventListener('click', function() { loadPublicData(); toast('Refreshed', 'i'); });
+
+    // Auth tabs
+    document.querySelectorAll('.auth-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.auth-tab').forEach(function(t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+            document.querySelectorAll('.auth-form').forEach(function(f) { f.classList.remove('active'); });
+            var target = el(tab.dataset.tab);
+            if (target) target.classList.add('active');
+            hideAuthError();
+        });
+    });
+
+    // Auth forms
+    el('loginForm') && el('loginForm').addEventListener('submit', handleLogin);
+    el('signupForm') && el('signupForm').addEventListener('submit', handleSignup);
+    el('btnForgotPw') && el('btnForgotPw').addEventListener('click', handleForgotPw);
+
+    // Signup steps
+    el('btnSignupNext') && el('btnSignupNext').addEventListener('click', function() {
+        var name = el('signupName').value.trim(), email = el('signupEmail').value.trim(), pw = el('signupPassword').value;
+        if (!name || !email || !pw) { showAuthError('Fill all required fields.'); return; }
+        if (pw.length < 6) { showAuthError('Password must be at least 6 characters.'); return; }
+        showSignupStep(2);
+    });
+    el('btnSignupBack') && el('btnSignupBack').addEventListener('click', function() { showSignupStep(1); });
+
+    // Password strength
+    el('signupPassword') && el('signupPassword').addEventListener('input', function(e) { checkPwStrength(e.target.value); });
+
+    // Toggle password visibility
+    document.querySelectorAll('.tog-pw').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var target = el(btn.dataset.target);
+            if (target) {
+                var show = target.type === 'password';
+                target.type = show ? 'text' : 'password';
+                btn.innerHTML = '<i class="fa-solid fa-eye' + (show ? '-slash' : '') + '"></i>';
+            }
+        });
+    });
+
+    // Role selection
+    document.querySelectorAll('.rs-btn[data-role]').forEach(function(btn) {
+        btn.addEventListener('click', function() { selectRole(btn.dataset.role); });
+    });
+    el('btnRoleSkip') && el('btnRoleSkip').addEventListener('click', async function() {
+        if (currentUser && bizId) {
+            await updateDoc(doc(db, 'users', currentUser.uid), { workingRole: 'manager' });
+            currentUserData.workingRole = 'manager';
+            showAppLayout();
+        }
+    });
+
+    // Sidebar
+    el('menuTog') && el('menuTog').addEventListener('click', function() {
+        el('sidebar').classList.toggle('open');
+        el('sbBackdrop').classList.toggle('show');
+    });
+    el('sbBackdrop') && el('sbBackdrop').addEventListener('click', function() {
+        el('sidebar').classList.remove('open');
+        el('sbBackdrop').classList.remove('show');
+    });
+
+    // Navigation items
+    document.querySelectorAll('.ni[data-section]').forEach(function(ni) {
+        ni.addEventListener('click', function() { navigateSection(ni.dataset.section); });
+    });
+
+    // Logout buttons
+    el('navLogout') && el('navLogout').addEventListener('click', handleLogout);
+    el('ddLogout') && el('ddLogout').addEventListener('click', function() { el('uDd').classList.remove('show'); handleLogout(); });
+
+    // User dropdown
+    el('uChip') && el('uChip').addEventListener('click', function(e) {
+        if (!e.target.closest('.udd')) el('uDd').classList.toggle('show');
+    });
+    document.querySelectorAll('.udd[data-section]').forEach(function(btn) {
+        btn.addEventListener('click', function() { el('uDd').classList.remove('show'); navigateSection(btn.dataset.section); });
+    });
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#uChip')) { var dd = el('uDd'); if (dd) dd.classList.remove('show'); }
+    });
+
+    // Notification panel
+    el('btnNotif') && el('btnNotif').addEventListener('click', function() { el('notifPanel').classList.toggle('show'); });
+    el('btnCloseNotif') && el('btnCloseNotif').addEventListener('click', function() { el('notifPanel').classList.remove('show'); });
+
+    // Modal close buttons
+    el('btnCloseMainModal') && el('btnCloseMainModal').addEventListener('click', closeMainModal);
+    el('btnCloseReceipt') && el('btnCloseReceipt').addEventListener('click', function() { closeModal('receiptModal'); });
+    el('btnCloseReceipt2') && el('btnCloseReceipt2').addEventListener('click', function() { closeModal('receiptModal'); });
+    el('btnPrintReceipt') && el('btnPrintReceipt').addEventListener('click', function() {
+        var c = el('receiptContent');
+        if (c) {
+            var w = window.open('', '', 'width=400,height=600');
+            w.document.write('<html><head><title>Receipt</title><style>body{font-family:Courier New,monospace;padding:20px}</style></head><body>' + c.innerHTML + '</body></html>');
+            w.document.close();
+            w.print();
+        }
+    });
+    el('btnConfirmCancel') && el('btnConfirmCancel').addEventListener('click', function() { closeModal('confirmModal'); });
+    el('btnConfirmOk') && el('btnConfirmOk').addEventListener('click', function() {
+        closeModal('confirmModal');
+        if (typeof confirmCallback === 'function') confirmCallback();
+        confirmCallback = null;
+    });
+
+    // Close modals on overlay click
+    ['mainModal', 'confirmModal', 'receiptModal'].forEach(function(id) {
+        var m = el(id);
+        if (m) m.addEventListener('click', function(e) { if (e.target === m) closeModal(id); });
+    });
+
+    // Dashboard
+    el('btnPriceCalc') && el('btnPriceCalc').addEventListener('click', function() { el('priceCalculatorModal').style.display = 'flex'; });
+    el('btnClosePriceCalc') && el('btnClosePriceCalc').addEventListener('click', function() { el('priceCalculatorModal').style.display = 'none'; });
+    ['pcCost', 'pcOverhead', 'pcMargin'].forEach(function(id) {
+        var e2 = el(id);
+        if (e2) e2.addEventListener('input', updatePriceCalc);
+    });
+
+    // Products
+    el('btnAddProduct') && el('btnAddProduct').addEventListener('click', openAddProduct);
+    el('productSearch') && el('productSearch').addEventListener('input', function() { productPage = 1; renderProducts(); });
+
+    // Sales
+    el('btnAddSale') && el('btnAddSale').addEventListener('click', function() { navigateSection('pos'); });
+    el('saleSearch') && el('saleSearch').addEventListener('input', function() { salePage = 1; renderSales(); });
+    document.querySelectorAll('#saleFilter .pf-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('#saleFilter .pf-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            saleStatusFilter = btn.dataset.filter;
+            salePage = 1;
+            renderSales();
+        });
+    });
+
+    // POS
+    el('posSearch') && el('posSearch').addEventListener('input', function(e) { renderPOSProducts(e.target.value); });
+    el('posDiscInput') && el('posDiscInput').addEventListener('input', renderCart);
+    el('btnPosCheckout') && el('btnPosCheckout').addEventListener('click', handlePosCheckout);
+
+    // Inventory
+    el('btnAddAdjustment') && el('btnAddAdjustment').addEventListener('click', openAddAdjustment);
+    el('inventorySearch') && el('inventorySearch').addEventListener('input', renderInventory);
+
+    // Customers
+    el('btnAddCustomer') && el('btnAddCustomer').addEventListener('click', openAddCustomer);
+    el('customerSearch') && el('customerSearch').addEventListener('input', function() { customerPage = 1; renderCustomers(); });
+
+    // Suppliers
+    el('btnAddSupplier') && el('btnAddSupplier').addEventListener('click', openAddSupplier);
+    el('supplierSearch') && el('supplierSearch').addEventListener('input', renderSuppliers);
+
+    // Staff
+    el('btnAddStaff') && el('btnAddStaff').addEventListener('click', openAddStaff);
+
+    // Reports
+    el('btnRefreshReports') && el('btnRefreshReports').addEventListener('click', loadReports);
+
+    // Settings
+    el('settingsForm') && el('settingsForm').addEventListener('submit', handleSettingsSave);
+    el('btnUploadLogo') && el('btnUploadLogo').addEventListener('click', handleLogoUpload);
+    el('btnRemoveLogo') && el('btnRemoveLogo').addEventListener('click', handleLogoRemove);
+    el('logoPrev') && el('logoPrev').addEventListener('click', handleLogoUpload);
+
+    // Profile
+    el('profileForm') && el('profileForm').addEventListener('submit', handleProfileSave);
+    el('changePwForm') && el('changePwForm').addEventListener('submit', handleChangePw);
+
+    // Super Admin
+    el('btnSuperBack') && el('btnSuperBack').addEventListener('click', function() { showScreen('landingPage'); });
+    el('superLoginForm') && el('superLoginForm').addEventListener('submit', handleSuperLogin);
+    el('btnSuperLogout') && el('btnSuperLogout').addEventListener('click', handleLogout);
+    el('superBackBtn') && el('superBackBtn').addEventListener('click', function() {
+        el('superBodyMain').classList.remove('hidden');
+        el('superBodyDetail').classList.add('hidden');
+        el('superBackBtn').classList.remove('show');
+    });
+    el('superUserSearch') && el('superUserSearch').addEventListener('input', renderSuperUsers);
+    el('btnNewSuperAd') && el('btnNewSuperAd').addEventListener('click', openNewSuperAd);
+    el('superAdForm') && el('superAdForm').addEventListener('submit', handleSuperAdSave);
+    el('btnCloseSuperAdModal') && el('btnCloseSuperAdModal').addEventListener('click', function() { el('superAdModal').style.display = 'none'; });
+    el('btnCancelSuperAd') && el('btnCancelSuperAd').addEventListener('click', function() { el('superAdModal').style.display = 'none'; });
+    el('btnNewSuperProduct') && el('btnNewSuperProduct').addEventListener('click', openNewSuperProduct);
+    el('superProductForm') && el('superProductForm').addEventListener('submit', handleSuperProductSave);
+    el('btnCloseSuperProdModal') && el('btnCloseSuperProdModal').addEventListener('click', function() { el('superProductModal').style.display = 'none'; });
+    el('btnCancelSuperProd') && el('btnCancelSuperProd').addEventListener('click', function() { el('superProductModal').style.display = 'none'; });
+    el('btnShareCatalogue') && el('btnShareCatalogue').addEventListener('click', shareCatalogue);
+    el('btnSuperConfirmCancel') && el('btnSuperConfirmCancel').addEventListener('click', function() { el('superConfirmModal').style.display = 'none'; });
+
+    // Keyboard: Escape closes modals
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            ['mainModal', 'confirmModal', 'receiptModal', 'priceCalculatorModal', 'superAdModal', 'superProductModal', 'superConfirmModal'].forEach(function(id) {
+                var m = el(id);
+                if (m) {
+                    if (m.style.display !== 'none' && m.style.display !== '') closeModal(id);
+                    else m.style.display = 'none';
+                }
+            });
+        }
+    });
+}
+
+// ============================================================
+// MAIN INITIALIZATION — KITOVU KIMOJA CHA ANZISHA
+// ============================================================
+async function initializeAppSystem() {
+    console.log('[SYSTEM] Starting initialization...');
+    try {
+        if (!firebaseReady) {
+            console.error('[SYSTEM] Firebase not ready \u2014 configuration may be invalid.');
+            showScreen('landingPage');
+            renderFeatureGrid();
+            return;
+        }
+        renderFeatureGrid();
+        loadPublicData();
+        initEventListeners();
+        console.log('[SYSTEM] Application initialized successfully.');
+    } catch (err) {
+        console.error('[SYSTEM INIT ERROR]', err);
+        toast('System initialization error', 'e');
+    }
+}
+<!-- ============================================================
+     ANZA PROGRAMU
+     ============================================================ -->
+    initializeAppSystem();
+</script>
+</body>
+</html>
