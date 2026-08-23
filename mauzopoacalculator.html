@@ -1049,293 +1049,1322 @@ const features = [
 ];
  $("featureGrid").innerHTML = features.map(f => `<div class="ld-card"><i class="fa-solid ${f.icon}"></i><h5>${f.title}</h5><p>${f.desc}</p>${f.lock ? '<span class="ld-lock"><i class="fa-solid fa-lock"></i> Admin</span>' : ''}</div>`).join("");
 // ============================================================
-// SUPER ADMIN AUTHORIZATION — SINGLE SOURCE OF TRUTH
+// SUPER ADMIN AUTHORIZATION + LOGIN
+// SINGLE SOURCE OF TRUTH
+// FIREBASE AUTH + FIRESTORE
 // ============================================================
 
-// Authoritative super admin email list (all lowercase)
-const SUPER_ADMIN_EMAILS = [
-  "nashiri2waziri29@gmail.com"
-];
+(() => {
+  "use strict";
 
-// Authoritative role value used across the entire system
-const SUPER_ADMIN_ROLE = "superAdmin";
+  // ============================================================
+  // 1. SUPER ADMIN CONFIGURATION
+  // ============================================================
 
-/**
- * verifySuperAdmin()
- * 
- * SINGLE AUTHORITATIVE FUNCTION for super admin authorization.
- * Called after Firebase Authentication succeeds.
- * 
- * Flow:
- *   1. Get auth.currentUser — reject if null
- *   2. Normalize email (trim + lowercase)
- *   3. Check Firestore users/{uid} for role
- *   4. Normalize role (trim + lowercase) before comparison
- *   5. If Firestore authorizes → return true
- *   6. If Firestore missing/wrong → fall back to email list
- *   7. If email matches → repair Firestore document → return true
- *   8. Otherwise → return false
- * 
- * NEVER silently fails — always logs every decision point.
- */
-async function verifySuperAdmin() {
-  const user = auth.currentUser;
+  const SUPER_ADMIN_EMAILS = [
+    "nashiri2waziri29@gmail.com"
+  ];
 
-  console.log("[SUPER ADMIN] Auth user:", user ? { uid: user.uid, email: user.email } : null);
+  const SUPER_ADMIN_ROLE = "superAdmin";
 
-  // Step 1: Reject if no authenticated user
-  if (!user || !user.uid || !user.email) {
-    console.log("[SUPER ADMIN] REJECTED — No authenticated user.");
-    return false;
-  }
+  const AUTH_TIMEOUT = 15000;
+  const FIRESTORE_TIMEOUT = 10000;
 
-  // Step 2: Normalize email
-  const email = String(user.email || "").trim().toLowerCase();
-  console.log("[SUPER ADMIN] UID:", user.uid);
-  console.log("[SUPER ADMIN] Normalized email:", email);
 
-  // Step 3: Check Firestore user document
-  let firestoreAuthorized = false;
-  let firestoreDocExists = false;
-  let firestoreRole = null;
+  // ============================================================
+  // 2. GET EXISTING FIREBASE INSTANCES SAFELY
+  // ============================================================
 
-  try {
-    const userRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userRef);
-
-    if (userSnap.exists()) {
-      firestoreDocExists = true;
-      const userData = userSnap.data();
-
-      console.log("[SUPER ADMIN] Firestore user document EXISTS:", {
-        uid: user.uid,
-        email: userData.email,
-        role: userData.role,
-        userRole: userData.userRole,
-        accountType: userData.accountType,
-        isSuperAdmin: userData.isSuperAdmin,
-        superAdmin: userData.superAdmin,
-        status: userData.status
-      });
-
-      // Check string role fields — normalize before comparison
-      const rawRole = userData.role || userData.userRole || userData.accountType || "";
-      firestoreRole = String(rawRole).trim().toLowerCase();
-      console.log("[SUPER ADMIN] Normalized role from Firestore:", firestoreRole);
-
-      if (firestoreRole === SUPER_ADMIN_ROLE.toLowerCase()) {
-        console.log("[SUPER ADMIN] AUTHORIZED via Firestore role match.");
-        firestoreAuthorized = true;
-      }
-
-      // Check boolean fields as secondary
-      if (!firestoreAuthorized && (userData.isSuperAdmin === true || userData.superAdmin === true)) {
-        console.log("[SUPER ADMIN] AUTHORIZED via Firestore boolean field.");
-        firestoreAuthorized = true;
-      }
-    } else {
-      console.log("[SUPER ADMIN] Firestore user document DOES NOT EXIST for uid:", user.uid);
-    }
-  } catch (err) {
-    console.error("[SUPER ADMIN] Firestore read error:", err.code || err.message);
-    // Do NOT return false here — fall through to email check
-  }
-
-  // If Firestore authorized, return immediately
-  if (firestoreAuthorized) {
-    console.log("[SUPER ADMIN] FINAL RESULT: AUTHORIZED (Firestore)");
-    return true;
-  }
-
-  // Step 4: Fallback — email-based authorization
-  const emailAuthorized = SUPER_ADMIN_EMAILS.includes(email);
-  console.log("[SUPER ADMIN] Email in allowed list:", emailAuthorized);
-
-  if (emailAuthorized) {
-    console.log("[SUPER ADMIN] AUTHORIZED via email fallback. Attempting Firestore repair...");
-
-    // Step 5: Auto-repair Firestore document if safe
+  function getFirebaseAuth() {
     try {
-      const userRef = doc(db, "users", user.uid);
+      if (typeof auth !== "undefined" && auth) {
+        return auth;
+      }
+    } catch (_) {}
 
-      if (!firestoreDocExists) {
-        // Document missing — create it with correct role
-        console.log("[SUPER ADMIN] REPAIR: Creating Firestore user document.");
-        await setDoc(userRef, {
+    try {
+      if (window.auth) {
+        return window.auth;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  function getFirebaseDB() {
+    try {
+      if (typeof db !== "undefined" && db) {
+        return db;
+      }
+    } catch (_) {}
+
+    try {
+      if (window.db) {
+        return window.db;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+
+  // ============================================================
+  // 3. FIREBASE FUNCTION CHECK
+  // ============================================================
+
+  function getFirebaseFunctions() {
+    const functions = {};
+
+    try {
+      functions.signInWithEmailAndPassword =
+        typeof signInWithEmailAndPassword !== "undefined"
+          ? signInWithEmailAndPassword
+          : window.signInWithEmailAndPassword;
+
+      functions.signOut =
+        typeof signOut !== "undefined"
+          ? signOut
+          : window.signOut;
+
+      functions.doc =
+        typeof doc !== "undefined"
+          ? doc
+          : window.doc;
+
+      functions.getDoc =
+        typeof getDoc !== "undefined"
+          ? getDoc
+          : window.getDoc;
+
+      functions.setDoc =
+        typeof setDoc !== "undefined"
+          ? setDoc
+          : window.setDoc;
+
+      functions.updateDoc =
+        typeof updateDoc !== "undefined"
+          ? updateDoc
+          : window.updateDoc;
+
+      functions.serverTimestamp =
+        typeof serverTimestamp !== "undefined"
+          ? serverTimestamp
+          : window.serverTimestamp;
+
+    } catch (error) {
+      console.error(
+        "[SUPER ADMIN] Firebase function detection error:",
+        error
+      );
+    }
+
+    return functions;
+  }
+
+
+  // ============================================================
+  // 4. TIMEOUT HELPER
+  // ============================================================
+
+  function withTimeout(promise, timeoutMs, message) {
+
+    return Promise.race([
+      promise,
+
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          const error = new Error(message);
+          error.code = "super-admin/timeout";
+          reject(error);
+        }, timeoutMs);
+      })
+    ]);
+  }
+
+
+  // ============================================================
+  // 5. NORMALIZE VALUES
+  // ============================================================
+
+  function normalizeEmail(email) {
+    return String(email || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function normalizeRole(role) {
+    return String(role || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, "");
+  }
+
+
+  // ============================================================
+  // 6. CHECK FIREBASE INITIALIZATION
+  // ============================================================
+
+  function validateFirebase() {
+
+    const firebaseAuth = getFirebaseAuth();
+    const firebaseDB = getFirebaseDB();
+    const fb = getFirebaseFunctions();
+
+    if (!firebaseAuth) {
+      throw new Error(
+        "Firebase Authentication is not initialized."
+      );
+    }
+
+    if (!fb.signInWithEmailAndPassword) {
+      throw new Error(
+        "Firebase signInWithEmailAndPassword is not available."
+      );
+    }
+
+    if (!firebaseDB) {
+      throw new Error(
+        "Firebase Firestore is not initialized."
+      );
+    }
+
+    if (!fb.doc || !fb.getDoc) {
+      throw new Error(
+        "Firebase Firestore functions are not available."
+      );
+    }
+
+    return {
+      auth: firebaseAuth,
+      db: firebaseDB,
+      fb
+    };
+  }
+
+
+  // ============================================================
+  // 7. VERIFY SUPER ADMIN
+  // ============================================================
+
+  async function verifySuperAdmin() {
+
+    console.log(
+      "[SUPER ADMIN] ========================================"
+    );
+
+    console.log(
+      "[SUPER ADMIN] Starting authorization verification..."
+    );
+
+    const firebaseAuth = getFirebaseAuth();
+    const firebaseDB = getFirebaseDB();
+    const fb = getFirebaseFunctions();
+
+    // ----------------------------------------------------------
+    // Authentication check
+    // ----------------------------------------------------------
+
+    if (!firebaseAuth) {
+
+      console.error(
+        "[SUPER ADMIN] Firebase Auth is unavailable."
+      );
+
+      return false;
+    }
+
+    const currentUser = firebaseAuth.currentUser;
+
+    console.log(
+      "[SUPER ADMIN] Current Firebase user:",
+      currentUser
+        ? {
+            uid: currentUser.uid,
+            email: currentUser.email
+          }
+        : null
+    );
+
+    if (
+      !currentUser ||
+      !currentUser.uid ||
+      !currentUser.email
+    ) {
+
+      console.error(
+        "[SUPER ADMIN] REJECTED — No authenticated Firebase user."
+      );
+
+      return false;
+    }
+
+
+    // ----------------------------------------------------------
+    // Normalize email
+    // ----------------------------------------------------------
+
+    const email = normalizeEmail(currentUser.email);
+
+    console.log(
+      "[SUPER ADMIN] UID:",
+      currentUser.uid
+    );
+
+    console.log(
+      "[SUPER ADMIN] Normalized email:",
+      email
+    );
+
+
+    // ----------------------------------------------------------
+    // Firestore authorization
+    // ----------------------------------------------------------
+
+    let firestoreAuthorized = false;
+    let firestoreDocExists = false;
+    let firestoreRole = "";
+
+
+    if (firebaseDB && fb.doc && fb.getDoc) {
+
+      try {
+
+        console.log(
+          "[SUPER ADMIN] Reading users document..."
+        );
+
+        const userRef = fb.doc(
+          firebaseDB,
+          "users",
+          currentUser.uid
+        );
+
+        const userSnap = await withTimeout(
+          fb.getDoc(userRef),
+          FIRESTORE_TIMEOUT,
+          "Firestore authorization check timed out."
+        );
+
+
+        // ------------------------------------------------------
+        // Document exists
+        // ------------------------------------------------------
+
+        if (userSnap.exists()) {
+
+          firestoreDocExists = true;
+
+          const userData = userSnap.data() || {};
+
+          console.log(
+            "[SUPER ADMIN] Firestore document:",
+            userData
+          );
+
+
+          // ----------------------------------------------------
+          // Check all supported role fields
+          // ----------------------------------------------------
+
+          const possibleRoles = [
+            userData.role,
+            userData.userRole,
+            userData.accountType,
+            userData.account_role,
+            userData.user_role
+          ];
+
+          for (const role of possibleRoles) {
+
+            if (!role) continue;
+
+            const normalized = normalizeRole(role);
+
+            console.log(
+              "[SUPER ADMIN] Checking role:",
+              role,
+              "=>",
+              normalized
+            );
+
+            if (
+              normalized === normalizeRole(SUPER_ADMIN_ROLE) ||
+              normalized === "superadmin" ||
+              normalized === "superadministrator"
+            ) {
+
+              firestoreAuthorized = true;
+              firestoreRole = normalized;
+
+              console.log(
+                "[SUPER ADMIN] AUTHORIZED via Firestore role."
+              );
+
+              break;
+            }
+          }
+
+
+          // ----------------------------------------------------
+          // Boolean authorization
+          // ----------------------------------------------------
+
+          if (
+            !firestoreAuthorized &&
+            (
+              userData.isSuperAdmin === true ||
+              userData.superAdmin === true ||
+              userData.isSuperAdministrator === true
+            )
+          ) {
+
+            firestoreAuthorized = true;
+
+            console.log(
+              "[SUPER ADMIN] AUTHORIZED via Firestore boolean."
+            );
+          }
+
+
+          // ----------------------------------------------------
+          // Check email stored in Firestore
+          // ----------------------------------------------------
+
+          const firestoreEmail =
+            normalizeEmail(userData.email);
+
+          if (
+            !firestoreAuthorized &&
+            firestoreEmail &&
+            firestoreEmail === email &&
+            SUPER_ADMIN_EMAILS.includes(email)
+          ) {
+
+            firestoreAuthorized = true;
+
+            console.log(
+              "[SUPER ADMIN] AUTHORIZED via matching Firestore email."
+            );
+          }
+
+        } else {
+
+          console.warn(
+            "[SUPER ADMIN] users/{uid} document does not exist."
+          );
+        }
+
+      } catch (firestoreError) {
+
+        console.error(
+          "[SUPER ADMIN] Firestore authorization error:",
+          firestoreError
+        );
+
+        // IMPORTANT:
+        // Do not immediately reject.
+        // Continue to authoritative email fallback.
+      }
+    }
+
+
+    // ----------------------------------------------------------
+    // Firestore authorized
+    // ----------------------------------------------------------
+
+    if (firestoreAuthorized) {
+
+      console.log(
+        "[SUPER ADMIN] FINAL RESULT: AUTHORIZED via Firestore"
+      );
+
+      return true;
+    }
+
+
+    // ==========================================================
+    // 8. AUTHORITATIVE EMAIL FALLBACK
+    // ==========================================================
+
+    const emailAuthorized =
+      SUPER_ADMIN_EMAILS.includes(email);
+
+    console.log(
+      "[SUPER ADMIN] Email authorization:",
+      emailAuthorized
+    );
+
+
+    if (!emailAuthorized) {
+
+      console.error(
+        "[SUPER ADMIN] FINAL RESULT: DENIED"
+      );
+
+      console.error(
+        "[SUPER ADMIN] Email:",
+        email
+      );
+
+      console.error(
+        "[SUPER ADMIN] Firestore role:",
+        firestoreRole
+      );
+
+      return false;
+    }
+
+
+    // ==========================================================
+    // 9. AUTO-REPAIR SUPER ADMIN FIRESTORE RECORD
+    // ==========================================================
+
+    console.log(
+      "[SUPER ADMIN] Authorized by master email."
+    );
+
+    if (
+      firebaseDB &&
+      fb.doc &&
+      fb.setDoc
+    ) {
+
+      try {
+
+        const userRef = fb.doc(
+          firebaseDB,
+          "users",
+          currentUser.uid
+        );
+
+
+        const repairData = {
+
           email: email,
-          displayName: user.displayName || "",
+
+          displayName:
+            currentUser.displayName || "",
+
           role: SUPER_ADMIN_ROLE,
+
+          userRole: SUPER_ADMIN_ROLE,
+
+          accountType: SUPER_ADMIN_ROLE,
+
           isSuperAdmin: true,
+
+          superAdmin: true,
+
           status: "active",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        console.log("[SUPER ADMIN] REPAIR: Document created successfully.");
-      } else if (firestoreRole !== SUPER_ADMIN_ROLE.toLowerCase()) {
-        // Document exists but role is wrong — fix it
-        console.log("[SUPER ADMIN] REPAIR: Updating role from '" + firestoreRole + "' to '" + SUPER_ADMIN_ROLE + "'.");
-        await updateDoc(userRef, {
-          role: SUPER_ADMIN_ROLE,
-          isSuperAdmin: true,
-          updatedAt: serverTimestamp()
-        });
-        console.log("[SUPER ADMIN] REPAIR: Role updated successfully.");
+
+          updatedAt:
+            fb.serverTimestamp
+              ? fb.serverTimestamp()
+              : new Date()
+        };
+
+
+        if (!firestoreDocExists) {
+
+          repairData.createdAt =
+            fb.serverTimestamp
+              ? fb.serverTimestamp()
+              : new Date();
+
+          console.log(
+            "[SUPER ADMIN] Creating missing Firestore record..."
+          );
+
+          await withTimeout(
+            fb.setDoc(
+              userRef,
+              repairData
+            ),
+            FIRESTORE_TIMEOUT,
+            "Super Admin Firestore creation timed out."
+          );
+
+          console.log(
+            "[SUPER ADMIN] Firestore record created."
+          );
+
+        } else if (fb.updateDoc) {
+
+          console.log(
+            "[SUPER ADMIN] Repairing existing Firestore record..."
+          );
+
+          await withTimeout(
+            fb.updateDoc(
+              userRef,
+              repairData
+            ),
+            FIRESTORE_TIMEOUT,
+            "Super Admin Firestore update timed out."
+          );
+
+          console.log(
+            "[SUPER ADMIN] Firestore record repaired."
+          );
+
+        }
+
+      } catch (repairError) {
+
+        console.warn(
+          "[SUPER ADMIN] Firestore repair failed:",
+          repairError
+        );
+
+        // IMPORTANT:
+        // Email authorization remains valid.
       }
-    } catch (repairErr) {
-      console.error("[SUPER ADMIN] REPAIR FAILED:", repairErr.code || repairErr.message);
-      // Still authorize via email even if repair fails
     }
 
-    console.log("[SUPER ADMIN] FINAL RESULT: AUTHORIZED (Email fallback)");
+
+    console.log(
+      "[SUPER ADMIN] FINAL RESULT: AUTHORIZED via master email"
+    );
+
     return true;
   }
 
-  // Step 6: All checks failed
-  console.log("[SUPER ADMIN] FINAL RESULT: DENIED. Email:", email, "| Firestore role:", firestoreRole, "| Doc exists:", firestoreDocExists);
-  return false;
-}
 
-// Expose to window for any inline HTML handlers
-window.verifySuperAdmin = verifySuperAdmin;
+  // ============================================================
+  // 10. OPEN SUPER ADMIN PANEL
+  // ============================================================
+
+  async function openSuperAdminPanel() {
+
+    console.log(
+      "[SUPER ADMIN] Opening Super Admin Control Panel..."
+    );
 
 
-// ============================================================
-// SUPER ADMIN LOGIN HANDLER — REPLACES EXISTING
-// ============================================================
+    // ----------------------------------------------------------
+    // Hide authentication screens
+    // ----------------------------------------------------------
 
-// Remove any existing listener to prevent duplicates
-const superLoginFormEl = document.getElementById('superLoginForm');
-if (superLoginFormEl) {
-  // Clone to remove all existing event listeners
-  const newForm = superLoginFormEl.cloneNode(true);
-  superLoginFormEl.parentNode.replaceChild(newForm, superLoginFormEl);
+    const loginBox =
+      document.getElementById("superLoginBox");
 
-  newForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const errEl = document.getElementById('superErr');
-    errEl.textContent = "";
-
-    const emailInput = document.getElementById('superUser');
-    const passInput = document.getElementById('superPass');
-    const email = emailInput ? emailInput.value.trim() : "";
-    const password = passInput ? passInput.value : "";
-
-    // Validate fields
-    if (!email) {
-      errEl.textContent = "Please enter your email.";
-      return;
-    }
-    if (!password) {
-      errEl.textContent = "Please enter your password.";
-      return;
+    if (loginBox) {
+      loginBox.classList.add("hidden");
+      loginBox.style.display = "none";
     }
 
-    const btn = document.getElementById('btnSuperLoginSubmit');
-    const originalBtnHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px"></div> Verifying...';
+
+    // ----------------------------------------------------------
+    // Hide normal user/business dashboard if present
+    // ----------------------------------------------------------
+
+    const normalScreens = [
+      "authScreen",
+      "roleScreen",
+      "userScreen",
+      "userDashboard",
+      "businessDashboard",
+      "mainApp",
+      "appScreen"
+    ];
+
+    normalScreens.forEach(id => {
+
+      const element =
+        document.getElementById(id);
+
+      if (element) {
+
+        // Do not permanently destroy anything.
+        // Just hide normal-user screens while Super Admin is active.
+        element.classList.add("hidden");
+      }
+    });
+
+
+    // ----------------------------------------------------------
+    // Show Super Admin Panel
+    // ----------------------------------------------------------
+
+    const superPanel =
+      document.getElementById("superPanel");
+
+    if (!superPanel) {
+
+      console.error(
+        "[SUPER ADMIN] ERROR: #superPanel was not found."
+      );
+
+      throw new Error(
+        "Super Admin Control Panel element (#superPanel) was not found."
+      );
+    }
+
+
+    superPanel.classList.remove("hidden");
+    superPanel.style.display = "";
+
+
+    // ----------------------------------------------------------
+    // Optional parent screen
+    // ----------------------------------------------------------
+
+    const superScreen =
+      document.getElementById("superScreen");
+
+    if (superScreen) {
+
+      superScreen.classList.remove("hidden");
+      superScreen.style.display = "";
+    }
+
+
+    // ----------------------------------------------------------
+    // Load dashboard
+    // ----------------------------------------------------------
 
     try {
-      // ====== AUTHENTICATION (Firebase only) ======
-      console.log("[SUPER ADMIN] Attempting Firebase sign-in for:", email);
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      console.log("[SUPER ADMIN] Firebase Authentication SUCCESS. UID:", cred.user.uid);
 
-      // ====== AUTHORIZATION (Application-level) ======
-      const authorized = await verifySuperAdmin();
+      if (typeof window.loadSuperDashboard === "function") {
 
-      if (authorized) {
-        console.log("[SUPER ADMIN] Access granted. Opening control panel.");
+        console.log(
+          "[SUPER ADMIN] Loading dashboard..."
+        );
 
-        // Hide login, show panel
-        document.getElementById('superLoginBox').classList.add('hidden');
-        document.getElementById('superPanel').classList.remove('hidden');
-
-        // Load all super admin sections
-        if (typeof loadSuperDashboard === 'function') loadSuperDashboard();
-        if (typeof loadUsers === 'function') loadUsers();
-        if (typeof loadSuperPublicProducts === 'function') loadSuperPublicProducts();
-        if (typeof loadGlobalAdvertisements === 'function') loadGlobalAdvertisements();
-
-      } else {
-        // Authentication succeeded but authorization failed
-        console.log("[SUPER ADMIN] Access DENIED after successful authentication.");
-        errEl.textContent = "Access denied. Not a super admin account.";
-        // Sign out to prevent stale session
-        await signOut(auth);
+        await Promise.resolve(
+          window.loadSuperDashboard()
+        );
       }
 
-    } catch (err) {
-      console.error("[SUPER ADMIN] Login error:", err.code, err.message);
+    } catch (error) {
 
-      // Show correct Firebase error — NOT "Not a super admin account"
-      switch (err.code) {
-        case 'auth/user-not-found':
-          errEl.textContent = "No account found with this email address.";
+      console.error(
+        "[SUPER ADMIN] Dashboard loading error:",
+        error
+      );
+    }
+
+
+    // ----------------------------------------------------------
+    // Load Users
+    // ----------------------------------------------------------
+
+    try {
+
+      if (typeof window.loadUsers === "function") {
+
+        console.log(
+          "[SUPER ADMIN] Loading users..."
+        );
+
+        await Promise.resolve(
+          window.loadUsers()
+        );
+      }
+
+    } catch (error) {
+
+      console.error(
+        "[SUPER ADMIN] Users loading error:",
+        error
+      );
+    }
+
+
+    // ----------------------------------------------------------
+    // Load Public Products
+    // ----------------------------------------------------------
+
+    try {
+
+      if (
+        typeof window.loadSuperPublicProducts ===
+        "function"
+      ) {
+
+        console.log(
+          "[SUPER ADMIN] Loading public products..."
+        );
+
+        await Promise.resolve(
+          window.loadSuperPublicProducts()
+        );
+      }
+
+    } catch (error) {
+
+      console.error(
+        "[SUPER ADMIN] Public products loading error:",
+        error
+      );
+    }
+
+
+    // ----------------------------------------------------------
+    // Load Global Advertisements
+    // ----------------------------------------------------------
+
+    try {
+
+      if (
+        typeof window.loadGlobalAdvertisements ===
+        "function"
+      ) {
+
+        console.log(
+          "[SUPER ADMIN] Loading advertisements..."
+        );
+
+        await Promise.resolve(
+          window.loadGlobalAdvertisements()
+        );
+      }
+
+    } catch (error) {
+
+      console.error(
+        "[SUPER ADMIN] Advertisements loading error:",
+        error
+      );
+    }
+
+
+    console.log(
+      "[SUPER ADMIN] ========================================"
+    );
+
+    console.log(
+      "[SUPER ADMIN] CONTROL PANEL OPENED SUCCESSFULLY"
+    );
+
+    console.log(
+      "[SUPER ADMIN] ========================================"
+    );
+  }
+
+
+  // ============================================================
+  // 11. SUPER ADMIN LOGIN
+  // ============================================================
+
+  async function superAdminLogin(event) {
+
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+
+    const errEl =
+      document.getElementById("superErr");
+
+    const emailInput =
+      document.getElementById("superUser");
+
+    const passInput =
+      document.getElementById("superPass");
+
+    const btn =
+      document.getElementById(
+        "btnSuperLoginSubmit"
+      );
+
+
+    if (errEl) {
+      errEl.textContent = "";
+      errEl.style.display = "";
+    }
+
+
+    const email =
+      normalizeEmail(
+        emailInput ? emailInput.value : ""
+      );
+
+    const password =
+      passInput
+        ? passInput.value
+        : "";
+
+
+    // ==========================================================
+    // VALIDATION
+    // ==========================================================
+
+    if (!email) {
+
+      if (errEl) {
+        errEl.textContent =
+          "Please enter your email.";
+      }
+
+      if (emailInput) {
+        emailInput.focus();
+      }
+
+      return;
+    }
+
+
+    if (!password) {
+
+      if (errEl) {
+        errEl.textContent =
+          "Please enter your password.";
+      }
+
+      if (passInput) {
+        passInput.focus();
+      }
+
+      return;
+    }
+
+
+    // ==========================================================
+    // BUTTON STATE
+    // ==========================================================
+
+    const originalHTML =
+      btn
+        ? btn.innerHTML
+        : "";
+
+
+    if (btn) {
+
+      btn.disabled = true;
+
+      btn.innerHTML =
+        '<span class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-right:8px;"></span> Verifying...';
+    }
+
+
+    try {
+
+      console.log(
+        "[SUPER ADMIN] ========================================"
+      );
+
+      console.log(
+        "[SUPER ADMIN] Login started."
+      );
+
+      console.log(
+        "[SUPER ADMIN] Email:",
+        email
+      );
+
+
+      // ========================================================
+      // FIREBASE CHECK
+      // ========================================================
+
+      let firebase;
+
+      try {
+
+        firebase =
+          validateFirebase();
+
+      } catch (firebaseError) {
+
+        console.error(
+          "[SUPER ADMIN] Firebase initialization error:",
+          firebaseError
+        );
+
+        throw firebaseError;
+      }
+
+
+      const firebaseAuth =
+        firebase.auth;
+
+      const fb =
+        firebase.fb;
+
+
+      // ========================================================
+      // FIREBASE AUTHENTICATION
+      // ========================================================
+
+      console.log(
+        "[SUPER ADMIN] Firebase Authentication initialized."
+      );
+
+      console.log(
+        "[SUPER ADMIN] Attempting Firebase sign-in..."
+      );
+
+
+      const cred =
+        await withTimeout(
+          fb.signInWithEmailAndPassword(
+            firebaseAuth,
+            email,
+            password
+          ),
+          AUTH_TIMEOUT,
+          "Login verification timed out."
+        );
+
+
+      if (
+        !cred ||
+        !cred.user
+      ) {
+
+        throw new Error(
+          "Firebase authentication returned no user."
+        );
+      }
+
+
+      console.log(
+        "[SUPER ADMIN] Firebase Authentication SUCCESS."
+      );
+
+      console.log(
+        "[SUPER ADMIN] UID:",
+        cred.user.uid
+      );
+
+
+      // ========================================================
+      // AUTHORIZATION
+      // ========================================================
+
+      console.log(
+        "[SUPER ADMIN] Checking Super Admin authorization..."
+      );
+
+
+      const authorized =
+        await verifySuperAdmin();
+
+
+      // ========================================================
+      // DENIED
+      // ========================================================
+
+      if (!authorized) {
+
+        console.error(
+          "[SUPER ADMIN] ACCESS DENIED."
+        );
+
+
+        if (errEl) {
+
+          errEl.textContent =
+            "Access denied. Not a super admin account.";
+
+          errEl.style.display = "block";
+        }
+
+
+        try {
+
+          if (fb.signOut) {
+
+            await fb.signOut(
+              firebaseAuth
+            );
+
+          } else if (
+            typeof signOut !== "undefined"
+          ) {
+
+            await signOut(
+              firebaseAuth
+            );
+          }
+
+        } catch (signOutError) {
+
+          console.warn(
+            "[SUPER ADMIN] Sign-out error:",
+            signOutError
+          );
+        }
+
+
+        return;
+      }
+
+
+      // ========================================================
+      // AUTHORIZED
+      // ========================================================
+
+      console.log(
+        "[SUPER ADMIN] ACCESS GRANTED."
+      );
+
+
+      if (errEl) {
+        errEl.textContent = "";
+      }
+
+
+      await openSuperAdminPanel();
+
+
+      console.log(
+        "[SUPER ADMIN] Login process completed successfully."
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        "[SUPER ADMIN] LOGIN ERROR:",
+        error
+      );
+
+      console.error(
+        "[SUPER ADMIN] Error code:",
+        error?.code
+      );
+
+      console.error(
+        "[SUPER ADMIN] Error message:",
+        error?.message
+      );
+
+
+      let message =
+        "Login failed. Please try again.";
+
+
+      switch (error?.code) {
+
+        case "auth/user-not-found":
+          message =
+            "No account found with this email address.";
           break;
-        case 'auth/wrong-password':
-          errEl.textContent = "Incorrect password. Please try again.";
+
+
+        case "auth/wrong-password":
+          message =
+            "Incorrect password. Please try again.";
           break;
-        case 'auth/invalid-credential':
-          errEl.textContent = "Invalid email or password.";
+
+
+        case "auth/invalid-credential":
+        case "auth/invalid-login-credentials":
+          message =
+            "Invalid email or password.";
           break;
-        case 'auth/invalid-email':
-          errEl.textContent = "Invalid email format.";
+
+
+        case "auth/invalid-email":
+          message =
+            "Invalid email format.";
           break;
-        case 'auth/user-disabled':
-          errEl.textContent = "This account has been disabled by an administrator.";
+
+
+        case "auth/user-disabled":
+          message =
+            "This account has been disabled.";
           break;
-        case 'auth/too-many-requests':
-          errEl.textContent = "Too many failed attempts. Please wait a few minutes and try again.";
+
+
+        case "auth/too-many-requests":
+          message =
+            "Too many failed attempts. Please wait and try again.";
           break;
-        case 'auth/network-request-failed':
-          errEl.textContent = "Network error. Please check your internet connection.";
+
+
+        case "auth/network-request-failed":
+          message =
+            "Network error. Please check your internet connection.";
           break;
-        case 'auth/invalid-tenant-id':
-          errEl.textContent = "Authentication configuration error.";
+
+
+        case "auth/operation-not-allowed":
+          message =
+            "Email/password authentication is not enabled in Firebase.";
           break;
+
+
+        case "auth/configuration-not-found":
+          message =
+            "Firebase Authentication configuration is missing.";
+          break;
+
+
+        case "auth/invalid-api-key":
+          message =
+            "Firebase API configuration is invalid.";
+          break;
+
+
+        case "super-admin/timeout":
+          message =
+            "Login verification timed out. Please check your internet connection and Firebase configuration.";
+          break;
+
+
         default:
-          errEl.textContent = err.message || "Login failed. Please try again.";
+
+          if (
+            error?.message ===
+            "Firebase Authentication is not initialized."
+          ) {
+
+            message =
+              "Firebase Authentication is not initialized.";
+
+          } else if (
+            error?.message ===
+            "Firebase Firestore is not initialized."
+          ) {
+
+            message =
+              "Firebase Firestore is not initialized.";
+
+          } else if (
+            error?.message
+          ) {
+
+            message =
+              error.message;
+          }
       }
+
+
+      if (errEl) {
+
+        errEl.textContent =
+          message;
+
+        errEl.style.display =
+          "block";
+      }
+
 
     } finally {
-      btn.disabled = false;
-      btn.innerHTML = originalBtnHTML;
+
+      // ========================================================
+      // ALWAYS RESTORE BUTTON
+      // ========================================================
+
+      if (btn) {
+
+        btn.disabled = false;
+
+        btn.innerHTML =
+          originalHTML;
+      }
+
+
+      console.log(
+        "[SUPER ADMIN] Login button restored."
+      );
     }
-  });
-}
+  }
 
 
-// ============================================================
-// onAuthStateChanged — SUPER ADMIN GUARD
-// ============================================================
-// 
-// CRITICAL: The existing onAuthStateChanged listener MUST be
-// modified to SKIP normal user redirection when the super admin
-// screen or panel is visible.
-//
-// Find your existing onAuthStateChanged(auth, async (user) => { ... })
-// and ADD the following guard AT THE VERY TOP of the callback,
-// before any redirects or dashboard loading:
-//
-//   // === SUPER ADMIN GUARD — DO NOT REMOVE ===
-//   const superScreen = document.getElementById('superScreen');
-//   const superPanel = document.getElementById('superPanel');
-//   const superLoginBox = document.getElementById('superLoginBox');
-//   const isOnSuperScreen = superScreen && !superScreen.classList.contains('hidden');
-//   const isSuperPanelOpen = superPanel && !superPanel.classList.contains('hidden');
-//
-//   if (isOnSuperScreen || isSuperPanelOpen) {
-//     console.log("[AUTH STATE] Super admin context active — skipping normal redirect.");
-//     return;
-//   }
-//   // === END SUPER ADMIN GUARD ===
-//
-// This prevents the super admin from being redirected to the
-// normal business/user dashboard after onAuthStateChanged fires.
-// ============================================================
+  // ============================================================
+  // 12. INSTALL SINGLE LOGIN LISTENER
+  // ============================================================
 
+  function installSuperAdminLogin() {
+
+    const form =
+      document.getElementById(
+        "superLoginForm"
+      );
+
+    if (!form) {
+
+      console.warn(
+        "[SUPER ADMIN] superLoginForm not found yet."
+      );
+
+      return false;
+    }
+
+
+    // Prevent duplicate installation
+    if (
+      form.dataset.superAdminListener ===
+      "installed"
+    ) {
+
+      console.log(
+        "[SUPER ADMIN] Login listener already installed."
+      );
+
+      return true;
+    }
+
+
+    form.addEventListener(
+      "submit",
+      superAdminLogin,
+      false
+    );
+
+
+    form.dataset.superAdminListener =
+      "installed";
+
+
+    console.log(
+      "[SUPER ADMIN] Login listener installed successfully."
+    );
+
+
+    return true;
+  }
+
+
+  // ============================================================
+  // 13. EXPOSE GLOBAL FUNCTIONS
+  // ============================================================
+
+  window.verifySuperAdmin =
+    verifySuperAdmin;
+
+  window.superAdminLogin =
+    superAdminLogin;
+
+  window.openSuperAdminPanel =
+    openSuperAdminPanel;
+
+  window.installSuperAdminLogin =
+    installSuperAdminLogin;
+
+
+  // ============================================================
+  // 14. INITIALIZE
+  // ============================================================
+
+  if (
+    document.readyState ===
+    "loading"
+  ) {
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      installSuperAdminLogin,
+      { once: true }
+    );
+
+  } else {
+
+    installSuperAdminLogin();
+  }
+
+
+  console.log(
+    "[SUPER ADMIN] Authorization system initialized."
+  );
+
+})();
 
 // ============================================================
 // SUPER ADMIN LOGOUT
