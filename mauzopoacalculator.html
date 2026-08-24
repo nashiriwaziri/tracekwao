@@ -1480,44 +1480,201 @@ function openProductModal(id) {
   openModal('productModal');
 }
 
+// ================================================================
+// SAVE PRODUCT — MODULAR FIREBASE / FIRESTORE + STORAGE
+// SAFE, NO INFINITE "INAHIFADHI"
+// ================================================================
+
 async function saveProduct(e) {
-  e.preventDefault();
+  if (e) e.preventDefault();
+
   const btn = document.getElementById('prodSaveBtn');
-  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
+
+  // Prevent double click
+  if (btn?.disabled) return;
+
   try {
-    let imageUrl = document.getElementById('prodImage').value;
-    if (document.getElementById('prodImageFile').files.length > 0) {
-      imageUrl = await uploadToStorage('prodImageFile', 'products/' + currentBiz.id, 'prodImageLoading');
+    // ------------------------------------------------------------
+    // 1. VALIDATE BUSINESS
+    // ------------------------------------------------------------
+    if (!currentBiz || !currentBiz.id) {
+      throw new Error('Akaunti ya biashara haijapatikana.');
     }
+
+    // ------------------------------------------------------------
+    // 2. GET FORM VALUES
+    // ------------------------------------------------------------
+    const name = document.getElementById('prodName')?.value.trim();
+    const description = document.getElementById('prodDesc')?.value.trim() || '';
+    const category = document.getElementById('prodCategory')?.value.trim() || '';
+    const price = Number(document.getElementById('prodPrice')?.value || 0);
+    const stock = Number(document.getElementById('prodStock')?.value || 0);
+    const productId = document.getElementById('prodId')?.value.trim() || '';
+
+    const imageInput = document.getElementById('prodImage');
+    const imageFile = document.getElementById('prodImageFile');
+
+    // ------------------------------------------------------------
+    // 3. VALIDATION
+    // ------------------------------------------------------------
+    if (!name) {
+      throw new Error('Tafadhali weka jina la bidhaa.');
+    }
+
+    if (!Number.isFinite(price) || price < 0) {
+      throw new Error('Bei ya bidhaa si sahihi.');
+    }
+
+    if (!Number.isFinite(stock) || stock < 0) {
+      throw new Error('Stock si sahihi.');
+    }
+
+    // ------------------------------------------------------------
+    // 4. DISABLE BUTTON
+    // ------------------------------------------------------------
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML =
+        '<i class="fas fa-spinner fa-spin"></i> Inahifadhi...';
+    }
+
+    // ------------------------------------------------------------
+    // 5. IMAGE URL
+    // ------------------------------------------------------------
+    let imageUrl = imageInput?.value.trim() || '';
+
+    // Upload image only when a file exists
+    if (imageFile && imageFile.files && imageFile.files.length > 0) {
+
+      if (typeof uploadToStorage !== 'function') {
+        throw new Error('Mfumo wa kuhifadhi picha haujapatikana.');
+      }
+
+      if (typeof showProductImageLoading === 'function') {
+        showProductImageLoading(true);
+      }
+
+      try {
+        imageUrl = await uploadToStorage(
+          'prodImageFile',
+          `products/${currentBiz.id}`,
+          'prodImageLoading'
+        );
+
+        if (!imageUrl) {
+          throw new Error('Picha haikupatikana baada ya upload.');
+        }
+
+      } finally {
+        if (typeof showProductImageLoading === 'function') {
+          showProductImageLoading(false);
+        }
+      }
+    }
+
+    // ------------------------------------------------------------
+    // 6. PRODUCT DATA
+    // ------------------------------------------------------------
     const data = {
-      name: document.getElementById('prodName').value,
-      description: document.getElementById('prodDesc').value,
-      category: document.getElementById('prodCategory').value,
-      price: Number(document.getElementById('prodPrice').value),
-      stock: Number(document.getElementById('prodStock').value),
+      name,
+      description,
+      category,
+      price,
+      stock,
       image: imageUrl || '',
       businessId: currentBiz.id,
-      sold: 0
+      sold: 0,
+      updatedAt: serverTimestamp()
     };
-    const id = document.getElementById('prodId').value;
-    if (id) {
-      const existing = products.find(p=>p.id===id);
-      if(existing) data.sold = existing.sold || 0;
-      await db.collection('products').doc(id).update(data);
-      toast('Bidhaa imesasishwa!','s');
-    } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('products').add(data);
-      toast('Bidhaa imeongezwa!','s');
-    }
-    closeModal('productModal');
-    await loadAllData();
-    renderProducts();
-  } catch(err) { toast('Hitilafu: '+err.message,'e'); }
-  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-save"></i> Hifadhi';
-}
 
-async function deleteProduct(id) {
+    // ------------------------------------------------------------
+    // 7. UPDATE EXISTING PRODUCT
+    // ------------------------------------------------------------
+    if (productId) {
+
+      const existing = products.find(
+        p => String(p.id) === String(productId)
+      );
+
+      if (existing) {
+        data.sold = Number(existing.sold || 0);
+      }
+
+      await updateDoc(
+        doc(db, 'products', productId),
+        data
+      );
+
+      toast('Bidhaa imesasishwa!', 's');
+
+    }
+
+    // ------------------------------------------------------------
+    // 8. CREATE NEW PRODUCT
+    // ------------------------------------------------------------
+    else {
+
+      data.createdAt = serverTimestamp();
+
+      const productRef = await addDoc(
+        collection(db, 'products'),
+        data
+      );
+
+      console.log(
+        'Product saved successfully:',
+        productRef.id
+      );
+
+      toast('Bidhaa imeongezwa!', 's');
+    }
+
+    // ------------------------------------------------------------
+    // 9. CLOSE MODAL
+    // ------------------------------------------------------------
+    if (typeof closeModal === 'function') {
+      closeModal('productModal');
+    }
+
+    // ------------------------------------------------------------
+    // 10. RELOAD PRODUCTS
+    // ------------------------------------------------------------
+    if (typeof loadAllData === 'function') {
+      await loadAllData();
+    }
+
+    if (typeof renderProducts === 'function') {
+      renderProducts();
+    }
+
+  } catch (err) {
+
+    console.error(
+      'SAVE PRODUCT ERROR:',
+      err
+    );
+
+    toast(
+      'Hitilafu: ' + (
+        err?.message ||
+        'Imeshindikana kuhifadhi bidhaa.'
+      ),
+      'e'
+    );
+
+  } finally {
+
+    // ------------------------------------------------------------
+    // 11. ALWAYS RESTORE BUTTON
+    // ------------------------------------------------------------
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML =
+        '<i class="fa-solid fa-save"></i> Hifadhi';
+    }
+  }
+}
+  async function deleteProduct(id) {
   if(!confirm('Unahakika unataka kufuta bidhaa hii?')) return;
   await db.collection('products').doc(id).delete();
   toast('Bidhaa imefutwa!','s');
