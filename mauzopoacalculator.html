@@ -1222,37 +1222,41 @@ async function handleLogout() {
   showScreen('landingScreen');
 }
 
-// ============================================================
-// J. SUPER ADMIN HANDLERS
-// ============================================================
-async function superLogin(e) {
+/* ===== SUPER ADMIN ===== */
+const SUPER_EMAIL = 'super@mauzopoa.app';
+const SUPER_PASS = 'WAZIRI2015';
+
+function superLogin(e) {
   e.preventDefault();
+  const u = document.getElementById('superUser').value.trim();
+  const p = document.getElementById('superPass').value;
   document.getElementById('superErr').textContent = '';
-  const email = document.getElementById('superUser').value.trim();
-  const pass = document.getElementById('superPass').value;
-  if (!email || !pass) { document.getElementById('superErr').textContent = 'Jaza barua pepe na nenosiri.'; return; }
-  const btn = document.getElementById('btnSuperLogin');
-  setBtnLoading(btn, true);
-  try {
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
-    // onAuthStateChanged will check role and route
-  } catch(err) {
-    let msg = 'Imeshindwa kuingia.';
-    if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') msg = 'Barua pepe au nenosiri sio sahihi.';
-    else if (err.code === 'auth/user-not-found') msg = 'Akaunti haipo.';
-    document.getElementById('superErr').textContent = msg;
-  } finally { setBtnLoading(btn, false); }
+  if (u === SUPER_EMAIL && p === SUPER_PASS) {
+    document.getElementById('superLoginBox').classList.add('hidden');
+    document.getElementById('superPanel').classList.remove('hidden');
+    loadSuperData();
+  } else {
+    document.getElementById('superErr').textContent = 'Email au password si sahihi!';
+  }
 }
+window.superLogin = superLogin;
 
-async function superLogout() {
-  try { await logAudit('super_logout', currentUserId, 'user'); } catch(e) {}
-  try { await signOut(auth); } catch(e) {}
-  currentUser = null; currentUserProfile = null; currentUserId = null;
-  document.getElementById('superLoginBox').classList.remove('hidden');
+function superLogout() {
   document.getElementById('superPanel').classList.add('hidden');
-  showScreen('superScreen');
+  document.getElementById('superLoginBox').classList.remove('hidden');
+  document.getElementById('superUser').value = '';
+  document.getElementById('superPass').value = '';
+  showScreen('landingScreen');
 }
+window.superLogout = superLogout;
 
+async function loadSuperData() {
+  const snap = await getDocs(collection(db, 'users'));
+  allUsersCache = snap.docs.map(d => ({id:d.id,...d.data()}));
+  renderSuperMetrics();
+  renderSuperUsers();
+  renderSuperCharts();
+}
 async function loadSuperPanel() {
   try {
     // Load all users
