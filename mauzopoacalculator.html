@@ -1620,151 +1620,167 @@ function openProductModal(editId) {
     await saveProduct(editId);
   });
 }
+async function saveProduct(editId = null) {
+  console.log('=== saveProduct START ===', editId);
 
-async function saveProduct(editId) {
-  const name = document.getElementById('prodName')?.value.trim() || '';
-  const category = document.getElementById('prodCat')?.value.trim() || '';
-  const price = parseFloat(document.getElementById('prodPrice')?.value);
-  const stock = parseInt(document.getElementById('prodStock')?.value) || 0;
-  const isPublic = document.getElementById('prodPublic')?.value === 'true';
+  try {
+    // ================================
+    // GET FORM VALUES SAFELY
+    // ================================
+    const nameEl = document.getElementById('prodName');
+    const categoryEl = document.getElementById('prodCat');
+    const priceEl = document.getElementById('prodPrice');
+    const stockEl = document.getElementById('prodStock');
+    const publicEl = document.getElementById('prodPublic');
+    const imgUrlEl = document.getElementById('prodImgUrl');
+    const fileInput = document.getElementById('prodImgFile');
 
-  // ================================
-  // VALIDATION
-  // ================================
-  if (!name) {
-    showToast('Jaza jina la bidhaa.', 'e');
-    return;
-  }
+    console.log('FORM ELEMENTS:', {
+      nameEl,
+      categoryEl,
+      priceEl,
+      stockEl,
+      publicEl,
+      imgUrlEl,
+      fileInput
+    });
 
-  if (!Number.isFinite(price) || price <= 0) {
-    showToast('Bei lazima iwe kubwa kuliko 0.', 'e');
-    return;
-  }
+    if (!nameEl || !categoryEl || !priceEl || !stockEl) {
+      throw new Error(
+        'Product form elements hazipatikani. Angalia IDs za prodName, prodCat, prodPrice na prodStock.'
+      );
+    }
 
-  if (stock < 0) {
-    showToast('Stock hawezi kuwa hasi.', 'e');
-    return;
-  }
+    const name = nameEl.value.trim();
+    const category = categoryEl.value.trim();
+    const price = parseFloat(priceEl.value);
+    const stock = parseInt(stockEl.value) || 0;
 
-  // ================================
-  // IMAGE
-  // ================================
-  let imageUrl =
-    document.getElementById('prodImgUrl')?.value.trim() || '';
+    const isPublic =
+      publicEl ? publicEl.value === 'true' : false;
 
-  const fileInput =
-    document.getElementById('prodImgFile');
+    // ================================
+    // VALIDATION
+    // ================================
+    if (!name) {
+      showToast('Jaza jina la bidhaa.', 'e');
+      return;
+    }
 
-  const file =
-    fileInput?.files?.length
-      ? fileInput.files[0]
-      : null;
+    if (!Number.isFinite(price) || price <= 0) {
+      showToast('Bei lazima iwe kubwa kuliko 0.', 'e');
+      return;
+    }
 
-  // ================================
-  // UPLOAD NEW IMAGE
-  // ================================
-  if (file) {
-    try {
+    if (stock < 0) {
+      showToast('Stock hawezi kuwa hasi.', 'e');
+      return;
+    }
+
+    // ================================
+    // CURRENT USER CHECK
+    // ================================
+    if (!currentUserId) {
+      throw new Error(
+        'currentUserId haipo. User hajalogin au ID haijasetiwa.'
+      );
+    }
+
+    // ================================
+    // IMAGE
+    // ================================
+    let imageUrl =
+      imgUrlEl?.value.trim() || '';
+
+    const file =
+      fileInput?.files?.length
+        ? fileInput.files[0]
+        : null;
+
+    console.log('IMAGE FILE:', file);
+
+    // ================================
+    // UPLOAD IMAGE
+    // ================================
+    if (file) {
+
+      console.log(
+        'Starting image compression...'
+      );
+
       showProcModal(
-        'Tafadhali subiri...',
-        'Inapakia picha...'
-      );
-
-      updateProcModal(
         'Inaandaa picha...',
-        5
+        'Inachakata picha...'
       );
 
-      // Compress image
-      const compressed = await compressImage(
-        file,
-        800,
-        800,
-        0.7
+      const compressed =
+        await compressImage(
+          file,
+          800,
+          800,
+          0.7
+        );
+
+      console.log(
+        'Compression complete:',
+        compressed
       );
 
       updateProcModal(
-        'Picha imeandaliwa. Inapakia Firebase Storage...',
-        15
+        'Inapakia picha...',
+        20
       );
 
-      // Upload
-      const uploaded = await uploadImage(
-        compressed,
-        `products/${currentUserId}/${Date.now()}_${file.name}`
+      const uploaded =
+        await uploadImage(
+          compressed,
+          `products/${currentUserId}/${Date.now()}_${file.name}`
+        );
+
+      console.log(
+        'Upload result:',
+        uploaded
       );
 
       if (!uploaded) {
         throw new Error(
-          'Firebase Storage haikurudisha download URL.'
+          'Upload haikurudisha image URL.'
         );
       }
 
       imageUrl = uploaded;
 
       updateProcModal(
-        'Picha imepakiwa kikamilifu.',
+        'Picha imepakiwa.',
         100
       );
 
-      // Give UI time to show 100%
-      await new Promise(resolve =>
-        setTimeout(resolve, 300)
+      await new Promise(
+        resolve => setTimeout(resolve, 300)
       );
 
       hideProcModal();
-
-    } catch (error) {
-
-      console.error(
-        'IMAGE UPLOAD ERROR:',
-        error
-      );
-
-      hideProcModal();
-
-      showToast(
-        'Picha haikupakiwa. Bidhaa haijahifadhiwa.',
-        'e'
-      );
-
-      // MUHIMU:
-      // Usihifadhi bidhaa kama image upload imefeli.
-      return;
     }
-  }
 
-  // ================================
-  // KEEP OLD IMAGE WHEN EDITING
-  // ================================
-  if (!imageUrl && editId) {
+    // ================================
+    // EXISTING IMAGE
+    // ================================
+    if (!imageUrl && editId) {
 
-    const existing =
-      allProducts.find(
-        p => p.id === editId
-      );
+      const existing =
+        allProducts.find(
+          p => p.id === editId
+        );
 
-    if (existing) {
-      imageUrl =
-        getImgSrc(existing) || '';
+      if (existing) {
+        imageUrl =
+          getImgSrc(existing) || '';
+      }
     }
-  }
 
-  // ================================
-  // SAVE PRODUCT
-  // ================================
-  try {
-
-    showProcModal(
-      'Tafadhali subiri...',
-      'Inahifadhi bidhaa...'
-    );
-
-    updateProcModal(
-      'Inahifadhi taarifa za bidhaa...',
-      90
-    );
-
+    // ================================
+    // FIRESTORE DATA
+    // ================================
     const data = {
       uid: currentUserId,
       name,
@@ -1776,7 +1792,25 @@ async function saveProduct(editId) {
       updatedAt: serverTimestamp()
     };
 
+    console.log(
+      'PRODUCT DATA:',
+      data
+    );
+
+    // ================================
+    // SAVE TO FIRESTORE
+    // ================================
+    showProcModal(
+      'Tafadhali subiri...',
+      'Inahifadhi bidhaa...'
+    );
+
     if (editId) {
+
+      console.log(
+        'Updating product:',
+        editId
+      );
 
       await updateDoc(
         doc(db, 'products', editId),
@@ -1797,18 +1831,27 @@ async function saveProduct(editId) {
 
     } else {
 
+      console.log(
+        'Creating new product...'
+      );
+
       data.createdAt =
         serverTimestamp();
 
-      const productRef =
+      const newProduct =
         await addDoc(
           collection(db, 'products'),
           data
         );
 
+      console.log(
+        'Product created:',
+        newProduct.id
+      );
+
       await logAudit(
         'create_product',
-        productRef.id,
+        newProduct.id,
         'product',
         { name }
       );
@@ -1819,13 +1862,16 @@ async function saveProduct(editId) {
       );
     }
 
+    // ================================
+    // FINISH
+    // ================================
     updateProcModal(
       'Bidhaa imehifadhiwa kikamilifu.',
       100
     );
 
-    await new Promise(resolve =>
-      setTimeout(resolve, 400)
+    await new Promise(
+      resolve => setTimeout(resolve, 400)
     );
 
     hideProcModal();
@@ -1834,16 +1880,21 @@ async function saveProduct(editId) {
 
     await renderProducts();
 
+    console.log(
+      '=== saveProduct COMPLETE ==='
+    );
+
   } catch (error) {
 
     console.error(
-      'SAVE PRODUCT ERROR:',
+      '=== saveProduct ERROR ===',
       error
     );
 
     hideProcModal();
 
     showToast(
+      error?.message ||
       'Imeshindwa kuhifadhi bidhaa.',
       'e'
     );
