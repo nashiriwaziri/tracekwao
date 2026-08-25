@@ -2360,41 +2360,44 @@ window.uploadLogo = async function(e) {
 /* ====== GENERIC MODAL ====== */
 window.closeGenModal = function() { $('genModal').classList.remove('show'); };
 
-/* ===== SUPER ADMIN ===== */
-const SUPER_EMAIL = 'super@mauzopoa.app';
-const SUPER_PASS = 'WAZIRI2015';
+/* ====== SUPER ADMIN ====== */
+let superCharts = {};
 
-function superLogin(e) {
+window.superLogin = async function(e) {
   e.preventDefault();
-  const u = document.getElementById('superUser').value.trim();
-  const p = document.getElementById('superPass').value;
-  document.getElementById('superErr').textContent = '';
-  if (u === SUPER_EMAIL && p === SUPER_PASS) {
-    document.getElementById('superLoginBox').classList.add('hidden');
-    document.getElementById('superPanel').classList.remove('hidden');
-    loadSuperData();
-  } else {
-    document.getElementById('superErr').textContent = 'Email au password si sahihi!';
+  const email = $('superUser').value;
+  const pass = $('superPass').value;
+  $('superErr').textContent = '';
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const uDoc = await getDoc(doc(db,'users',cred.user.uid));
+    if (!uDoc.exists() || uDoc.data().isSuperAdmin !== true) {
+      await signOut(auth);
+      $('superErr').textContent = 'Hakuna ruhusa ya Super Admin.';
+      return;
+    }
+    S.user = cred.user;
+    $('superLoginBox').classList.add('hidden');
+    $('superPanel').classList.remove('hidden');
+    toast('Karibu Super Admin!','s');
+    await loadSuperData();
+  } catch(err) {
+    $('superErr').textContent = err.message.replace('Firebase: ','');
   }
-}
-window.superLogin = superLogin;
+};
 
-function superLogout() {
-  document.getElementById('superPanel').classList.add('hidden');
-  document.getElementById('superLoginBox').classList.remove('hidden');
-  document.getElementById('superUser').value = '';
-  document.getElementById('superPass').value = '';
-  showScreen('landingScreen');
-}
-window.superLogout = superLogout;
+window.superLogout = async function() {
+  try { await signOut(auth); } catch(e) {}
+  S.user = null;
+  Object.values(superCharts).forEach(c => { if(c&&c.destroy) c.destroy(); });
+  superCharts = {};
+  $('superPanel').classList.add('hidden');
+  $('superLoginBox').classList.remove('hidden');
+  $('superUser').value = '';
+  $('superPass').value = '';
+  window.showLanding();
+};
 
-async function loadSuperData() {
-  const snap = await getDocs(collection(db, 'users'));
-  allUsersCache = snap.docs.map(d => ({id:d.id,...d.data()}));
-  renderSuperMetrics();
-  renderSuperUsers();
-  renderSuperCharts();
-}
 async function loadSuperData() {
   try {
     // Load all users
