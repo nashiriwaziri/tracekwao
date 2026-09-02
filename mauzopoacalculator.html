@@ -1481,6 +1481,91 @@ var App = {
       }
     }
   },
+  // ---------- 角色选择 ----------
+  renderRoles() {
+    if (!S.biz || !S.user) return;
+    const bizEl = document.getElementById('roleBizInfo');
+    bizEl.innerHTML = `<div class="rb-icon"><i class="fa-solid fa-building"></i></div><div><h3>${S.biz.name}</h3><p>${S.user.email} &bull; ${S.biz.currency}</p></div>`;
+
+    const roles = ['owner','manager','seller','cashier','stockkeeper'];
+    const grid = document.getElementById('roleGrid');
+    grid.innerHTML = roles.map((r, i) => {
+      const perms = t('rolePerms')[i] || [];
+      const allPerms = ['Dashboard','Products','POS','Sales','Customers','Staff','Settings'];
+      return `<div class="role-card" onclick="App.selectRole('${r}')">
+        <div class="rc-icon ${ROLE_CLASSES[r]}"><i class="fa-solid ${ROLE_ICONS[r]}"></i></div>
+        <h4>${t(r)}</h4>
+        <p class="rc-desc">${t('roleDescs')[i]}</p>
+        <ul class="rc-perms">${allPerms.map(p =>
+          `<li><i class="fa-solid fa-${perms.includes(p)?'check':'xmark'}"></i> ${p}</li>`
+        ).join('')}</ul>
+        <button class="btn btn-p btn-block btn-sm">${t('selectRole')}</button>
+      </div>`;
+    }).join('');
+  },
+
+  selectRole(role) {
+    S.role = role;
+    if (S.user && !S.user.passcode) {
+      // 首次选择角色，设置默认密码 "0000" 并提示修改
+      S.user.passcode = '0000';
+      DB.updateUser(S.user.id, { passcode: '0000' }).catch(() => {});
+      toast('Default passcode set to 0000. Change it in Settings.', 'w');
+    }
+    this.showScreen('passcode');
+    this.initPasscode();
+  },
+
+  // ---------- 密码界面 ----------
+  initPasscode() {
+    S.pinInput = '';
+    const userEl = document.getElementById('pcUser');
+    const initials = (S.user?.name || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    userEl.innerHTML = `<div class="av">${initials}</div><div><h5>${S.user?.name || 'User'}</h5><p>${t(S.role || 'owner')}</p></div>`;
+
+    const pad = document.getElementById('pcPad');
+    pad.innerHTML = '';
+    for (let i = 1; i <= 9; i++) pad.innerHTML += `<button class="pc-key" onclick="App.pinPress('${i}')">${i}</button>`;
+    pad.innerHTML += `<button class="pc-key act" onclick="App.pinClear()"><i class="fa-solid fa-delete-left"></i></button>`;
+    pad.innerHTML += `<button class="pc-key" onclick="App.pinPress('0')">0</button>`;
+    pad.innerHTML += `<button class="pc-key act" onclick="App.pinClear()">C</button>`;
+    this.updatePinDots();
+    document.getElementById('pcErr').textContent = '';
+  },
+
+  pinPress(digit) {
+    if (S.pinInput.length >= 4) return;
+    S.pinInput += digit;
+    this.updatePinDots();
+    if (S.pinInput.length === 4) {
+      setTimeout(() => this.pinVerify(), 200);
+    }
+  },
+
+  pinClear() {
+    S.pinInput = '';
+    this.updatePinDots();
+    document.getElementById('pcErr').textContent = '';
+  },
+
+  updatePinDots() {
+    document.querySelectorAll('#pcDots .pc-dot').forEach((dot, i) => {
+      dot.textContent = S.pinInput[i] || '';
+      dot.classList.toggle('filled', i < S.pinInput.length);
+      dot.classList.remove('error');
+    });
+  },
+
+  pinVerify() {
+    if (S.pinInput === S.user?.passcode) {
+      this.showScreen('dash');
+    } else {
+      document.querySelectorAll('#pcDots .pc-dot').forEach(d => d.classList.add('error'));
+      document.getElementById('pcErr').textContent = t('wrongPin');
+      S.pinInput = '';
+      setTimeout(() => this.updatePinDots(), 600);
+    }
+  },
 
   // ===================== OPEN DASHBOARD =====================
   async openDashboard() {
