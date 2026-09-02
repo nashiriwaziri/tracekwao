@@ -879,13 +879,12 @@ tr:hover td{background:var(--bg3)}
    FIREBASE CONFIGURATION & INITIALIZATION
    ========================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
-  authDomain: "ncrs-aeb43.firebaseapp.com",
-  projectId: "ncrs-aeb43",
-  storageBucket: "ncrs-aeb43.firebasestorage.app",
-  messagingSenderId: "786434442929",
-  appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
-  measurementId: "G-ZYB71RY8J5"
+  apiKey: "AIzaSyD-PLACEHOLDER-REPLACE-WITH-YOURS",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project-id",
+  storageBucket: "your-project-id.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef123456"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -2198,206 +2197,1131 @@ async function markDebtPaid(id) {
   } catch(err) { handleError(err,'MarkDebtPaid'); }
 }
 
+/* =========================================================
+   EXPENSES
+   ========================================================= */
+function renderExpenses() {
+  var html = '';
+  if (allExpenses.length === 0) {
+    html = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-receipt"></i><p>Hakuna matumizi</p></td></tr>';
+  } else {
+    allExpenses.forEach(function(e) {
+      html += '<tr><td>' + formatDate(e.createdAt) + '</td><td>' + escHtml(e.type||'—') + '</td><td>' + escHtml(e.description||'—') + '</td><td>' + formatMoney(e.amount||0) + '</td><td><button class="btn btn-d btn-xs" onclick="deleteExpense(\'' + e.id + '\')"><i class="fa-solid fa-trash"></i></button></td></tr>';
+    });
+  }
+  setHtml('expensesBody', html);
+}
+
 function openExpenseModal() {
   setEl('genModalTitle', 'New Expense');
   setHtml('genModalBody', '<form onsubmit="saveExpense(event)"><div class="fg"><label>Aina <span class="req">*</span></label><select class="fi" id="expType" required><option value="">Chagua...</option><option value="Rent">Kodi</option><option value="Salary">Mshahara</option><option value="Utilities">Umeme/Maji</option><option value="Transport">Usafiri</option><option value="Marketing">Matangazo</option><option value="Maintenance">Matengenezo</option><option value="Other">Nyingine</option></select></div><div class="fg"><label>Kiasi (TZS) <span class="req">*</span></label><input class="fi" id="expAmount" type="number" min="0" step="0.01
-// EXPENSES CRUD
-// ============================================================
-async function renderExpenses() { if(!db||!currentBiz?.id)return; const snap=await db.collection(getBizPath()+'/expenses').orderBy('date','desc').get(); const tbody=document.getElementById('expensesBody'); let h=''; snap.forEach(d=>{const e=d.data();h+=`<tr><td>${fmtDate(e.date)}</td><td>${e.description||'-'}</td><td>${e.category||'-'}</td><td>${fmt(e.amount)}</td><td><button class="btn btn-d btn-xs" onclick="deleteDoc('expenses','${d.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;}); tbody.innerHTML=h||'<tr><td colspan="5" class="empty-s"><p>Hakuna matumizi</p></td></tr>'; }
-function openExpenseModal() { document.getElementById('genModalTitle').textContent='Ongeza Matumizi'; document.getElementById('genModalBody').innerHTML=`<form onsubmit="saveExpense(event)"><div class="fg"><label>Maelezo</label><input class="fi" id="expDesc" required/></div><div class="fg"><label>Category</label><select class="fi" id="expCat" required><option value="">Chagua...</option><option>Ushuru</option><option>Kodi</option><option>Umeme</option><option>Maji</option><option>Kodi ya Nyumba</option><option>Mshahara</option><option>Uendeshaji</option><option>Matengenezo</option><option>Usafiri</option><option>Nyingine</option></select></div><div class="fg"><label>Kiasi (TZS)</label><input class="fi" id="expAmount" type="number" min="0" required/></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Hifadhi</button></div></form>`; document.getElementById('genModal').classList.add('show'); }
-async function saveExpense(e) { e.preventDefault();if(!db||!currentBiz?.id)return; try{await db.collection(getBizPath()+'/expenses').add({description:document.getElementById('expDesc').value,category:document.getElementById('expCat').value,amount:parseFloat(document.getElementById('expAmount').value)||0,date:firebase.firestore.FieldValue.serverTimestamp()});toast('Matumizi yameongezwa','s');closeGenModal();renderExpenses();}catch(err){toast('Hitilafu: '+err.message,'e');} }
 
-// ============================================================
-// EMPLOYEES CRUD
-// ============================================================
-async function renderEmployees() {
-  if(!db||!currentBiz?.id)return;
-  const snap=await db.collection(getBizPath()+'/employees').get(); const grid=document.getElementById('employeesGrid');
-  if(snap.empty){grid.innerHTML='<div class="empty-s" style="grid-column:1/-1"><p>Hakuna wafanyakazi</p></div>';return;}
-  const colors=['#6c5ce7','#00b894','#e74c3c','#f39c12','#0984e3','#a29bfe']; let h='';
-  snap.forEach((d,i)=>{const e=d.data();const c=colors[i%colors.length];
-    h+=`<div class="emp-card"><div class="emp-card-head"><div class="emp-av" style="background:${c}">${(e.name||'E').charAt(0).toUpperCase()}</div><div><h4>${e.name||'-'}</h4><p>${e.role||'-'}</p></div></div><div class="emp-card-body"><span class="emp-tag role">${e.role||'-'}</span><span class="emp-tag status ${e.status==='inactive'?'inactive':''}">${e.status||'active'}</span><span class="emp-tag" style="background:var(--bg3);color:var(--text2)">TZS ${fmt(e.salary)}</span></div><div class="emp-card-foot"><button class="btn btn-i btn-xs" onclick="editEmployee('${d.id}')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteDoc('employees','${d.id}')"><i class="fa-solid fa-trash"></i></button></div></div>`;});
-  grid.innerHTML=h;
-}
-function openEmployeeModal(editId) {
-  document.getElementById('genModalTitle').textContent=editId?'Badilisha Mfanyakazi':'Ongeza Mfanyakazi';
-  document.getElementById('genModalBody').innerHTML=`<form onsubmit="saveEmployee(event,'${editId||''}')"><div class="fg"><label>Jina</label><input class="fi" id="empName" required/></div><div class="fg"><label>Simu</label><input class="fi" id="empPhone"/></div><div class="fg"><label>Jukumu</label><select class="fi" id="empRole" required><option value="">Chagua...</option><option>Meneja</option><option>Mfanyakazi</option><option>Kashieri</option><option>Muuzaji</option></select></div><div class="fg"><label>Mshahara (TZS)</label><input class="fi" id="empSalary" type="number" min="0" required/></div><div class="fg"><label>Hali</label><select class="fi" id="empStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Hifadhi</button></div></form>`;
-  document.getElementById('genModal').classList.add('show');
-  if(editId&&db) db.collection(getBizPath()+'/employees').doc(editId).get().then(doc=>{if(doc.exists){const e=doc.data();document.getElementById('empName').value=e.name||'';document.getElementById('empPhone').value=e.phone||'';document.getElementById('empRole').value=e.role||'';document.getElementById('empSalary').value=e.salary||'';document.getElementById('empStatus').value=e.status||'active';}});
-}
-function editEmployee(id) { openEmployeeModal(id); }
-async function saveEmployee(e, editId) {
-  e.preventDefault();if(!db||!currentBiz?.id)return;
-  const data={name:document.getElementById('empName').value,phone:document.getElementById('empPhone').value,role:document.getElementById('empRole').value,salary:parseFloat(document.getElementById('empSalary').value)||0,status:document.getElementById('empStatus').value};
-  try{if(editId){await db.collection(getBizPath()+'/employees').doc(editId).update(data);toast('Mfanyakazi amebadilishwa','s');}else{data.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection(getBizPath()+'/employees').add(data);toast('Mfanyakazi ameongezwa','s');}closeGenModal();renderEmployees();}catch(err){toast('Hitilafu: '+err.message,'e');}
+
+           required/></div><div class="fg"><label>Maelezo</label><textarea class="fi" id="expDesc" rows="2"></textarea></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Ghairi</button><button class="btn btn-p" type="submit">Save</button></div></form>');
+  openGenModal();
 }
 
-// ============================================================
-// GENERIC DELETE (used by sales, purchases, suppliers, customers, debts, expenses, employees)
-// ============================================================
-async function deleteDoc(collection, id) {
-  if(!confirm('Futa hii rekodi?')) return;
-  if(!db||!currentBiz?.id) return;
+async function saveExpense(e) {
+  e.preventDefault();
   try {
-    await db.collection(getBizPath()+'/'+collection).doc(id).delete();
-    toast('Imefutwa','s');
-    // Re-render the correct section
-    const renderers = {sales:renderSales,purchases:renderPurchases,suppliers:renderSuppliers,customers:renderCustomers,debts:renderDebts,expenses:renderExpenses,employees:renderEmployees};
-    if(renderers[collection]) renderers[collection]();
-  } catch(err) { toast('Hitilafu: '+err.message,'e'); }
+    var data = {
+      bizId: currentBiz.id,
+      type: getVal('expType'),
+      amount: parseFloat(getVal('expAmount')) || 0,
+      description: getVal('expDesc'),
+      userId: currentUser.uid,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    var ref = await db.collection('expenses').add(data);
+    data.id = ref.id;
+    allExpenses.unshift(data);
+    showToast('Matumizi yamehifadhiwa!', 's');
+    closeGenModal();
+    renderExpenses();
+  } catch(err) {
+    handleError(err, 'SaveExpense');
+  }
 }
 
-// ============================================================
-// NOTIFICATIONS
-// ============================================================
-async function renderNotifications() {
-  if(!db||!currentBiz?.id)return;
-  const snap=await db.collection(getBizPath()+'/notifications').orderBy('createdAt','desc').limit(30).get();
-  const list=document.getElementById('notificationsList');
-  if(snap.empty){list.innerHTML='<div class="empty-s"><p>Hakuna arifa</p></div>';return;}
-  const icons={sale:'fa-receipt',debt:'fa-hand-holding-dollar',stock:'fa-box-open',info:'fa-info-circle',system:'fa-gear'};
-  const colors={sale:'var(--success)',debt:'var(--danger)',stock:'var(--warning)',info:'var(--info)',system:'var(--primary2)'};
-  let h='';
-  snap.forEach(d=>{const n=d.data();const ic=icons[n.type]||icons.info;const cl=colors[n.type]||colors.info;
-    h+=`<div class="notif-item"><i class="fa-solid ${ic}" style="color:${cl}"></i><div><h5>${n.title||'Arifa'}</h5><p>${n.message||''}</p><p style="margin-top:4px">${fmtDate(n.createdAt)}</p></div></div>`;});
-  list.innerHTML=h;
+async function deleteExpense(id) {
+  try {
+    await db.collection('expenses').doc(id).delete();
+    allExpenses = allExpenses.filter(function(x){ return x.id !== id; });
+    showToast('Matumizi yamefutwa.', 'i');
+    renderExpenses();
+  } catch(err) {
+    handleError(err, 'DeleteExpense');
+  }
 }
+
+/* =========================================================
+   STAFF MANAGEMENT
+   ========================================================= */
+function renderStaff() {
+  var html = '';
+  if (allStaff.length === 0) {
+    html = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-id-badge"></i><p>Hakuna wafanyakazi</p></div>';
+  } else {
+    allStaff.forEach(function(s) {
+      if (s.uid === currentUser.uid && currentRole === 'owner') return;
+      var colors = {owner:'#e74c3c',manager:'#f39c12',cashier:'#00b894',seller:'#6c5ce7',admin:'#0984e3'};
+      var bgColor = colors[s.role] || '#6c5ce7';
+      var isActive = s.status !== 'suspended';
+      html += '<div class="emp-card">';
+      html += '<div class="emp-card-head"><div class="emp-av" style="background:' + bgColor + '">' + getInitials(s.name) + '</div><div><h4>' + escHtml(s.name || '—') + '</h4><p>' + escHtml(s.email || '—') + '</p></div></div>';
+      html += '<div class="emp-card-body"><span class="emp-tag role">' + escHtml(s.role || 'user') + '</span><span class="emp-tag status ' + (isActive ? '' : 'inactive') + '">' + (isActive ? 'Active' : 'Suspended') + '</span></div>';
+      html += '<div class="emp-card-foot">';
+      if (s.role !== 'owner') {
+        html += '<button class="btn btn-o btn-xs" onclick="openEditStaffModal(\'' + s.id + '\')"><i class="fa-solid fa-pen"></i></button>';
+        if (isActive) {
+          html += '<button class="btn btn-w btn-xs" onclick="suspendStaff(\'' + s.id + '\')"><i class="fa-solid fa-ban"></i></button>';
+        } else {
+          html += '<button class="btn btn-s btn-xs" onclick="activateStaff(\'' + s.id + '\')"><i class="fa-solid fa-check"></i></button>';
+        }
+        html += '<button class="btn btn-d btn-xs" onclick="confirmDeleteStaff(\'' + s.id + '\')"><i class="fa-solid fa-trash"></i></button>';
+      }
+      html += '</div></div>';
+    });
+  }
+  setHtml('staffGrid', html);
+}
+
+function openStaffModal() {
+  setEl('genModalTitle', 'Ongeza Mfanyakazi');
+  var html = '<form onsubmit="saveStaff(event)">';
+  html += '<div class="logo-mgmt-notice"><i class="fa-solid fa-info-circle"></i> Mfanyakazi atapokea barua pepe ya kuunda nenosiri.</div>';
+  html += '<div class="fg"><label>Jina Kamili <span class="req">*</span></label><input class="fi" id="staffName" required/></div>';
+  html += '<div class="fg"><label>Barua Pepe <span class="req">*</span></label><input class="fi" id="staffEmail" type="email" required/></div>';
+  html += '<div class="fg"><label>Nenosiri la Awali <span class="req">*</span></label><input class="fi" id="staffPass" type="password" required minlength="6" placeholder("Angalau herufi 6"/></div>';
+  html += '<div class="fg"><label>Jukumu</label><select class="fi" id="staffRole"><option value="manager">Meneja</option><option value="cashier">Kashieri</option><option value="seller">Muuzaji</option><option value="admin">Admin</option></select></div>';
+  html += '<div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Ghairi</button><button class="btn btn-p" type="submit">Ongeza</button></div>';
+  html += '</form>';
+  setHtml('genModalBody', html);
+  openGenModal();
+}
+
+async function saveStaff(e) {
+  e.preventDefault();
+  try {
+    var name = getVal('staffName');
+    var email = getVal('staffEmail');
+    var pass = getVal('staffPass');
+    var role = getVal('staffRole');
+    if (!name || !email || !pass) { showToast('Jaza sehemu zote.', 'e'); return; }
+    if (pass.length < 6) { showToast('Nenosiri liwe na angalau herufi 6.', 'e'); return; }
+
+    var cred = await auth.createUserWithEmailAndPassword(email, pass);
+    await cred.user.updateProfile({ displayName: name });
+
+    await db.collection('users').doc(cred.user.uid).set({
+      name: name,
+      email: email,
+      role: role,
+      bizId: currentBiz.id,
+      status: 'active',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdBy: currentUser.uid
+    });
+
+    allStaff.push({
+      id: cred.user.uid,
+      name: name,
+      email: email,
+      role: role,
+      bizId: currentBiz.id,
+      status: 'active'
+    });
+
+    // Send notification
+    await db.collection('notifications').add({
+      bizId: currentBiz.id,
+      userId: cred.user.uid,
+      title: 'Karibu!',
+      message: 'Umeongezwa kama ' + role + ' kwenye ' + (currentBiz.name || 'biashara'),
+      icon: 'fa-user-plus',
+      read: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    showToast('Mfanyakazi ameongezwa!', 's');
+    closeGenModal();
+    renderStaff();
+  } catch(err) {
+    handleError(err, 'SaveStaff');
+  }
+}
+
+function openEditStaffModal(id) {
+  var s = allStaff.find(function(x){ return x.id === id; });
+  if (!s) return;
+  setEl('genModalTitle', 'Edit Mfanyakazi');
+  var html = '<form onsubmit="updateStaff(event,\'' + id + '\')">';
+  html += '<div class="fg"><label>Jina</label><input class="fi" id="editStaffName" value="' + escHtml(s.name || '') + '"/></div>';
+  html += '<div class="fg"><label>Jukumu</label><select class="fi" id="editStaffRole">';
+  ['manager','cashier','seller','admin'].forEach(function(r) {
+    html += '<option value="' + r + '"' + (s.role === r ? ' selected' : '') + '>' + r + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Ghairi</button><button class="btn btn-p" type="submit">Hifadhi</button></div>';
+  html += '</form>';
+  setHtml('genModalBody', html);
+  openGenModal();
+}
+
+async function updateStaff(e, id) {
+  e.preventDefault();
+  try {
+    var name = getVal('editStaffName');
+    var role = getVal('editStaffRole');
+    await db.collection('users').doc(id).update({ name: name, role: role });
+    var idx = allStaff.findIndex(function(x){ return x.id === id; });
+    if (idx !== -1) { allStaff[idx].name = name; allStaff[idx].role = role; }
+    showToast('Mfanyakazi amehifadhiwa!', 's');
+    closeGenModal();
+    renderStaff();
+  } catch(err) {
+    handleError(err, 'UpdateStaff');
+  }
+}
+
+async function suspendStaff(id) {
+  try {
+    await db.collection('users').doc(id).update({ status: 'suspended' });
+    var s = allStaff.find(function(x){ return x.id === id; });
+    if (s) s.status = 'suspended';
+    showToast('Mfanyakazi amesimamishwa.', 'w');
+    renderStaff();
+  } catch(err) {
+    handleError(err, 'SuspendStaff');
+  }
+}
+
+async function activateStaff(id) {
+  try {
+    await db.collection('users').doc(id).update({ status: 'active' });
+    var s = allStaff.find(function(x){ return x.id === id; });
+    if (s) s.status = 'active';
+    showToast('Mfanyakazi amewezeshwa.', 's');
+    renderStaff();
+  } catch(err) {
+    handleError(err, 'ActivateStaff');
+  }
+}
+
+function confirmDeleteStaff(id) {
+  setEl('confirmTitle', 'Futa Mfanyakazi?');
+  setEl('confirmText', 'Hatua hii haiwezi kurudishwa. Mfanyakazi atafutwa kabisa.');
+  pendingConfirmCb = function() { deleteStaff(id); };
+  document.getElementById('confirmModal').classList.add('show');
+}
+
+async function deleteStaff(id) {
+  try {
+    await db.collection('users').doc(id).delete();
+    try { await auth.getUser(id); /* check exists before deleting */ await firebase.auth().deleteUser(id); } catch(e) { /* user may not exist in auth or may not have permission */ }
+    allStaff = allStaff.filter(function(x){ return x.id !== id; });
+    showToast('Mfanyakazi amefutwa.', 'i');
+    renderStaff();
+  } catch(err) {
+    handleError(err, 'DeleteStaff');
+  }
+}
+
+/* =========================================================
+   NOTIFICATIONS
+   ========================================================= */
+function renderNotifications() {
+  var html = '';
+  if (allNotifications.length === 0) {
+    html = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa</p></div>';
+  } else {
+    allNotifications.forEach(function(n) {
+      var iconMap = { 'fa-user-plus':'var(--primary2)', 'fa-box-open':'var(--warning)', 'fa-chart-line':'var(--success)', 'fa-triangle-exclamation':'var(--danger)' };
+      var iconColor = iconMap[n.icon] || 'var(--text3)';
+      html += '<div class="notif-item" style="opacity:' + (n.read ? '0.5' : '1') + '">';
+      html += '<i class="fa-solid ' + (n.icon || 'fa-bell') + '" style="color:' + iconColor + '"></i>';
+      html += '<div><h5>' + escHtml(n.title || 'Arifa') + '</h5><p>' + escHtml(n.message || '') + ' — ' + formatDate(n.createdAt) + '</p></div>';
+      html += '</div>';
+    });
+  }
+  setHtml('notifListSection', html);
+
+  // Also update notification panel
+  var nListHtml = '';
+  if (allNotifications.length === 0) {
+    nListHtml = '<div class="empty-s"><i class="fa-solid fa-bell-slash"></i><p>Hakuna arifa</p></div>';
+  } else {
+    allNotifications.slice(0, 20).forEach(function(n) {
+      nListHtml += '<div class="notif-item"><i class="fa-solid ' + (n.icon || 'fa-bell') + '" style="color:var(--primary2)"></i><div><h5>' + escHtml(n.title || 'Arifa') + '</h5><p>' + escHtml(n.message || '') + '</p></div></div>';
+    });
+  }
+  setHtml('nList', nListHtml);
+}
+
 async function clearNotifications() {
-  if(!confirm('Futa arifa zote?'))return;if(!db||!currentBiz?.id)return;
-  try{const snap=await db.collection(getBizPath()+'/notifications').get();const batch=db.batch();snap.forEach(d=>batch.delete(d.ref));await batch.commit();toast('Arifa zimefutwa','s');renderNotifications();updateNotifCount();}catch(e){toast('Hitilafu','e');}
-}
-async function updateNotifCount() {
-  if(!db||!currentBiz?.id)return;
-  try{
-    const snap=await db.collection(getBizPath()+'/notifications').get();const cnt=snap.size;
-    document.getElementById('notifBdg').textContent=cnt;document.getElementById('tbNotifCnt').textContent=cnt;
-    const nList=document.getElementById('nList');
-    if(snap.empty){nList.innerHTML='<div class="empty-s"><p>Hakuna arifa</p></div>';return;}
-    let h='';snap.forEach(d=>{const n=d.data();h+=`<div class="notif-item"><i class="fa-solid fa-bell" style="color:var(--primary2)"></i><div><h5>${n.title||'Arifa'}</h5><p>${(n.message||'').substring(0,60)}</p></div></div>`;});
-    nList.innerHTML=h;
-  }catch(e){}
-}
-async function addNotification(type, title, message) {
-  if(!db||!currentBiz?.id)return;
-  try{await db.collection(getBizPath()+'/notifications').add({type,title,message,createdAt:firebase.firestore.FieldValue.serverTimestamp()});updateNotifCount();}catch(e){}
+  try {
+    var batch = db.batch();
+    allNotifications.forEach(function(n) {
+      if (n.id) batch.delete(db.collection('notifications').doc(n.id));
+    });
+    await batch.commit();
+    allNotifications = [];
+    renderNotifications();
+    updateTopbar();
+    buildSidebar();
+    showToast('Arifa zimefutwa.', 'i');
+  } catch(err) {
+    handleError(err, 'ClearNotifications');
+  }
 }
 
-// ============================================================
-// USERS MANAGEMENT (Business level)
-// ============================================================
-async function renderUsers() {
-  if(!db||!currentBiz?.id)return;
-  const snap=await db.collection(getBizPath()+'/users').get(); const tbody=document.getElementById('usersBody'); let h='';
-  snap.forEach(d=>{const u=d.data();h+=`<tr><td>${u.name||'-'}</td><td>${u.email||'-'}</td><td>${u.role||'-'}</td><td><span class="status-badge ${u.status||'active'}">${u.status||'active'}</span></td><td><button class="btn btn-d btn-xs" onclick="deleteDoc('users','${d.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;});
-  tbody.innerHTML=h||'<tr><td colspan="5" class="empty-s"><p>Hakuna watumiaji</p></td></tr>';
-}
-function openUserModal() {
-  document.getElementById('genModalTitle').textContent='Ongeza Mtumiaji';
-  document.getElementById('genModalBody').innerHTML=`<form onsubmit="saveBizUser(event)"><div class="fg"><label>Jina</label><input class="fi" id="buName" required/></div><div class="fg"><label>Barua Pepe</label><input class="fi" id="buEmail" type="email" required/></div><div class="fg"><label>Jukumu</label><select class="fi" id="buRole" required><option value="">Chagua...</option><option>manager</option><option>staff</option><option>cashier</option><option>seller</option></select></div><div class="fg"><label>Nenosiri</label><input class="fi" id="buPass" type="password" required minlength="6"/></div><div class="modal-actions"><button type="button" class="btn btn-o" onclick="closeGenModal()">Cancel</button><button class="btn btn-p" type="submit">Hifadhi</button></div></form>`;
-  document.getElementById('genModal').classList.add('show');
-}
-async function saveBizUser(e) {
-  e.preventDefault();if(!auth||!db||!currentBiz?.id)return;
-  try{
-    const email=document.getElementById('buEmail').value,pass=document.getElementById('buPass').value;
-    const cred=await auth.createUserWithEmailAndPassword(email,pass);
-    await db.collection(getBizPath()+'/users').doc(cred.user.uid).set({name:document.getElementById('buName').value,email,role:document.getElementById('buRole').value,status:'active',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-    toast('Mtumiaji ameongezwa','s');closeGenModal();renderUsers();
-    // Re-sign in original user
-    await auth.signInWithEmailAndPassword(auth.currentUser.email, '---'); // This will fail gracefully
-  }catch(err){toast('Hitilafu: '+err.message,'e');}
-}
-
-// ============================================================
-// PROFILE & LOGO MANAGEMENT
-// ============================================================
+/* =========================================================
+   PROFILE
+   ========================================================= */
 function loadProfile() {
-  if(!currentBiz) return;
-  document.getElementById('profBizName').textContent=currentBiz.name||'-';
-  document.getElementById('profBizCat').textContent=currentBiz.category||'-';
-  document.getElementById('profBizNameInput').value=currentBiz.name||'';
-  document.getElementById('profBizCatInput').value=currentBiz.category||'';
-  if(bizSettings.logo || currentBiz.logo) {
-    const logo = bizSettings.logo || currentBiz.logo;
-    document.getElementById('logoPrev').innerHTML=`<img src="${logo}" alt="Logo"/>`;
+  if (!currentBiz) return;
+  setVal('profBizName', currentBiz.name || '');
+  setVal('profBizCat', currentBiz.category || '');
+  setVal('profBizPhone', currentBiz.phone || '');
+  setVal('profBizLocation', currentBiz.location || '');
+  setVal('profBizEmail', currentBiz.email || '');
+  var logoPrev = document.getElementById('logoPrev');
+  if (logoPrev) {
+    if (currentBiz.logo) {
+      logoPrev.innerHTML = '<img src="' + currentBiz.logo + '"/>';
+    } else {
+      logoPrev.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
+    }
   }
 }
 
-function handleLogoClick() {
-  // Only manager or super admin can upload logo
-  if(currentRole !== 'manager') {
-    toast('Kupakia logo kunaruhusiwa kwa Meneja tu. Wasiliana na Meneja wako.','w');
-    return;
+function setVal(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.value = val;
+}
+
+async function saveBusinessProfile(e) {
+  e.preventDefault();
+  try {
+    if (!currentBiz || !currentBiz.id) { showToast('Biashara haipo.', 'e'); return; }
+    var data = {
+      name: getVal('profBizName'),
+      category: getVal('profBizCat'),
+      phone: getVal('profBizPhone'),
+      location: getVal('profBizLocation'),
+      email: getVal('profBizEmail'),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    await db.collection('businesses').doc(currentBiz.id).update(data);
+    currentBiz.name = data.name;
+    currentBiz.category = data.category;
+    currentBiz.phone = data.phone;
+    currentBiz.location = data.location;
+    currentBiz.email = data.email;
+    setEl('tbBizName', data.name);
+    showToast('Profaili imehifadhiwa!', 's');
+  } catch(err) {
+    handleError(err, 'SaveBusinessProfile');
   }
-  document.getElementById('logoInput').click();
 }
 
 async function handleLogoUpload(e) {
-  const file=e.target.files[0]; if(!file) return;
-  if(currentRole !== 'manager') { toast('Kupakia logo kunaruhusiwa kwa Meneja tu.','w'); return; }
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
   try {
-    const compressed=await compressImage(file);
-    if(!db||!currentBiz?.id) return;
-    // Save to business settings (primary) and user doc (fallback)
-    await db.collection(getBizPath()+'/settings').doc('main').update({ logo: compressed });
-    await db.collection('users').doc(currentBiz.id).update({ logo: compressed });
-    bizSettings.logo=compressed;
-    currentBiz.logo=compressed;
-    document.getElementById('logoPrev').innerHTML=`<img src="${compressed}" alt="Logo"/>`;
-    updateAllLogos();
-    toast('Logo imehifadhiwa na itaonekana kwenye PDF zote.','s');
-  }catch(err){toast('Hitilafu: '+err.message,'e');}
+    // Delete old logo
+    if (currentBiz && currentBiz.logo) {
+      await deleteImage(currentBiz.logo);
+    }
+    var url = await uploadImage(file, 'logos/');
+    if (!currentBiz || !currentBiz.id) { showToast('Biashara haipo.', 'e'); return; }
+    await db.collection('businesses').doc(currentBiz.id).update({ logo: url });
+    currentBiz.logo = url;
+
+    // Update previews
+    var logoPrev = document.getElementById('logoPrev');
+    if (logoPrev) logoPrev.innerHTML = '<img src="' + url + '"/>';
+    var tbl = document.getElementById('tbBizLogo');
+    var sbl = document.getElementById('sbBizLogo');
+    if (tbl) { tbl.src = url; tbl.style.display = 'block'; }
+    if (sbl) { sbl.src = url; sbl.style.display = 'block'; }
+
+    showToast('Logo imebadilishwa!', 's');
+  } catch(err) {
+    handleError(err, 'HandleLogoUpload');
+  }
 }
 
-async function saveProfile(e) {
-  e.preventDefault();if(!db||!currentBiz?.id) return;
-  const name=document.getElementById('profBizNameInput').value;
-  const cat=document.getElementById('profBizCatInput').value;
-  const phone=document.getElementById('profBizPhone').value;
-  const loc=document.getElementById('profBizLocation').value;
-  try{
-    await db.collection('users').doc(currentBiz.id).update({businessName:name,businessCategory:cat});
-    // Also save overhead and margin if changed
-    currentBiz.name=name; currentBiz.category=cat;
-    document.getElementById('tbBizName').textContent=name;
-    document.getElementById('profBizName').textContent=name;
-    document.getElementById('profBizCat').textContent=cat;
-    toast('Profaili imehifadhiwa','s');
-  }catch(err){toast('Hitilafu: '+err.message,'e');}
+/* =========================================================
+   BUSINESS USERS
+   ========================================================= */
+function renderBizUsers() {
+  var html = '';
+  if (allStaff.length === 0) {
+    html = '<tr><td colspan="5" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna watumiaji</p></td></tr>';
+  } else {
+    allStaff.forEach(function(u) {
+      var badge = u.status === 'suspended' ? '<span class="status-badge suspended">Suspended</span>' : '<span class="status-badge active">Active</span>';
+      var actions = '';
+      if (u.uid !== currentUser.uid && u.role !== 'owner') {
+        actions = '<button class="btn btn-w btn-xs" onclick="suspendStaff(\'' + u.id + '\')"><i class="fa-solid fa-ban"></i></button> ';
+        actions += '<button class="btn btn-d btn-xs" onclick="confirmDeleteStaff(\'' + u.id + '\')"><i class="fa-solid fa-trash"></i></button>';
+      }
+      html += '<tr><td>' + escHtml(u.name || '—') + '</td><td>' + escHtml(u.email || '—') + '</td><td>' + escHtml(u.role || '—') + '</td><td>' + badge + '</td><td>' + actions + '</td></tr>';
+    });
+  }
+  setHtml('bizUsersBody', html);
 }
 
-// ============================================================
-// GENERIC MODAL
-// ============================================================
+/* =========================================================
+   GENERIC MODAL
+   ========================================================= */
+function openGenModal() {
+  document.getElementById('genModal').classList.add('show');
+}
+
 function closeGenModal() {
   document.getElementById('genModal').classList.remove('show');
-  document.getElementById('genModalBody').innerHTML='';
-  ['pmImage'].forEach(k=>delete compressedImages[k]);
 }
 
-// ============================================================
-// AUTH STATE LISTENER
-// ============================================================
-auth.onAuthStateChanged(user => {
-  currentUser=user;
-  // If user is logged in but no currentBiz, try to load it
-  if(user && !currentBiz) {
-    db.collection('users').doc(user.uid).get().then(doc => {
-      if(doc.exists) {
-        const d=doc.data();
-        currentBiz={id:doc.id, name:d.businessName, category:d.businessCategory, logo:d.logo};
+/* =========================================================
+   CONFIRM MODAL
+   ========================================================= */
+function closeConfirm() {
+  document.getElementById('confirmModal').classList.remove('show');
+  pendingConfirmCb = null;
+}
+
+function confirmAction() {
+  if (typeof pendingConfirmCb === 'function') {
+    pendingConfirmCb();
+  }
+  closeConfirm();
+}
+
+/* =========================================================
+   PDF EXPORTS
+   ========================================================= */
+function exportSalesPDF() {
+  try {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text((currentBiz && currentBiz.name ? currentBiz.name : 'BizBook') + ' - Sales Report', 14, 20);
+    doc.setFontSize(10);
+    doc.text('Generated: ' + new Date().toLocaleString(), 14, 28);
+    var rows = [];
+    allSales.forEach(function(s) {
+      var pName = s.productName || ((s.items && s.items[0]) ? s.items[0].name : 'Multiple');
+      rows.push([s.receiptNo || '—', pName, s.qty || ((s.items && s.items[0]) ? s.items[0].qty : '—'), (s.total || 0).toLocaleString(), s.paymentMethod || 'cash', s.customerName || 'Walk-in', formatDate(s.createdAt)]);
+    });
+    doc.autoTable({
+      head: [['Receipt#', 'Product', 'Qty', 'Total', 'Payment', 'Customer', 'Date']],
+      body: rows,
+      startY: 34,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [108, 92, 231] }
+    });
+    doc.save('sales-report.pdf');
+    showToast('PDF imeundwa!', 's');
+  } catch(err) {
+    handleError(err, 'ExportSalesPDF');
+  }
+}
+
+/* =========================================================
+   SUPER ADMIN
+   ========================================================= */
+async function superLogin(e) {
+  e.preventDefault();
+  setEl('superErr', '');
+  var email = getVal('superUser');
+  var pass = getVal('superPass');
+  if (!email || !pass) { setEl('superErr', 'Jaza sehemu zote.'); return; }
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+    var userDoc = await db.collection('users').doc(auth.currentUser.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== 'super_admin') {
+      await auth.signOut();
+      setEl('superErr', 'Hakuna ruhusa ya Super Admin.');
+      return;
+    }
+    document.getElementById('superLoginBox').classList.add('hidden');
+    document.getElementById('superPanel').classList.remove('hidden');
+    loadSuperAdmin();
+    showToast('Karibu Super Admin!', 's');
+  } catch(err) {
+    setEl('superErr', err.message);
+  }
+}
+
+function superLogout() {
+  auth.signOut().then(function() {
+    showSuperAdmin();
+    showToast('Umetoka.', 'i');
+  });
+}
+
+function returnToSuperPanel() {
+  document.getElementById('superBodyMain').classList.remove('hidden');
+  document.getElementById('superBodyDetail').classList.add('hidden');
+  var btn = document.getElementById('superBackBtn');
+  if (btn) btn.classList.remove('show');
+}
+
+async function loadSuperAdmin() {
+  try {
+    // Load all users
+    var usersSnap = await db.collection('users').get();
+    allSuperUsers = [];
+    usersSnap.forEach(function(d) { var o = d.data(); o.id = d.id; allSuperUsers.push(o); });
+
+    // Load ads
+    var adsSnap = await db.collection('ads').orderBy('createdAt', 'desc').get();
+    allSuperAds = [];
+    adsSnap.forEach(function(d) { var o = d.data(); o.id = d.id; allSuperAds.push(o); });
+
+    // Load public products
+    var ppSnap = await db.collection('publicProducts').orderBy('createdAt', 'desc').get();
+    allSuperProducts = [];
+    ppSnap.forEach(function(d) { var o = d.data(); o.id = d.id; allSuperProducts.push(o); });
+
+    renderSuperMetrics();
+    renderSuperUsers();
+    renderSuperAds();
+    renderSuperProducts();
+    renderSuperCharts();
+  } catch(err) {
+    handleError(err, 'LoadSuperAdmin');
+  }
+}
+
+function renderSuperMetrics() {
+  var totalUsers = allSuperUsers.length;
+  var totalBiz = [];
+  var bizIds = {};
+  allSuperUsers.forEach(function(u) {
+    if (u.bizId && !bizIds[u.bizId]) { bizIds[u.bizId] = true; totalBiz.push(u); }
+  });
+  var activeUsers = allSuperUsers.filter(function(u){ return u.status !== 'suspended'; }).length;
+  var suspendedUsers = allSuperUsers.filter(function(u){ return u.status === 'suspended'; }).length;
+  var totalAds = allSuperAds.length;
+  var totalPubProds = allSuperProducts.length;
+
+  var html = '';
+  html += '<div class="sm-card"><h4>Watumiaji Wote</h4><div class="sm-val">' + totalUsers + '</div><div class="sm-sub">Registered users</div></div>';
+  html += '<div class="sm-card"><h4>Biashara</h4><div class="sm-val">' + totalBiz.length + '</div><div class="sm-sub">Active businesses</div></div>';
+  html += '<div class="sm-card"><h4>Active</h4><div class="sm-val" style="color:var(--success)">' + activeUsers + '</div><div class="sm-sub">Active users</div></div>';
+  html += '<div class="sm-card"><h4>Suspended</h4><div class="sm-val" style="color:var(--danger)">' + suspendedUsers + '</div><div class="sm-sub">Suspended users</div></div>';
+  html += '<div class="sm-card"><h4>Advertisements</h4><div class="sm-val">' + totalAds + '</div><div class="sm-sub">Global ads</div></div>';
+  html += '<div class="sm-card"><h4>Public Products</h4><div class="sm-val">' + totalPubProds + '</div><div class="sm-sub">Published products</div></div>';
+  setHtml('superMetrics', html);
+}
+
+function renderSuperUsers() {
+  var search = (getVal('superUserSearch') || '').toLowerCase();
+  var filtered = allSuperUsers.filter(function(u) {
+    if (u.role === 'super_admin') return false;
+    return !search || (u.name||'').toLowerCase().indexOf(search)!==-1 || (u.email||'').toLowerCase().indexOf(search)!==-1;
+  });
+  var html = '';
+  if (filtered.length === 0) {
+    html = '<tr><td colspan="7" class="empty-s"><i class="fa-solid fa-users"></i><p>Hakuna watumiaji</p></td></tr>';
+  } else {
+    filtered.forEach(function(u) {
+      var badge = u.status === 'suspended' ? '<span class="status-badge suspended">Suspended</span>' : '<span class="status-badge active">Active</span>';
+      var actions = '';
+      if (u.status === 'suspended') {
+        actions += '<button class="btn btn-s btn-xs" onclick="superActivateUser(\'' + u.id + '\')"><i class="fa-solid fa-check"></i></button> ';
+      } else {
+        actions += '<button class="btn btn-w btn-xs" onclick="superSuspendUser(\'' + u.id + '\')"><i class="fa-solid fa-ban"></i></button> ';
       }
-    }).catch(()=>{});
+      actions += '<button class="btn btn-d btn-xs" onclick="superDeleteUser(\'' + u.id + '\')"><i class="fa-solid fa-trash"></i></button>';
+      actions += ' <button class="btn btn-i btn-xs" onclick="superViewUser(\'' + u.id + '\')"><i class="fa-solid fa-eye"></i></button>';
+      html += '<tr><td>' + escHtml(u.name || '—') + '</td><td>' + escHtml(u.email || '—') + '</td><td>' + escHtml(u.bizId ? 'Yes' : '—') + '</td><td>' + escHtml(u.role || '—') + '</td><td>' + badge + '</td><td>' + formatDate(u.createdAt) + '</td><td>' + actions + '</td></tr>';
+    });
+  }
+  setHtml('superUsersBody', html);
+}
+
+async function superSuspendUser(id) {
+  try {
+    await db.collection('users').doc(id).update({ status: 'suspended' });
+    var u = allSuperUsers.find(function(x){ return x.id === id; });
+    if (u) u.status = 'suspended';
+    showToast('User suspended.', 'w');
+    renderSuperUsers();
+    renderSuperMetrics();
+  } catch(err) { handleError(err, 'SuperSuspendUser'); }
+}
+
+async function superActivateUser(id) {
+  try {
+    await db.collection('users').doc(id).update({ status: 'active' });
+    var u = allSuperUsers.find(function(x){ return x.id === id; });
+    if (u) u.status = 'active';
+    showToast('User activated.', 's');
+    renderSuperUsers();
+    renderSuperMetrics();
+  } catch(err) { handleError(err, 'SuperActivateUser'); }
+}
+
+async function superDeleteUser(id) {
+  setEl('confirmTitle', 'Delete User?');
+  setEl('confirmText', 'This action cannot be undone.');
+  pendingConfirmCb = async function() {
+    try {
+      await db.collection('users').doc(id).delete();
+      try { await firebase.auth().deleteUser(id); } catch(e) {}
+      allSuperUsers = allSuperUsers.filter(function(x){ return x.id !== id; });
+      showToast('User deleted.', 'i');
+      renderSuperUsers();
+      renderSuperMetrics();
+    } catch(err) { handleError(err, 'SuperDeleteUser'); }
+  };
+  document.getElementById('confirmModal').classList.add('show');
+}
+
+async function superViewUser(id) {
+  var u = allSuperUsers.find(function(x){ return x.id === id; });
+  if (!u) return;
+  var bizInfo = '—';
+  if (u.bizId) {
+    try {
+      var bizDoc = await db.collection('businesses').doc(u.bizId).get();
+      if (bizDoc.exists) {
+        var b = bizDoc.data();
+        bizInfo = '<strong>' + escHtml(b.name) + '</strong><br><small>Category: ' + escHtml(b.category || '—') + '</small>';
+      }
+    } catch(e) { bizInfo = u.bizId; }
+  }
+  setEl('superViewTitle', 'User Details');
+  setHtml('superViewContent', '<div style="display:grid;gap:12px"><div><strong>Name:</strong> ' + escHtml(u.name || '—') + '</div><div><strong>Email:</strong> ' + escHtml(u.email || '—') + '</div><div><strong>Role:</strong> ' + escHtml(u.role || '—') + '</div><div><strong>Status:</strong> ' + (u.status === 'suspended' ? '<span class="status-badge suspended">Suspended</span>' : '<span class="status-badge active">Active</span>') + '</div><div><strong>Business:</strong> ' + bizInfo + '</div><div><strong>Joined:</strong> ' + formatDate(u.createdAt) + '</div></div>');
+  document.getElementById('superViewModal').style.display = 'flex';
+}
+
+function renderSuperCharts() {
+  // Users trend - monthly for last 12 months
+  var now = new Date();
+  var labels = [], data = [];
+  for (var i = 11; i >= 0; i--) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    labels.push(d.toLocaleDateString('en-US', { month: 'short' }));
+    var count = 0;
+    allSuperUsers.forEach(function(u) {
+      var cd = u.createdAt ? (u.createdAt.toDate ? u.createdAt.toDate() : new Date(u.createdAt)) : null;
+      if (cd && cd.getMonth() === d.getMonth() && cd.getFullYear() === d.getFullYear()) count++;
+    });
+    data.push(count);
+  }
+  makeChart('superUsersTrend', 'suTrend', { type: 'line', data: { labels: labels, datasets: [{ label: 'New Users', data: data, borderColor: '#6c5ce7', backgroundColor: 'rgba(108,92,231,0.1)', fill: true, tension: 0.4 }] }, options: { scales: { y: { beginAtZero: true } } } });
+
+  // Category chart
+  var catMap = {};
+  allSuperUsers.forEach(function(u) {
+    if (u.role === 'super_admin') return;
+    // We need business category - load from bizId
+    var cat = u.category || 'Unknown';
+    catMap[cat] = (catMap[cat] || 0) + 1;
+  });
+  var catLabels = Object.keys(catMap);
+  var catData = Object.values(catMap);
+  var catColors = ['#6c5ce7','#00b894','#e74c3c','#f39c12','#0984e3','#a29bfe','#fd79a8','#00cec9'];
+  makeChart('superCategoryChart', 'suCat', { type: 'doughnut', data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors.slice(0, catLabels.length) }] }, options: {} });
+
+  // Business chart - placeholder
+  makeChart('superBusinessChart', 'suBiz', { type: 'bar', data: { labels: ['No Data'], datasets: [{ label: 'Sales', data: [0], backgroundColor: 'rgba(0,184,148,0.6)' }] }, options: { scales: { y: { beginAtZero: true } } } });
+
+  // Product chart - placeholder
+  makeChart('superProductChart', 'suProd', { type: 'bar', data: { labels: ['No Data'], datasets: [{ label: 'Sales', data: [0], backgroundColor: 'rgba(108,92,231,0.6)' }] }, options: { scales: { y: { beginAtZero: true } } } });
+}
+
+/* =========================================================
+   SUPER ADMIN - ADS
+   ========================================================= */
+function renderSuperAds() {
+  var html = '';
+  if (allSuperAds.length === 0) {
+    html = '<div class="empty-s"><i class="fa-solid fa-bullhorn"></i><p>Hakuna matangazo</p></div>';
+  } else {
+    allSuperAds.forEach(function(ad) {
+      var imgHtml = ad.image ? '<img class="super-ad-thumb" src="' + ad.image + '"/>' : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>';
+      html += '<div class="super-ad-item">' + imgHtml + '<div class="super-ad-info"><h5>' + escHtml(ad.title || '—') + '</h5><p>' + escHtml(ad.description || '').substring(0, 60) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperAd(\'' + ad.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperAd(\'' + ad.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+    });
+  }
+  setHtml('superAdsList', html);
+}
+
+function openSuperAdModal(id) {
+  var isEdit = !!id;
+  var ad = isEdit ? allSuperAds.find(function(x){ return x.id === id; }) : null;
+  setEl('superAdModalTitle', isEdit ? 'Edit Advertisement' : 'Create Advertisement');
+  var btn = document.getElementById('superAdSubmitBtn');
+  if (btn) btn.textContent = isEdit ? 'Update' : 'Save';
+  setVal('superAdId', id || '');
+  setVal('superAdTitle', ad ? ad.title : '');
+  setVal('superAdText', ad ? ad.description : '');
+  setVal('superAdLink', ad ? ad.link : '');
+  var prev = document.getElementById('superAdPreview');
+  if (prev) {
+    if (ad && ad.image) { prev.innerHTML = '<img src="' + ad.image + '"/>'; prev.classList.add('has-img'); }
+    else { prev.innerHTML = ''; prev.classList.remove('has-img'); }
+  }
+  var fileInput = document.getElementById('superAdImage');
+  if (fileInput) fileInput.value = '';
+  document.getElementById('superAdModal').style.display = 'flex';
+}
+
+async function saveSuperAd(e) {
+  e.preventDefault();
+  try {
+    var id = getVal('superAdId');
+    var data = {
+      title: getVal('superAdTitle'),
+      description: getVal('superAdText'),
+      link: getVal('superAdLink'),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    var fileInput = document.getElementById('superAdImage');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      if (id) {
+        var old = allSuperAds.find(function(x){ return x.id === id; });
+        if (old && old.image) await deleteImage(old.image);
+      }
+      data.image = await uploadImage(fileInput.files[0], 'ads/');
+    }
+    if (id) {
+      var oldAd = allSuperAds.find(function(x){ return x.id === id; });
+      if (oldAd && !data.image) data.image = oldAd.image;
+      await db.collection('ads').doc(id).update(data);
+      var idx = allSuperAds.findIndex(function(x){ return x.id === id; });
+      if (idx !== -1) { data.id = id; allSuperAds[idx] = data; }
+      showToast('Ad imehifadhiwa!', 's');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      var ref = await db.collection('ads').add(data);
+      data.id = ref.id;
+      allSuperAds.unshift(data);
+      showToast('Ad imeongezwa!', 's');
+    }
+    closeSuperModal('superAdModal');
+    renderSuperAds();
+    renderSuperMetrics();
+  } catch(err) {
+    handleError(err, 'SaveSuperAd');
+  }
+}
+
+function editSuperAd(id) { openSuperAdModal(id); }
+
+async function deleteSuperAd(id) {
+  setEl('confirmTitle', 'Futa Tangazo?');
+  setEl('confirmText', 'Hatua hii haiwezi kurudishwa.');
+  pendingConfirmCb = async function() {
+    try {
+      var ad = allSuperAds.find(function(x){ return x.id === id; });
+      if (ad && ad.image) await deleteImage(ad.image);
+      await db.collection('ads').doc(id).delete();
+      allSuperAds = allSuperAds.filter(function(x){ return x.id !== id; });
+      showToast('Tangazo limefutwa.', 'i');
+      renderSuperAds();
+      renderSuperMetrics();
+    } catch(err) { handleError(err, 'DeleteSuperAd'); }
+  };
+  document.getElementById('confirmModal').classList.add('show');
+}
+
+/* =========================================================
+   SUPER ADMIN - PUBLIC PRODUCTS
+   ========================================================= */
+function renderSuperProducts() {
+  var html = '';
+  if (allSuperProducts.length === 0) {
+    html = '<div class="empty-s"><i class="fa-solid fa-boxes-stacked"></i><p>Hakuna bidhaa hadharani</p></div>';
+  } else {
+    allSuperProducts.forEach(function(p) {
+      var imgHtml = p.image ? '<img class="super-ad-thumb" src="' + p.image + '"/>' : '<div class="super-ad-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><i class="fa-solid fa-image"></i></div>';
+      html += '<div class="super-prod-item">' + imgHtml + '<div class="super-ad-info"><h5>' + escHtml(p.name || '—') + '</h5><p>' + escHtml(p.seller || '') + ' — ' + formatMoney(p.price || 0) + '</p></div><div class="super-ad-actions"><button class="btn btn-o btn-xs" onclick="editSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-pen"></i></button><button class="btn btn-d btn-xs" onclick="deleteSuperProduct(\'' + p.id + '\')"><i class="fa-solid fa-trash"></i></button></div></div>';
+    });
+  }
+  setHtml('superProductsList', html);
+}
+
+function openSuperProductModal(id) {
+  var isEdit = !!id;
+  var p = isEdit ? allSuperProducts.find(function(x){ return x.id === id; }) : null;
+  setEl('superProdModalTitle', isEdit ? 'Edit Public Product' : 'Public Product Catalogue');
+  var btn = document.getElementById('superProdSubmitBtn');
+  if (btn) btn.textContent = isEdit ? 'Update' : 'Publish';
+  setVal('superProdId', id || '');
+  setVal('superProdName', p ? p.name : '');
+  setVal('superProdCategory', p ? p.category : '');
+  setVal('superProdSeller', p ? p.seller : '');
+  setVal('superProdShop', p ? p.shop : '');
+  setVal('superProdPhone', p ? p.phone : '');
+  setVal('superProdLocation', p ? p.location : '');
+  setVal('superProdPrice', p ? p.price : '');
+  setVal('superProdDesc', p ? p.description : '');
+  var prev = document.getElementById('superProdPreview');
+  if (prev) {
+    if (p && p.image) { prev.innerHTML = '<img src="' + p.image + '"/>'; prev.classList.add('has-img'); }
+    else { prev.innerHTML = ''; prev.classList.remove('has-img'); }
+  }
+  var fileInput = document.getElementById('superProdImage');
+  if (fileInput) fileInput.value = '';
+  document.getElementById('superProductModal').style.display = 'flex';
+}
+
+async function saveSuperProduct(e) {
+  e.preventDefault();
+  try {
+    var id = getVal('superProdId');
+    var data = {
+      name: getVal('superProdName'),
+      category: getVal('superProdCategory'),
+      seller: getVal('superProdSeller'),
+      shop: getVal('superProdShop'),
+      phone: getVal('superProdPhone'),
+      location: getVal('superProdLocation'),
+      price: parseFloat(getVal('superProdPrice')) || 0,
+      description: getVal('superProdDesc'),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    var fileInput = document.getElementById('superProdImage');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      if (id) {
+        var old = allSuperProducts.find(function(x){ return x.id === id; });
+        if (old && old.image) await deleteImage(old.image);
+      }
+      data.image = await uploadImage(fileInput.files[0], 'publicProducts/');
+    }
+    if (id) {
+      var oldP = allSuperProducts.find(function(x){ return x.id === id; });
+      if (oldP && !data.image) data.image = oldP.image;
+      await db.collection('publicProducts').doc(id).update(data);
+      var idx = allSuperProducts.findIndex(function(x){ return x.id === id; });
+      if (idx !== -1) { data.id = id; allSuperProducts[idx] = data; }
+      showToast('Bidhaa imehifadhiwa!', 's');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      var ref = await db.collection('publicProducts').add(data);
+      data.id = ref.id;
+      allSuperProducts.unshift(data);
+      showToast('Bidhaa imechapishwa!', 's');
+    }
+    closeSuperModal('superProductModal');
+    renderSuperProducts();
+    renderSuperMetrics();
+  } catch(err) {
+    handleError(err, 'SaveSuperProduct');
+  }
+}
+
+function editSuperProduct(id) { openSuperProductModal(id); }
+
+async function deleteSuperProduct(id) {
+  setEl('confirmTitle', 'Futa Bidhaa?');
+  setEl('confirmText', 'Hatua hii haiwezi kurudishwa.');
+  pendingConfirmCb = async function() {
+    try {
+      var p = allSuperProducts.find(function(x){ return x.id === id; });
+      if (p && p.image) await deleteImage(p.image);
+      await db.collection('publicProducts').doc(id).delete();
+      allSuperProducts = allSuperProducts.filter(function(x){ return x.id !== id; });
+      showToast('Bidhaa imefutwa.', 'i');
+      renderSuperProducts();
+      renderSuperMetrics();
+    } catch(err) { handleError(err, 'DeleteSuperProduct'); }
+  };
+  document.getElementById('confirmModal').classList.add('show');
+}
+
+/* =========================================================
+   SUPER MODALS
+   ========================================================= */
+function closeSuperModal(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
+/* =========================================================
+   SUPER ADMIN - PDF EXPORTS
+   ========================================================= */
+function exportUsersPDF() {
+  try {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('BizBook - All Users Report', 14, 20);
+    doc.setFontSize(10);
+    doc.text('Generated: ' + new Date().toLocaleString(), 14, 28);
+    var rows = [];
+    allSuperUsers.forEach(function(u) {
+      if (u.role === 'super_admin') return;
+      rows.push([u.name || '—', u.email || '—', u.role || '—', u.status || 'active', formatDate(u.createdAt)]);
+    });
+    doc.autoTable({
+      head: [['Name', 'Email', 'Role', 'Status', 'Joined']],
+      body: rows,
+      startY: 34,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [231, 76, 60] }
+    });
+    doc.save('users-report.pdf');
+    showToast('PDF imeundwa!', 's');
+  } catch(err) {
+    handleError(err, 'ExportUsersPDF');
+  }
+}
+
+function exportAdsPDF() {
+  try {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('BizBook - Advertisements Report', 14, 20);
+    var rows = [];
+    allSuperAds.forEach(function(ad) {
+      rows.push([ad.title || '—', (ad.description || '').substring(0, 80), ad.link || '—', formatDate(ad.createdAt)]);
+    });
+    doc.autoTable({
+      head: [['Title', 'Description', 'Link', 'Created']],
+      body: rows,
+      startY: 30,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [108, 92, 231] }
+    });
+    doc.save('ads-report.pdf');
+    showToast('PDF imeundwa!', 's');
+  } catch(err) {
+    handleError(err, 'ExportAdsPDF');
+  }
+}
+
+function exportPublicProductsPDF() {
+  try {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('BizBook - Public Products Catalogue', 14, 20);
+    var rows = [];
+    allSuperProducts.forEach(function(p) {
+      rows.push([p.name || '—', p.category || '—', p.seller || '—', p.shop || '—', (p.price || 0).toLocaleString(), p.location || '—']);
+    });
+    doc.autoTable({
+      head: [['Product', 'Category', 'Seller', 'Shop', 'Price (TZS)', 'Location']],
+      body: rows,
+      startY: 30,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [108, 92, 231] }
+    });
+    doc.save('public-products.pdf');
+    showToast('PDF imeundwa!', 's');
+  } catch(err) {
+    handleError(err, 'ExportPublicProductsPDF');
+  }
+}
+
+/* =========================================================
+   SHARE PUBLIC CATALOGUE
+   ========================================================= */
+function sharePublicCatalogue() {
+  var url = window.location.href.split('?')[0];
+  if (navigator.share) {
+    navigator.share({ title: 'BizBook - Product Catalogue', text: 'Angalia bidhaa zilizochapishwa kwenye BizBook!', url: url }).catch(function(){});
+  } else {
+    // Copy to clipboard
+    var tempInput = document.createElement('input');
+    tempInput.value = url;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    try { document.execCommand('copy'); showToast('Link imecopiwa!', 's'); } catch(e) { showToast('Shindikano limekataa.', 'e'); }
+    document.body.removeChild(tempInput);
+  }
+}
+
+/* =========================================================
+   PUBLIC SHOWCASE (Landing Page)
+   ========================================================= */
+async function renderPublicShowcase() {
+  try {
+    // Load ads
+    var adsSnap = await db.collection('ads').orderBy('createdAt', 'desc').limit(10).get();
+    var ads = [];
+    adsSnap.forEach(function(d) { var o = d.data(); o.id = d.id; ads.push(o); });
+
+    var adsHtml = '';
+    if (ads.length === 0) {
+      adsHtml = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-bullhorn"></i><p>Hakuna matangazo kwa sasa</p></div>';
+    } else {
+      ads.forEach(function(ad) {
+        var imgHtml = ad.image ? '<img class="pub-ad-img" src="' + ad.image + '"/>' : '<div class="pub-ad-img-placeholder"><i class="fa-solid fa-image"></i></div>';
+        adsHtml += '<div class="pub-ad-card">' + imgHtml + '<div class="pub-ad-body"><h4>' + escHtml(ad.title || '—') + '</h4><p>' + escHtml(ad.description || '') + '</p>' + (ad.link ? '<a class="pub-ad-link" href="' + escHtml(ad.link) + '" target="_blank"><i class="fa-solid fa-external-link"></i> Angalia</a>' : '') + '</div></div>';
+      });
+    }
+    setHtml('publicAdsGrid', adsHtml);
+
+    // Load public products
+    var ppSnap = await db.collection('publicProducts').orderBy('createdAt', 'desc').limit(20).get();
+    var prods = [];
+    ppSnap.forEach(function(d) { var o = d.data(); o.id = d.id; prods.push(o); });
+
+    var prodsHtml = '';
+    if (prods.length === 0) {
+      prodsHtml = '<div class="empty-s" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><p>Hakuna bidhaa hadharani kwa sasa</p></div>';
+    } else {
+      prods.forEach(function(p) {
+        var imgHtml = p.image ? '<img class="pub-prod-img" src="' + p.image + '"/>' : '<div class="pub-prod-img-placeholder"><i class="fa-solid fa-image"></i></div>';
+        prodsHtml += '<div class="pub-prod-card">' + imgHtml + '<div class="pub-prod-body"><h4>' + escHtml(p.name || '—') + '</h4><p>' + escHtml(p.description || '').substring(0, 80) + '</p><div class="pub-prod-price">' + formatMoney(p.price || 0) + '</div><div class="pub-prod-seller"><i class="fa-solid fa-store"></i> ' + escHtml(p.shop || p.seller || '—') + (p.phone ? ' &bull; ' + escHtml(p.phone) : '') + '</div>' + (p.location ? '<div class="pub-prod-seller"><i class="fa-solid fa-location-dot"></i> ' + escHtml(p.location) + '</div>' : '') + '</div></div>';
+      });
+    }
+    setHtml('publicProductsGrid', prodsHtml);
+  } catch(err) {
+    // Silently fail for public showcase - user may not be logged in
+    console.warn('Public showcase error:', err);
+  }
+}
+
+/* =========================================================
+   GLOBAL CLICK HANDLER (close dropdowns)
+   ========================================================= */
+document.addEventListener('click', function(e) {
+  // Close user dropdown if clicking outside
+  var chip = document.querySelector('.u-chip');
+  var dd = document.getElementById('uDd');
+  if (dd && dd.classList.contains('show') && chip && !chip.contains(e.target)) {
+    dd.classList.remove('show');
+  }
+  // Close notification panel if clicking outside
+  var np = document.getElementById('notifPanel');
+  if (np && np.classList.contains('show')) {
+    var isNotifBtn = e.target.closest('.tb-btn');
+    var isInsidePanel = np.contains(e.target);
+    if (!isNotifBtn && !isInsidePanel) {
+      np.classList.remove('show');
+    }
   }
 });
 
-// ============================================================
-// INITIALIZATION
-// ============================================================
-document.addEventListener('DOMContentLoaded', () => {
-  showLanding();
-  renderPublicShowcase();
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
+document.addEventListener('DOMContentLoaded', async function() {
+  try {
+    // Show landing page by default
+    showLanding();
+
+    // Render public showcase
+    await renderPublicShowcase();
+  } catch(err) {
+    console.error('Initialization failed:', err);
+    showLanding();
+  }
 });
+
+/* =========================================================
+   EXPOSE FUNCTIONS TO GLOBAL SCOPE
+   (Required because onclick attributes in HTML need global access)
+   ========================================================= */
+window.showLanding = showLanding;
+window.showAuth = showAuth;
+window.showSuperAdmin = showSuperAdmin;
+window.switchAuthTab = switchAuthTab;
+window.loginUser = loginUser;
+window.signupUser = signupUser;
+window.logoutUser = logoutUser;
+window.enterRole = enterRole;
+window.togglePw = togglePw;
+window.checkPwStr = checkPwStr;
+window.calcPrice = calcPrice;
+window.openPriceCalculator = openPriceCalculator;
+window.closePriceCalculator = closePriceCalculator;
+window.previewImage = previewImage;
+window.toggleSidebar = toggleSidebar;
+window.closeSidebar = closeSidebar;
+window.toggleNotifications = toggleNotifications;
+window.toggleUserDd = toggleUserDd;
+window.navTo = navTo;
+window.openProductModal = openProductModal;
+window.saveProduct = saveProduct;
+window.confirmDeleteProduct = confirmDeleteProduct;
+window.openCategoryModal = openCategoryModal;
+window.saveCategory = saveCategory;
+window.deleteCategory = deleteCategory;
+window.openStockInModal = openStockInModal;
+window.saveStockIn = saveStockIn;
+window.openStockOutModal = openStockOutModal;
+window.saveStockOut = saveStockOut;
+window.addToCart = addToCart;
+window.removeFromCart = removeFromCart;
+window.changeCartQty = changeCartQty;
+window.clearCart = clearCart;
+window.completeSale = completeSale;
+window.viewSaleReceipt = viewSaleReceipt;
+window.closeReceipt = closeReceipt;
+window.printReceipt = printReceipt;
+window.openPurchaseModal = openPurchaseModal;
+window.savePurchase = savePurchase;
+window.markPurchasePaid = markPurchasePaid;
+window.deletePurchase = deletePurchase;
+window.openSupplierModal = openSupplierModal;
+window.saveSupplier = saveSupplier;
+window.deleteSupplier = deleteSupplier;
+window.openCustomerModal = openCustomerModal;
+window.saveCustomer = saveCustomer;
+window.deleteCustomer = deleteCustomer;
+window.markDebtPaid = markDebtPaid;
+window.openExpenseModal = openExpenseModal;
+window.saveExpense = saveExpense;
+window.deleteExpense = deleteExpense;
+window.openStaffModal = openStaffModal;
+window.saveStaff = saveStaff;
+window.openEditStaffModal = openEditStaffModal;
+window.updateStaff = updateStaff;
+window.suspendStaff = suspendStaff;
+window.activateStaff = activateStaff;
+window.confirmDeleteStaff = confirmDeleteStaff;
+window.clearNotifications = clearNotifications;
+window.saveBusinessProfile = saveBusinessProfile;
+window.handleLogoUpload = handleLogoUpload;
+window.closeGenModal = closeGenModal;
+window.closeConfirm = closeConfirm;
+window.confirmAction = confirmAction;
+window.exportSalesPDF = exportSalesPDF;
+window.superLogin = superLogin;
+window.superLogout = superLogout;
+window.returnToSuperPanel = returnToSuperPanel;
+window.renderSuperUsers = renderSuperUsers;
+window.superSuspendUser = superSuspendUser;
+window.superActivateUser = superActivateUser;
+window.superDeleteUser = superDeleteUser;
+window.superViewUser = superViewUser;
+window.openSuperAdModal = openSuperAdModal;
+window.saveSuperAd = saveSuperAd;
+window.editSuperAd = editSuperAd;
+window.deleteSuperAd = deleteSuperAd;
+window.openSuperProductModal = openSuperProductModal;
+window.saveSuperProduct = saveSuperProduct;
+window.editSuperProduct = editSuperProduct;
+window.deleteSuperProduct = deleteSuperProduct;
+window.closeSuperModal = closeSuperModal;
+window.exportUsersPDF = exportUsersPDF;
+window.exportAdsPDF = exportAdsPDF;
+window.exportPublicProductsPDF = exportPublicProductsPDF;
+window.sharePublicCatalogue = sharePublicCatalogue;
+window.renderPublicShowcase = renderPublicShowcase;
+window.autoCalcSellPrice = autoCalcSellPrice;
+window.toggleCodePreview = toggleCodePreview;
+window.renderProducts = renderProducts;
+window.renderPosProducts = renderPosProducts;
+window.renderSales = renderSales;
+window.renderSuppliers = renderSuppliers;
+window.renderCustomers = renderCustomers;
+window.renderDebts = renderDebts;
+window.renderExpenses = renderExpenses;
+window.renderStaff = renderStaff;
+window.renderBizUsers = renderBizUsers;
+window.deleteCategory = deleteCategory;
 </script>
 </body>
 </html>
