@@ -1304,6 +1304,77 @@ function updateAllLogos() {
   const av = document.getElementById('tbUserAv');
   if (logo && av) { av.innerHTML = `<img src="${logo}" alt=""/>`; }
 }
+/* ======================================
+   DELETE / EDIT / VIEW — ROLE AWARE
+   ====================================== */
+function askDelete(id, type) {
+  if (!canDelete()) {
+    toast('Huna ruhusa ya kufuta', 'e');
+    return;
+  }
+  pendingDeleteId = id;
+  pendingDeleteType = type;
+  var names = { product: 'Bidhaa hii', sale: 'Muuzo huu', purchase: 'Manunuzi haya', seller: 'Muuzaji huyu', customer: 'Mteja huyu', expense: 'Matumizi haya', employee: 'Mfanyakazi huyu', user: 'Mtumiaji huyu' };
+  document.getElementById('superDeleteMsg').textContent = 'Una uhakika unataka kufuta ' + (names[type] || 'kipengele hiki') + '? Hatua hii haiwezi kurudishwa.';
+  document.getElementById('superDeleteConfirmModal').style.display = 'flex';
+}
+
+function confirmSuperDelete() {
+  if (!pendingDeleteId || !pendingDeleteType) return;
+  var type = pendingDeleteType;
+  var id = pendingDeleteId;
+  var collectionMap = {
+    product: 'products', sale: 'sales', purchase: 'purchases',
+    seller: 'sellers', customer: 'customers', expense: 'expenses',
+    employee: 'employees', user: 'users'
+  };
+  var col = collectionMap[type];
+  if (col) {
+    db.collection(col).doc(id).delete().then(function() {
+      toast('Imefutwa kwa mafanikio', 's');
+      closeSuperModal('superDeleteConfirmModal');
+      loadAllData();
+      pendingDeleteId = null;
+      pendingDeleteType = null;
+    }).catch(function(err) {
+      toast('Hitilafu: ' + err.message, 'e');
+    });
+  }
+}
+
+function editItem(id, type) {
+  switch (type) {
+    case 'product': openProductModal(id); break;
+    case 'purchase': openPurchaseModal(id); break;
+    case 'seller': openSellerModal(id); break;
+    case 'customer': openCustomerModal(id); break;
+    case 'expense': openExpenseModal(id); break;
+    case 'employee': openEmployeeModal(id); break;
+    case 'user': openUserModal(id); break;
+  }
+}
+
+function viewItem(id, type) {
+  if (type === 'sale') {
+    var s = allSales.find(function(x) { return x.id === id; });
+    if (!s) return;
+    var html = '<table style="width:100%"><tr><td style="color:var(--text2)">Invoice</td><td><strong>' + (s.invoiceNo || '-') + '</strong></td></tr>';
+    html += '<tr><td style="color:var(--text2)">Mteja</td><td>' + (s.customerName || 'Walk-in') + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Tarehe</td><td>' + fmtDate(s.createdAt) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Status ya Deni</td><td>' + (s.isDebt ? (s.debtStatus || 'unpaid') : 'Ameleta pesa') + '</td></tr></table>';
+    if (s.items && s.items.length) {
+      html += '<h4 style="margin:16px 0 8px;font-size:14px">Bidhaa</h4><table style="width:100%"><thead><tr><th>Bidhaa</th><th>Kiasi</th><th>Bei</th><th>Jumla</th></tr></thead><tbody>';
+      for (var i = 0; i < s.items.length; i++) {
+        var it = s.items[i];
+        html += '<tr><td>' + it.name + '</td><td>' + it.qty + '</td><td>TZS ' + fmt(it.price) + '</td><td>TZS ' + fmt(it.total) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+    html += '<div style="text-align:right;margin-top:12px;font-size:20px;font-weight:800;color:var(--success)">JUMUA: TZS ' + fmt(s.total) + '</div>';
+    document.getElementById('saleModalContent').innerHTML = html;
+    openModal('saleModal');
+  }
+}
 
 // ============================================================
 // PRICE CALCULATOR (Standalone Modal)
