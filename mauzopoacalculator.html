@@ -838,6 +838,185 @@ async function getCompressedImage(inputId) {
   if (input && input.files[0]) { const c = await compressImage(input.files[0]); compressedImages[inputId] = c; return c; }
   return null;
 }
+/* ======================================
+   PASSCODE SYSTEM
+   ====================================== */
+function checkPasscodeAndEnter(role) {
+  if (!currentBiz || !currentBiz.passcode) {
+    enterDashboard(role);
+    return;
+  }
+  if (role === 'meneja') {
+    enterDashboard(role);
+    return;
+  }
+  passcodeInput = '';
+  hideAllScreens();
+  document.getElementById('passcodeScreen').classList.remove('hidden');
+  renderPasscodeDots();
+  renderPasscodeNumpad();
+  document.getElementById('passcodeErr').textContent = '';
+}
+
+function renderPasscodeDots() {
+  var dots = document.getElementById('passcodeDots').children;
+  for (var i = 0; i < dots.length; i++) {
+    if (i < passcodeInput.length) dots[i].classList.add('filled');
+    else dots[i].classList.remove('filled');
+  }
+}
+
+function renderPasscodeNumpad() {
+  var pad = document.getElementById('passcodeNumpad');
+  pad.innerHTML = '';
+  for (var i = 1; i <= 9; i++) {
+    var btn = document.createElement('button');
+    btn.className = 'passcode-key';
+    btn.type = 'button';
+    btn.textContent = i;
+    btn.onclick = (function(n) { return function() { passcodeDigit(n); }; })(i);
+    pad.appendChild(btn);
+  }
+  var empty = document.createElement('button');
+  empty.className = 'passcode-key empty';
+  empty.type = 'button';
+  pad.appendChild(empty);
+  var zero = document.createElement('button');
+  zero.className = 'passcode-key';
+  zero.type = 'button';
+  zero.textContent = '0';
+  zero.onclick = function() { passcodeDigit(0); };
+  pad.appendChild(zero);
+  var del = document.createElement('button');
+  del.className = 'passcode-key del';
+  del.type = 'button';
+  del.innerHTML = '<i class="fa-solid fa-delete-left"></i>';
+  del.onclick = passcodeBackspace;
+  pad.appendChild(del);
+}
+
+function passcodeDigit(n) {
+  if (passcodeInput.length >= 6) return;
+  passcodeInput += String(n);
+  renderPasscodeDots();
+  if (passcodeInput.length === 6) {
+    setTimeout(function() { verifyPasscode(); }, 200);
+  }
+}
+
+function passcodeBackspace() {
+  passcodeInput = passcodeInput.slice(0, -1);
+  renderPasscodeDots();
+}
+
+function verifyPasscode() {
+  if (passcodeInput === currentBiz.passcode) {
+    document.getElementById('passcodeErr').textContent = '';
+    enterDashboard(currentRole);
+  } else {
+    document.getElementById('passcodeErr').textContent = 'Passcode si sahihi. Jaribu tena.';
+    passcodeInput = '';
+    renderPasscodeDots();
+  }
+}
+
+function passcodeCancel() {
+  showRoleScreen();
+}
+
+function savePasscode() {
+  var current = document.getElementById('currentPasscode').value;
+  var newPc = document.getElementById('newPasscode').value;
+  var confirm = document.getElementById('confirmPasscode').value;
+  if (currentBiz.passcode && current !== currentBiz.passcode) {
+    toast('Passcode ya sasa si sahihi', 'e');
+    return;
+  }
+  if (!newPc || newPc.length !== 6 || !/^\d{6}$/.test(newPc)) {
+    toast('Passcode lazima iwe nambari 6', 'e');
+    return;
+  }
+  if (newPc !== confirm) {
+    toast('Passcode mpya haifanani', 'e');
+    return;
+  }
+  db.collection('businesses').doc(currentBizId).update({ passcode: newPc });
+  currentBiz.passcode = newPc;
+  document.getElementById('currentPasscode').value = '';
+  document.getElementById('newPasscode').value = '';
+  document.getElementById('confirmPasscode').value = '';
+  toast('Passcode imehifadhiwa', 's');
+}
+
+function removePasscode() {
+  if (!currentBiz.passcode) {
+    toast('Hakuna passcode iliyowekwa', 'w');
+    return;
+  }
+  db.collection('businesses').doc(currentBizId).update({ passcode: firebase.firestore.FieldValue.delete() });
+  currentBiz.passcode = null;
+  toast('Passcode imeondolewa', 's');
+}
+
+/* ======================================
+   SIDEBAR
+   ====================================== */
+function buildSidebar() {
+  var nav = document.getElementById('sbNav');
+  var items = [];
+  var allItems = [
+    { id: 'dashboard', icon: 'fa-gauge-high', lbl: 'MAIN', text: 'Dashboard', roles: ['meneja', 'mfanyakazi', 'kashieri', 'muuzaji'] },
+    { id: 'finance', icon: 'fa-chart-line', lbl: 'MAIN', text: 'Fedha', roles: ['meneja'] },
+    { id: 'pos', icon: 'fa-cash-register', lbl: 'MAIN', text: 'Point of Sale', roles: ['meneja', 'mfanyakazi', 'kashieri', 'muuzaji'] },
+    { id: 'products', icon: 'fa-box-open', lbl: 'MANAGEMENT', text: 'Bidhaa', roles: ['meneja', 'kashieri', 'muuzaji'] },
+    { id: 'sales', icon: 'fa-receipt', lbl: 'MANAGEMENT', text: 'Mauzo', roles: ['meneja', 'mfanyakazi', 'kashieri', 'muuzaji'] },
+    { id: 'purchases', icon: 'fa-truck', lbl: 'MANAGEMENT', text: 'Manunuzi', roles: ['meneja'] },
+    { id: 'sellers', icon: 'fa-handshake', lbl: 'MANAGEMENT', text: 'Wauzaji', roles: ['meneja'] },
+    { id: 'customers', icon: 'fa-users', lbl: 'MANAGEMENT', text: 'Wateja', roles: ['meneja', 'mfanyakazi', 'kashieri', 'muuzaji'] },
+    { id: 'debts', icon: 'fa-hand-holding-dollar', lbl: 'MANAGEMENT', text: 'Madeni', roles: ['meneja'] },
+    { id: 'expenses', icon: 'fa-money-bill-wave', lbl: 'MANAGEMENT', text: 'Matumizi', roles: ['meneja'] },
+    { id: 'employees', icon: 'fa-id-badge', lbl: 'PEOPLE', text: 'Wafanyakazi', roles: ['meneja'] },
+    { id: 'users', icon: 'fa-user-shield', lbl: 'PEOPLE', text: 'Watumiaji', roles: ['meneja'] },
+    { id: 'notifications', icon: 'fa-bell', lbl: 'PEOPLE', text: 'Arifa', roles: ['meneja', 'mfanyakazi', 'kashieri', 'muuzaji'] },
+    { id: 'profile', icon: 'fa-user-gear', lbl: 'PEOPLE', text: 'Profaili', roles: ['meneja', 'mfanyakazi', 'kashieri', 'muuzaji'] }
+  ];
+  for (var i = 0; i < allItems.length; i++) {
+    if (allItems[i].roles.indexOf(currentRole) !== -1) {
+      items.push(allItems[i]);
+    }
+  }
+  var html = '';
+  var lastLbl = '';
+  for (var j = 0; j < items.length; j++) {
+    var it = items[j];
+    if (it.lbl !== lastLbl) {
+      html += '<div class="sb-lbl">' + it.lbl + '</div>';
+      lastLbl = it.lbl;
+    }
+    html += '<div class="ni" data-sec="' + it.id + '" onclick="navTo(\'' + it.id + '\')"><i class="fa-solid ' + it.icon + '"></i><span>' + it.text + '</span></div>';
+  }
+  nav.innerHTML = html;
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sbBd').classList.toggle('show');
+}
+
+function navTo(sec) {
+  var sections = document.querySelectorAll('.section');
+  for (var i = 0; i < sections.length; i++) sections[i].classList.remove('active');
+  var target = document.getElementById('sec-' + sec);
+  if (target) target.classList.add('active');
+  var navItems = document.querySelectorAll('.ni');
+  for (var j = 0; j < navItems.length; j++) {
+    if (navItems[j].getAttribute('data-sec') === sec) navItems[j].classList.add('active');
+    else navItems[j].classList.remove('active');
+  }
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sbBd').classList.remove('show');
+  loadSectionData(sec);
+}
 
 // ============================================================
 // BARCODE & QR GENERATION
