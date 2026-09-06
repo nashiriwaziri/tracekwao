@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sound Heart Mental Clinic - Self Assessment & Admin</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    
+    <!-- PDF Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        :root {
+            --green-dark: #1B5E20;
+            --green-mid: #2E7D32;
+            --green-light: #4CAF50;
+            --green-pale: #E8F5E9;
+            --green-bg: #F1F8E9;
+            --gold: #F9A825;
+            --gold-light: #FFD54F;
+            --gold-pale: #FFF8E1;
+            --white: #FFFFFF;
+            --text-dark: #1A1A2E;
+            --text-mid: #37474F;
+            --text-light: #607D8B;
+            --red: #E53935;
+            --red-bg: #FFEBEE;
+            --orange: #FB8C00;
+            --blue: #1565C0;
+            --border: #C8E6C9;
+            --shadow: 0 4px 24px rgba(27,94,32,0.12);
+            --shadow-lg: 0 8px 40px rgba(27,94,32,0.18);
+            --radius: 16px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: var(--green-bg);
+            color: var(--text-dark);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* === BACKGROUND & ANIMATION === */
+        .bg-decor { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .bg-decor .blob {
+            position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15;
+            animation: blobFloat 12s ease-in-out infinite alternate;
+        }
+        .bg-decor .blob:nth-child(1) { width: 500px; height: 500px; background: var(--green-light); top: -10%; left: -10%; }
+        .bg-decor .blob:nth-child(2) { width: 400px; height: 400px; background: var(--gold); bottom: -10%; right: -10%; animation-delay: -4s; }
+        .bg-decor .blob:nth-child(3) { width: 300px; height: 300px; background: var(--green-mid); top: 50%; left: 60%; animation-delay: -8s; }
+        @keyframes blobFloat {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(40px, -30px) scale(1.15); }
+        }
+
+        /* === LEAVES === */
+        .leaf-particle {
+            position: fixed; z-index: 0; pointer-events: none; opacity: 0;
+            font-size: 18px; color: var(--green-light);
+            animation: leafFall linear infinite;
+        }
+        @keyframes leafFall {
+            0% { opacity: 0; transform: translateY(-20px) rotate(0deg); }
+            10% { opacity: 0.5; }
+            90% { opacity: 0.3; }
+            100% { opacity: 0; transform: translateY(100vh) rotate(360deg); }
+        }
+
+        /* === CONTAINER === */
+        .app-container {
+            position: relative; z-index: 1;
+            max-width: 900px; margin: 0 auto; padding: 20px 16px 80px;
+        }
+
+        /* === HEADER === */
+        .logo-header { text-align: center; padding: 30px 0 20px; }
+        .logo-header img {
+            width: 120px; height: 120px; object-fit: contain;
+            filter: drop-shadow(0 4px 16px rgba(27,94,32,0.2));
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+        @keyframes logoPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+        .logo-header h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.8rem; font-weight: 800; margin-top: 12px;
+            background: linear-gradient(135deg, var(--green-dark), var(--green-mid));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .logo-header h1 span {
+            background: linear-gradient(135deg, var(--gold), #E65100);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .logo-header .subtitle { color: var(--text-light); font-size: 0.9rem; margin-top: 4px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+
+        /* === LANGUAGE TOGGLE === */
+        .lang-toggle { display: flex; justify-content: center; gap: 4px; margin-top: 10px; }
+        .lang-btn {
+            padding: 6px 14px; border: 2px solid var(--border); border-radius: 20px;
+            background: transparent; font-family: 'Nunito', sans-serif;
+            font-weight: 700; font-size: 0.75rem; cursor: pointer;
+            color: var(--text-light); transition: all 0.3s;
+        }
+        .lang-btn.active { background: var(--green-mid); color: var(--white); border-color: var(--green-mid); }
+
+        /* === TEXT UTILS === */
+        .bi { line-height: 1.55; }
+        .bi-sw { display: block; }
+        .bi-en { display: block; font-size: 0.88em; color: var(--text-light); font-style: italic; margin-top: 1px; }
+        .hidden { display: none !important; }
+
+        /* === CARDS === */
+        .card {
+            background: var(--white); border-radius: var(--radius);
+            box-shadow: var(--shadow); border: 1px solid var(--border);
+            padding: 28px 24px; margin-top: 20px;
+            animation: cardIn 0.5s ease-out;
+        }
+        @keyframes cardIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .card-title { font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 800; color: var(--green-dark); margin-bottom: 6px; }
+        .card-desc { color: var(--text-mid); font-size: 0.9rem; line-height: 1.6; margin-bottom: 20px; }
+
+        /* === FORMS & INPUTS === */
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-weight: 700; font-size: 0.85rem; color: var(--text-mid); margin-bottom: 6px; }
+        .form-input {
+            width: 100%; padding: 12px 14px; border: 2px solid var(--border);
+            border-radius: 10px; font-size: 0.95rem; font-family: 'Nunito', sans-serif;
+            color: var(--text-dark); background: var(--green-pale); transition: all 0.3s;
+        }
+        .form-input:focus { outline: none; border-color: var(--green-mid); background: var(--white); box-shadow: 0 0 0 3px rgba(46,125,50,0.1); }
+
+        /* === BUTTONS === */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 12px 24px; border: none; border-radius: 10px; font-size: 0.95rem;
+            font-weight: 700; font-family: 'Nunito', sans-serif; cursor: pointer;
+            transition: all 0.3s; text-decoration: none;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--green-mid), var(--green-dark)); color: var(--white); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(27,94,32,0.3); }
+        .btn-gold { background: linear-gradient(135deg, var(--gold), #E65100); color: var(--white); }
+        .btn-danger { background: var(--red); color: var(--white); }
+        .btn-outline { background: transparent; color: var(--green-mid); border: 2px solid var(--green-mid); }
+        .btn-full { width: 100%; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
+
+        /* === ASSESSMENT UI === */
+        .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .choice-card {
+            border: 2px solid var(--border); border-radius: 12px; padding: 20px; text-align: center;
+            cursor: pointer; transition: all 0.3s; background: var(--green-pale);
+        }
+        .choice-card:hover { border-color: var(--green-mid); transform: translateY(-3px); }
+        .choice-card.selected { border-color: var(--green-mid); background: var(--white); box-shadow: 0 0 0 3px rgba(46,125,50,0.1); }
+        .choice-card h3 { font-size: 1.1rem; margin-bottom: 4px; }
+
+        /* Progress Bar */
+        .progress-wrap { margin-bottom: 20px; }
+        .progress-info { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-mid); }
+        .progress-bar { width: 100%; height: 8px; background: var(--green-pale); border-radius: 8px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--green-light), var(--green-dark)); transition: width 0.4s ease; }
+
+        /* Questions */
+        .question-block { margin-bottom: 24px; animation: qIn 0.4s ease; }
+        @keyframes qIn { from { opacity: 0; transform: translateX(15px); } to { opacity: 1; transform: translateX(0); } }
+        .question-num {
+            display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+            border-radius: 50%; background: var(--green-mid); color: var(--white); font-weight: 800; font-size: 0.8rem; margin-right: 10px;
+        }
+        .options-group { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-left: 38px; }
+        .option-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 2px solid var(--border);
+            border-radius: 10px; cursor: pointer; transition: all 0.2s; background: var(--white);
+        }
+        .option-item:hover { background: var(--green-pale); }
+        .option-item.selected { border-color: var(--green-mid); background: var(--green-pale); box-shadow: 0 0 0 2px rgba(46,125,50,0.1); }
+        .option-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #B0BEC5; flex-shrink: 0; }
+        .option-item.selected .option-radio { border-color: var(--green-mid); background: var(--green-mid); }
+
+        /* === RESULTS STYLING === */
+        .result-header { text-align: center; padding: 20px 0; }
+        .result-header .user-info {
+            background: linear-gradient(135deg, var(--green-pale), var(--gold-pale));
+            border-radius: 12px; padding: 16px; display: inline-block; border: 2px solid var(--border);
+        }
+        .score-card { border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid transparent; }
+        .score-card.phq-card { background: #E3F2FD; border-color: #90CAF9; }
+        .score-card.gad-card { background: var(--gold-pale); border-color: #FFE082; }
+        .score-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .score-circle {
+            width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; font-weight: 800; color: var(--white); box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+        }
+        .phq-card .score-circle { background: linear-gradient(135deg, #1565C0, #0D47A1); }
+        .gad-card .score-circle { background: linear-gradient(135deg, var(--gold), #E65100); }
+        .severity-badge { display: inline-block; padding: 4px 12px; border-radius: 15px; font-weight: 700; font-size: 0.85rem; }
+        
+        /* Badge Colors */
+        .severity-minimal { background: #C8E6C9; color: #1B5E20; }
+        .severity-mild { background: #FFF9C4; color: #F57F17; }
+        .severity-moderate { background: #FFE0B2; color: #E65100; }
+        .severity-modsevere { background: #FFCCBC; color: #BF360C; }
+        .severity-severe { background: #FFCDD2; color: #B71C1C; }
+
+        .recommendation-box {
+            background: var(--white); border-radius: 10px; padding: 16px; border-left: 4px solid var(--green-mid); margin-top: 12px;
+        }
+        .recommendation-box h4 { font-size: 0.9rem; font-weight: 800; color: var(--green-dark); margin-bottom: 8px; }
+        .recommendation-box ul { list-style: none; padding: 0; }
+        .recommendation-box li {
+            font-size: 0.85rem; color: var(--text-mid); margin-bottom: 6px; padding-left: 20px; position: relative; line-height: 1.4;
+        }
+        .recommendation-box li::before {
+            content: '✔'; position: absolute; left: 0; color: var(--green-mid); font-size: 0.7rem; top: 3px;
+        }
+
+        /* === TOAST NOTIFICATION === */
+        .toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: var(--text-dark); color: var(--white); padding: 12px 24px;
+            border-radius: 50px; font-weight: 700; font-size: 0.9rem; z-index: 9999;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; align-items: center; gap: 10px; max-width: 90vw; text-align: center;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+        .toast.error { background: var(--red); }
+        .toast.success { background: var(--green-mid); }
+
+        /* === ADMIN DASHBOARD === */
+        .admin-section { display: none; }
+        .admin-dashboard-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+            border-bottom: 2px solid var(--border); padding-bottom: 15px;
+        }
+        .admin-table-container { overflow-x: auto; background: var(--white); border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: var(--green-pale); color: var(--green-dark); font-weight: 800; font-size: 0.85rem; }
+        td { font-size: 0.9rem; color: var(--text-mid); }
+        .action-btns { display: flex; gap: 8px; }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
+
+        /* === MODALS === */
+        .modal {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: var(--white); padding: 30px; border-radius: var(--radius);
+            width: 90%; max-width: 400px; position: relative; animation: modalPop 0.3s ease;
+            text-align: center;
+        }
+        .modal-content.large { max-width: 800px; max-height: 90vh; overflow-y: auto; text-align: left; }
+        @keyframes modalPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .close-modal { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: var(--text-light); }
+
+        /* === FOOTER === */
+        .footer { text-align: center; padding: 20px 0; font-size: 0.8rem; color: var(--text-light); }
+        .footer a { color: var(--green-dark); text-decoration: none; font-weight: 700; cursor: pointer; }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .choice-grid { grid-template-columns: 1fr; }
+            .admin-dashboard-header { flex-direction: column; gap: 10px; align-items: flex-start; }
+        }
+
+        /* Print */
+        @media print {
+            .bg-decor, .leaf-particle, .toast, .admin-controls, .actions-row, .lang-toggle, .footer, .modal, #admin-login-trigger { display: none !important; }
+            .app-container { max-width: 100%; padding: 0; }
+            .card { box-shadow: none; border: 1px solid #ccc; }
+            body { background: white; -webkit-print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ANIMATED BACKGROUND -->
+<div class="bg-decor">
+    <div class="blob"></div>
+    <div class="blob"></div>
+    <div class="blob"></div>
+</div>
+
+<!-- TOAST NOTIFICATION -->
+<div class="toast" id="toast"><i class="fas fa-info-circle"></i><span id="toast-msg"></span></div>
+
+<div class="app-container">
+    <!-- HEADER -->
+    <header class="logo-header">
+        <img src="https://z-cdn-media.chatglm.cn/files/9dffb918-3cbf-4a95-8ec7-d8830a64552b.png?auth_key=1882846998-faa411c46af645329b50f298bbc00617-0-d67af14997606d00b12da835f063877f" alt="Logo">
+        <h1>SOUND <span>Heart</span> MENTAL CLINIC</h1>
+        <p class="subtitle">Self Assessment Tool / Zana ya Kujifanyia Tathmini Binafsi</p>
+        <div class="lang-toggle">
+            <button class="lang-btn active" onclick="setLang('sw',this)">Kiswahili</button>
+            <button class="lang-btn" onclick="setLang('en',this)">English</button>
+            <button class="lang-btn" onclick="setLang('both',this)">Both</button>
+        </div>
+    </header>
+
+    <!-- ==================== USER FLOW SECTIONS ==================== -->
+
+    <!-- SIGN UP -->
+    <section class="page-section active" id="page-signup">
+        <div class="card">
+            <h2 class="card-title"><span data-sw="Usajili" data-en="Sign Up">Usajili</span></h2>
+            <p class="card-desc bi">
+                <span class="bi-sw" data-sw="Tafadhali jisajili kwanza. Maelezo yako yatatumika kwenye ripoti.">Tafadhali jisajili kwanza. Maelezo yako yatatumika kwenye ripoti.</span>
+                <span class="bi-en" data-en="Please register first. Your information will be used in the report.">Please register first. Your information will be used in the report.</span>
+            </p>
+            <div class="form-group">
+                <label><span data-sw="Jina Kamili" data-en="Full Name">Jina Kamili</span></label>
+                <input type="text" class="form-input" id="input-name" placeholder="Enter Name...">
+            </div>
+            <div class="form-group">
+                <label><span data-sw="Umri" data-en="Age">Umri</span></label>
+                <input type="number" class="form-input" id="input-age" placeholder="Age" min="5" max="120">
+            </div>
+            <div class="form-group">
+                <label><span data-sw="Jinsia" data-en="Gender">Jinsia</span></label>
+                <select class="form-input" id="input-gender">
+                    <option value="">-- Select --</option>
+                    <option value="Mwanaume">Mwanaume / Male</option>
+                    <option value="Mwanamke">Mwanamke / Female</option>
+                    <option value="Other">Nyingine / Other</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="goToChoice()">
+                <i class="fas fa-arrow-right"></i> <span data-sw="Endelea" data-en="Continue">Endelea</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- CHOICE -->
+    <section class="page-section" id="page-choice">
+        <div class="card">
+            <h2 class="card-title"><span data-sw="Chagua Dodoso" data-en="Choose Questionnaire">Chagua Dodoso</span></h2>
+            <div class="choice-grid">
+                <div class="choice-card phq" onclick="toggleChoice('phq9')" id="choice-phq9">
+                    <h3>PHQ-9</h3>
+                    <p><span data-sw="Kuzimia" data-en="Depression">Kuzimia</span></p>
+                </div>
+                <div class="choice-card gad" onclick="toggleChoice('gad7')" id="choice-gad7">
+                    <h3>GAD-7</h3>
+                    <p><span data-sw="Wasiwasi" data-en="Anxiety">Wasiwasi</span></p>
+                </div>
+            </div>
+            <div class="choice-card both" onclick="toggleChoice('both')" id="choice-both" style="margin-bottom:20px;">
+                <h3><span data-sw="Yote Mbili" data-en="Both">Yote Mbili</span> (PHQ-9 + GAD-7)</h3>
+            </div>
+            <div style="display:flex;gap:12px;">
+                <button class="btn btn-outline" onclick="showPage('page-signup')" style="flex:1;"><span data-sw="Nyuma" data-en="Back">Nyuma</span></button>
+                <button class="btn btn-primary" onclick="startAssessment()" style="flex:2;"><span data-sw="Anza" data-en="Start">Anza</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- PHQ-9 -->
+    <section class="page-section" id="page-phq9">
+        <div class="card">
+            <div style="margin-bottom:10px; color:var(--blue); font-weight:800;"><span data-sw="Dodoso la Kuzimia (PHQ-9)" data-en="Depression (PHQ-9)">Dodoso la Kuzimia (PHQ-9)</span></div>
+            <p class="card-desc bi" style="font-size:0.8rem;">
+                <span class="bi-sw" data-sw="Kwa wiki 2 zilizopita, mara ngapi ulihisi hivi?">Kwa wiki 2 zilizopita, mara ngapi ulihisi hivi?</span>
+                <span class="bi-en" data-en="Over the last 2 weeks, how often have you been bothered by the following?">Over the last 2 weeks, how often have you been bothered by the following?</span>
+            </p>
+            <div class="progress-wrap">
+                <div class="progress-info"><span class="label" id="phq-progress-label">Swali 1 ya 9</span><span class="count" id="phq-progress-count">0/9</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="phq-progress-fill" style="width:0%"></div></div>
+            </div>
+            <div id="phq-questions-container"></div>
+            <div style="display:flex;gap:12px;margin-top:20px;">
+                <button class="btn btn-outline" id="phq-prev-btn" onclick="phqPrev()" style="flex:1;display:none;"><span data-sw="Nyuma" data-en="Back">Nyuma</span></button>
+                <button class="btn btn-primary" id="phq-next-btn" onclick="phqNext()" style="flex:2;" disabled><span data-sw="Mbele" data-en="Next">Mbele</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- GAD-7 -->
+    <section class="page-section" id="page-gad7">
+        <div class="card">
+            <div style="margin-bottom:10px; color:#E65100; font-weight:800;"><span data-sw="Dodoso la Wasiwasi (GAD-7)" data-en="Anxiety (GAD-7)">Dodoso la Wasiwasi (GAD-7)</span></div>
+            <p class="card-desc bi" style="font-size:0.8rem;">
+                <span class="bi-sw" data-sw="Kwa wiki 2 zilizopita, mara ngapi ulihisi hivi?">Kwa wiki 2 zilizopita, mara ngapi ulihisi hivi?</span>
+                <span class="bi-en" data-en="Over the last 2 weeks, how often have you been bothered by the following?">Over the last 2 weeks, how often have you been bothered by the following?</span>
+            </p>
+            <div class="progress-wrap">
+                <div class="progress-info"><span class="label" id="gad-progress-label">Swali 1 ya 7</span><span class="count" id="gad-progress-count">0/7</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="gad-progress-fill" style="width:0%"></div></div>
+            </div>
+            <div id="gad-questions-container"></div>
+            <div style="display:flex;gap:12px;margin-top:20px;">
+                <button class="btn btn-outline" id="gad-prev-btn" onclick="gadPrev()" style="flex:1;display:none;"><span data-sw="Nyuma" data-en="Back">Nyuma</span></button>
+                <button class="btn btn-gold" id="gad-next-btn" onclick="gadNext()" style="flex:2;" disabled><span data-sw="Mbele" data-en="Next">Mbele</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="page-section" id="page-results">
+        <div id="results-container"></div>
+        <div class="card" style="margin-top:20px;">
+            <button class="btn btn-outline btn-full" onclick="location.reload()">
+                <i class="fas fa-home"></i> <span data-sw="Rudi Nyumbani" data-en="Back to Home">Rudi Nyumbani</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ==================== ADMIN DASHBOARD ==================== -->
+    <section class="page-section admin-section" id="page-admin">
+        <div class="card">
+            <div class="admin-dashboard-header">
+                <div>
+                    <h2 class="card-title">Super Administrator Dashboard</h2>
+                    <p class="card-desc">Taarifa za Watumiaji na Orodha ya Ripoti</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="fetchDataFromFirestore()"><i class="fas fa-sync"></i> Refresh Data</button>
+                    <button class="btn btn-danger" onclick="logoutAdmin()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                </div>
+            </div>
+            
+            <div class="admin-table-container">
+                <table id="users-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Name</th>
+                            <th>Age</th>
+                            <th>Gender</th>
+                            <th>PHQ-9</th>
+                            <th>GAD-7</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body">
+                        <!-- Data will be loaded here -->
+                        <tr><td colspan="7" style="text-align:center;">Loading data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2025 Sound Heart Mental Clinic. <span data-sw="Haki zote zimehifadhiwa." data-en="All rights reserved.">Haki zote zimehifadhiwa.</span></p>
+        <div style="margin-top:10px;">
+            <span id="admin-login-trigger" onclick="openAdminLogin()" style="font-size:0.75rem; opacity:0.6; cursor:pointer;">[ Super Admin Login ]</span>
+        </div>
+    </footer>
+</div>
+
+<!-- ==================== MODALS ==================== -->
+
+<!-- Admin Login Modal -->
+<div class="modal" id="modal-admin-login">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeModal('modal-admin-login')">&times;</span>
+        <h3 style="margin-bottom:15px; color:var(--green-dark);">Super Admin Access</h3>
+        <p style="margin-bottom:15px; font-size:0.9rem;">Enter Passcode to access user reports.</p>
+        <input type="password" id="admin-pass-input" class="form-input" placeholder="Enter Passcode" style="text-align:center; font-size:1.2rem; letter-spacing:2px; margin-bottom:15px;">
+        <button class="btn btn-primary btn-full" onclick="checkAdminPasscode()">LOGIN</button>
+    </div>
+</div>
+
+<!-- Report View Modal -->
+<div class="modal" id="modal-report-view">
+    <div class="modal-content large">
+        <span class="close-modal" onclick="closeModal('modal-report-view')">&times;</span>
+        <div class="admin-controls" style="display:flex; justify-content:flex-end; gap:10px; margin-bottom:15px;">
+            <button class="btn btn-primary" onclick="printCurrentReport()"><i class="fas fa-download"></i> Save PDF</button>
+        </div>
+        <div id="report-view-content">
+            <!-- Report content goes here -->
+        </div>
+    </div>
+</div>
+
+<!-- JAVASCRIPT LOGIC -->
+<script type="module">
+    // ================= FIREBASE INITIALIZATION =================
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBrtkRulxflRFp2ZfcnUuGHcmo57tkcRNI",
+        authDomain: "ncrs-aeb43.firebaseapp.com",
+        projectId: "ncrs-aeb43",
+        storageBucket: "ncrs-aeb43.firebasestorage.app",
+        messagingSenderId: "786434442929",
+        appId: "1:786434442929:web:3a5aa4347d8ff8a54b4490",
+        measurementId: "G-ZYB71RY8J5"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Expose DB functions to window for inline HTML handlers
+    window.saveAssessmentToFirestore = async (data) => {
+        try {
+            data.createdAt = Timestamp.now();
+            await addDoc(collection(db, "assessments"), data);
+            console.log("Document successfully written!");
+        } catch (e) {
+            console.error("Error adding document: ", e);
+            window.showToast("Error saving data. Please check internet connection.", "Kuna tatizo la kuhifadhi data. Angalia mtandao.");
+        }
+    };
+
+    window.fetchDataFromFirestore = async () => {
+        const tbody = document.getElementById('users-table-body');
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading...</td></tr>';
+        
+        try {
+            const q = query(collection(db, "assessments"), orderBy("createdAt", "desc"));
+            const querySnapshot = await getDocs(q);
+            
+            tbody.innerHTML = '';
+            if (querySnapshot.empty) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>';
+                return;
+            }
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const date = data.createdAt ? data.createdAt.toDate().toLocaleDateString() : 'Unknown';
+                const phqScore = data.phqAnswers ? data.phqAnswers.reduce((a, b) => a + b, 0) : '-';
+                const gadScore = data.gadAnswers ? data.gadAnswers.reduce((a, b) => a + b, 0) : '-';
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${date}</td>
+                    <td>${data.name || 'Unknown'}</td>
+                    <td>${data.age || '-'}</td>
+                    <td>${data.gender || '-'}</td>
+                    <td><span style="font-weight:bold; color:${phqScore > 14 ? 'red' : 'inherit'}">${phqScore}</span></td>
+                    <td><span style="font-weight:bold; color:${gadScore > 14 ? 'red' : 'inherit'}">${gadScore}</span></td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="btn btn-primary btn-sm" onclick="window.viewReport('${doc.id}')"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="window.deleteReport('${doc.id}')"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+                
+                // Store data globally for viewing
+                if(!window.adminDataCache) window.adminDataCache = {};
+                window.adminDataCache[doc.id] = data;
+            });
+        } catch (e) {
+            console.error("Error fetching data: ", e);
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:red;">Error loading data.</td></tr>';
+        }
+    };
+
+    window.deleteReport = async (id) => {
+        if(confirm("Are you sure you want to delete this report permanently?")) {
+            try {
+                await deleteDoc(doc(db, "assessments", id));
+                window.showToast("Report deleted.", "Ripoti imefutwa.");
+                window.fetchDataFromFirestore();
+            } catch (e) {
+                console.error("Error deleting: ", e);
+                window.showToast("Error deleting.", "Tatizo la kufuta.");
+            }
+        }
+    };
+
+    // ================= STATE & CONSTANTS =================
+    window.currentLang = 'both';
+    window.userData = { name: '', age: '', gender: '' };
+    window.selectedAssessments = [];
+    window.phqAnswers = new Array(9).fill(null);
+    window.gadAnswers = new Array(7).fill(null);
+    window.phqCurrentQ = 0;
+    window.gadCurrentQ = 0;
+
+    const PASSCODE = "WAZIRI2015";
+    let isAdminLoggedIn = false;
+
+    // ================= DATA =================
+    const phq9Questions = [
+        ["Kupungua kwa shauku au furaha", "Little interest or pleasure"],
+        ["Kuhisi kuwa na huzuni, kufedheha, au kutokuwa na matumaini", "Feeling down, depressed, or hopeless"],
+        ["Matatizo ya kulala", "Trouble falling/staying asleep"],
+        ["Kuhisi uchovu", "Feeling tired or having little energy"],
+        ["Kupungua kwa hamu ya kula", "Poor appetite or overeating"],
+        ["Kujisikia vibaya kuhusu mwenyewe", "Feeling bad about yourself"],
+        ["Matatizo ya kujilenga", "Trouble concentrating"],
+        ["Kusonga polepole au kukaa kimya sana", "Moving slowly or being restless"],
+        ["Mawazo ya kujidhuru", "Thoughts of hurting yourself"]
+    ];
+    const gad7Questions = [
+        ["Kuhisi na wasiwasi, fujo", "Nervousness, anxiety, or on edge"],
+        ["Kutoweza kuzuili wasiwasi", "Not being able to stop worrying"],
+        ["Kuhisi wasiwasi kupita kiasi", "Worrying too much"],
+        ["Matatizo ya kupumua", "Trouble relaxing"],
+        ["Kuhisi kuwa na msisimko mkubwa", "Being so restless it is hard to sit still"],
+        ["Kuhisi hasira kwa urahisi", "Becoming easily annoyed"],
+        ["Kuhisi kwa hofu kitu cha kutafa", "Feeling afraid as if something awful might happen"]
+    ];
+    const optionLabels = [
+        ["Kamwe", "Not at all"],
+        ["Siku chache", "Several days"],
+        ["Zaidi ya nusu ya siku", "More than half the days"],
+        ["Karibu kila siku", "Nearly every day"]
+    ];
+
+    // ================= UI HELPERS =================
+    window.setLang = (lang, btn) => {
+        window.currentLang = lang;
+        document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        document.querySelectorAll('[data-sw]').forEach(el => {
+            const sw = el.getAttribute('data-sw');
+            const en = el.getAttribute('data-en');
+            if (lang === 'sw') el.textContent = sw;
+            else if (lang === 'en') el.textContent = en || sw;
+            else el.textContent = sw; // Default to SW in mixed mode if no specific logic
+        });
+        document.querySelectorAll('.bi-en, .q-en').forEach(el => {
+            el.style.display = (lang === 'both' || lang === 'en') ? 'block' : 'none';
+        });
+        // Re-render active question
+        if(document.getElementById('page-phq9').classList.contains('active')) renderPhqQuestion();
+        if(document.getElementById('page-gad7').classList.contains('active')) renderGadQuestion();
+        if(document.getElementById('page-results').classList.contains('active')) showResults();
+    };
+
+    window.showPage = (id) => {
+        document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        window.scrollTo(0,0);
+    };
+
+    window.showToast = (msgSw, msgEn, type = 'normal') => {
+        const toast = document.getElementById('toast');
+        const msgEl = document.getElementById('toast-msg');
+        
+        // Reset classes
+        toast.className = 'toast'; 
+        if(type === 'error') toast.classList.add('error');
+        if(type === 'success') toast.classList.add('success');
+
+        if (window.currentLang === 'en') msgEl.innerHTML = msgEn;
+        else if (window.currentLang === 'both') msgEl.innerHTML = `${msgSw} <span class="bi-en">${msgEn}</span>`;
+        else msgEl.innerHTML = msgSw;
+
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    };
+
+    window.closeModal = (id) => document.getElementById(id).style.display = 'none';
+
+    // ================= ADMIN LOGIC =================
+    window.openAdminLogin = () => {
+        document.getElementById('modal-admin-login').style.display = 'flex';
+        document.getElementById('admin-pass-input').value = '';
+    };
+
+    window.checkAdminPasscode = () => {
+        const input = document.getElementById('admin-pass-input').value;
+        if (input === PASSCODE) {
+            isAdminLoggedIn = true;
+            window.closeModal('modal-admin-login');
+            window.showPage('page-admin');
+            window.fetchDataFromFirestore();
+        } else {
+            // RED NOTIFICATION AS REQUESTED
+            window.showToast("ASK SUPER ADMINISTRATORS PERMISSIONS", "ASK SUPER ADMINISTRATORS PERMISSIONS", 'error');
+            document.getElementById('admin-pass-input').value = '';
+        }
+    };
+
+    window.logoutAdmin = () => {
+        isAdminLoggedIn = false;
+        window.showPage('page-signup');
+        window.location.reload(); // Refresh to clear state
+    };
+
+    window.viewReport = (id) => {
+        const data = window.adminDataCache[id];
+        if(!data) return;
+        
+        // Render detailed report inside the modal
+        // We temporarily override global userData to use the render functions
+        const originalUserData = {...window.userData};
+        const originalPhq = [...window.phqAnswers];
+        const originalGad = [...window.gadAnswers];
+        
+        window.userData = data;
+        window.phqAnswers = data.phqAnswers || new Array(9).fill(0);
+        window.gadAnswers = data.gadAnswers || new Array(7).fill(0);
+        
+        // Render to the modal content div
+        const container = document.getElementById('report-view-content');
+        container.innerHTML = ''; // Clear
+        container.innerHTML = generateResultHTML(); // Use helper to get string
+        
+        document.getElementById('modal-report-view').style.display = 'flex';
+
+        // Restore global state (though strictly not necessary if we just view)
+        window.userData = originalUserData;
+        window.phqAnswers = originalPhq;
+        window.gadAnswers = originalGad;
+    };
+
+    window.printCurrentReport = () => {
+        const element = document.getElementById('report-view-content');
+        const opt = {
+            margin: 0.5,
+            filename: `report_${new Date().getTime()}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    };
+
+    // ================= APP LOGIC =================
+    window.goToChoice = () => {
+        const name = document.getElementById('input-name').value.trim();
+        const age = document.getElementById('input-age').value.trim();
+        const gender = document.getElementById('input-gender').value;
+        if (!name || !age || !gender) {
+            window.showToast("Jaza sehemu zote.", "Please fill all fields.");
+            return;
+        }
+        window.userData = { name, age, gender };
+        window.showPage('page-choice');
+    };
+
+    window.toggleChoice = (type) => {
+        document.querySelectorAll('.choice-card').forEach(c => c.classList.remove('selected'));
+        if (type === 'both') {
+            window.selectedAssessments = ['phq9', 'gad7'];
+            document.getElementById('choice-both').classList.add('selected');
+        } else if (type === 'phq9') {
+            window.selectedAssessments = window.selectedAssessments.includes('phq9') ? [] : ['phq9'];
+        } else if (type === 'gad7') {
+            window.selectedAssessments = window.selectedAssessments.includes('gad7') ? [] : ['gad7'];
+        }
+        if (window.selectedAssessments.includes('phq9')) document.getElementById('choice-phq9').classList.add('selected');
+        if (window.selectedAssessments.includes('gad7')) document.getElementById('choice-gad7').classList.add('selected');
+    };
+
+    window.startAssessment = () => {
+        if (window.selectedAssessments.length === 0) {
+            window.showToast("Chagua angalau mtihani mmoja.", "Select at least one test.");
+            return;
+        }
+        window.phqAnswers = new Array(9).fill(null);
+        window.gadAnswers = new Array(7).fill(null);
+        window.phqCurrentQ = 0;
+        window.gadCurrentQ = 0;
+        
+        if (window.selectedAssessments.includes('phq9')) {
+            renderPhqQuestion();
+            window.showPage('page-phq9');
+        } else {
+            renderGadQuestion();
+            window.showPage('page-gad7');
+        }
+    };
+
+    // Helper to render questions
+    function buildQuestionHTML(qData, idx, answers, total, onClickName) {
+        const isEn = window.currentLang === 'en';
+        const qText = isEn ? qData[1] : qData[0];
+        
+        let html = `<div class="question-block">
+            <div class="question-text"><span class="question-num">${idx+1}</span><span>${qText}
+            ${window.currentLang === 'both' ? `<span class="bi-en">${qData[1]}</span>` : ''}
+            </span></div>
+            <div class="options-group">`;
+        
+        optionLabels.forEach((opt, score) => {
+            const optText = isEn ? opt[1] : opt[0];
+            const isSelected = answers[idx] === score ? 'selected' : '';
+            html += `<div class="option-item ${isSelected}" onclick="${onClickName}(${idx}, ${score})">
+                <div class="option-radio"></div>
+                <span>${optText}</span>
+            </div>`;
+        });
+        html += `</div></div>`;
+        return html;
+    }
+
+    // PHQ Logic
+    window.renderPhqQuestion = () => {
+        const idx = window.phqCurrentQ;
+        const container = document.getElementById('phq-questions-container');
+        const answered = window.phqAnswers.filter(a => a !== null).length;
+        
+        document.getElementById('phq-progress-label').textContent = `Question ${idx+1} of 9`;
+        document.getElementById('phq-progress-count').textContent = `${answered}/9`;
+        document.getElementById('phq-progress-fill').style.width = `${(answered/9)*100}%`;
+        
+        container.innerHTML = buildQuestionHTML(phq9Questions[idx], idx, window.phqAnswers, 9, 'selectPhq');
+        
+        document.getElementById('phq-prev-btn').style.display = idx > 0 ? 'block' : 'none';
+        const nextBtn = document.getElementById('phq-next-btn');
+        nextBtn.innerHTML = idx === 8 ? (window.currentLang === 'en' ? 'Finish' : 'Maliza') : (window.currentLang === 'en' ? 'Next' : 'Mbele');
+        nextBtn.disabled = window.phqAnswers[idx] === null;
+    };
+
+    window.selectPhq = (idx, score) => { window.phqAnswers[idx] = score; window.renderPhqQuestion(); };
+    window.phqNext = () => {
+        if(window.phqAnswers[window.phqCurrentQ] === null) return;
+        if(window.phqCurrentQ < 8) { window.phqCurrentQ++; window.renderPhqQuestion(); }
+        else {
+            if(window.selectedAssessments.includes('gad7')) { renderGadQuestion(); window.showPage('page-gad7'); }
+            else { finishAndShowResults(); }
+        }
+    };
+    window.phqPrev = () => { if(window.phqCurrentQ > 0) { window.phqCurrentQ--; window.renderPhqQuestion(); } };
+
+    // GAD Logic
+    window.renderGadQuestion = () => {
+        const idx = window.gadCurrentQ;
+        const container = document.getElementById('gad-questions-container');
+        const answered = window.gadAnswers.filter(a => a !== null).length;
+        
+        document.getElementById('gad-progress-label').textContent = `Question ${idx+1} of 7`;
+        document.getElementById('gad-progress-count').textContent = `${answered}/7`;
+        document.getElementById('gad-progress-fill').style.width = `${(answered/7)*100}%`;
+        
+        container.innerHTML = buildQuestionHTML(gad7Questions[idx], idx, window.gadAnswers, 7, 'selectGad');
+        
+        document.getElementById('gad-prev-btn').style.display = idx > 0 ? 'block' : 'none';
+        const nextBtn = document.getElementById('gad-next-btn');
+        nextBtn.innerHTML = idx === 6 ? (window.currentLang === 'en' ? 'Finish' : 'Maliza') : (window.currentLang === 'en' ? 'Next' : 'Mbele');
+        nextBtn.disabled = window.gadAnswers[idx] === null;
+    };
+
+    window.selectGad = (idx, score) => { window.gadAnswers[idx] = score; window.renderGadQuestion(); };
+    window.gadNext = () => {
+        if(window.gadAnswers[window.gadCurrentQ] === null) return;
+        if(window.gadCurrentQ < 6) { window.gadCurrentQ++; window.renderGadQuestion(); }
+        else { finishAndShowResults(); }
+    };
+    window.gadPrev = () => { if(window.gadCurrentQ > 0) { window.gadCurrentQ--; window.renderGadQuestion(); } };
+
+    // ================= RESULTS & SAVING =================
+    function getSeverity(score, type) {
+        if(type === 'phq') {
+            if(score <= 4) return { sw: 'Kutoona Dalili', en: 'Minimal', cls: 'severity-minimal' };
+            if(score <= 9) return { sw: 'Ugonjwa Mdogo', en: 'Mild', cls: 'severity-mild' };
+            if(score <= 14) return { sw: 'Ugonjwa wa Kati', en: 'Moderate', cls: 'severity-moderate' };
+            if(score <= 19) return { sw: 'Ugonjwa Mkubwa Zaidi', en: 'Mod. Severe', cls: 'severity-modsevere' };
+            return { sw: 'Ugonjwa Mkubwa', en: 'Severe', cls: 'severity-severe' };
+        } else {
+            if(score <= 4) return { sw: 'Kutoona Dalili', en: 'Minimal', cls: 'severity-minimal' };
+            if(score <= 9) return { sw: 'Wasiwasi Mdogo', en: 'Mild', cls: 'severity-mild' };
+            if(score <= 14) return { sw: 'Wasiwasi wa Kati', en: 'Moderate', cls: 'severity-moderate' };
+            return { sw: 'Wasiwasi Mkubwa', en: 'Severe', cls: 'severity-severe' };
+        }
+    }
+
+    // Helper to generate HTML string for results (used for both display and PDF)
+    function generateResultHTML() {
+        const phqTotal = window.phqAnswers.reduce((a,b)=>a+b, 0);
+        const gadTotal = window.gadAnswers.reduce((a,b)=>a+b, 0);
+        const phqSev = getSeverity(phqTotal, 'phq');
+        const gadSev = getSeverity(gadTotal, 'gad');
+
+        let html = `<div class="result-header">
+            <div class="user-info">
+                <h3>${window.userData.name}</h3>
+                <p>${window.userData.age} Years | ${window.userData.gender}</p>
+            </div>
+        </div>`;
+
+        if(window.selectedAssessments.includes('phq9')) {
+            html += `<div class="score-card phq-card">
+                <div class="score-top">
+                    <h3>PHQ-9 Depression</h3>
+                    <div class="score-circle">${phqTotal}</div>
+                </div>
+                <p style="margin-bottom:10px;">Severity: <span class="severity-badge ${phqSev.cls}">${window.currentLang === 'en' ? phqSev.en : phqSev.sw}</span></p>
+                <div class="recommendation-box">
+                    <h4>Recommendations / Mapendekezo:</h4>
+                    <ul>
+                        ${getRecs(phqTotal, 'phq')}
+                    </ul>
+                </div>
+            </div>`;
+        }
+
+        if(window.selectedAssessments.includes('gad7')) {
+            html += `<div class="score-card gad-card">
+                <div class="score-top">
+                    <h3>GAD-7 Anxiety</h3>
+                    <div class="score-circle">${gadTotal}</div>
+                </div>
+                <p style="margin-bottom:10px;">Severity: <span class="severity-badge ${gadSev.cls}">${window.currentLang === 'en' ? gadSev.en : gadSev.sw}</span></p>
+                <div class="recommendation-box">
+                    <h4>Recommendations / Mapendekezo:</h4>
+                    <ul>
+                        ${getRecs(gadTotal, 'gad')}
+                    </ul>
+                </div>
+            </div>`;
+        }
+        
+        html += `<div style="margin-top:20px; font-size:0.8rem; color:#777; text-align:center; border-top:1px solid #eee; padding-top:10px;">
+            Assessment Date: ${new Date().toLocaleString()}
+        </div>`;
+
+        return html;
+    }
+
+    function getRecs(score, type) {
+        // Simple recommendation logic
+        if(score <= 4) return `<li>Continue healthy lifestyle / Endelea na maisha salama.</li><li>Monitor for changes / Fuatilia mabadiliko.</li>`;
+        if(score <= 9) return `<li>Self-care exercises / Mazoezi ya kujitunza.</li><li>Consider talking to a friend / Pata mazungumzo na rafiki.</li>`;
+        if(score <= 14) return `<li>Consult a counselor / Pendekeza kuonona na mshauri.</li><li>Stress management techniques / Mbinu za kupunguza msongo.</li>`;
+        return `<li>Seek professional help immediately / Pata msaada wa kitaalamu haraka.</li><li>Contact clinic / Wasiliana na kliniki.</li>`;
+    }
+
+    function finishAndShowResults() {
+        window.showPage('page-results');
+        document.getElementById('results-container').innerHTML = generateResultHTML();
+        
+        // Save to Firestore
+        const dataToSave = {
+            ...window.userData,
+            phqAnswers: window.phqAnswers,
+            gadAnswers: window.gadAnswers,
+            assessments: window.selectedAssessments
+        };
+        window.saveAssessmentToFirestore(dataToSave);
+    }
+    
+    // Make this available globally for the viewReport function inside module
+    window.showResults = () => {
+         document.getElementById('results-container').innerHTML = generateResultHTML();
+    };
+
+    // Initialize Leaves
+    (function createLeaves() {
+        for (let i = 0; i < 10; i++) {
+            const leaf = document.createElement('div');
+            leaf.className = 'leaf-particle';
+            leaf.innerHTML = '<i class="fas fa-leaf"></i>';
+            leaf.style.left = Math.random() * 100 + '%';
+            leaf.style.animationDuration = (8 + Math.random() * 12) + 's';
+            leaf.style.animationDelay = (Math.random() * 10) + 's';
+            document.body.appendChild(leaf);
+        }
+    })();
+</script>
+</body>
+</html>
