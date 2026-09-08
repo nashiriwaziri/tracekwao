@@ -1080,7 +1080,6 @@ a,
     </div>
     <div class="super-body hidden" id="superBodyDetail"></div>
   </div>
-</div>
 
 <!-- SUPER MODALS -->
 <div class="super-modal" id="superAdModal" style="display:none" onclick="if(event.target===this)closeSuperModal('superAdModal')">
@@ -1119,13 +1118,41 @@ a,
   </div>
 </div>
 </div>
-<div class="super-modal" id="superDeleteConfirmModal" style="display:none" onclick="if(event.target===this)closeSuperModal('superDeleteConfirmModal')">
-  <div class="super-modal-card" style="max-width:400px;text-align:center">
-    <div style="font-size:48px;color:var(--danger);margin-bottom:12px"><i class="fa-solid fa-triangle-exclamation"></i></div>
-    <h3 style="margin-bottom:8px">Thibitisha Kufuta</h3>
-    <p id="superDeleteMsg" style="color:var(--text2);font-size:13px;margin-bottom:20px"></p>
-    <div class="modal-actions" style="justify-content:center"><button class="btn btn-o" onclick="closeSuperModal('superDeleteConfirmModal')">Ghairi</button><button class="btn btn-d" id="superDeleteConfirmBtn" onclick="confirmSuperDelete()">Futa Akaunti</button></div>
-  </div>
+<div class="super-modal" id="superDeleteConfirmModal"
+     style="display:none"
+     onclick="if(event.target===this)closeSuperModal('superDeleteConfirmModal')">
+
+    <div class="super-modal-card"
+         style="max-width:400px;text-align:center">
+
+        <div style="font-size:48px;color:var(--danger);margin-bottom:12px">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+
+        <h3 style="margin-bottom:8px">Thibitisha Kufuta</h3>
+
+        <p id="superDeleteMsg"
+           style="color:var(--text2);font-size:13px;margin-bottom:20px">
+        </p>
+
+        <div class="modal-actions" style="justify-content:center">
+
+            <button class="btn btn-o"
+                    onclick="closeSuperModal('superDeleteConfirmModal')">
+                Ghairi
+            </button>
+
+            <button class="btn btn-d"
+                    id="superDeleteConfirmBtn"
+                    onclick="confirmSuperDelete()">
+                Futa Akaunti
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
 </div>
   
 <!-- AUTH SCREEN -->
@@ -1873,41 +1900,160 @@ function updateAllLogos() {
 /* ======================================
    DELETE / EDIT / VIEW — ROLE AWARE
    ====================================== */
+
 function askDelete(id, type) {
-  if (!canDelete()) {
-    toast('Huna ruhusa ya kufuta', 'e');
-    return;
-  }
-  pendingDeleteId = id;
-  pendingDeleteType = type;
-  var names = { product: 'Bidhaa hii', sale: 'Muuzo huu', purchase: 'Manunuzi haya', seller: 'Muuzaji huyu', customer: 'Mteja huyu', expense: 'Matumizi haya', employee: 'Mfanyakazi huyu', user: 'Mtumiaji huyu' };
-  document.getElementById('superDeleteMsg').textContent = 'Una uhakika unataka kufuta ' + (names[type] || 'kipengele hiki') + '? Hatua hii haiwezi kurudishwa.';
-  document.getElementById('superDeleteConfirmModal').style.display = 'flex';
+
+    /* Super Administrator ana ruhusa ya kufuta User Account */
+    if (type === 'user' && isSuperAdmin()) {
+        pendingDeleteId = id;
+        pendingDeleteType = type;
+
+        const msg = document.getElementById('superDeleteMsg');
+
+        if (msg) {
+            msg.textContent =
+                'Una uhakika unataka kufuta akaunti hii? ' +
+                'Hatua hii haiwezi kurudishwa.';
+        }
+
+        const modal = document.getElementById('superDeleteConfirmModal');
+
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+
+        return;
+    }
+
+    /* Delete za kawaida zinafuata role permissions */
+    if (!canDelete()) {
+        toast('Huna ruhusa ya kufuta', 'e');
+        return;
+    }
+
+    pendingDeleteId = id;
+    pendingDeleteType = type;
+
+    const names = {
+        product: 'Bidhaa hii',
+        sale: 'Muuzo huu',
+        purchase: 'Manunuzi haya',
+        seller: 'Muuzaji huyu',
+        customer: 'Mteja huyu',
+        expense: 'Matumizi haya',
+        employee: 'Mfanyakazi huyu',
+        user: 'Mtumiaji huyu'
+    };
+
+    const msg = document.getElementById('superDeleteMsg');
+
+    if (msg) {
+        msg.textContent =
+            'Una uhakika unataka kufuta ' +
+            (names[type] || 'kipengele hiki') +
+            '? Hatua hii haiwezi kurudishwa.';
+    }
+
+    const modal = document.getElementById('superDeleteConfirmModal');
+
+    if (modal) {
+        modal.style.display = 'flex';
+    }
 }
 
-function confirmSuperDelete() {
-  if (!pendingDeleteId || !pendingDeleteType) return;
-  var type = pendingDeleteType;
-  var id = pendingDeleteId;
-  var collectionMap = {
-    product: 'products', sale: 'sales', purchase: 'purchases',
-    seller: 'sellers', customer: 'customers', expense: 'expenses',
-    employee: 'employees', user: 'users'
-  };
-  var col = collectionMap[type];
-  if (col) {
-    db.collection(col).doc(id).delete().then(function() {
-      toast('Imefutwa kwa mafanikio', 's');
-      closeSuperModal('superDeleteConfirmModal');
-      loadAllData();
-      pendingDeleteId = null;
-      pendingDeleteType = null;
-    }).catch(function(err) {
-      toast('Hitilafu: ' + err.message, 'e');
-    });
-  }
-}
 
+/* ======================================
+   CONFIRM DELETE
+   FIREBASE MODULAR
+====================================== */
+
+async function confirmSuperDelete() {
+
+    if (!pendingDeleteId || !pendingDeleteType) {
+        toast('Hakuna akaunti iliyochaguliwa', 'e');
+        return;
+    }
+
+    const type = pendingDeleteType;
+    const id = pendingDeleteId;
+
+    const collectionMap = {
+        product: 'products',
+        sale: 'sales',
+        purchase: 'purchases',
+        seller: 'sellers',
+        customer: 'customers',
+        expense: 'expenses',
+        employee: 'employees',
+        user: 'users'
+    };
+
+    const col = collectionMap[type];
+
+    if (!col) {
+        toast('Aina ya taarifa haijulikani', 'e');
+        return;
+    }
+
+    try {
+
+        /* ---------------------------------
+           SUPER ADMIN ONLY — USER ACCOUNT
+        --------------------------------- */
+
+        if (type === 'user') {
+
+            if (!isSuperAdmin()) {
+                toast('Super Administrator pekee anaweza kufuta akaunti', 'e');
+                return;
+            }
+
+            await deleteDoc(doc(db, 'users', id));
+
+            toast('Akaunti imefutwa kwa mafanikio', 's');
+
+        } else {
+
+            /* ---------------------------------
+               OTHER RECORDS
+            --------------------------------- */
+
+            if (!canDelete()) {
+                toast('Huna ruhusa ya kufuta', 'e');
+                return;
+            }
+
+            await deleteDoc(doc(db, col, id));
+
+            toast('Imefutwa kwa mafanikio', 's');
+        }
+
+        /* Close modal */
+        closeSuperModal('superDeleteConfirmModal');
+
+        /* Clear pending */
+        pendingDeleteId = null;
+        pendingDeleteType = null;
+
+        /* Reload data */
+        await loadAllData();
+
+        /* Refresh Super Admin users table if available */
+        if (typeof renderSuperUsers === 'function') {
+            renderSuperUsers();
+        }
+
+    } catch (err) {
+
+        console.error('Delete error:', err);
+
+        toast(
+            'Hitilafu wakati wa kufuta: ' +
+            (err.message || err),
+            'e'
+        );
+    }
+}
 function editItem(id, type) {
   switch (type) {
     case 'product': openProductModal(id); break;
