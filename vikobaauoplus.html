@@ -1,883 +1,767 @@
 <!DOCTYPE html>
-<html lang="sw">
+<html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>CSCMS 2.0 - International Production Architecture</title>
-<meta name="description" content="Community Savings and Credit Management System - Secure, Scalable, Robust.">
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-<!-- CSCMS 2.0: Modular Firebase SDK Imports (Type Module) -->
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-    import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, startAfter, runTransaction, writeBatch, serverTimestamp, increment, arrayUnion, onSnapshot, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-
-    // ==========================================
-    // CSCMS 2.0: CONFIGURATION & STATE
-    // ==========================================
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSCMS Global | Enterprise Savings & Credit Management</title>
     
-    // TODO: Replace with actual production config
-    const firebaseConfig = {
-        apiKey: "AIzaSyD-PLACEHOLDER-KEY-CHANGE-ME",
-        authDomain: "cscms-production.firebaseapp.com",
-        projectId: "cscms-production",
-        storageBucket: "cscms-production.appspot.com",
-        messagingSenderId: "123456789",
-        appId: "1:123456789:web:abcdef"
-    };
-
-    let app, auth, db, storage;
-
-    // Global State Management
-    const State = {
-        user: null, // Auth User
-        userData: null, // Firestore User Document
-        activeGroupId: null,
-        activeGroupData: null,
-        members: [],
-        roles: [],
-        isDemoMode: false, // Enabled if API keys are missing
-        currency: 'TZS'
-    };
-
-    // Initialize System
-    try {
-        if (firebaseConfig.apiKey.includes("PLACEHOLDER")) {
-            console.warn("CSCMS 2.0: Running in DEMO MODE (Missing API Keys)");
-            State.isDemoMode = true;
-        } else {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-            storage = getStorage(app);
-        }
-    } catch (e) {
-        console.error("Firebase Init Error:", e);
-        showToast("System initialization failed", "error");
-    }
-
-    // ==========================================
-    // CSCMS 2.0: SERVICE LAYER
-    // ==========================================
-
-    class AuthService {
-        static async login(email, password) {
-            if (State.isDemoMode) {
-                // Mock Login for Demo
-                return { user: { uid: "demo123", email: email }, userData: { role: "admin", groupId: "demo_group" } };
-            }
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            // Fetch user details to determine role and group
-            const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
-            if (!userDoc.exists()) throw new Error("User profile not found");
-            return { user: userCredential.user, userData: userDoc.data() };
-        }
-
-        static async logout() {
-            if (State.isDemoMode) return;
-            await signOut(auth);
-        }
-    }
-
-    class DataService {
-        // Generic fetcher with Tenant Isolation
-        static async getCollection(collectionName, constraints = []) {
-            if (State.isDemoMode) return []; // Return empty in demo
-            
-            // Enforce Tenant Isolation: Always filter by activeGroupId if present
-            if (State.activeGroupId) {
-                constraints.push(where("groupId", "==", State.activeGroupId));
-            }
-            
-            const q = query(collection(db, collectionName), ...constraints);
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        }
-
-        static async getDocument(collectionName, docId) {
-            if (State.isDemoMode) return null;
-            const snap = await getDoc(doc(db, collectionName, docId));
-            return snap.exists() ? { id: snap.id, ...snap.data() } : null;
-        }
-    }
-
-    // ==========================================
-    // CSCMS 2.0: FINANCIAL ENGINE (Double Entry)
-    // ==========================================
-
-    class AccountingEngine {
-        static async recordTransaction(transactionData) {
-            /* 
-             * Double Entry Logic:
-             * Every transaction creates at least two ledger entries.
-             * Debit (Dr) and Credit (Cr).
-             * Assets + Expenses = Debit increase
-             * Liabilities + Equity + Income = Credit increase
-             */
-
-            const { amount, type, description, memberId, groupId } = transactionData;
-            
-            // Mapping of CSCMS events to Accounts
-            // This would ideally come from a 'chart_of_accounts' collection
-            let drAccount, crAccount;
-
-            switch(type) {
-                case 'SHARE_PURCHASE':
-                    drAccount = 'cash_on_hand'; // Asset
-                    crAccount = 'share_capital'; // Equity
-                    break;
-                case 'SAVING_DEPOSIT':
-                    drAccount = 'cash_on_hand'; // Asset
-                    crAccount = 'members_savings'; // Liability
-                    break;
-                case 'LOAN_DISBURSEMENT':
-                    drAccount = 'loans_receivable'; // Asset
-                    crAccount = 'cash_on_hand'; // Asset
-                    break;
-                case 'LOAN_REPAYMENT':
-                    drAccount = 'cash_on_hand'; // Asset
-                    crAccount = 'loans_receivable'; // Asset (Principal)
-                    crAccount = 'interest_income'; // Income (Interest)
-                    break;
-                default:
-                    throw new Error("Unknown transaction type");
-            }
-
-            const batch = writeBatch(db);
-            const txRef = doc(collection(db, `groups/${groupId}/transactions`));
-            
-            // 1. Create Master Transaction Record
-            batch.set(txRef, {
-                ...transactionData,
-                createdAt: serverTimestamp(),
-                createdBy: State.user.uid,
-                status: 'POSTED'
-            });
-
-            // 2. Create Debit Entry
-            const drRef = doc(collection(db, `groups/${groupId}/general_ledger`));
-            batch.set(drRef, {
-                txId: txRef.id,
-                account: drAccount,
-                amount: amount,
-                direction: 'DEBIT',
-                date: serverTimestamp()
-            });
-
-            // 3. Create Credit Entry
-            const crRef = doc(collection(db, `groups/${groupId}/general_ledger`));
-            batch.set(crRef, {
-                txId: txRef.id,
-                account: crAccount,
-                amount: amount,
-                direction: 'CREDIT',
-                date: serverTimestamp()
-            });
-
-            await batch.commit();
-            return txRef.id;
-        }
-    }
-
-    // ==========================================
-    // CSCMS 2.0: LOAN ENGINE (Production)
-    // ==========================================
-
-    class LoanEngine {
-        static generateSchedule(principal, annualRate, months, startDate) {
-            const schedule = [];
-            const monthlyRate = annualRate / 12 / 100;
-            // Amortization Formula: P * (r * (1+r)^n) / ((1+r)^n - 1)
-            const monthlyPayment = principal * (monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
-            
-            let balance = principal;
-
-            for (let i = 1; i <= months; i++) {
-                const interestPayment = balance * monthlyRate;
-                const principalPayment = monthlyPayment - interestPayment;
-                balance -= principalPayment;
-                
-                // Fix floating point dust
-                if (balance < 0) balance = 0;
-
-                schedule.push({
-                    installmentNumber: i,
-                    dueDate: new Date(startDate.setMonth(startDate.getMonth() + 1)).toISOString().split('T')[0],
-                    principalDue: principalPayment,
-                    interestDue: interestPayment,
-                    totalDue: monthlyPayment,
-                    balance: balance
-                });
-            }
-            return schedule;
-        }
-
-        static async allocateRepayment(loanId, amountPaid) {
-            /*
-             * Payment Allocation Logic:
-             * 1. Penalties/Fees
-             * 2. Interest
-             * 3. Principal
-             */
-            const loan = await DataService.getDocument('loans', loanId);
-            if (!loan) throw new Error("Loan not found");
-
-            // In a real backend, we run a transaction here to lock the loan record
-            let remaining = amountPaid;
-            let allocation = { penalty: 0, interest: 0, principal: 0 };
-
-            // Simplified logic for frontend demo
-            if (remaining > 0 && loan.penaltyBalance > 0) {
-                const paidPenalty = Math.min(remaining, loan.penaltyBalance);
-                allocation.penalty = paidPenalty;
-                remaining -= paidPenalty;
-            }
-            
-            if (remaining > 0 && loan.interestBalance > 0) {
-                const paidInterest = Math.min(remaining, loan.interestBalance);
-                allocation.interest = paidInterest;
-                remaining -= paidInterest;
-            }
-
-            if (remaining > 0 && loan.principalBalance > 0) {
-                const paidPrincipal = Math.min(remaining, loan.principalBalance);
-                allocation.principal = paidPrincipal;
-                remaining -= paidPrincipal;
-            }
-
-            return allocation;
-        }
-    }
-
-    // ==========================================
-    // CSCMS 2.0: UI CONTROLLER
-    // ==========================================
-
-    // DOM Elements Cache
-    const UI = {
-        screens: {
-            landing: document.getElementById('landingPage'),
-            auth: document.getElementById('authScreen'),
-            memberReg: document.getElementById('memberRegScreen'),
-            super: document.getElementById('superScreen'),
-            dashboard: document.getElementById('dashboardApp') 
-        },
-        forms: {
-            login: document.getElementById('loginForm'),
-            signup: document.getElementById('signupForm')
-        }
-    };
-
-    // Navigation
-    function showScreen(screenName) {
-        Object.values(UI.screens).forEach(el => el.classList.add('hidden'));
-        if(UI.screens[screenName]) UI.screens[screenName].classList.remove('hidden');
-    }
-
-    window.showAuth = () => showScreen('auth');
-    window.showLanding = () => showScreen('landing');
-    window.showSuperAdmin = () => showScreen('super');
-
-    // Auth Handlers
-    window.switchAuthTab = (tab) => {
-        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-        
-        if(tab === 'login') {
-            document.querySelector('.auth-tab:first-child').classList.add('active');
-            document.getElementById('loginForm').classList.add('active');
-        } else {
-            document.querySelector('.auth-tab:last-child').classList.add('active');
-            document.getElementById('signupForm').classList.add('active');
-        }
-    };
-
-    window.loginUser = async (e) => {
-        e.preventDefault();
-        const btn = e.target.querySelector('button');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Inapakia...';
-        
-        try {
-            const email = document.getElementById('loginEmail').value;
-            const pass = document.getElementById('loginPass').value;
-            
-            const result = await AuthService.login(email, pass);
-            
-            State.user = result.user;
-            State.userData = result.userData;
-            State.activeGroupId = result.userData.groupId;
-            
-            showToast("Umefanikiwa kuingia", "success");
-            initDashboard();
-        } catch (err) {
-            console.error(err);
-            showToast("Hitilafu kwenye kuingia: " + err.message, "error");
-        } finally {
-            btn.innerHTML = originalText;
-        }
-    };
-
-    window.signupGroup = async (e) => {
-        e.preventDefault();
-        // Placeholder for group signup logic (Phase 3 Implementation)
-        showToast("Kujenga kikundi kimefungwa kwa muda katika toleo hili la demo.", "info");
-    };
-
-    // Dashboard Logic
-    async function initDashboard() {
-        showScreen('dashboard');
-        
-        // Update User Profile UI
-        document.getElementById('userNameDisplay').innerText = State.userData.displayName || State.user.email;
-        document.getElementById('userRoleDisplay').innerText = State.userData.role || 'Member';
-
-        // Load Modules based on Role
-        if(State.userData.role === 'admin') {
-            loadAdminDashboard();
-        } else {
-            loadMemberDashboard();
-        }
-    }
-
-    async function loadAdminDashboard() {
-        // 1. Metrics Aggregation (Real Data Only - No Math.random)
-        try {
-            const members = await DataService.getCollection('members');
-            const loans = await DataService.getCollection('loans');
-            
-            // Calculate totals securely
-            const totalSavings = members.reduce((sum, m) => sum + (m.savingsBalance || 0), 0);
-            const activeLoans = loans.filter(l => l.status === 'active').length;
-            const portfolioValue = loans.reduce((sum, l) => sum + (l.principalBalance || 0), 0);
-
-            // Update DOM
-            updateMetric('totalMembers', members.length);
-            updateMetric('totalSavings', formatCurrency(totalSavings));
-            updateMetric('activeLoans', activeLoans);
-            updateMetric('portfolioVal', formatCurrency(portfolioValue));
-
-            // 2. Render Charts
-            renderCharts(loans, members);
-
-        } catch (err) {
-            console.error("Dashboard Load Error:", err);
-            showToast("Imeshindwa kupakua data ya dashibodi", "error");
-        }
-    }
-
-    // Chart Rendering (Real Data)
-    function renderCharts(loans, members) {
-        // Example: Loan Distribution by Status
-        const ctx = document.getElementById('loanStatusChart');
-        if(!ctx) return;
-
-        const statusCounts = { active: 0, pending: 0, completed: 0 };
-        loans.forEach(l => {
-            if(statusCounts[l.status] !== undefined) statusCounts[l.status]++;
-        });
-
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Active', 'Pending', 'Completed'],
-                datasets: [{
-                    data: [statusCounts.active, statusCounts.pending, statusCounts.completed],
-                    backgroundColor: ['#0ea573', '#f59e0b', '#3b82f6'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'right', labels: { color: '#e2e8f0' } } }
-            }
-        });
-    }
-
-    // Helper: Update Metric UI
-    function updateMetric(id, value) {
-        const el = document.getElementById(id);
-        if(el) el.innerText = value;
-    }
-
-    // Helper: Format Currency
-    function formatCurrency(amount) {
-        return new Intl.NumberFormat('sw-TZ', { style: 'currency', currency: 'TZS' }).format(amount);
-    }
-
-    // Share Calculator Logic
-    window.calcShare = () => {
-        const price = parseFloat(document.getElementById('shareValue').value) || 0;
-        const count = parseFloat(document.getElementById('shareCount').value) || 0;
-        const total = price * count;
-        document.getElementById('shareTotal').innerText = total.toLocaleString();
-    }
-
-    window.showMemberReg = () => showScreen('memberReg');
-
-    // Toast Notification System
-    function showToast(message, type = 'info') {
-        const container = document.querySelector('.tc') || createToastContainer();
-        const toast = document.createElement('div');
-        toast.className = `toast ${type.charAt(0)}`;
-        toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-info-circle'}"></i> ${message}`;
-        
-        container.appendChild(toast);
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
-    }
-
-    function createToastContainer() {
-        const div = document.createElement('div');
-        div.className = 'tc';
-        document.body.appendChild(div);
-        return div;
-    }
-
-    // Initialize App
-    document.addEventListener('DOMContentLoaded', () => {
-        // Check for existing session (Phase 2)
-        if (!State.isDemoMode) {
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    State.user = user;
-                    // Fetch user data and init dashboard...
-                    showToast("Karibu tena CSCMS 2.0", "success");
-                }
-            });
-        }
-    });
-
-</script>
-
-<style>
-/* ==========================================
-   CSCMS 2.0: CORE STYLES (Preserved & Enhanced)
-   ========================================== */
-:root {
-    /* Palette */
-    --bg: #0a0e14;
-    --bg2: #0f1420;
-    --bg3: #161d2a;
-    --bg4: #1e2738;
-    --text: #e2e8f0;
-    --text2: #8899aa;
-    --text3: #4a5568;
-    --primary: #0ea573;
-    --primary2: #34d399;
-    --primary-bg: rgba(14,165,115,.1);
-    --success: #10b981;
-    --danger: #ef4444;
-    --warning: #f59e0b;
-    --info: #3b82f6;
-    --border: #1e2d3d;
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    /* Spacing & Layout */
-    --radius: 10px;
-    --shadow: 0 4px 24px rgba(0,0,0,.5);
-    --font: 'Inter', sans-serif;
-    --header-height: 60px;
-}
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-* { margin:0; padding:0; box-sizing:border-box; outline:none; }
+    <style>
+        /* --- CSS VARIABLES & RESET --- */
+        :root {
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-glass: rgba(30, 41, 59, 0.7);
+            --primary: #10b981; /* Emerald */
+            --primary-hover: #059669;
+            --primary-light: rgba(16, 185, 129, 0.15);
+            --accent: #3b82f6; /* Blue */
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --radius: 12px;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            --font: 'Outfit', sans-serif;
+        }
 
-body {
-    position:relative;
-    min-height:100vh;
-    background:var(--bg);
-    color:var(--text);
-    font-family:var(--font);
-    overflow-x:hidden;
-}
+        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
+        
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font);
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
 
-/* Background Animation (Preserved) */
-body::before {
-    content:"";
-    position:fixed;
-    inset:-120%;
-    z-index:-2;
-    pointer-events:none;
-    background: repeating-radial-gradient(circle at center,transparent 0px,transparent 110px,rgba(14,165,115,.15) 112px,transparent 116px);
-    opacity:.25;
-    animation:animeSpeed 20s linear infinite;
-}
-@keyframes animeSpeed { 0% {transform:scale(1) rotate(0deg)} 100% {transform:scale(1.3) rotate(0deg)} }
+        /* --- UTILITIES & ANIMATIONS --- */
+        .hidden { display: none !important; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+        .justify-center { justify-content: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 0.5rem; }
+        .gap-4 { gap: 1rem; }
+        .w-full { width: 100%; }
+        .text-center { text-align: center; }
+        .text-primary { color: var(--primary); }
+        .text-sm { font-size: 0.875rem; }
+        .font-bold { font-weight: 700; }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius);
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: var(--font);
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+        .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .btn-danger:hover { background: var(--danger); color: white; }
 
-/* Typography */
-h1, h2, h3, h4, h5, h6 { font-weight:700; color:var(--text); }
-a { text-decoration:none; color:inherit; cursor:pointer; }
-button { cursor:pointer; border:none; font-family:inherit; transition:all .2s; }
+        /* --- BACKGROUND FX --- */
+        .bg-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.15;
+            z-index: -1;
+            animation: float 10s infinite ease-in-out;
+        }
+        .orb-1 { width: 400px; height: 400px; background: var(--primary); top: -100px; left: -100px; }
+        .orb-2 { width: 300px; height: 300px; background: var(--accent); bottom: 0; right: -50px; animation-delay: 2s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 20px); } }
 
-/* Utilities */
-.hidden { display:none !important; }
-.flex { display:flex; }
-.flex-col { flex-direction:column; }
-.items-center { align-items:center; }
-.justify-between { justify-content:space-between; }
-.gap-2 { gap:8px; }
-.gap-4 { gap:16px; }
-.p-4 { padding:16px; }
-.text-sm { font-size:13px; }
-.text-xs { font-size:11px; }
-.text-center { text-align:center; }
-.w-full { width:100%; }
+        /* --- LANDING PAGE --- */
+        #landing-page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .nav-landing {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            margin-bottom: 4rem;
+        }
+        .logo { font-size: 1.5rem; font-weight: 800; color: white; display: flex; align-items: center; gap: 0.5rem; }
+        .logo i { color: var(--primary); }
+        
+        .hero-section {
+            text-align: center;
+            padding: 3rem 1rem;
+            max-width: 800px;
+            margin: 0 auto 5rem;
+            animation: fadeIn 1s ease;
+        }
+        .hero-title {
+            font-size: 3.5rem;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-subtitle { font-size: 1.1rem; color: var(--text-muted); margin-bottom: 2.5rem; line-height: 1.6; }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+        .feature-card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            padding: 2rem;
+            border-radius: var(--radius);
+            transition: transform 0.3s ease;
+        }
+        .feature-card:hover { transform: translateY(-5px); border-color: var(--primary); }
+        .feature-icon {
+            width: 50px; height: 50px;
+            background: var(--primary-light);
+            color: var(--primary);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
 
-/* Components */
-.card {
-    background:rgba(255,255,255,.03);
-    backdrop-filter:blur(12px);
-    border:1px solid rgba(255,255,255,.06);
-    border-radius:16px;
-    padding:20px;
-    box-shadow:var(--shadow);
-}
+        /* --- AUTH SCREEN --- */
+        .auth-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .auth-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 2.5rem;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: var(--shadow);
+            animation: slideUp 0.5s ease;
+        }
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted); }
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: white;
+            transition: border-color 0.2s;
+        }
+        .form-input:focus { border-color: var(--primary); }
 
-.btn {
-    padding:10px 20px;
-    border-radius:8px;
-    font-weight:600;
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    font-size:13px;
-}
-.btn-p { background:var(--primary); color:#fff; }
-.btn-p:hover { background:var(--primary2); transform:translateY(-1px); }
-.btn-o { background:transparent; border:1px solid var(--primary); color:var(--primary2); }
-.btn-o:hover { background:var(--primary-bg); }
-.btn-d { background:var(--danger); color:#fff; }
+        /* --- DASHBOARD --- */
+        .app-layout { display: flex; min-height: 100vh; }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100%;
+            z-index: 100;
+            transition: transform 0.3s;
+        }
+        .sidebar-header { padding: 1.5rem; border-bottom: 1px solid var(--border); }
+        .nav-links { padding: 1.5rem 1rem; flex: 1; overflow-y: auto; }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            transition: all 0.2s;
+        }
+        .nav-item:hover, .nav-item.active { background: var(--primary-light); color: var(--primary); }
+        .nav-item i { width: 20px; text-align: center; }
 
-.input-group { margin-bottom:16px; }
-.input-group label { display:block; margin-bottom:6px; font-size:12px; color:var(--text2); font-weight:600; }
-.fi {
-    width:100%;
-    padding:12px;
-    background:var(--bg3);
-    border:1px solid var(--border);
-    border-radius:8px;
-    color:var(--text);
-    transition:border .2s;
-}
-.fi:focus { border-color:var(--primary); }
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 260px;
+            padding: 2rem;
+            width: calc(100% - 260px);
+        }
+        
+        /* Topbar */
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
 
-/* LANDING */
-.landing { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px; }
-.ld-logo { width:80px; height:80px; border-radius:20px; background:linear-gradient(135deg,var(--primary),#065f46); display:flex; align-items:center; justify-content:center; font-size:32px; color:#fff; margin:0 auto 20px; }
-.ld-brand { font-size:3rem; font-weight:900; background:linear-gradient(135deg,var(--primary2),var(--primary)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-.ld-tag { color:var(--text2); margin:20px 0 40px; max-width:600px; line-height:1.6; }
+        /* Dashboard Widgets */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .stat-icon {
+            width: 48px; height: 48px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.25rem;
+        }
+        .stat-info h3 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+        .stat-info p { color: var(--text-muted); font-size: 0.875rem; }
+        
+        .bg-success-soft { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .bg-blue-soft { background: rgba(59, 130, 246, 0.1); color: var(--accent); }
+        .bg-warning-soft { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .bg-danger-soft { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
 
-/* AUTH */
-.auth-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); }
-.auth-card { width:100%; max-width:440px; }
-.auth-tabs { display:flex; margin-bottom:24px; background:var(--bg2); border-radius:var(--radius); padding:4px; border:1px solid var(--border); }
-.auth-tab { flex:1; padding:10px; border-radius:8px; font-weight:600; color:var(--text2); }
-.auth-tab.active { background:var(--primary); color:#fff; }
-.auth-form { display:none; }
-.auth-form.active { display:block; }
+        /* Charts Section */
+        .charts-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+        }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
 
-/* DASHBOARD LAYOUT */
-.dashboard-layout { display:flex; min-height:100vh; }
-.sidebar { width:260px; background:var(--bg2); border-right:1px solid var(--border); display:flex; flex-direction:column; position:fixed; height:100%; left:0; top:0; }
-.sidebar-header { height:60px; display:flex; align-items:center; padding:0 20px; border-bottom:1px solid var(--border); font-weight:800; font-size:18px; color:var(--primary2); }
-.nav-items { flex:1; padding:20px 10px; display:flex; flex-direction:column; gap:4px; }
-.nav-item { padding:12px; border-radius:8px; color:var(--text2); display:flex; align-items:center; gap:10px; font-size:14px; cursor:pointer; }
-.nav-item:hover, .nav-item.active { background:var(--bg3); color:var(--text); }
-.nav-item.active { border-left:3px solid var(--primary); }
+        /* Tables */
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            overflow-x: auto;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 1rem; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+        td { padding: 1rem; border-bottom: 1px solid var(--border); color: var(--text-main); }
+        tr:last-child td { border-bottom: none; }
+        
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-paid { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .status-pending { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
 
-.main-content { margin-left:260px; flex:1; padding:20px; }
-.topbar { height:60px; background:rgba(10,14,20,0.8); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; margin:-20px -20px 20px -20px; position:sticky; top:0; z-index:50; }
+        /* --- TOAST NOTIFICATIONS --- */
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+        .toast {
+            background: var(--bg-card);
+            border-left: 4px solid var(--primary);
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideInRight 0.3s ease;
+            color: white;
+        }
 
-/* DASHBOARD WIDGETS */
-.metrics-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px; }
-.metric-card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:20px; position:relative; overflow:hidden; }
-.metric-card::before { content:''; position:absolute; top:0; left:0; width:4px; height:100%; background:var(--primary); }
-.metric-value { font-size:28px; font-weight:800; margin:8px 0; }
-.metric-label { font-size:12px; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
+        /* --- MODAL --- */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            z-index: 500;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            width: 90%; max-width: 500px;
+            transform: scale(0.95);
+            transition: transform 0.3s;
+        }
+        .modal-overlay.open .modal { transform: scale(1); }
 
-.charts-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(350px, 1fr)); gap:16px; margin-bottom:24px; }
-.chart-container { height:300px; width:100%; position:relative; }
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-/* TABLES */
-.table-container { background:var(--bg2); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:24px; }
-.data-table { width:100%; border-collapse:collapse; }
-.data-table th, .data-table td { padding:14px; text-align:left; border-bottom:1px solid var(--border); }
-.data-table th { background:var(--bg3); font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text2); }
-.data-table tr:hover td { background:var(--bg3); }
-
-/* MODALS */
-.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:100; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .3s; backdrop-filter:blur(4px); }
-.modal-overlay.show { opacity:1; pointer-events:auto; }
-.modal-content { background:var(--bg2); width:90%; max-width:500px; border-radius:16px; padding:24px; border:1px solid var(--border); transform:scale(.95); transition:transform .3s; }
-.modal-overlay.show .modal-content { transform:scale(1); }
-
-/* TOASTS */
-.tc { position:fixed; bottom:20px; right:20px; z-index:999; display:flex; flex-direction:column; gap:10px; }
-.toast { background:var(--bg3); border-left:4px solid var(--primary); padding:12px 20px; border-radius:4px; box-shadow:var(--shadow); color:#fff; animation:slideIn .3s; min-width:250px; display:flex; align-items:center; gap:10px; font-size:13px; }
-.toast.e { border-color:var(--danger); }
-.toast.s { border-color:var(--success); }
-@keyframes slideIn { from{transform:translateX(100%)} to{transform:translateX(0)} }
-
-/* RESPONSIVE */
-@media(max-width:768px) {
-    .sidebar { transform:translateX(-100%); transition:transform .3s; z-index:100; }
-    .sidebar.open { transform:translateX(0); }
-    .main-content { margin-left:0; }
-}
-</style>
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.active { transform: translateX(0); }
+            .main-content { margin-left: 0; width: 100%; }
+            .charts-container { grid-template-columns: 1fr; }
+            .hero-title { font-size: 2.5rem; }
+        }
+    </style>
 </head>
 <body>
 
-<!-- ===== TOAST CONTAINER ===== -->
-<div id="toastContainer" class="tc"></div>
+    <!-- Background Effects -->
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
 
-<!-- ===== LANDING PAGE ===== -->
-<section class="landing" id="landingPage">
-  <div class="ld-logo"><i class="fa-solid fa-people-group"></i></div>
-  <div class="ld-brand">CSCMS 2.0</div>
-  <p class="ld-tag">
-      <strong>International Production Architecture</strong><br>
-      Mfumo kamili wa usimamizi wa Vikoba na Makundi ya Akiba na Mikopo.<br>
-      Salama, Scalable, na Imara kwa Matumizi ya Kila Siku.
-  </p>
-  <div class="flex gap-4">
-      <button class="btn btn-p" onclick="showAuth()"><i class="fa-solid fa-right-to-bracket"></i> Ingia</button>
-      <button class="btn btn-o" onclick="showSuperAdmin()"><i class="fa-solid fa-shield-halved"></i> Super Admin</button>
-  </div>
-  
-  <div style="margin-top: 40px; display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; max-width:800px;">
-      <div class="card text-center">
-          <i class="fa-solid fa-lock text-2xl" style="color:var(--primary2); margin-bottom:10px;"></i>
-          <h5>Security First</h5>
-          <p class="text-xs text2">Tenant Isolation & Role-Based Access Control</p>
-      </div>
-      <div class="card text-center">
-          <i class="fa-solid fa-calculator text-2xl" style="color:var(--primary2); margin-bottom:10px;"></i>
-          <h5>Double Entry</h5>
-          <p class="text-xs text2">Accounting Engine for Financial Integrity</p>
-      </div>
-      <div class="card text-center">
-          <i class="fa-solid fa-server text-2xl" style="color:var(--primary2); margin-bottom:10px;"></i>
-          <h5>Scalable</h5>
-          <p class="text-xs text2">Modular Firebase v10 Architecture</p>
-      </div>
-  </div>
-</section>
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
 
-<!-- ===== AUTH SCREEN ===== -->
-<section class="auth-screen hidden" id="authScreen">
-  <div class="auth-card card">
-      <h2 class="text-center" style="margin-bottom:20px;">Karibu CSCMS</h2>
-      <div class="auth-tabs">
-          <button class="auth-tab active" onclick="switchAuthTab('login')">Ingia</button>
-          <button class="auth-tab" onclick="switchAuthTab('signup')">Jiunge</button>
-      </div>
-      
-      <form id="loginForm" class="auth-form active" onsubmit="loginUser(event)">
-          <div class="input-group">
-              <label>Barua Pepe</label>
-              <input type="email" id="loginEmail" class="fi" required placeholder="admin@cscms.com">
-          </div>
-          <div class="input-group">
-              <label>Neno la Siri</label>
-              <input type="password" id="loginPass" class="fi" required placeholder="******">
-          </div>
-          <button type="submit" class="btn btn-p w-full">Ingia</button>
-      </form>
-
-      <form id="signupForm" class="auth-form">
-          <!-- Group creation form would go here -->
-          <div class="text-center text2 text-sm">Tafadhali wasiliana na afisa wa teknolojia kuunda kikundi kipya.</div>
-      </form>
-      
-      <div class="text-center" style="margin-top:20px;">
-          <button class="btn btn-o text-xs" onclick="showLanding()">Rudi Nyumbani</button>
-      </div>
-  </div>
-</section>
-
-<!-- ===== MEMBER REGISTRATION (Simplified) ===== -->
-<section class="hidden" id="memberRegScreen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
-    <div class="card" style="width:100%; max-width:500px;">
-        <h2>Jiunge kama Mwanachama</h2>
-        <p class="text2 text-sm" style="margin-bottom:20px;">Jaza fomu hili kuomba kujiunga na kikundi.</p>
-        <form onsubmit="event.preventDefault(); showToast('Ombi lako limetumwa kwa idhini', 'success'); showLanding();">
-            <div class="input-group"><label>Jina Kamili</label><input class="fi" required></div>
-            <div class="input-group"><label>Namba ya Simu</label><input class="fi" required></div>
-            <div class="input-group"><label>Kikundi cha Kujiunga</label>
-                <select class="fi"><option>Tumaini Savings Group</option></select>
+    <!-- ===== LANDING PAGE ===== -->
+    <div id="landing-page">
+        <nav class="nav-landing">
+            <div class="logo"><i class="fa-solid fa-layer-group"></i> CSCMS Global</div>
+            <div>
+                <button class="btn btn-outline" onclick="router.navigate('login')">Log In</button>
+                <button class="btn btn-primary" style="margin-left: 10px;" onclick="router.navigate('register')">Get Started</button>
             </div>
-            <button class="btn btn-p w-full">Tuma Ombi</button>
-            <button type="button" class="btn btn-o w-full" style="margin-top:10px;" onclick="showLanding()">Ghairi</button>
-        </form>
-    </div>
-</section>
+        </nav>
 
-<!-- ===== SUPER ADMIN SCREEN ===== -->
-<section class="hidden" id="superScreen" style="min-height:100vh; background:var(--bg); padding:20px;">
-    <div class="card" style="max-width:600px; margin:40px auto;">
-        <h2><i class="fa-solid fa-shield-halved"></i> Super Admin Portal</h2>
-        <p class="text2 text-sm" style="margin-bottom:20px;">Global system monitoring and tenant management.</p>
-        <div class="flex gap-4">
-            <div class="flex-1 p-4" style="background:var(--bg3); border-radius:8px;">
-                <h3 class="text2">Active Groups</h3>
-                <div class="text-3xl font-bold">124</div>
-            </div>
-            <div class="flex-1 p-4" style="background:var(--bg3); border-radius:8px;">
-                <h3 class="text2">Total Members</h3>
-                <div class="text-3xl font-bold">4,520</div>
+        <div class="hero-section">
+            <h1 class="hero-title">Enterprise Savings & Credit Management</h1>
+            <p class="hero-subtitle">The next-generation platform for SACCOs, Microfinance, and Cooperative Groups. Manage shares, loans, savings, and member analytics in one unified global dashboard.</p>
+            <div class="flex justify-center gap-4">
+                <button class="btn btn-primary" onclick="router.navigate('login')">Access Dashboard</button>
+                <button class="btn btn-outline"><i class="fa-solid fa-play"></i> Watch Demo</button>
             </div>
         </div>
-        <div style="margin-top:20px; height:200px; background:var(--bg3); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--text2);">
-            System Health Visualization (Placeholder)
-        </div>
-        <button class="btn btn-d w-full" style="margin-top:20px;" onclick="showLanding()">Logout</button>
-    </div>
-</section>
 
-<!-- ===== DASHBOARD APP ===== -->
-<section class="hidden" id="dashboardApp">
-    <div class="dashboard-layout">
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-chart-pie"></i></div>
+                <h3>Real-time Analytics</h3>
+                <p class="text-muted text-sm">Track financial health with live charts and detailed metrics.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-users"></i></div>
+                <h3>Member Management</h3>
+                <p class="text-muted text-sm">Comprehensive profiles, KYC data, and activity logs.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                <h3>Secure Banking</h3>
+                <p class="text-muted text-sm">Enterprise-grade security for transaction data.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-mobile-screen"></i></div>
+                <h3>Mobile Ready</h3>
+                <p class="text-muted text-sm">Access your dashboard from anywhere, on any device.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== AUTHENTICATION PAGE ===== -->
+    <div id="auth-page" class="auth-container hidden">
+        <div class="auth-card">
+            <div class="text-center" style="margin-bottom: 2rem;">
+                <div class="logo justify-center" style="margin-bottom: 1rem; font-size: 1.8rem;">
+                    <i class="fa-solid fa-layer-group"></i> CSCMS
+                </div>
+                <h2 id="auth-title">Welcome Back</h2>
+                <p class="text-muted text-sm">Enter your credentials to access the platform</p>
+            </div>
+
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label">Email Address</label>
+                    <input type="email" class="form-input" placeholder="admin@company.com" value="demo@cscms.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" placeholder="••••••••" value="123456" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">Sign In</button>
+                <div class="text-center" style="margin-top: 1rem;">
+                    <a href="#" onclick="router.navigate('landing')" class="text-sm text-muted" style="text-decoration: none;">Back to Home</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== MAIN DASHBOARD APP ===== -->
+    <div id="app-dashboard" class="app-layout hidden">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <i class="fa-solid fa-people-group" style="margin-right:10px;"></i> CSCMS 2.0
+                <div class="logo"><i class="fa-solid fa-layer-group"></i> CSCMS Global</div>
             </div>
-            <div class="nav-items">
-                <div class="nav-item active"><i class="fa-solid fa-gauge-high"></i> Dashibodi</div>
-                <div class="nav-item"><i class="fa-solid fa-users"></i> Wanachama</div>
-                <div class="nav-item"><i class="fa-solid fa-hand-holding-dollar"></i> Mikopo</div>
-                <div class="nav-item"><i class="fa-solid fa-piggy-bank"></i> Akiba</div>
-                <div class="nav-item"><i class="fa-solid fa-book"></i> Cashbook</div>
-                <div class="nav-item"><i class="fa-solid fa-gear"></i> Mipangilio</div>
+            <nav class="nav-links">
+                <a href="#" class="nav-item active" onclick="switchTab(this, 'overview')"><i class="fa-solid fa-grid-2"></i> Overview</a>
+                <a href="#" class="nav-item" onclick="switchTab(this, 'members')"><i class="fa-solid fa-users"></i> Members</a>
+                <a href="#" class="nav-item" onclick="switchTab(this, 'loans')"><i class="fa-solid fa-hand-holding-dollar"></i> Loans</a>
+                <a href="#" class="nav-item" onclick="switchTab(this, 'savings')"><i class="fa-solid fa-piggy-bank"></i> Savings</a>
+                <a href="#" class="nav-item" onclick="switchTab(this, 'reports')"><i class="fa-solid fa-file-invoice"></i> Reports</a>
+                <a href="#" class="nav-item" onclick="switchTab(this, 'settings')"><i class="fa-solid fa-gear"></i> Settings</a>
+            </nav>
+            <div style="padding: 1.5rem;">
+                <button class="btn btn-danger w-full" onclick="router.navigate('landing')"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
             </div>
         </aside>
 
-        <!-- Main Content -->
+        <!-- Main Content Area -->
         <main class="main-content">
             <!-- Topbar -->
             <header class="topbar">
                 <div class="flex items-center gap-4">
-                    <button class="btn btn-o btn-xs"><i class="fa-solid fa-bars"></i></button>
-                    <h4>Dashboard</h4>
+                    <button class="btn btn-outline" onclick="document.getElementById('sidebar').classList.toggle('active')" style="padding: 0.5rem;">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <h2>Dashboard Overview</h2>
                 </div>
                 <div class="flex items-center gap-4">
-                    <div class="text-right">
-                        <div class="text-sm font-bold" id="userNameDisplay">Admin User</div>
-                        <div class="text-xs text2" id="userRoleDisplay">Administrator</div>
+                    <button class="btn btn-primary btn-sm" onclick="openModal('shareModal')"><i class="fa-solid fa-calculator"></i> Calculator</button>
+                    <div class="user-profile">
+                        <div class="avatar">DA</div>
+                        <div style="display: none; @media(min-width:768px){display:block;}">
+                            <div class="text-sm font-bold">Demo Admin</div>
+                            <div class="text-sm text-muted">Super User</div>
+                        </div>
                     </div>
-                    <div style="width:36px; height:36px; background:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold;">A</div>
-                    <button class="btn btn-d btn-xs" onclick="AuthService.logout(); location.reload();"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </div>
             </header>
 
             <!-- Widgets -->
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Jumla ya Wanachama</div>
-                    <div class="metric-value" id="totalMembers">-</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon bg-success-soft"><i class="fa-solid fa-wallet"></i></div>
+                    <div class="stat-info">
+                        <h3>$124,500</h3>
+                        <p>Total Savings</p>
+                    </div>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-label">Akiba (Savings)</div>
-                    <div class="metric-value" id="totalSavings">-</div>
+                <div class="stat-card">
+                    <div class="stat-icon bg-blue-soft"><i class="fa-solid fa-money-bill-transfer"></i></div>
+                    <div class="stat-info">
+                        <h3>$85,200</h3>
+                        <p>Active Loans</p>
+                    </div>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-label">Mikopo Inayoendelea</div>
-                    <div class="metric-value" id="activeLoans">-</div>
+                <div class="stat-card">
+                    <div class="stat-icon bg-warning-soft"><i class="fa-solid fa-users"></i></div>
+                    <div class="stat-info">
+                        <h3>1,240</h3>
+                        <p>Total Members</p>
+                    </div>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-label">Thamani ya Mkopo</div>
-                    <div class="metric-value" id="portfolioVal">-</div>
+                <div class="stat-card">
+                    <div class="stat-icon bg-danger-soft"><i class="fa-solid fa-chart-line"></i></div>
+                    <div class="stat-info">
+                        <h3>12.5%</h3>
+                        <p>Interest Rate</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- Charts Section -->
-            <div class="charts-grid">
-                <div class="card">
-                    <h5 style="margin-bottom:15px;">Hali ya Mikopo (Portfolio)</h5>
-                    <div class="chart-container">
-                        <canvas id="loanStatusChart"></canvas>
+            <!-- Charts Area -->
+            <div class="charts-container">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h4>Financial Performance</h4>
+                        <select style="background:var(--bg-dark); color:white; border:none; padding:5px;"><option>This Year</option></select>
                     </div>
+                    <canvas id="revenueChart"></canvas>
                 </div>
-                <div class="card">
-                    <h5 style="margin-bottom:15px;">Mwekaji wa Michango (Monthly)</h5>
-                    <div class="chart-container">
-                        <canvas id="savingsTrendChart"></canvas>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h4>Loan Distribution</h4>
                     </div>
+                    <canvas id="loanDistChart"></canvas>
                 </div>
             </div>
 
             <!-- Recent Transactions Table -->
             <div class="table-container">
-                <div style="padding:15px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
-                    <h5>Miamala ya Hivi Karibuni</h5>
-                    <button class="btn btn-o btn-xs">Onysha Zote</button>
+                <div class="flex justify-between items-center" style="margin-bottom: 1.5rem;">
+                    <h4>Recent Transactions</h4>
+                    <button class="btn btn-outline text-sm">View All</button>
                 </div>
-                <table class="data-table">
+                <table>
                     <thead>
                         <tr>
-                            <th>Tarehe</th>
-                            <th>Mwanachama</th>
-                            <th>Aina</th>
-                            <th>Kiasi</th>
-                            <th>Hali</th>
+                            <th>Transaction ID</th>
+                            <th>Member</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td>2023-10-25</td>
-                            <td>Juma Mohamed</td>
-                            <td>Mchango</td>
-                            <td>20,000 TZS</td>
-                            <td><span style="color:var(--success)">Imekamilika</span></td>
-                        </tr>
-                        <tr>
-                            <td>2023-10-25</td>
-                            <td>Anna Silla</td>
-                            <td>Mkopo</td>
-                            <td>500,000 TZS</td>
-                            <td><span style="color:var(--warning)">Inalipiwa</span></td>
-                        </tr>
+                    <tbody id="transaction-body">
+                        <!-- Populated by JS -->
                     </tbody>
                 </table>
             </div>
         </main>
     </div>
-</section>
 
-<!-- CALCULATOR MODAL -->
-<div class="modal-overlay" id="shareCalcModal">
-    <div class="modal-content">
-        <h3>Kikokotoo cha Hisa</h3>
-        <div class="input-group">
-            <label>Thamani ya Hisa Moja</label>
-            <input type="number" id="shareValue" class="fi" value="10000" oninput="calcShare()">
+    <!-- ===== CALCULATOR MODAL ===== -->
+    <div id="shareModal" class="modal-overlay">
+        <div class="modal">
+            <div class="flex justify-between items-center" style="margin-bottom: 1.5rem;">
+                <h3>Share Calculator</h3>
+                <button onclick="closeModal('shareModal')" style="background:none; border:none; color:white; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Share Price ($)</label>
+                <input type="number" id="calc-price" class="form-input" value="100" oninput="calculateShares()">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Number of Shares</label>
+                <input type="number" id="calc-qty" class="form-input" value="10" oninput="calculateShares()">
+            </div>
+            <div style="background: var(--bg-dark); padding: 1.5rem; border-radius: 8px; text-align: center; margin-bottom: 1.5rem; border: 1px dashed var(--border);">
+                <p class="text-muted text-sm">Total Value</p>
+                <h2 class="text-primary" id="calc-result">$1,000</h2>
+            </div>
+            <button class="btn btn-primary w-full" onclick="closeModal('shareModal')">Done</button>
         </div>
-        <div class="input-group">
-            <label>Idadi ya Hisa</label>
-            <input type="number" id="shareCount" class="fi" value="5" oninput="calcShare()">
-        </div>
-        <div style="background:var(--primary-bg); padding:15px; border-radius:8px; text-align:center;">
-            <div class="text2 text-xs">Jumla</div>
-            <div class="text-2xl font-bold" style="color:var(--primary2)" id="shareTotal">50000</div>
-        </div>
-        <button class="btn btn-o w-full" style="margin-top:15px;" onclick="document.getElementById('shareCalcModal').classList.remove('show')">Funga</button>
     </div>
-</div>
 
-<script>
-// Temporary script to link the landing calculator button
-document.querySelector('.ld-logo').addEventListener('click', () => {
-    document.getElementById('shareCalcModal').classList.add('show');
-});
-</script>
+    <script>
+        // --- 1. ROUTER & NAVIGATION ---
+        const router = {
+            navigate: (pageId) => {
+                document.querySelectorAll('body > div').forEach(div => {
+                    if(div.id !== 'toast-container' && !div.classList.contains('bg-orb')) {
+                        div.classList.add('hidden');
+                    }
+                });
+                
+                if (pageId === 'landing') document.getElementById('landing-page').classList.remove('hidden');
+                if (pageId === 'login' || pageId === 'register') {
+                    document.getElementById('auth-page').classList.remove('hidden');
+                    document.getElementById('auth-title').innerText = pageId === 'login' ? 'Welcome Back' : 'Create Account';
+                }
+                if (pageId === 'dashboard') {
+                    document.getElementById('app-dashboard').classList.remove('hidden');
+                    initDashboard();
+                }
+            }
+        };
 
+        // --- 2. AUTHENTICATION SIMULATION ---
+        function handleLogin(e) {
+            e.preventDefault();
+            // Simulating API call
+            const btn = e.target.querySelector('button');
+            const originalText = btn.innerText;
+            btn.innerText = 'Authenticating...';
+            
+            setTimeout(() => {
+                showToast('Welcome back, Administrator!', 'success');
+                router.navigate('dashboard');
+                btn.innerText = originalText;
+            }, 1000);
+        }
+
+        // --- 3. DASHBOARD LOGIC & CHARTS ---
+        let revenueChartInstance = null;
+        let loanChartInstance = null;
+
+        function initDashboard() {
+            renderTransactions();
+            renderCharts();
+        }
+
+        function renderCharts() {
+            // Destroy existing if any to prevent overlap
+            if(revenueChartInstance) revenueChartInstance.destroy();
+            if(loanChartInstance) loanChartInstance.destroy();
+
+            // Revenue Chart
+            const ctx1 = document.getElementById('revenueChart').getContext('2d');
+            revenueChartInstance = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+                    datasets: [{
+                        label: 'Savings ($)',
+                        data: [12000, 19000, 15000, 25000, 22000, 30000, 35000],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Loans ($)',
+                        data: [8000, 12000, 10000, 18000, 15000, 24000, 28000],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                        tension: 0.4,
+                        borderDash: [5, 5]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: {
+                        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+
+            // Loan Distribution Chart
+            const ctx2 = document.getElementById('loanDistChart').getContext('2d');
+            loanChartInstance = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Business', 'Education', 'Agriculture', 'Personal'],
+                    datasets: [{
+                        data: [45, 25, 20, 10],
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    cutout: '70%',
+                    plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } }
+                }
+            });
+        }
+
+        // --- 4. DATA TABLES ---
+        const transactions = [
+            { id: '#TRX-001', user: 'John Doe', type: 'Deposit', amount: '$1,200', date: 'Oct 24, 2023', status: 'Paid' },
+            { id: '#TRX-002', user: 'Sarah Smith', type: 'Loan Repayment', amount: '$450', date: 'Oct 23, 2023', status: 'Paid' },
+            { id: '#TRX-003', user: 'Michael Brown', type: 'Loan Request', amount: '$5,000', date: 'Oct 22, 2023', status: 'Pending' },
+            { id: '#TRX-004', user: 'Emily White', type: 'Shares Buy', amount: '$2,000', date: 'Oct 21, 2023', status: 'Paid' },
+            { id: '#TRX-005', user: 'David Wilson', type: 'Withdrawal', amount: '$300', date: 'Oct 20, 2023', status: 'Paid' },
+        ];
+
+        function renderTransactions() {
+            const tbody = document.getElementById('transaction-body');
+            tbody.innerHTML = transactions.map(t => `
+                <tr>
+                    <td class="text-primary font-bold">${t.id}</td>
+                    <td>${t.user}</td>
+                    <td>${t.type}</td>
+                    <td class="font-bold">${t.amount}</td>
+                    <td class="text-muted">${t.date}</td>
+                    <td><span class="status-badge ${t.status === 'Paid' ? 'status-paid' : 'status-pending'}">${t.status}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // --- 5. INTERACTION UTILS ---
+        function switchTab(el, tabName) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            el.classList.add('active');
+            // In a real app, this would switch visible divs inside main-content
+            // For this single page demo, we just animate the header
+            document.querySelector('.topbar h2').innerText = tabName.charAt(0).toUpperCase() + tabName.slice(1);
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('open');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('open');
+        }
+
+        function calculateShares() {
+            const price = parseFloat(document.getElementById('calc-price').value) || 0;
+            const qty = parseFloat(document.getElementById('calc-qty').value) || 0;
+            const total = price * qty;
+            document.getElementById('calc-result').innerText = '$' + total.toLocaleString();
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            const icon = type === 'success' ? '<i class="fa-solid fa-check-circle" style="color:#10b981"></i>' : '<i class="fa-solid fa-exclamation-circle"></i>';
+            toast.innerHTML = `${icon} <span>${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Initialize calculator
+        calculateShares();
+
+    </script>
 </body>
 </html>
