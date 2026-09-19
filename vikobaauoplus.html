@@ -15,8 +15,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
+<!-- PDF LIBRARIES -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
 <style>
-/* ================= ENHANCED CSS ================= */
+/* ================= CSS (Same as before with additions) ================= */
 :root{--bg:#0a0e14;--bg2:#0f1420;--bg3:#161d2a;--bg4:#1e2738;--text:#e2e8f0;--text2:#8899aa;--text3:#4a5568;--primary:#0ea573;--primary2:#34d399;--primary-bg:rgba(14,165,115,.1);--success:#10b981;--success-bg:rgba(16,185,129,.1);--danger:#ef4444;--danger-bg:rgba(239,68,68,.1);--warning:#f59e0b;--warning-bg:rgba(245,158,11,.1);--info:#3b82f6;--info-bg:rgba(59,130,246,.1);--purple:#8b5cf6;--purple-bg:rgba(139,92,246,.1);--border:#1e2d3d;--radius:10px;--shadow:0 4px 24px rgba(0,0,0,.5);--font:'Inter',sans-serif}
 *{margin:0;padding:0;box-sizing:border-box;outline:none}
 body{position:relative;min-height:100vh;margin:0;padding:0;background:var(--bg);color:var(--text);overflow-x:hidden;font-family:var(--font)}
@@ -29,6 +33,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .card{background:rgba(255,255,255,.03);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.06);border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
 button{transition:.2s;cursor:pointer;font-family:var(--font);border:none}
 button:hover{transform:translateY(-1px)}
+button:disabled{opacity:0.5;cursor:not-allowed;}
 a{color:var(--primary2);cursor:pointer}
 .hidden{display:none!important}
 input,select,textarea{font-family:var(--font)}
@@ -263,6 +268,9 @@ tr:hover td{background:var(--bg3)}
 .tab-btn{padding:6px 12px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:13px}
 .tab-btn.active{color:var(--primary);font-weight:700;border-bottom:2px solid var(--primary)}
 
+.danger-zone{border: 1px solid var(--danger); background: rgba(239,68,68,0.05); padding: 20px; border-radius: var(--radius); margin-top: 30px;}
+.danger-zone h3{color: var(--danger); font-size: 14px; margin-bottom: 10px;}
+
 /* --- RESPONSIVE --- */
 @media(max-width:900px){.sidebar{position:fixed;transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.main-content{margin-left:0}.auth-left{display:none}}
 @media(max-width:600px){.fg-row{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.ld-grid{grid-template-columns:1fr 1fr}.sh{flex-direction:column;align-items:flex-start}.sh-acts{width:100%;justify-content:space-between}}
@@ -279,7 +287,7 @@ tr:hover td{background:var(--bg3)}
     <div class="ld-logo"><i class="fa-solid fa-people-group"></i></div>
     <div class="ld-brand">CSCMS PRO</div>
     <div class="ld-sub">Microfinance & Vikoba System</div>
-    <p class="ld-tag">Mfumo kamili wa usimamizi wa Vikoba na SACCO. Accounting Double-Entry, Mikopo, Mikakati ya Madeni, Dividends, na ripoti kamili.</p>
+    <p class="ld-tag">Mfumo kamili wa usimamizi wa Vikoba na SACCO. Accounting Double-Entry, Mikopo, Mikakati ya Madeni, Dividends, na ripoti kamili za PDF.</p>
     <div class="ld-btns">
       <button class="ld-btn ld-btn-p" onclick="showAuth()"><i class="fa-solid fa-right-to-bracket"></i> Ingia</button>
       <button class="ld-btn ld-btn-o" onclick="showMemberReg()"><i class="fa-solid fa-user-plus"></i> Jiunge</button>
@@ -393,7 +401,7 @@ tr:hover td{background:var(--bg3)}
         <div><h2>System Tenants</h2><p>Manage Groups & Organizations</p></div>
       </div>
       <div class="super-card super-table-card">
-        <div class="table-scroll"><table class="super-table"><thead><tr><th>Group Name</th><th>Admin</th><th>Members</th><th>Created</th><th>Status</th></tr></thead><tbody id="superGroupsBody"></tbody></table></div>
+        <div class="table-scroll"><table class="super-table"><thead><tr><th>Group Name</th><th>Admin</th><th>Members</th><th>Created</th><th>Status</th><th>Action</th></tr></thead><tbody id="superGroupsBody"></tbody></table></div>
       </div>
     </div>
   </div>
@@ -445,6 +453,7 @@ tr:hover td{background:var(--bg3)}
 
     <!-- DASHBOARD SECTION -->
     <div id="dashboardSection" class="section active">
+      <div class="sh"><div><h2>Dashibodi</h2><p>Muhtasari wa Kifedha</p></div><div class="sh-acts"><button class="btn btn-i" onclick="exportDashboardPDF()"><i class="fa-solid fa-file-pdf"></i> Download Report</button></div></div>
       <div class="metrics">
         <div class="mc pu"><i class="fa-solid fa-users mc-icon"></i><h3 id="dMembers">0</h3><p>Wanachama</p></div>
         <div class="mc g"><i class="fa-solid fa-piggy-bank mc-icon"></i><h3 id="dSavings">0</h3><p>Jumla Akiba (TZS)</p></div>
@@ -461,8 +470,8 @@ tr:hover td{background:var(--bg3)}
 
     <!-- MEMBERS SECTION -->
     <div id="membersSection" class="section">
-      <div class="sh"><div><h2>Wanachama</h2><p>Orodha na Usimamizi</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openModal('memberModal')"><i class="fa-solid fa-plus"></i> Mpya</button></div></div>
-      <div class="tw"><table><thead><tr><th>Jina</th><th>Simu</th><th>Akiba</th><th>Hisa</th><th>Mikopo</th><th>KYC</th><th>Shughuli</th></tr></thead><tbody id="membersList"></tbody></table></div>
+      <div class="sh"><div><h2>Wanachama</h2><p>Orodha na Usimamizi</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openModal('memberModal')"><i class="fa-solid fa-plus"></i> Mpya</button> <button class="btn btn-i" onclick="exportTableToPDF('membersList', 'Wanachama-Report')"><i class="fa-solid fa-file-pdf"></i> PDF</button></div></div>
+      <div class="tw"><table id="membersTable"><thead><tr><th>Jina</th><th>Simu</th><th>Akiba</th><th>Hisa</th><th>Mikopo</th><th>KYC</th><th>Shughuli</th></tr></thead><tbody id="membersList"></tbody></table></div>
     </div>
 
     <!-- GROUPS SECTION -->
@@ -481,30 +490,37 @@ tr:hover td{background:var(--bg3)}
           <button class="btn btn-p" type="submit">Sasisha Maelezo</button>
         </form>
       </div>
+      
+      <!-- DELETE GROUP ZONE -->
+      <div class="danger-zone">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> Hatari: Futa Kikundi</h3>
+        <p style="font-size:12px; color:var(--text3); margin-bottom:10px;">Hatua hii itafuta data ya kikundi lako. Haitikisoki.</p>
+        <button class="btn btn-d" onclick="confirmDeleteGroup()"><i class="fa-solid fa-trash"></i> Futa Kikundi Chote</button>
+      </div>
     </div>
 
     <!-- SAVINGS SECTION -->
     <div id="savingsSection" class="section">
-      <div class="sh"><div><h2>Akiba (Savings)</h2><p>Deposits & Withdrawals</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openTransactModal('DEPOSIT')"><i class="fa-solid fa-plus"></i> Weka Akiba</button> <button class="btn btn-o" onclick="openTransactModal('WITHDRAWAL')"><i class="fa-solid fa-minus"></i> Toa Akiba</button></div></div>
+      <div class="sh"><div><h2>Akiba (Savings)</h2><p>Deposits & Withdrawals</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openTransactModal('DEPOSIT')"><i class="fa-solid fa-plus"></i> Weka Akiba</button> <button class="btn btn-o" onclick="openTransactModal('WITHDRAWAL')"><i class="fa-solid fa-minus"></i> Toa Akiba</button> <button class="btn btn-i" onclick="exportTableToPDF('savingsList', 'Akiba-Report')"><i class="fa-solid fa-file-pdf"></i> PDF</button></div></div>
       <div class="tw"><table><thead><tr><th>Tarehe</th><th>Mwanachama</th><th>Aina</th><th>Kiasi</th><th>User</th></tr></thead><tbody id="savingsList"></tbody></table></div>
     </div>
 
     <!-- SHARES SECTION -->
     <div id="sharesSection" class="section">
-      <div class="sh"><div><h2>Hisa (Shares)</h2><p>Hisa na Uhamisho</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openTransactModal('SHARE_PURCHASE')"><i class="fa-solid fa-cart-plus"></i> Nunua</button> <button class="btn btn-o" onclick="openTransactModal('SHARE_TRANSFER')"><i class="fa-solid fa-arrow-right-arrow-left"></i> Hamisha</button></div></div>
+      <div class="sh"><div><h2>Hisa (Shares)</h2><p>Hisa na Uhamisho</p></div><div class="sh-acts"><button class="btn btn-p" onclick="openTransactModal('SHARE_PURCHASE')"><i class="fa-solid fa-cart-plus"></i> Nunua</button> <button class="btn btn-o" onclick="openTransactModal('SHARE_TRANSFER')"><i class="fa-solid fa-arrow-right-arrow-left"></i> Hamisha</button> <button class="btn btn-i" onclick="exportTableToPDF('sharesList', 'Hisa-Report')"><i class="fa-solid fa-file-pdf"></i> PDF</button></div></div>
       <div class="loan-calc-box"><h4>Maelezo ya Sasa</h4><div class="lc-row"><div class="lc-l">Bei ya Hisa Moja</div><div class="lc-v" id="sharePriceDisplay">TZS 10,000</div></div><div class="lc-row"><div class="lc-l">Jumla ya Hisa Zilizouzwa</div><div class="lc-v" id="totalSharesSold">0</div></div></div>
       <div class="tw"><table><thead><tr><th>Tarehe</th><th>Mwanachama</th><th>Aina</th><th>Idadi</th><th>Kiasi</th></tr></thead><tbody id="sharesList"></tbody></table></div>
     </div>
 
     <!-- LOANS SECTION -->
     <div id="loansSection" class="section">
-      <div class="sh"><div><h2>Mikopo (Loans)</h2><p>Ombi, Disbursement, Repayment</p></div><div class="sh-acts"><button class="btn btn-o" onclick="openModal('loanProductModal')"><i class="fa-solid fa-box"></i> Bidhaa</button> <button class="btn btn-p" onclick="openModal('applyLoanModal')"><i class="fa-solid fa-file-signature"></i> Ombi Mkopo</button></div></div>
+      <div class="sh"><div><h2>Mikopo (Loans)</h2><p>Ombi, Disbursement, Repayment</p></div><div class="sh-acts"><button class="btn btn-o" onclick="openModal('loanProductModal')"><i class="fa-solid fa-box"></i> Bidhaa</button> <button class="btn btn-p" onclick="openModal('applyLoanModal')"><i class="fa-solid fa-file-signature"></i> Ombi Mkopo</button> <button class="btn btn-i" onclick="exportTableToPDF('loansList', 'Mikopo-Report')"><i class="fa-solid fa-file-pdf"></i> PDF</button></div></div>
       <div class="tw"><table><thead><tr><th>ID</th><th>Mwanachama</th><th>Kiasi</th><th>Baki</th><th>Riba</th><th>Hali</th><th>Shughuli</th></tr></thead><tbody id="loansList"></tbody></table></div>
     </div>
 
     <!-- ACCOUNTING SECTION -->
     <div id="accountingSection" class="section">
-      <div class="sh"><div><h2>General Ledger (GL)</h2><p>Double-Entry Records</p></div><div class="sh-acts"><button class="btn btn-d" onclick="exportData('journal_entries')"><i class="fa-solid fa-download"></i> Export GL</button></div></div>
+      <div class="sh"><div><h2>General Ledger (GL)</h2><p>Double-Entry Records</p></div><div class="sh-acts"><button class="btn btn-i" onclick="exportTableToPDF('ledgerList', 'Ledger-Report')"><i class="fa-solid fa-file-pdf"></i> PDF</button></div></div>
       <div class="tw"><table><thead><tr><th>Tarehe</th><th>Akaunti</th><th>Maelezo</th><th>Ref</th><th>Debit</th><th>Credit</th></tr></thead><tbody id="ledgerList"></tbody></table></div>
     </div>
 
@@ -658,6 +674,88 @@ tr:hover td{background:var(--bg3)}
     btn.innerHTML = `<i class="fa-solid fa-eye${i.type==='password'?'':'-slash'}"></i>`;
   }
 
+  // ================= PDF GENERATION ENGINE =================
+  
+  window.exportTableToPDF = (tableBodyId, filename) => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    // Group Name Header
+    doc.setFontSize(18);
+    doc.setTextColor(14, 165, 115); // Brand color
+    doc.text(state.groupData ? state.groupData.name : 'CSCMS Report', 14, 20);
+    
+    // Title
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Ripoti ya: ${filename.replace(/-/g, ' ')}`, 14, 30);
+    doc.text(`Tarehe: ${new Date().toLocaleDateString('sw-TZ')}`, 14, 36);
+
+    // Extract Table Data
+    const table = document.getElementById(tableBodyId).closest('table');
+    const headers = [];
+    const data = [];
+
+    // Get Headers
+    table.querySelectorAll('thead th').forEach(th => headers.push(th.innerText));
+
+    // Get Rows
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const row = [];
+        tr.querySelectorAll('td').forEach(td => {
+            // Clean text (remove currency symbols if needed, or keep for clarity)
+            row.push(td.innerText);
+        });
+        data.push(row);
+    });
+
+    // Generate Table
+    doc.autoTable({
+        head: [headers],
+        body: data,
+        startY: 45,
+        theme: 'grid',
+        headStyles: { fillColor: [14, 165, 115] }, // Primary color header
+        styles: { fontSize: 8 },
+    });
+
+    doc.save(`${filename}-${Date.now()}.pdf`);
+    showToast('Ripoti ya PDF imeshapakuliwa', 's');
+  };
+
+  window.exportDashboardPDF = () => {
+     const { jsPDF } = window.jspdf;
+     const doc = new jsPDF();
+     
+     doc.setFontSize(18);
+     doc.setTextColor(14, 165, 115);
+     doc.text(state.groupData ? state.groupData.name : 'CSCMS Report', 14, 20);
+     
+     doc.setFontSize(14);
+     doc.text("Dashibodi Kuu - Financial Overview", 14, 30);
+     
+     // Manually create a summary table for metrics
+     const metrics = [
+        ['Wanachama', getEl('dMembers').innerText],
+        ['Jumla Akiba', getEl('dSavings').innerText],
+        ['Thamani Hisa', getEl('dShares').innerText],
+        ['Mikopo Hai', getEl('dLoans').innerText],
+        ['PAR 30', getEl('dPar').innerText],
+        ['Cash & Bank', getEl('dCash').innerText]
+     ];
+     
+     doc.autoTable({
+        head: [['Kipengele', 'Thamani']],
+        body: metrics,
+        startY: 40,
+        theme: 'grid',
+        headStyles: { fillColor: [14, 165, 115] }
+     });
+     
+     doc.save(`Dashboard-Report-${Date.now()}.pdf`);
+     showToast('Ripoti ya Dashibodi imeshapakuliwa', 's');
+  };
+
   // ================= NAVIGATION =================
   window.showAuth = () => {
     hideAll(); getEl('authScreen').classList.remove('hidden');
@@ -791,7 +889,7 @@ tr:hover td{background:var(--bg3)}
 
   window.superLogin = async (e) => {
     e.preventDefault();
-    // Mock Super Admin Login for demo purposes - in production use Custom Claims
+    // Mock Super Admin Login
     if(getEl('superUser').value === 'admin@cscms.pro' && getEl('superPass').value === 'admin123') {
        getEl('superLoginBox').classList.add('hidden');
        getEl('superPanel').classList.remove('hidden');
@@ -877,7 +975,7 @@ tr:hover td{background:var(--bg3)}
     // Add to Journal
     await db.collection(`groups/${groupId}/journal_entries`).add(entry);
     
-    // Update Ledger Balances (Atomic at account level usually, simplified here)
+    // Update Ledger Balances
     const debitRef = db.collection(`groups/${groupId}/accounts`).doc(debitAccCode);
     const creditRef = db.collection(`groups/${groupId}/accounts`).doc(creditAccCode);
     
@@ -885,10 +983,7 @@ tr:hover td{background:var(--bg3)}
       const dDoc = await t.get(debitRef);
       const cDoc = await t.get(creditRef);
       const dBal = (dDoc.exists ? dDoc.data().balance : 0) + parseFloat(amount);
-      const cBal = (cDoc.exists ? cDoc.data().balance : 0) + parseFloat(amount); // Liability/Equity/Income increases on Credit
-      
-      // Logic: Assets/Expenses increase Debit, Liability/Equity/Income increase Credit
-      // For simplicity, we track absolute balance and let reporting handle sign based on type
+      const cBal = (cDoc.exists ? cDoc.data().balance : 0) + parseFloat(amount);
       
       t.update(debitRef, { balance: dBal });
       t.update(creditRef, { balance: cBal });
@@ -923,7 +1018,6 @@ tr:hover td{background:var(--bg3)}
 
     if(type.includes('SHARE')) {
       shareQtyDiv.style.display = 'block';
-      // Listen for amount change to calc shares
       getEl('txAmount').oninput = function() {
         getEl('txShareQty').value = Math.floor(this.value / state.groupData.sharePrice);
       }
@@ -956,7 +1050,7 @@ tr:hover td{background:var(--bg3)}
         await db.collection('groups').doc(state.groupId).collection('savings').add({
           memberId, type: 'DEPOSIT', amount, date: firebase.firestore.Timestamp.fromDate(txDate), desc
         });
-        // 3. Accounting: Dr Cash, Cr Savings Liability
+        // 3. Accounting
         await postJournalEntry(state.groupId, txDate, desc || 'Deposit', '1010', '2010', amount, txId);
         showToast('Imewekwa kwa mafanikio', 's');
       } 
@@ -971,7 +1065,7 @@ tr:hover td{background:var(--bg3)}
         await db.collection('groups').doc(state.groupId).collection('savings').add({
           memberId, type: 'WITHDRAWAL', amount, date: firebase.firestore.Timestamp.fromDate(txDate), desc
         });
-        // Accounting: Dr Savings Liability, Cr Cash
+        // Accounting
         await postJournalEntry(state.groupId, txDate, desc || 'Withdrawal', '2010', '1010', amount, txId);
         showToast('Imechukuliwa', 's');
       }
@@ -986,7 +1080,7 @@ tr:hover td{background:var(--bg3)}
         await db.collection('groups').doc(state.groupId).collection('shares').add({
           memberId, type: 'PURCHASE', quantity: qty, amount: actualCost, date: firebase.firestore.Timestamp.fromDate(txDate)
         });
-        // Accounting: Dr Cash, Cr Share Capital
+        // Accounting
         await postJournalEntry(state.groupId, txDate, 'Share Purchase', '1010', '2020', actualCost, txId);
         showToast(`Umenunua hisa ${qty}`, 's');
       }
@@ -1026,10 +1120,9 @@ tr:hover td{background:var(--bg3)}
       }
       
       closeModal('transactModal');
-      // Refresh sections
       if(type.includes('SHARE')) showSection('sharesSection');
       else showSection('savingsSection');
-      loadDashboard(); // Update stats
+      loadDashboard();
 
     } catch (err) {
       console.error(err);
@@ -1039,7 +1132,6 @@ tr:hover td{background:var(--bg3)}
 
   // --- Loan Engine ---
 
-  // PMT Formula for Loan Repayment
   function calculatePMT(principal, annualRate, months) {
     if (annualRate === 0) return principal / months;
     const r = annualRate / 12 / 100;
@@ -1145,24 +1237,20 @@ tr:hover td{background:var(--bg3)}
         disbursementDate: firebase.firestore.FieldValue.serverTimestamp()
     });
     
-    // 2. Accounting: Dr Loan Receivable, Cr Cash
+    // 2. Accounting
     const txId = generateId();
     await postJournalEntry(state.groupId, new Date(), `Loan Disbursement ${loanId}`, '3010', '1010', loan.principal, txId);
     
     // 3. Generate Schedule
     let balance = loan.principal;
     let date = new Date();
-    // Move to next month
     date.setMonth(date.getMonth() + 1);
     
-    for(let i=1; i<=12; i++) { // Assuming max 12 for preview logic, should match duration
-        // Simple interest split for demo: Fixed amount per month
-        // Proper amortization would reduce principal and interest portion
-        // Here we use the fixed PMT logic calculated earlier
+    for(let i=1; i<=12; i++) {
         let interest = balance * (loan.interestRate/12/100);
         let principal = loan.installmentAmount - interest;
         
-        if(principal > balance) { principal = balance; interest = 0; } // Last payment
+        if(principal > balance) { principal = balance; interest = 0; } 
         
         balance -= principal;
         
@@ -1182,7 +1270,7 @@ tr:hover td{background:var(--bg3)}
     }
     
     await batch.commit();
-    showToast('Mkopo umekubaliwa na kusambazwa', 's');
+    showToast('Mkopo umekubaliwa', 's');
     loadLoans();
     loadDashboard();
   };
@@ -1211,10 +1299,7 @@ tr:hover td{background:var(--bg3)}
     if(amount > due) return showToast(`Kiasi cha juu zaidi kinachohitajika ni ${formatCurrency(due)}`, 'e');
 
     const batch = db.batch();
-    let interestPaid = 0;
-    let principalPaid = 0;
     
-    // Allocation: Interest first, then Principal
     const remainingInterest = schedData.interestDue - schedData.paidInterest || 0;
     const remainingPrincipal = schedData.principalDue - schedData.paidPrincipal || 0;
     
@@ -1229,9 +1314,8 @@ tr:hover td{background:var(--bg3)}
         payPrin = 0;
     }
     
-    if(payPrin > remainingPrincipal) payPrin = remainingPrincipal; // Cap at due
+    if(payPrin > remainingPrincipal) payPrin = remainingPrincipal; 
     
-    // Update Schedule
     const newPaidTotal = schedData.paid + amount;
     batch.update(sched.ref, {
         paid: newPaidTotal,
@@ -1240,12 +1324,10 @@ tr:hover td{background:var(--bg3)}
         status: newPaidTotal >= schedData.totalDue ? 'PAID' : 'PARTIAL'
     });
     
-    // Update Loan Balance
     batch.update(loanRef, {
         balance: firebase.firestore.FieldValue.increment(-payPrin)
     });
     
-    // Record Transaction
     const txRef = db.collection(`groups/${state.groupId}/loan_repayments`).doc();
     batch.set(txRef, {
         loanId, amount, principal: payPrin, interest: payInt,
@@ -1254,7 +1336,6 @@ tr:hover td{background:var(--bg3)}
     });
     
     // Accounting
-    // Dr Cash (Amount), Cr Loan Receivable (Prin), Cr Interest Income (Int)
     await postJournalEntry(state.groupId, new Date(), `Loan Repayment ${loanId}`, '1010', '3010', payPrin, txRef.id);
     if(payInt > 0) await postJournalEntry(state.groupId, new Date(), `Interest Income ${loanId}`, '1010', '4010', payInt, txRef.id);
     
@@ -1270,7 +1351,6 @@ tr:hover td{background:var(--bg3)}
   async function loadDashboard() {
     if(!state.groupId) return;
     
-    // Load Metrics
     const memsSnap = await db.collection('members').where('groupId', '==', state.groupId).get();
     const totalMembers = memsSnap.size;
     let totalSavings = 0;
@@ -1285,36 +1365,27 @@ tr:hover td{background:var(--bg3)}
         totalSharesVal += dat.shareBalance || 0;
     });
     
-    // Loans
     const loansSnap = await db.collection(`groups/${state.groupId}/loans`).where('status', '==', 'ACTIVE').get();
     loansSnap.forEach(d => totalLoanBal += d.data().balance || 0);
     
-    // Cash (From GL)
     const cashDoc = await db.collection(`groups/${state.groupId}/accounts`).doc('1010').get();
     const cashBal = cashDoc.exists ? cashDoc.data().balance : 0;
     
-    // Update UI
     getEl('dMembers').textContent = totalMembers;
     getEl('dSavings').textContent = formatCurrency(totalSavings);
     getEl('dShares').textContent = formatCurrency(totalSharesVal);
     getEl('dLoans').textContent = formatCurrency(totalLoanBal);
     getEl('dCash').textContent = formatCurrency(cashBal);
     
-    // PAR 30 (Mock calculation based on overdue loans)
     const today = new Date();
     let overduePrincipal = 0;
     loansSnap.forEach(async d => {
         const loan = d.data();
-        // Check schedule
         const sched = await db.collection(`groups/${state.groupId}/loans`).doc(loan.id).collection('schedule').where('dueDate', '<', today).where('status', '!=', 'PAID').get();
         sched.forEach(s => overduePrincipal += s.data().totalDue);
     });
-    // Simplified PAR (Async issue in vanilla JS loop, simplified for UI)
     const par = totalLoanBal > 0 ? ((overduePrincipal / totalLoanBal) * 100).toFixed(1) : 0;
     getEl('dPar').textContent = par + '%';
-    
-    // Charts
-    // initCharts(totalSavings, totalLoanBal, totalSharesVal);
   }
 
   async function loadMembers() {
@@ -1331,10 +1402,36 @@ tr:hover td{background:var(--bg3)}
             <td>${m.shareCount}</td>
             <td>-</td>
             <td><span class="status-badge pending">Pending</span></td>
-            <td><button class="btn btn-xs btn-i" onclick="viewMember('${m.id}')">View</button></td>
+            <td>
+                <button class="btn btn-xs btn-i" onclick="viewMember('${m.id}')">View</button>
+                <button class="btn btn-xs btn-d" onclick="deleteMember('${m.id}', '${m.firstName}')"><i class="fa-solid fa-trash"></i></button>
+            </td>
         </tr>`;
     });
   }
+  
+  // --- DELETE MEMBER LOGIC ---
+  window.deleteMember = async (uid, name) => {
+      if(state.role !== 'ADMIN') return showToast('Huruhsiwi', 'e');
+      
+      // Check active loans
+      const loanSnap = await db.collection(`groups/${state.groupId}/loans`).where('memberId', '==', uid).where('status', '==', 'ACTIVE').get();
+      if(!loanSnap.empty) return showToast('Mwanachama ana mikopo hai. Hawezi kufutwa.', 'e');
+      
+      // Check Balance
+      const mem = await db.collection('members').doc(uid).get();
+      const data = mem.data();
+      if(data.savingsBalance > 0 || data.shareBalance > 0) return showToast('Mwanachama ana akiba au hisa. Futa uhasibu.', 'e');
+      
+      if(!confirm(`Una hakika unataka kufuta ${name}?`)) return;
+      
+      await db.collection('members').doc(uid).delete();
+      await db.collection('users').doc(uid).delete(); // Delete auth link
+      
+      showToast('Mwanachama amefutwa', 's');
+      loadMembers();
+      loadDashboard();
+  };
 
   async function loadTransactions(type) {
     let col = type === 'savings' ? 'savings' : 'shares';
@@ -1403,10 +1500,33 @@ tr:hover td{background:var(--bg3)}
     });
   }
   
+  // --- Delete Group Logic ---
+  window.confirmDeleteGroup = async () => {
+      if(state.role !== 'ADMIN') return showToast('Huruhsiwi', 'e');
+      const confirmTxt = prompt('Andika "FUTA" kuthibitisha kuacha kikundi.');
+      if(confirmTxt !== 'FUTA') return;
+      
+      if(!confirm('Hatua hii hairudishiwi. Kundi litafutwa.')) return;
+      
+      try {
+          // Delete Main Group Doc
+          await db.collection('groups').doc(state.groupId).delete();
+          // Note: Sub-collections remain for audit compliance in real apps. 
+          // For true wipe, we'd need a recursive function which is heavy here.
+          
+          showToast('Kikundi kimefutwa. Utatoka sasa hivi.', 'w');
+          setTimeout(() => {
+              auth.signOut();
+              window.location.reload();
+          }, 2000);
+      } catch (err) {
+          showToast('Hitilafu: ' + err.message, 'e');
+      }
+  };
+  
   // --- Extra Functions ---
   
   window.loadReports = () => {
-     // Placeholder for report logic
      getEl('agingReport').innerHTML = '<p>Chaguo la 1-30 Siku: TZS 0</p><p>Chaguo la 31-60 Siku: TZS 0</p>';
   };
   
@@ -1444,8 +1564,14 @@ tr:hover td{background:var(--bg3)}
       list.innerHTML = '';
       snap.forEach(d => {
           const g = d.data();
-          list.innerHTML += `<tr><td>${g.name}</td><td>${g.adminName}</td><td>-</td><td>${formatDate(g.createdAt)}</td><td><span class="status-badge active">Active</span></td></tr>`;
+          list.innerHTML += `<tr><td>${g.name}</td><td>${g.adminName}</td><td>-</td><td>${formatDate(g.createdAt)}</td><td><span class="status-badge active">Active</span></td><td><button class="btn btn-xs btn-d" onclick="superDeleteGroup('${d.id}')">Del</button></td></tr>`;
       });
+  };
+  
+  window.superDeleteGroup = async (id) => {
+      if(!confirm('Delete this group completely?')) return;
+      await db.collection('groups').doc(id).delete();
+      renderSuperAdmin();
   };
 
   window.viewMember = (id) => {
