@@ -671,129 +671,946 @@ async function handleSignUp(e){
   let authUser=null;
   let groupSaved=false,memberSaved=false,userRecSaved=false;
 
-  try{
-    /* ==== STEP 1: Create Firebase Auth account FIRST ==== */
-    /* This must succeed before any Firestore writes, because the user
-       must be authenticated for Firestore rules to allow writes. */
-    const{createUserWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
-    if(!fbAuth||!fbDb)throw new Error('Firebase not initialized. Check your configuration.');
-
-    const email=nida+'@cscms.app';
-    const userCred=await createUserWithEmailAndPassword(fbAuth,email,password);
-    authUser=userCred.user;
-
-    /* ==== STEP 2: Firestore writes (user is now authenticated) ==== */
-    /* Each write is independent — if one fails, others still proceed.
-       Failed writes are stored in pendingWrites[] for later retry. */
-
-    /* 2a. Save Group */
-    const groupData={
-      id:groupId,name:groupName,type:groupType,country:country,
-      currency:currency,symbol:symbol,createdAt:new Date().toISOString(),
-      chairpersonId:memberId,registrationId:registrationId,
-      interest:10,sharePrice:10000,maxShares:100,penaltyRate:5,gracePeriod:7
-    };
-    const gResult=await safeFirestoreWrite({collection:'groups',id:groupId},groupData,'Group');
-    groupSaved=gResult.ok;
-
-    /* 2b. Save Chairperson Member */
-    const memberData={
-      id:memberId,name:fullName,firstName:fname,middleName:mname,lastName:lname,
-      nida:nida,phone:phone,email:'',groupId:groupId,role:'chair',
-      shares:0,savings:0,status:'ACTIVE',registrationId:registrationId,
-      createdAt:new Date().toISOString()
-    };
-    const mResult=await safeFirestoreWrite({collection:'members',id:memberId},memberData,'Member');
-    memberSaved=mResult.ok;
-
-    /* 2c. Save User record (maps Auth UID → Firestore data) */
-    const userData={
-      uid:authUser.uid,groupId:groupId,memberId:memberId,
-      registrationId:registrationId,nida:nida,phone:phone,
-      name:fullName,role:'chair',createdAt:new Date().toISOString()
-    };
-    const uResult=await safeFirestoreWrite({collection:'users',id:authUser.uid},userData,'User');
-    userRecSaved=uResult.ok;
-
-    /* ==== STEP 3: Set local state ==== */
-    currentGroup=groupData;currentGroupId=groupId;currentRole='chair';
-    currentUser=authUser;window._lastRegistrationId=registrationId;
-
-    /* ==== STEP 4: Show ID Reminder ==== */
-    showIdReminder(registrationId);
-
-    /* ==== STEP 5: Inform user about any write failures ==== */
-    if(!groupSaved||!memberSaved||!userRecSaved){
-      const failed=['Group','Member','User Record'].filter((_,i)=>[!groupSaved,!memberSaved,!userRecSaved][i]);
-      /* Show the Firestore rules banner on the form */
-      const banner=$('fsRulesBanner');if(banner)banner.classList.add('show');
-      toast('Account created! Some data is pending sync to Firestore. Please update your Firestore rules to allow authenticated writes. Your ID: '+registrationId,'warning');
-    }else{
-      toast('Registration successful!','success');
-    }
-
-    /* Reset form */
-    $('signUpForm').reset();checkPasswordStrength('');
-
-  }catch(err){
-    console.error('Sign up error:',err);
-
-    /* If auth account was created but Firestore failed, still give the ID */
-    if(authUser&&registrationId){
-      showIdReminder(registrationId);
-      const banner=$('fsRulesBanner');if(banner)banner.classList.add('show');
-      toast('Account created but data sync may be incomplete. Save your ID! Check Firestore rules. ID: '+registrationId,'warning');
-      $('signUpForm').reset();checkPasswordStrength('');
-    }else{
-      /* Auth itself failed */
-      let msg='Registration failed. Please try again.';
-      if(err.code==='auth/email-already-in-use')msg='An account with this National ID already exists. Please sign in instead.';
-      else if(err.code==='auth/weak-password')msg='Password is too weak. Use at least 6 characters.';
-      else if(err.code==='auth/network-request-failed')msg='Network error. Please check your internet connection.';
-      else if(err.code==='auth/too-many-requests')msg='Too many attempts. Please wait and try again.';
-      else if(err.message)msg=err.message;
-      toast(msg,'error');
-    }
-  }finally{
-    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-user-plus"></i> '+t('signUp')}
-  }
-}
-
-/* ======== SIGN IN ======== */
-async function handleSignIn(e){
+/* ============================================================
+   SIGN UP
+   ============================================================ */
+async function handleSignUp(e) {
   e.preventDefault();
-  const groupId=$('loginGroupId').value.trim();
-  const nida=$('loginNida').value.trim();
-  const password=$('loginPassword').value;
-  if(!groupId||!nida||!password){toast('All fields are required','error');return}
-  try{
-    const{signInWithEmailAndPassword}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
-    const{doc,getDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    if(!fbAuth||!fbDb)throw new Error('Firebase not initialized');
-    const email=nida+'@cscms.app';
-    const userCred=await signInWithEmailAndPassword(fbAuth,email,password);
-    const user=userCred.user;
-    const userDoc=await getDoc(doc(fbDb,'users',user.uid));
-    if(!userDoc.exists())throw new Error('User profile not found. Contact admin.');
-    const userData=userDoc.data();
-    if(userData.groupId!==groupId){toast('This account does not belong to the specified Group ID','error');const{signOut}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');await signOut(fbAuth);return}
-    const grpDoc=await getDoc(doc(fbDb,'groups',groupId));
-    if(!grpDoc.exists())throw new Error('Group not found');
-    currentGroup={id:groupId,...grpDoc.data()};currentGroupId=groupId;currentRole=userData.role||'member';currentUser=user;
-    window._lastRegistrationId=userData.registrationId||null;
-    /* Retry any pending writes from a previous session */
-    if(pendingWrites.length)await retryPendingWrites();
-    enterApp();
-  }catch(err){
-    console.error('Sign in error:',err);
-    let msg='Sign in failed. Check your credentials.';
-    if(err.code==='auth/user-not-found'||err.code==='auth/wrong-password'||err.code==='auth/invalid-credential')msg='Invalid National ID/Phone or Password.';
-    else if(err.code==='auth/network-request-failed')msg='Network error. Check your connection.';
-    else if(err.message)msg=err.message;
-    toast(msg,'error');
+
+  /*
+    IMPORTANT:
+    This function preserves the existing Firebase Modular SDK
+    architecture and existing application variables/functions.
+  */
+
+  let authUser = null;
+
+  try {
+
+    /* ==========================================================
+       STEP 1: LOAD FIREBASE MODULES
+       ========================================================== */
+
+    const {
+      createUserWithEmailAndPassword
+    } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js'
+    );
+
+    const {
+      doc,
+      setDoc,
+      serverTimestamp
+    } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'
+    );
+
+    /* ==========================================================
+       STEP 2: CHECK FIREBASE
+       ========================================================== */
+
+    if (!fbAuth || !fbDb) {
+      throw new Error(
+        'Firebase is not initialized. Please check your Firebase configuration.'
+      );
+    }
+
+    /* ==========================================================
+       STEP 3: VALIDATE REQUIRED DATA
+       ========================================================== */
+
+    if (!nida || !String(nida).trim()) {
+      throw new Error('National ID is required.');
+    }
+
+    if (!password || String(password).length < 6) {
+      throw new Error(
+        'Password must contain at least 6 characters.'
+      );
+    }
+
+    if (!groupName || !String(groupName).trim()) {
+      throw new Error(
+        'Please enter the name of your group.'
+      );
+    }
+
+    if (!groupId) {
+      throw new Error(
+        'Group ID could not be generated.'
+      );
+    }
+
+    if (!memberId) {
+      throw new Error(
+        'Member ID could not be generated.'
+      );
+    }
+
+    if (!registrationId) {
+      throw new Error(
+        'Registration ID could not be generated.'
+      );
+    }
+
+    /* ==========================================================
+       STEP 4: NORMALIZE NATIONAL ID
+       ========================================================== */
+
+    const cleanNida = String(nida)
+      .trim()
+      .replace(/\s+/g, '')
+      .toUpperCase();
+
+    /*
+      Firebase email must be deterministic.
+      The same NIDA must always produce the same login email.
+    */
+
+    const authEmail =
+      cleanNida.toLowerCase() + '@cscms.app';
+
+    /* ==========================================================
+       STEP 5: CREATE FIREBASE AUTH ACCOUNT
+       ========================================================== */
+
+    try {
+
+      const userCred =
+        await createUserWithEmailAndPassword(
+          fbAuth,
+          authEmail,
+          password
+        );
+
+      authUser = userCred.user;
+
+    } catch (authError) {
+
+      console.error(
+        'Firebase Authentication Error:',
+        authError
+      );
+
+      if (
+        authError.code ===
+        'auth/email-already-in-use'
+      ) {
+        throw new Error(
+          'An account with this National ID already exists. Please use Sign In instead.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/weak-password'
+      ) {
+        throw new Error(
+          'Password is too weak. Use at least 6 characters.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/invalid-email'
+      ) {
+        throw new Error(
+          'The National ID format is invalid.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/network-request-failed'
+      ) {
+        throw new Error(
+          'Network error. Please check your internet connection.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/too-many-requests'
+      ) {
+        throw new Error(
+          'Too many attempts. Please wait and try again.'
+        );
+      }
+
+      throw authError;
+    }
+
+    /* ==========================================================
+       STEP 6: CONFIRM AUTH UID
+       ========================================================== */
+
+    if (!authUser || !authUser.uid) {
+      throw new Error(
+        'Firebase account was created but the User ID could not be obtained.'
+      );
+    }
+
+    const uid = authUser.uid;
+
+    /* ==========================================================
+       STEP 7: PREPARE GROUP DATA
+       ========================================================== */
+
+    const groupData = {
+
+      id: groupId,
+
+      name:
+        String(groupName || '').trim(),
+
+      type:
+        groupType || '',
+
+      country:
+        country || '',
+
+      currency:
+        currency || '',
+
+      symbol:
+        symbol || '',
+
+      chairpersonId:
+        memberId,
+
+      registrationId:
+        registrationId,
+
+      interest: 10,
+
+      sharePrice: 10000,
+
+      maxShares: 100,
+
+      penaltyRate: 5,
+
+      gracePeriod: 7,
+
+      createdBy:
+        uid,
+
+      status:
+        'ACTIVE',
+
+      createdAt:
+        serverTimestamp()
+    };
+
+    /* ==========================================================
+       STEP 8: PREPARE MEMBER DATA
+       ========================================================== */
+
+    const memberData = {
+
+      id:
+        memberId,
+
+      name:
+        fullName || '',
+
+      firstName:
+        fname || '',
+
+      middleName:
+        mname || '',
+
+      lastName:
+        lname || '',
+
+      nida:
+        cleanNida,
+
+      phone:
+        phone || '',
+
+      email:
+        authEmail,
+
+      groupId:
+        groupId,
+
+      role:
+        'chair',
+
+      shares:
+        0,
+
+      savings:
+        0,
+
+      status:
+        'ACTIVE',
+
+      registrationId:
+        registrationId,
+
+      createdBy:
+        uid,
+
+      createdAt:
+        serverTimestamp()
+    };
+
+    /* ==========================================================
+       STEP 9: PREPARE USER DATA
+       ========================================================== */
+
+    const userData = {
+
+      uid:
+        uid,
+
+      groupId:
+        groupId,
+
+      memberId:
+        memberId,
+
+      registrationId:
+        registrationId,
+
+      nida:
+        cleanNida,
+
+      phone:
+        phone || '',
+
+      email:
+        authEmail,
+
+      name:
+        fullName || '',
+
+      role:
+        'chair',
+
+      status:
+        'ACTIVE',
+
+      createdAt:
+        serverTimestamp()
+    };
+
+    /* ==========================================================
+       STEP 10: SAVE GROUP
+       ========================================================== */
+
+    try {
+
+      await setDoc(
+        doc(
+          fbDb,
+          'groups',
+          groupId
+        ),
+        groupData
+      );
+
+    } catch (error) {
+
+      console.error(
+        'GROUP SAVE ERROR:',
+        error
+      );
+
+      throw new Error(
+        'Firebase Authentication succeeded, but the Group could not be saved. Please check Firestore Rules.'
+      );
+    }
+
+    /* ==========================================================
+       STEP 11: SAVE MEMBER
+       ========================================================== */
+
+    try {
+
+      await setDoc(
+        doc(
+          fbDb,
+          'members',
+          memberId
+        ),
+        memberData
+      );
+
+    } catch (error) {
+
+      console.error(
+        'MEMBER SAVE ERROR:',
+        error
+      );
+
+      throw new Error(
+        'The Group was created, but the Chairperson Member could not be saved. Please check Firestore Rules.'
+      );
+    }
+
+    /* ==========================================================
+       STEP 12: SAVE USER PROFILE
+       ========================================================== */
+
+    try {
+
+      await setDoc(
+        doc(
+          fbDb,
+          'users',
+          uid
+        ),
+        userData
+      );
+
+    } catch (error) {
+
+      console.error(
+        'USER PROFILE SAVE ERROR:',
+        error
+      );
+
+      throw new Error(
+        'The Group and Member were created, but the User Profile could not be saved. Please check users/{userId} Firestore Rules.'
+      );
+    }
+
+    /* ==========================================================
+       STEP 13: UPDATE APPLICATION STATE
+       ========================================================== */
+
+    currentGroup = {
+      ...groupData,
+      id: groupId
+    };
+
+    currentGroupId =
+      groupId;
+
+    currentRole =
+      'chair';
+
+    currentUser =
+      authUser;
+
+    /*
+      Keep Registration ID available to the application.
+    */
+
+    window._lastRegistrationId =
+      registrationId;
+
+    /* ==========================================================
+       STEP 14: SHOW ID REMINDER
+       ========================================================== */
+
+    if (
+      typeof showIdReminder ===
+      'function'
+    ) {
+      showIdReminder(
+        registrationId
+      );
+    }
+
+    /* ==========================================================
+       STEP 15: SUCCESS MESSAGE
+       ========================================================== */
+
+    toast(
+      'Registration successful! Please copy and securely save your Registration ID: ' +
+      registrationId,
+      'success'
+    );
+
+    /* ==========================================================
+       STEP 16: RESET SIGN UP FORM
+       ========================================================== */
+
+    const signUpForm =
+      $('signUpForm');
+
+    if (signUpForm) {
+      signUpForm.reset();
+    }
+
+    if (
+      typeof checkPasswordStrength ===
+      'function'
+    ) {
+      checkPasswordStrength('');
+    }
+
+  } catch (err) {
+
+    console.error(
+      'SIGN UP ERROR:',
+      err
+    );
+
+    /*
+      IMPORTANT:
+      Authentication may already have succeeded even if
+      Firestore failed.
+    */
+
+    if (
+      authUser &&
+      authUser.uid &&
+      registrationId
+    ) {
+
+      window._lastRegistrationId =
+        registrationId;
+
+      if (
+        typeof showIdReminder ===
+        'function'
+      ) {
+        showIdReminder(
+          registrationId
+        );
+      }
+
+      const banner =
+        $('fsRulesBanner');
+
+      if (banner) {
+        banner.classList.add('show');
+      }
+
+      toast(
+        'Your account was created, but some information could not be saved to Firestore. Please save your Registration ID: ' +
+        registrationId,
+        'warning'
+      );
+
+      const signUpForm =
+        $('signUpForm');
+
+      if (signUpForm) {
+        signUpForm.reset();
+      }
+
+      if (
+        typeof checkPasswordStrength ===
+        'function'
+      ) {
+        checkPasswordStrength('');
+      }
+
+      return;
+    }
+
+    /*
+      Authentication itself failed.
+    */
+
+    let msg =
+      'Registration failed. Please try again.';
+
+    if (
+      err &&
+      err.message
+    ) {
+      msg =
+        err.message;
+    }
+
+    toast(
+      msg,
+      'error'
+    );
+
+  } finally {
+
+    if (btn) {
+
+      btn.disabled =
+        false;
+
+      btn.innerHTML =
+        '<i class="fa-solid fa-user-plus"></i> ' +
+        t('signUp');
+    }
   }
 }
 
+
+/* ============================================================
+   SIGN IN
+   ============================================================ */
+
+async function handleSignIn(e) {
+
+  e.preventDefault();
+
+  /*
+    IMPORTANT:
+    Current authentication architecture uses National ID
+    as the Firebase Authentication login identifier.
+
+    Login format:
+    NATIONAL_ID + @cscms.app
+  */
+
+  const groupIdInput =
+    $('loginGroupId');
+
+  const nidaInput =
+    $('loginNida');
+
+  const passwordInput =
+    $('loginPassword');
+
+  if (
+    !groupIdInput ||
+    !nidaInput ||
+    !passwordInput
+  ) {
+    toast(
+      'Login form could not be found. Please refresh the page.',
+      'error'
+    );
+
+    return;
+  }
+
+  const groupId =
+    groupIdInput.value.trim();
+
+  const loginIdentifier =
+    nidaInput.value.trim();
+
+  const password =
+    passwordInput.value;
+
+  /* ==========================================================
+     STEP 1: VALIDATE LOGIN INPUT
+     ========================================================== */
+
+  if (
+    !groupId ||
+    !loginIdentifier ||
+    !password
+  ) {
+
+    toast(
+      'All login fields are required.',
+      'error'
+    );
+
+    return;
+  }
+
+  /* ==========================================================
+     STEP 2: LOAD FIREBASE MODULES
+     ========================================================== */
+
+  try {
+
+    const {
+      signInWithEmailAndPassword,
+      signOut
+    } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js'
+    );
+
+    const {
+      doc,
+      getDoc
+    } = await import(
+      'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'
+    );
+
+    if (!fbAuth || !fbDb) {
+      throw new Error(
+        'Firebase is not initialized. Please check your Firebase configuration.'
+      );
+    }
+
+    /* ========================================================
+       STEP 3: NORMALIZE NATIONAL ID
+       ======================================================== */
+
+    const cleanNida =
+      String(loginIdentifier)
+        .trim()
+        .replace(/\s+/g, '')
+        .toUpperCase();
+
+    /*
+      IMPORTANT:
+      This MUST exactly match the email-generation logic
+      used during Sign Up.
+    */
+
+    const authEmail =
+      cleanNida.toLowerCase() +
+      '@cscms.app';
+
+    console.log(
+      'Login authentication identifier:',
+      authEmail
+    );
+
+    /* ========================================================
+       STEP 4: FIREBASE AUTHENTICATION
+       ======================================================== */
+
+    let userCred;
+
+    try {
+
+      userCred =
+        await signInWithEmailAndPassword(
+          fbAuth,
+          authEmail,
+          password
+        );
+
+    } catch (authError) {
+
+      console.error(
+        'AUTHENTICATION ERROR:',
+        authError
+      );
+
+      if (
+        authError.code ===
+        'auth/invalid-credential'
+      ) {
+        throw new Error(
+          'Invalid National ID or Password.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/user-not-found'
+      ) {
+        throw new Error(
+          'No account was found for this National ID. Please Sign Up first.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/wrong-password'
+      ) {
+        throw new Error(
+          'Incorrect password.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/too-many-requests'
+      ) {
+        throw new Error(
+          'Too many login attempts. Please wait and try again.'
+        );
+      }
+
+      if (
+        authError.code ===
+        'auth/network-request-failed'
+      ) {
+        throw new Error(
+          'Network error. Please check your internet connection.'
+        );
+      }
+
+      throw authError;
+    }
+
+    /* ========================================================
+       STEP 5: CONFIRM USER
+       ======================================================== */
+
+    const user =
+      userCred.user;
+
+    if (
+      !user ||
+      !user.uid
+    ) {
+      throw new Error(
+        'Authentication succeeded, but the user account could not be loaded.'
+      );
+    }
+
+    /* ========================================================
+       STEP 6: GET USER PROFILE
+       ======================================================== */
+
+    const userRef =
+      doc(
+        fbDb,
+        'users',
+        user.uid
+      );
+
+    const userDoc =
+      await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+
+      await signOut(fbAuth);
+
+      throw new Error(
+        'User profile not found in Firestore. The account exists in Firebase Authentication but the user profile is missing.'
+      );
+    }
+
+    const userData =
+      userDoc.data();
+
+    /* ========================================================
+       STEP 7: VERIFY GROUP
+       ======================================================== */
+
+    if (
+      !userData.groupId
+    ) {
+
+      await signOut(fbAuth);
+
+      throw new Error(
+        'This account is not linked to a Group.'
+      );
+    }
+
+    if (
+      String(userData.groupId) !==
+      String(groupId)
+    ) {
+
+      await signOut(fbAuth);
+
+      toast(
+        'This account does not belong to the specified Group ID.',
+        'error'
+      );
+
+      return;
+    }
+
+    /* ========================================================
+       STEP 8: LOAD GROUP
+       ======================================================== */
+
+    const groupRef =
+      doc(
+        fbDb,
+        'groups',
+        groupId
+      );
+
+    const grpDoc =
+      await getDoc(groupRef);
+
+    if (!grpDoc.exists()) {
+
+      await signOut(fbAuth);
+
+      throw new Error(
+        'The specified Group could not be found.'
+      );
+    }
+
+    const groupData =
+      grpDoc.data();
+
+    /* ========================================================
+       STEP 9: UPDATE APPLICATION STATE
+       ======================================================== */
+
+    currentGroup = {
+      id: groupId,
+      ...groupData
+    };
+
+    currentGroupId =
+      groupId;
+
+    currentRole =
+      userData.role ||
+      'member';
+
+    currentUser =
+      user;
+
+    window._lastRegistrationId =
+      userData.registrationId ||
+      null;
+
+    /* ========================================================
+       STEP 10: RETRY PENDING WRITES
+       ======================================================== */
+
+    if (
+      Array.isArray(pendingWrites) &&
+      pendingWrites.length &&
+      typeof retryPendingWrites ===
+      'function'
+    ) {
+
+      try {
+
+        await retryPendingWrites();
+
+      } catch (retryError) {
+
+        console.warn(
+          'Pending writes retry failed:',
+          retryError
+        );
+
+        /*
+          Do not prevent the user from entering the application
+          just because an old pending write failed.
+        */
+      }
+    }
+
+    /* ========================================================
+       STEP 11: ENTER APPLICATION
+       ======================================================== */
+
+    enterApp();
+
+    toast(
+      'Login successful!',
+      'success'
+    );
+
+  } catch (err) {
+
+    console.error(
+      'SIGN IN ERROR:',
+      err
+    );
+
+    let msg =
+      'Invalid National ID or Password.';
+
+    if (
+      err &&
+      err.message
+    ) {
+      msg =
+        err.message;
+    }
+
+    toast(
+      msg,
+      'error'
+    );
+  }
+}
 /* ======== SUPER ADMIN ======== */
 const SUPER_CREDS={email:'super@vikoba.app',password:'WAZIRI2015'};
 let superLoggedIn=false;
