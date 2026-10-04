@@ -693,30 +693,42 @@ async function genPDF(ti,h,ro){
 }
 
 async function procImg(file,mw=1800,q=0.86){return new Promise((res,rej)=>{if(!file||!file.type.startsWith('image/'))return rej('Invalid image');const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{let w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;if(w>mw){h=Math.round(h*(mw/w));w=mw;}const c=document.createElement('canvas');c.width=Math.max(1,w);c.height=Math.max(1,h);const ctx=c.getContext('2d',{alpha:true});ctx.drawImage(img,0,0,w,h);const make=(quality,attempt=0)=>c.toBlob(b=>{if(!b)return rej('Image conversion failed');if(b.size>850000&&attempt<6){if(attempt<3)make(Math.max(.5,quality-.08),attempt+1);else{w=Math.max(900,Math.round(w*.82));h=Math.max(900,Math.round(h*.82));c.width=w;c.height=h;ctx.clearRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);make(.72,attempt+1);}}else res(b);},'image/webp',quality);make(q);};img.onerror=()=>rej('Could not read image');img.src=e.target.result;};r.onerror=()=>rej('Could not read image file');r.readAsDataURL(file);});}
-async function upFile(blob,path,cb,timeoutMs=90000){
+async function upFile(blob,path,cb,timeoutMs=30000){
   if(!blob)throw new Error('No image data available.');
   if(!navigator.onLine)throw new Error('Internet connection is required to publish the advertisement to all users.');
+  if(!auth.currentUser)throw new Error('Super Admin authentication is not active. Please sign in again.');
+  if(auth.currentUser.uid!==SA_UID)throw new Error('Only the authorized Super Admin can upload System Advertisements.');
   const sr=ref(storage,path);
-  let timer;
+  let timer=null,settled=false;
   try{
-    const task=uploadBytesResumable(sr,blob,{contentType:'image/webp',cacheControl:'public,max-age=31536000'});
-    const uploadPromise=new Promise((resolve,reject)=>{
-      task.on('state_changed',snap=>{
-        const pct=snap.totalBytes?Math.round((snap.bytesTransferred/snap.totalBytes)*100):0;
-        if(cb)cb(pct,snap.bytesTransferred,snap.totalBytes);
-      },err=>reject(err),async()=>{
-        try{resolve(await getDownloadURL(task.snapshot.ref));}catch(err){reject(err);}
-      });
+    const uploadPromise=(async()=>{
+      // Direct upload is more reliable here than a resumable task for the
+      // already-optimized WebP files used by System Advertisements.
+      const snap=await uploadBytes(sr,blob,{contentType:'image/webp',cacheControl:'public,max-age=31536000'});
+      if(cb)cb(100,blob.size,blob.size);
+      return await getDownloadURL(snap.ref);
+    })();
+    const timeoutPromise=new Promise((_,reject)=>{
+      timer=setTimeout(()=>{
+        if(!settled)reject(new Error('Firebase Storage did not respond within 30 seconds. This normally means Firebase Storage Rules, the Storage bucket, or the Firebase project configuration needs attention.'));
+      },timeoutMs);
     });
-    const timeoutPromise=new Promise((_,reject)=>{timer=setTimeout(()=>{try{task.cancel();}catch(e){}reject(new Error('Firebase Storage upload timed out after 90 seconds. Check Firebase Storage rules, bucket configuration and internet connection.'));},timeoutMs);});
-    return await Promise.race([uploadPromise,timeoutPromise]);
+    const url=await Promise.race([uploadPromise,timeoutPromise]);
+    settled=true;
+    return url;
   }catch(err){
-    const msg=err?.code==='storage/unauthorized'?'Firebase Storage permission denied. Update your Storage Rules for authenticated Super Admin uploads.':
-      err?.code==='storage/quota-exceeded'?'Firebase Storage quota has been exceeded.':
-      err?.code==='storage/canceled'?'Firebase Storage upload was cancelled.':
-      err?.message||String(err);
+    settled=true;
+    const code=err?.code||'';
+    let msg;
+    if(code==='storage/unauthorized'||code==='storage/unauthenticated')msg='Firebase Storage permission denied. The Storage Rules must allow the authenticated Super Admin to write to systemAds/. UID: '+(auth.currentUser?.uid||'none');
+    else if(code==='storage/unknown')msg='Firebase Storage returned an unknown error. Check the Storage bucket and Firebase Console Storage status.';
+    else if(code==='storage/quota-exceeded')msg='Firebase Storage quota has been exceeded.';
+    else if(code==='storage/canceled')msg='Firebase Storage upload was cancelled.';
+    else if(code==='storage/retry-limit-exceeded')msg='Firebase Storage could not complete the upload. Check internet connectivity and Storage configuration.';
+    else if(code==='storage/invalid-argument')msg='Invalid Firebase Storage upload data.';
+    else msg=err?.message||String(err);
     throw new Error(msg);
-  }finally{clearTimeout(timer);}
+  }finally{if(timer)clearTimeout(timer);}
 }
 
 /* ===== SYSTEM ADS LOCAL CACHE (IndexedDB — avoids LocalStorage quota problems) ===== */
