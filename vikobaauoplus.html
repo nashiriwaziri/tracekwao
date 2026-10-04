@@ -393,7 +393,7 @@ body,.card,.modal-card,.auth-card,.member-reg-card,.sidebar,.top-bar,.super-nav,
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,deleteUser,setPersistence,browserSessionPersistence}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import{getFirestore,enableMultiTabIndexedDbPersistence,collection,doc,setDoc,addDoc,getDoc,getDocs,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit,serverTimestamp,Timestamp,writeBatch}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import{getStorage,ref,uploadBytesResumable,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+import{getStorage,ref,uploadBytes,uploadBytesResumable,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const firebaseConfig={apiKey:"AIzaSyDSUs6uUjQTPQOkUPcIp2u8Rw9NJVnQOfo",authDomain:"ncrs2-f8da9.firebaseapp.com",projectId:"ncrs2-f8da9",storageBucket:"ncrs2-f8da9.firebasestorage.app",messagingSenderId:"436069918682",appId:"1:436069918682:web:70b56c627315bc782102e3",measurementId:"G-2QCBEJSGKS"};
 const fbApp=initializeApp(firebaseConfig);
@@ -443,8 +443,119 @@ let sFilterPlan='all';
 let sFilterStatus='all';
 let saCharts={};
 
-let sysSet={branding:{logoUrl:SYS_LOGO_FILE,logoEnabled:true},languages:[{code:'en',name:'English',enabled:true},{code:'sw',name:'Kiswahili',enabled:true},{code:'fr',name:'Français',enabled:true}],theme:'blue'};
-let curLang='en';
+/* ===== INTERNATIONAL LANGUAGE ENGINE ===== */
+const DEFAULT_LANGUAGES=[
+  {code:'en',name:'English',enabled:true},
+  {code:'sw',name:'Kiswahili',enabled:true},
+  {code:'fr',name:'Français',enabled:true},
+  {code:'zh',name:'中文',enabled:true}
+];
+let sysSet={branding:{logoUrl:SYS_LOGO_FILE,logoEnabled:true},languages:[...DEFAULT_LANGUAGES],theme:'blue'};
+let curLang=localStorage.getItem('cscms_language')||'en';
+const I18N={
+  en:{},
+  sw:{
+    'Offline Mode':'Hali ya Nje ya Mtandao','Back Online':'Mtandao Umerudi','Offline':'Nje ya Mtandao',
+    'Sign In':'Ingia','Sign Up':'Jisajili','Super Admin':'Msimamizi Mkuu','Dashboard':'Dashibodi',
+    'Latest Announcements':'Matangazo ya Hivi Karibuni','System Announcements':'Matangazo ya Mfumo',
+    'Visible to all visitors and logged-in users':'Inaonekana kwa wageni wote na watumiaji walioingia',
+    'Partners':'Washirika','Connect directly to partner applications and services':'Unganisha moja kwa moja na programu na huduma za washirika',
+    'Plans & Pricing':'Mipango na Bei','Free Trial':'Jaribio Bure','Get Started':'Anza','Basic':'Msingi','Pro':'Kitaalamu','Enterprise':'Biashara Kubwa',
+    'Choose Basic':'Chagua Msingi','Choose Pro':'Chagua Kitaalamu','Choose Enterprise':'Chagua Biashara Kubwa',
+    'Back':'Rudi','Register Group':'Sajili Kikundi','Works Offline. Syncs when online.':'Inafanya kazi bila mtandao. Husawazisha mtandao unapopatikana.',
+    'First Name *':'Jina la Kwanza *','Middle Name':'Jina la Kati','Last Name *':'Jina la Mwisho *','Phone *':'Simu *','Group Type *':'Aina ya Kikundi *',
+    'Group Name *':'Jina la Kikundi *','Country *':'Nchi *','National ID *':'Namba ya Kitambulisho cha Taifa *','Password *':'Nenosiri *','Password':'Nenosiri',
+    'Select...':'Chagua...','Tanzania':'Tanzania','Kenya':'Kenya','Uganda':'Uganda','Rwanda':'Rwanda','Burundi':'Burundi','South Sudan':'Sudan Kusini','Mozambique':'Msumbiji','Malawi':'Malawi','Zambia':'Zambia',
+    'Registration Successful!':'Usajili Umefanikiwa!','Please':'Tafadhali','COPY':'NAKILI','your Group ID.':'Kitambulisho cha Kikundi chako.','Your Group ID':'Kitambulisho cha Kikundi chako',
+    'COPY ID':'NAKILI ID','Go to Sign In':'Nenda Kuingia','Member Created!':'Mwanachama Ameundwa!','Share these credentials with the member.':'Mshirikishe mwanachama taarifa hizi za kuingia.',
+    'Member ID':'ID ya Mwanachama','Group ID':'ID ya Kikundi','National ID (Login)':'Namba ya Taifa (Kuingia)','Copy All':'Nakili Zote','Done':'Imekamilika',
+    'Group ID *':'ID ya Kikundi *','Members: Use Group ID + National ID + password from Chairperson':'Mwanachama: Tumia ID ya Kikundi + Namba ya Taifa + nenosiri ulilopewa na Mwenyekiti',
+    'FULL CONTROL':'UDHIBITI KAMILI','Logout':'Toka','MAIN APP':'MFUMO MKUU','Chair':'Mwenyekiti','Management':'Usimamizi','Members':'Wanachama',
+    'Finance':'Fedha','Savings':'Akiba','Shares':'Hisa','Loans':'Mikopo','Repayments':'Marejesho','Welfare':'Ustawi',
+    'Accounting':'Uhasibu','Income & Expense':'Mapato na Matumizi','Dividends':'Gawio','Penalties':'Adhabu',
+    'Operations':'Uendeshaji','Meetings':'Mikutano','Branches':'Matawi','Loan Products':'Bidhaa za Mikopo',
+    'Compliance':'Uzingatiaji','KYC':'Utambuzi wa Mwanachama (KYC)','Guarantors':'Wadhamini','Collateral':'Dhamana',
+    'Communication':'Mawasiliano','Announcements':'Matangazo','Payments':'Malipo','Payments & Billing':'Malipo na Ankara',
+    'System':'Mfumo','Pending Approval':'Inasubiri Idhini','Audit Trail':'Historia ya Ukaguzi',
+    'Cancel':'Ghairi','Confirm':'Thibitisha','Save':'Hifadhi','Save Changes':'Hifadhi Mabadiliko','Edit':'Hariri','Delete':'Futa','Delete Account':'Futa Akaunti',
+    'Delete Permanently':'Futa Kabisa','Type the Group ID to confirm':'Andika ID ya Kikundi kuthibitisha','Email':'Barua Pepe','Form':'Fomu',
+    'Assign Plan':'Weka Mpango','Plan':'Mpango','Free':'Bure','Duration':'Muda','1 Month':'Mwezi 1','3 Months':'Miezi 3','1 Year':'Mwaka 1','Permissions':'Ruhusa',
+    'Chairperson only':'Mwenyekiti pekee','No partners published.':'Hakuna washirika waliochapishwa.','Open App':'Fungua Programu',
+    'Create System Advertisement':'Tengeneza Tangazo la Mfumo','Advertisement Title *':'Kichwa cha Tangazo *','Description *':'Maelezo *',
+    'Advertisement Image *':'Picha ya Tangazo *','Choose Image':'Chagua Picha','Upload & Publish to All Users':'Pakia na Chapisha kwa Watumiaji Wote',
+    'Automatic Storage:':'Uhifadhi wa Kiotomatiki:','Saving Advertisement...':'Inahifadhi Tangazo...','Processing Image...':'Inachakata Picha...',
+    'Uploading to Firebase...':'Inapakia Firebase...','Advertisement uploaded, saved and published to all users':'Tangazo limepakiwa, kuhifadhiwa na kuchapishwa kwa watumiaji wote',
+    'Advertisement upload failed:':'Upakiaji wa tangazo umeshindikana:','No advertisements published.':'Hakuna matangazo yaliyochapishwa.',
+    'Search':'Tafuta','Add Member':'Ongeza Mwanachama','Add':'Ongeza','View':'Angalia','Actions':'Vitendo','Status':'Hali','Date':'Tarehe','Amount':'Kiasi','Total':'Jumla',
+    'Approved':'Imeidhinishwa','Pending':'Inasubiri','Rejected':'Imekataliwa','Active':'Hai','Inactive':'Haifanyi kazi','Suspended':'Imesimamishwa',
+    'Loading...':'Inapakia...','No data available':'Hakuna taarifa zinazopatikana','Successfully saved':'Imehifadhiwa kwa mafanikio','Update failed':'Marekebisho yameshindikana',
+    'Delete User':'Futa Mtumiaji','SUPER ADMIN':'MSIMAMIZI MKUU','COPY ID':'NAKILI ID','SIGN UP':'JISAJILI','SIGN IN':'INGIA'
+  },
+  fr:{
+    'Offline Mode':'Mode hors ligne','Back Online':'Connexion rétablie','Offline':'Hors ligne','Sign In':'Se connecter','Sign Up':'S’inscrire','Super Admin':'Super administrateur','Dashboard':'Tableau de bord',
+    'Latest Announcements':'Dernières annonces','System Announcements':'Annonces du système','Visible to all visitors and logged-in users':'Visible à tous les visiteurs et utilisateurs connectés',
+    'Partners':'Partenaires','Connect directly to partner applications and services':'Connectez-vous directement aux applications et services partenaires','Plans & Pricing':'Forfaits et tarifs',
+    'Free Trial':'Essai gratuit','Get Started':'Commencer','Basic':'Basique','Pro':'Professionnel','Enterprise':'Entreprise','Choose Basic':'Choisir Basique','Choose Pro':'Choisir Pro','Choose Enterprise':'Choisir Entreprise',
+    'Back':'Retour','Register Group':'Enregistrer le groupe','Works Offline. Syncs when online.':'Fonctionne hors ligne. Synchronisation dès la reconnexion.',
+    'First Name *':'Prénom *','Middle Name':'Deuxième prénom','Last Name *':'Nom *','Phone *':'Téléphone *','Group Type *':'Type de groupe *','Group Name *':'Nom du groupe *','Country *':'Pays *',
+    'National ID *':'Identifiant national *','Password *':'Mot de passe *','Password':'Mot de passe','Select...':'Sélectionner...','Tanzania':'Tanzanie','Kenya':'Kenya','Uganda':'Ouganda','Rwanda':'Rwanda','Burundi':'Burundi','South Sudan':'Soudan du Sud','Mozambique':'Mozambique','Malawi':'Malawi','Zambia':'Zambie',
+    'Registration Successful!':'Inscription réussie !','Please':'Veuillez','COPY':'COPIER','your Group ID.':'votre identifiant de groupe.','Your Group ID':'Votre identifiant de groupe','COPY ID':'COPIER ID','Go to Sign In':'Aller à la connexion',
+    'Member Created!':'Membre créé !','Share these credentials with the member.':'Partagez ces identifiants avec le membre.','Member ID':'ID du membre','Group ID':'ID du groupe','National ID (Login)':'Identifiant national (connexion)','Copy All':'Tout copier','Done':'Terminé',
+    'Group ID *':'ID du groupe *','Members: Use Group ID + National ID + password from Chairperson':'Membre : utilisez l’ID du groupe + l’identifiant national + le mot de passe fourni par le président',
+    'FULL CONTROL':'CONTRÔLE COMPLET','Logout':'Se déconnecter','MAIN APP':'APPLICATION PRINCIPALE','Chair':'Président','Management':'Gestion','Members':'Membres','Finance':'Finance','Savings':'Épargne','Shares':'Parts','Loans':'Prêts','Repayments':'Remboursements','Welfare':'Protection sociale',
+    'Accounting':'Comptabilité','Income & Expense':'Revenus et dépenses','Dividends':'Dividendes','Penalties':'Pénalités','Operations':'Opérations','Meetings':'Réunions','Branches':'Agences','Loan Products':'Produits de prêt',
+    'Compliance':'Conformité','KYC':'KYC','Guarantors':'Garants','Collateral':'Garantie','Communication':'Communication','Announcements':'Annonces','Payments':'Paiements','Payments & Billing':'Paiements et facturation','System':'Système','Pending Approval':'En attente d’approbation','Audit Trail':'Piste d’audit',
+    'Cancel':'Annuler','Confirm':'Confirmer','Save':'Enregistrer','Save Changes':'Enregistrer les modifications','Edit':'Modifier','Delete':'Supprimer','Delete Account':'Supprimer le compte','Delete Permanently':'Supprimer définitivement','Type the Group ID to confirm':'Saisissez l’ID du groupe pour confirmer','Email':'E-mail','Form':'Formulaire','Assign Plan':'Attribuer un forfait','Plan':'Forfait','Free':'Gratuit','Duration':'Durée','1 Month':'1 mois','3 Months':'3 mois','1 Year':'1 an','Permissions':'Autorisations',
+    'Chairperson only':'Président uniquement','No partners published.':'Aucun partenaire publié.','Open App':'Ouvrir l’application','Create System Advertisement':'Créer une annonce système','Advertisement Title *':'Titre de l’annonce *','Description *':'Description *','Advertisement Image *':'Image de l’annonce *','Choose Image':'Choisir une image','Upload & Publish to All Users':'Télécharger et publier pour tous les utilisateurs','Automatic Storage:':'Stockage automatique :','Saving Advertisement...':'Enregistrement de l’annonce...','Processing Image...':'Traitement de l’image...','Uploading to Firebase...':'Téléchargement vers Firebase...','Advertisement uploaded, saved and published to all users':'Annonce téléchargée, enregistrée et publiée pour tous les utilisateurs','Advertisement upload failed:':'Échec du téléchargement de l’annonce :','No advertisements published.':'Aucune annonce publiée.',
+    'Search':'Rechercher','Add Member':'Ajouter un membre','Add':'Ajouter','View':'Voir','Actions':'Actions','Status':'Statut','Date':'Date','Amount':'Montant','Total':'Total','Approved':'Approuvé','Pending':'En attente','Rejected':'Rejeté','Active':'Actif','Inactive':'Inactif','Suspended':'Suspendu','Loading...':'Chargement...','No data available':'Aucune donnée disponible','Successfully saved':'Enregistré avec succès','Update failed':'Échec de la mise à jour','Delete User':'Supprimer l’utilisateur','SUPER ADMIN':'SUPER ADMIN','SIGN UP':'S’INSCRIRE','SIGN IN':'SE CONNECTER'
+  },
+  zh:{
+    'Offline Mode':'离线模式','Back Online':'网络已恢复','Offline':'离线','Sign In':'登录','Sign Up':'注册','Super Admin':'超级管理员','Dashboard':'仪表板',
+    'Latest Announcements':'最新公告','System Announcements':'系统公告','Visible to all visitors and logged-in users':'所有访客和已登录用户可见','Partners':'合作伙伴','Connect directly to partner applications and services':'直接连接合作伙伴应用和服务',
+    'Plans & Pricing':'套餐与价格','Free Trial':'免费试用','Get Started':'开始使用','Basic':'基础版','Pro':'专业版','Enterprise':'企业版','Choose Basic':'选择基础版','Choose Pro':'选择专业版','Choose Enterprise':'选择企业版',
+    'Back':'返回','Register Group':'注册群组','Works Offline. Syncs when online.':'支持离线使用，联网后自动同步。','First Name *':'名字 *','Middle Name':'中间名','Last Name *':'姓氏 *','Phone *':'电话 *','Group Type *':'群组类型 *','Group Name *':'群组名称 *','Country *':'国家 *','National ID *':'国家身份证号码 *','Password *':'密码 *','Password':'密码','Select...':'请选择...',
+    'Tanzania':'坦桑尼亚','Kenya':'肯尼亚','Uganda':'乌干达','Rwanda':'卢旺达','Burundi':'布隆迪','South Sudan':'南苏丹','Mozambique':'莫桑比克','Malawi':'马拉维','Zambia':'赞比亚',
+    'Registration Successful!':'注册成功！','Please':'请','COPY':'复制','your Group ID.':'您的群组ID。','Your Group ID':'您的群组ID','COPY ID':'复制ID','Go to Sign In':'前往登录','Member Created!':'成员已创建！','Share these credentials with the member.':'请将这些登录信息提供给成员。','Member ID':'成员ID','Group ID':'群组ID','National ID (Login)':'国家身份证号（登录）','Copy All':'全部复制','Done':'完成',
+    'Group ID *':'群组ID *','Members: Use Group ID + National ID + password from Chairperson':'成员：使用群组ID + 国家身份证号 + 主席提供的密码','FULL CONTROL':'完全控制','Logout':'退出登录','MAIN APP':'主应用','Chair':'主席','Management':'管理','Members':'成员','Finance':'财务','Savings':'储蓄','Shares':'股份','Loans':'贷款','Repayments':'还款','Welfare':'福利',
+    'Accounting':'会计','Income & Expense':'收入与支出','Dividends':'股息','Penalties':'罚款','Operations':'运营','Meetings':'会议','Branches':'分支机构','Loan Products':'贷款产品','Compliance':'合规','KYC':'客户身份识别','Guarantors':'担保人','Collateral':'抵押品','Communication':'通信','Announcements':'公告','Payments':'付款','Payments & Billing':'付款与账单','System':'系统','Pending Approval':'待审批','Audit Trail':'审计记录',
+    'Cancel':'取消','Confirm':'确认','Save':'保存','Save Changes':'保存更改','Edit':'编辑','Delete':'删除','Delete Account':'删除账户','Delete Permanently':'永久删除','Type the Group ID to confirm':'输入群组ID以确认','Email':'电子邮件','Form':'表单','Assign Plan':'分配套餐','Plan':'套餐','Free':'免费','Duration':'期限','1 Month':'1个月','3 Months':'3个月','1 Year':'1年','Permissions':'权限',
+    'Chairperson only':'仅限主席','No partners published.':'暂无已发布的合作伙伴。','Open App':'打开应用','Create System Advertisement':'创建系统广告','Advertisement Title *':'广告标题 *','Description *':'描述 *','Advertisement Image *':'广告图片 *','Choose Image':'选择图片','Upload & Publish to All Users':'上传并发布给所有用户','Automatic Storage:':'自动存储：','Saving Advertisement...':'正在保存广告...','Processing Image...':'正在处理图片...','Uploading to Firebase...':'正在上传到 Firebase...','Advertisement uploaded, saved and published to all users':'广告已上传、保存并发布给所有用户','Advertisement upload failed:':'广告上传失败：','No advertisements published.':'暂无已发布广告。',
+    'Search':'搜索','Add Member':'添加成员','Add':'添加','View':'查看','Actions':'操作','Status':'状态','Date':'日期','Amount':'金额','Total':'总计','Approved':'已批准','Pending':'待处理','Rejected':'已拒绝','Active':'启用','Inactive':'停用','Suspended':'已暂停','Loading...':'加载中...','No data available':'暂无数据','Successfully saved':'保存成功','Update failed':'更新失败','Delete User':'删除用户','SUPER ADMIN':'超级管理员','SIGN UP':'注册','SIGN IN':'登录'
+  }
+};
+const originalTextNodes=new WeakMap();
+function tr(value){
+  if(value===null||value===undefined)return value;
+  const s=String(value),key=s.replace(/\s+/g,' ').trim();
+  return (I18N[curLang]&&I18N[curLang][key]) || s;
+}
+function translateDOM(root=document){
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+  nodes.forEach(n=>{
+    if(!n.parentElement||['SCRIPT','STYLE','NOSCRIPT'].includes(n.parentElement.tagName))return;
+    let base=originalTextNodes.get(n);if(base===undefined){base=n.nodeValue;originalTextNodes.set(n,base);}
+    const leading=(base.match(/^\s*/)||[''])[0],trailing=(base.match(/\s*$/)||[''])[0];
+    const core=base.trim();if(!core)return;
+    n.nodeValue=leading+tr(core)+trailing;
+  });
+  root.querySelectorAll?.('[data-i18n]').forEach(el=>{el.textContent=tr(el.dataset.i18n);});
+  root.querySelectorAll?.('input[placeholder],textarea[placeholder]').forEach(el=>{
+    if(!el.dataset.i18nPlaceholder)el.dataset.i18nPlaceholder=el.getAttribute('placeholder')||'';
+    el.setAttribute('placeholder',tr(el.dataset.i18nPlaceholder));
+  });
+  root.querySelectorAll?.('[title]').forEach(el=>{
+    if(!el.dataset.i18nTitle)el.dataset.i18nTitle=el.getAttribute('title')||'';
+    el.setAttribute('title',tr(el.dataset.i18nTitle));
+  });
+}
+let langObserver;
+function startLanguageObserver(){
+  if(langObserver)langObserver.disconnect();
+  langObserver=new MutationObserver(muts=>{if(curLang!=='en')muts.forEach(m=>m.addedNodes.forEach(n=>{if(n.nodeType===1)translateDOM(n);}));});
+  langObserver.observe(document.body,{childList:true,subtree:true});
+}
+
 let PUBLIC_ADS=[];
 
 /* ===== UTILITIES ===== */
@@ -582,7 +693,31 @@ async function genPDF(ti,h,ro){
 }
 
 async function procImg(file,mw=1800,q=0.86){return new Promise((res,rej)=>{if(!file||!file.type.startsWith('image/'))return rej('Invalid image');const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{let w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;if(w>mw){h=Math.round(h*(mw/w));w=mw;}const c=document.createElement('canvas');c.width=Math.max(1,w);c.height=Math.max(1,h);const ctx=c.getContext('2d',{alpha:true});ctx.drawImage(img,0,0,w,h);const make=(quality,attempt=0)=>c.toBlob(b=>{if(!b)return rej('Image conversion failed');if(b.size>850000&&attempt<6){if(attempt<3)make(Math.max(.5,quality-.08),attempt+1);else{w=Math.max(900,Math.round(w*.82));h=Math.max(900,Math.round(h*.82));c.width=w;c.height=h;ctx.clearRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);make(.72,attempt+1);}}else res(b);},'image/webp',quality);make(q);};img.onerror=()=>rej('Could not read image');img.src=e.target.result;};r.onerror=()=>rej('Could not read image file');r.readAsDataURL(file);});}
-function upFile(blob,path,cb){return new Promise((res,rej)=>{const sr=ref(storage,path);const ut=uploadBytesResumable(sr,blob);ut.on('state_changed',s=>{if(cb)cb((s.bytesTransferred/s.totalBytes)*100);},rej,()=>getDownloadURL(ut.snapshot.ref).then(res));});}
+async function upFile(blob,path,cb,timeoutMs=90000){
+  if(!blob)throw new Error('No image data available.');
+  if(!navigator.onLine)throw new Error('Internet connection is required to publish the advertisement to all users.');
+  const sr=ref(storage,path);
+  let timer;
+  try{
+    const task=uploadBytesResumable(sr,blob,{contentType:'image/webp',cacheControl:'public,max-age=31536000'});
+    const uploadPromise=new Promise((resolve,reject)=>{
+      task.on('state_changed',snap=>{
+        const pct=snap.totalBytes?Math.round((snap.bytesTransferred/snap.totalBytes)*100):0;
+        if(cb)cb(pct,snap.bytesTransferred,snap.totalBytes);
+      },err=>reject(err),async()=>{
+        try{resolve(await getDownloadURL(task.snapshot.ref));}catch(err){reject(err);}
+      });
+    });
+    const timeoutPromise=new Promise((_,reject)=>{timer=setTimeout(()=>{try{task.cancel();}catch(e){}reject(new Error('Firebase Storage upload timed out after 90 seconds. Check Firebase Storage rules, bucket configuration and internet connection.'));},timeoutMs);});
+    return await Promise.race([uploadPromise,timeoutPromise]);
+  }catch(err){
+    const msg=err?.code==='storage/unauthorized'?'Firebase Storage permission denied. Update your Storage Rules for authenticated Super Admin uploads.':
+      err?.code==='storage/quota-exceeded'?'Firebase Storage quota has been exceeded.':
+      err?.code==='storage/canceled'?'Firebase Storage upload was cancelled.':
+      err?.message||String(err);
+    throw new Error(msg);
+  }finally{clearTimeout(timer);}
+}
 
 /* ===== SYSTEM ADS LOCAL CACHE (IndexedDB — avoids LocalStorage quota problems) ===== */
 const AD_LOCAL_DB='cscms_system_ads_local_v2';
@@ -631,9 +766,10 @@ function applyTheme(name,save=true){
 function loadLocalTheme(){applyTheme(localStorage.getItem('cscms_theme')||sysSet.theme||'blue',false);}
 try{onSnapshot(doc(db,'systemSettings','branding'),s=>{if(s.exists()){const d=s.data();sysSet.branding={logoUrl:d.logoUrl||SYS_LOGO_FILE,logoEnabled:d.logoEnabled!==false};}paintAllLogos();});}catch(e){}
 try{onSnapshot(doc(db,'systemSettings','theme'),s=>{if(s.exists()&&s.data().theme){sysSet.theme=s.data().theme;applyTheme(sysSet.theme,false);}});}catch(e){}
-try{onSnapshot(doc(db,'systemSettings','languages'),s=>{if(s.exists())sysSet.languages=s.data().list||sysSet.languages;renderLB();});}catch(e){}
-function renderLB(){const b=$('localeBar');if(!b)return;b.innerHTML='';sysSet.languages.filter(l=>l.enabled).forEach(l=>{b.innerHTML+=`<button class="locale-btn ${l.code===curLang?'active':''}" onclick="swLang('${l.code}')">${l.name}</button>`;});}
-window.swLang=c=>{curLang=c;renderLB();};
+try{onSnapshot(doc(db,'systemSettings','languages'),s=>{if(s.exists()){const saved=Array.isArray(s.data().list)?s.data().list:[];const byCode=new Map(saved.map(x=>[x.code,x]));sysSet.languages=DEFAULT_LANGUAGES.map(d=>({...d,...(byCode.get(d.code)||{})}));saved.filter(x=>x.code&&!DEFAULT_LANGUAGES.some(d=>d.code===x.code)).forEach(x=>sysSet.languages.push(x));}else{sysSet.languages=[...DEFAULT_LANGUAGES];}renderLB();});}catch(e){}
+function renderLB(){const b=$('localeBar');if(!b)return;b.innerHTML='';const langs=(sysSet.languages&&sysSet.languages.length?sysSet.languages:DEFAULT_LANGUAGES).filter(l=>l.enabled!==false);langs.forEach(l=>{b.innerHTML+=`<button class="locale-btn ${l.code===curLang?'active':''}" title="${l.name}" onclick="swLang('${l.code}')">${l.name}</button>`;});translateDOM(document);}
+window.swLang=c=>{if(!I18N[c])c='en';curLang=c;localStorage.setItem('cscms_language',c);renderLB();buildNav();if(typeof aSec!=='undefined'&&aSec)renderSec(aSec);translateDOM(document);};
+
 loadLocalTheme();
 
 
@@ -1568,7 +1704,7 @@ const mAllowed=new Set(['dashboard','members','savings','shares','loans','repaym
 function buildNav(){
   const n=$('navContainer');
   const vis=CR==='chair'?navItems:navItems.filter(i=>!i.id||mAllowed.has(i.id));
-  n.innerHTML=vis.map(i=>i.section?`<div class="nav-label">${i.section}</div>`:`<button class="nav-btn" data-nav="${i.id}" onclick="navigateTo('${i.id}')"><i class="fa-solid ${i.icon}"></i> ${i.label}</button>`).join('');
+  n.innerHTML=vis.map(i=>i.section?`<div class="nav-label">${tr(i.section)}</div>`:`<button class="nav-btn" data-nav="${i.id}" onclick="navigateTo('${i.id}')"><i class="fa-solid ${i.icon}"></i> ${tr(i.label)}</button>`).join('');
 }
 
 window.navigateTo=id=>{
@@ -1576,7 +1712,7 @@ window.navigateTo=id=>{
   aSec=id;
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.nav===id));
   const it=navItems.find(n=>n.id===id);
-  $('pageTitle').textContent=it?it.label:id;
+  $('pageTitle').textContent=it?tr(it.label):tr(id);
   renderSec(id);
 };
 
@@ -2024,9 +2160,10 @@ window.openSAAdForm=()=>{
       const f=$('adFile').files[0];if(!f)throw new Error('Please select an advertisement image.');
       if(!f.type.startsWith('image/'))throw new Error('Please select a valid image file.');
       const blob=await procImg(f,1800,.86);
-      btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Uploading to Firebase...';
+      btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Connecting to Firebase...';
       const path=`systemAds/${Date.now()}_${Math.random().toString(36).slice(2,9)}.webp`;
-      const imageUrl=await upFile(blob,path,p=>{if(p>5)btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Uploading ${Math.round(p)}%...`;});
+      const imageUrl=await upFile(blob,path,(p)=>{btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Uploading to Firebase ${p}%...`;});
+      btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Saving Advertisement...';
       const adData={title:$('adTitle').value.trim(),description:$('adDesc').value.trim(),imageUrl,storagePath:path,originalFileName:f.name,originalFileSize:f.size,optimizedFileSize:blob.size,mimeType:'image/webp',status:'active',visibility:'public',audience:'all-users',createdBy:SA_UID,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
       const refDoc=await addDoc(collection(db,'advertisements'),adData);
       const localAd={...adData,id:refDoc.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
@@ -2051,6 +2188,8 @@ window.deleteSAPartner=async id=>{showConfirm('Delete Partner','Remove this glob
 loadLocalTheme();
 paintAllLogos();
 renderLB();
+startLanguageObserver();
+translateDOM(document);
 
 </script>
 </body>
