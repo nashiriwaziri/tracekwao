@@ -208,6 +208,7 @@ body,.card,.modal-card,.auth-card,.member-reg-card,.sidebar,.top-bar,.super-nav,
 .ad-tile-pro{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:100%;transition:.25s}
 .ad-tile-pro:hover{transform:translateY(-4px);border-color:var(--blue);box-shadow:0 12px 30px var(--surface-shadow)}
 .ad-tile-media{width:100%;height:185px;background:var(--panel2);object-fit:cover}.ad-tile-body{padding:16px;display:flex;flex-direction:column;gap:8px;flex:1}.ad-tile-title{font-size:15px;font-weight:800}.ad-tile-desc{font-size:12px;color:var(--muted);line-height:1.6}.ad-tile-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:auto;padding-top:8px}.ad-preview{width:100%;height:180px;border-radius:12px;object-fit:cover;background:var(--panel2);border:1px solid var(--line);margin-top:10px}
+.ad-tile-pro{min-width:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:linear-gradient(180deg,var(--panel),var(--panel2));box-shadow:0 10px 35px rgba(0,0,0,.12);transition:transform .25s,box-shadow .25s}.ad-tile-pro:hover{transform:translateY(-4px);box-shadow:0 18px 45px rgba(0,0,0,.2)}.ad-tile-media{aspect-ratio:16/9;height:auto;min-height:180px;display:block;object-fit:cover;background:var(--panel2)}.ad-tile-body{min-width:0}.ad-tile-desc{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.ad-tile-title{overflow-wrap:anywhere}
 .upload-zone-pro{border:2px dashed var(--line);border-radius:14px;padding:22px;text-align:center;cursor:pointer;background:var(--panel2);transition:.2s}.upload-zone-pro:hover{border-color:var(--blue);background:rgba(59,130,246,.06)}.upload-zone-pro input{display:none}
 .app-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(59,130,246,.12);color:var(--blue);font-size:9px;font-weight:800;text-transform:uppercase}
 @media(max-width:600px){.theme-picker{grid-template-columns:1fr}.control-panel{grid-template-columns:repeat(2,1fr)}}
@@ -580,8 +581,16 @@ async function genPDF(ti,h,ro){
   doc.save(`${ti.replace(/\s+/g,'_')}_${today()}.pdf`);showToast('PDF Downloaded','success');
 }
 
-async function procImg(file,mw=1024,q=0.8){return new Promise((res,rej)=>{if(!file||!file.type.startsWith('image/'))return rej('Invalid');const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');let w=img.width,h=img.height;if(w>mw){h=Math.round(h*(mw/w));w=mw;}c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);c.toBlob(b=>b?res(b):rej('Fail'),'image/webp',q);};img.onerror=()=>rej('Err');img.src=e.target.result;};r.readAsDataURL(file);});}
+async function procImg(file,mw=1800,q=0.86){return new Promise((res,rej)=>{if(!file||!file.type.startsWith('image/'))return rej('Invalid image');const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{let w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;if(w>mw){h=Math.round(h*(mw/w));w=mw;}const c=document.createElement('canvas');c.width=Math.max(1,w);c.height=Math.max(1,h);const ctx=c.getContext('2d',{alpha:true});ctx.drawImage(img,0,0,w,h);const make=(quality,attempt=0)=>c.toBlob(b=>{if(!b)return rej('Image conversion failed');if(b.size>850000&&attempt<6){if(attempt<3)make(Math.max(.5,quality-.08),attempt+1);else{w=Math.max(900,Math.round(w*.82));h=Math.max(900,Math.round(h*.82));c.width=w;c.height=h;ctx.clearRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);make(.72,attempt+1);}}else res(b);},'image/webp',quality);make(q);};img.onerror=()=>rej('Could not read image');img.src=e.target.result;};r.onerror=()=>rej('Could not read image file');r.readAsDataURL(file);});}
 function upFile(blob,path,cb){return new Promise((res,rej)=>{const sr=ref(storage,path);const ut=uploadBytesResumable(sr,blob);ut.on('state_changed',s=>{if(cb)cb((s.bytesTransferred/s.totalBytes)*100);},rej,()=>getDownloadURL(ut.snapshot.ref).then(res));});}
+
+/* ===== SYSTEM ADS LOCAL CACHE (IndexedDB — avoids LocalStorage quota problems) ===== */
+const AD_LOCAL_DB='cscms_system_ads_local_v2';
+function adLocalDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(AD_LOCAL_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('ads'))r.result.createObjectStore('ads',{keyPath:'id'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+async function cacheAdsLocal(ads){try{const d=await adLocalDB(),tx=d.transaction('ads','readwrite'),st=tx.objectStore('ads');st.clear();(ads||[]).forEach(a=>st.put(a));return new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch(e){console.warn('Local ad cache:',e);}}
+async function readAdsLocal(){try{const d=await adLocalDB();return await new Promise((res,rej)=>{const q=d.transaction('ads','readonly').objectStore('ads').getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error);});}catch(e){return [];}}
+async function blobDataUrl(blob){return await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(blob);});}
+
 
 /* ===== OFFLINE QUEUE ===== */
 const OM={
@@ -640,17 +649,19 @@ function renderPublicAdsInto(elId,ads=PUBLIC_ADS){
   const el=$(elId);if(!el)return;
   const list=(ads||[]).filter(a=>(a.status||'active')==='active');
   el.innerHTML=list.map(a=>`<article class="ad-tile-pro">
-    ${a.imageUrl?`<img class="ad-tile-media" src="${a.imageUrl}" alt="${a.title||'Advertisement'}" loading="lazy">`:a.videoUrl?`<video class="ad-tile-media" src="${a.videoUrl}" controls preload="metadata"></video>`:`<div class="ad-tile-media flex-center"><i class="fa-solid fa-bullhorn" style="font-size:34px;color:var(--blue)"></i></div>`}
-    <div class="ad-tile-body"><span class="app-badge"><i class="fa-solid fa-globe"></i> System Announcement</span><div class="ad-tile-title">${a.title||'Announcement'}</div><div class="ad-tile-desc">${a.description||''}</div><div class="ad-tile-meta"><span class="tiny">${fD(a.createdAt)}</span>${a.destinationUrl?`<a class="btn primary btn-sm" href="${a.destinationUrl}" target="_blank" rel="noopener noreferrer">${a.callToAction||'Learn More'} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>`:''}</div></div>
+    ${a.imageUrl?`<img class="ad-tile-media" src="${a.imageUrl}" alt="${a.title||'Advertisement'}" loading="lazy" onerror="this.style.display='none'">`:a.videoUrl?`<video class="ad-tile-media" src="${a.videoUrl}" controls preload="metadata"></video>`:`<div class="ad-tile-media flex-center"><i class="fa-solid fa-bullhorn" style="font-size:34px;color:var(--blue)"></i></div>`}
+    <div class="ad-tile-body"><span class="app-badge"><i class="fa-solid fa-globe"></i> System Announcement</span><div class="ad-tile-title">${a.title||'Announcement'}</div><div class="ad-tile-desc">${a.description||''}</div><div class="ad-tile-meta"><span class="tiny">${fD(a.createdAt)}</span></div></div>
   </article>`).join('')||'<div class="card" style="grid-column:1/-1;text-align:center;padding:35px"><p class="small">No active system announcements at the moment.</p></div>';
 }
-try{onSnapshot(query(collection(db,'advertisements'),orderBy('createdAt','desc'),limit(30)),snap=>{
+async function renderLocalAdsFallback(){const local=await readAdsLocal();if(local.length){PUBLIC_ADS=local.filter(a=>(a.status||'active')==='active');renderPublicAdsInto('landingAds',PUBLIC_ADS.slice(0,3));renderPublicAdsInto('publicAds',PUBLIC_ADS);}}
+try{onSnapshot(query(collection(db,'advertisements'),orderBy('createdAt','desc'),limit(30)),async snap=>{
   PUBLIC_ADS=snap.docs.map(d=>({id:d.id,...d.data()})).filter(a=>(a.status||'active')==='active');
-  const top=PUBLIC_ADS.slice(0,3),ban=$('landingAds');
-  if(ban)renderPublicAdsInto('landingAds',top);
+  await cacheAdsLocal(PUBLIC_ADS);
+  renderPublicAdsInto('landingAds',PUBLIC_ADS.slice(0,3));
   const c=$('publicAds');if(c){c.className='ad-grid-pro';renderPublicAdsInto('publicAds',PUBLIC_ADS);}
   if($('contentArea')&&aSec==='systemads')renderSec('systemads');
-});}catch(e){console.warn('Public ads listener',e);}
+});}catch(e){console.warn('Public ads listener',e);renderLocalAdsFallback();}
+if(!navigator.onLine)renderLocalAdsFallback();
 
 /* ===== AUDIT ===== */
 async function audit(a,e,d=''){try{if(CGI)await addDoc(collection(db,'groups',CGI,'audit'),{action:a,entity:e,details:d,user:`${CU?.firstName||''} ${CU?.lastName||''}`,role:CR,date:serverTimestamp()});else await addDoc(collection(db,'auditLogs'),{action:a,entity:e,details:d,timestamp:serverTimestamp(),userId:auth.currentUser?.uid||'System'});}catch(e){}}
@@ -1992,34 +2003,41 @@ window.saConfirmPayment=async(gid,pid)=>{try{await updateDoc(doc(db,'groups',gid
 window.saRejectPayment=async(gid,pid)=>{try{await updateDoc(doc(db,'groups',gid,'payments',pid),{status:'REJECTED',rejectedBy:SA_UID,rejectedAt:serverTimestamp()});showToast('Payment rejected','warning');await loadSAData();}catch(e){showToast(e.message,'error');}};
 
 function renderSAAds(){
-  return `<div class="section-head"><h2><i class="fa-solid fa-bullhorn" style="color:var(--red)"></i> System Ads Control Panel</h2><div class="actions"><button class="btn danger btn-sm" onclick="openSAAdForm()"><i class="fa-solid fa-plus"></i> Create Advertisement</button><button class="btn outline btn-sm" onclick="loadSAData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
-    <div class="provider-note" style="margin-bottom:16px"><i class="fa-solid fa-circle-info"></i> Upload an image of any normal size. The system automatically optimizes it to WebP, uploads it to Firebase Storage, saves the public URL in Firestore and publishes it to the landing page and every logged-in user.</div>
-    <div class="ad-grid-pro">${SAds.map(a=>`<article class="ad-tile-pro">${a.imageUrl?`<img class="ad-tile-media" src="${a.imageUrl}" alt="${a.title||''}">`:a.videoUrl?`<video class="ad-tile-media" src="${a.videoUrl}" controls></video>`:`<div class="ad-tile-media flex-center"><i class="fa-solid fa-bullhorn" style="font-size:34px;color:var(--red)"></i></div>`}<div class="ad-tile-body"><div class="flex-between"><b class="ad-tile-title">${a.title||'Untitled'}</b>${sb(a.status||'active')}</div><div class="ad-tile-desc">${a.description||''}</div><div class="ad-tile-meta">${a.destinationUrl?`<a href="${a.destinationUrl}" target="_blank" rel="noopener noreferrer" class="btn outline btn-sm">Open Link</a>`:'<span></span>'}<button class="btn danger btn-sm" onclick="deleteSAAd('${a.id}')"><i class="fa-solid fa-trash"></i></button></div></div></article>`).join('')||'<div class="card" style="grid-column:1/-1;text-align:center"><p class="small">No system ads published.</p></div>'}</div>`;
+  return `<div class="section-head"><h2><i class="fa-solid fa-bullhorn" style="color:var(--red)"></i> System Ads Control Panel</h2><div class="actions"><button class="btn danger btn-sm" onclick="openSAAdForm()"><i class="fa-solid fa-plus"></i> Create System Advertisement</button><button class="btn outline btn-sm" onclick="loadSAData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
+    <div class="provider-note" style="margin-bottom:16px"><i class="fa-solid fa-cloud-arrow-up"></i> Upload picha ya size yoyote. Mfumo uta-optimize automatically, kuihifadhi Firebase Storage, metadata Firestore, na cache ya ndani ya kifaa kupitia IndexedDB. Tangazo litaonekana kwa visitors na watumiaji wote.</div>
+    <div class="ad-grid-pro">${SAds.map(a=>`<article class="ad-tile-pro">${a.imageUrl?`<img class="ad-tile-media" src="${a.imageUrl}" alt="${a.title||''}" loading="lazy">`:a.videoUrl?`<video class="ad-tile-media" src="${a.videoUrl}" controls></video>`:`<div class="ad-tile-media flex-center"><i class="fa-solid fa-bullhorn" style="font-size:34px;color:var(--red)"></i></div>`}<div class="ad-tile-body"><div class="flex-between"><b class="ad-tile-title">${a.title||'Untitled'}</b>${sb(a.status||'active')}</div><div class="ad-tile-desc">${a.description||''}</div><div class="ad-tile-meta"><span class="tiny"><i class="fa-solid fa-globe"></i> All Users</span><button class="btn danger btn-sm" onclick="deleteSAAd('${a.id}')"><i class="fa-solid fa-trash"></i></button></div></div></article>`).join('')||'<div class="card" style="grid-column:1/-1;text-align:center"><p class="small">No system ads published.</p></div>'}</div>`;
 }
 window.openSAAdForm=()=>{
   $('saEditTitle').innerHTML='<i class="fa-solid fa-bullhorn" style="color:var(--red)"></i> Create System Advertisement';
   $('saEditBody').innerHTML=`<form id="saAdForm">
-    <div class="field"><label>Title *</label><input id="adTitle" required maxlength="120"></div>
-    <div class="field"><label>Description *</label><textarea id="adDesc" rows="4" required maxlength="800"></textarea></div>
-    <div class="field"><label>Advertisement Image *</label><label class="upload-zone-pro" for="adFile"><i class="fa-solid fa-cloud-arrow-up" style="font-size:25px;color:var(--blue)"></i><div style="margin-top:7px;font-weight:700">Click to choose an image</div><div class="tiny">PNG, JPG, JPEG, WEBP — any common dimensions</div><input id="adFile" type="file" accept="image/png,image/jpeg,image/jpg,image/webp"><div id="adFileName" class="small" style="margin-top:8px"></div></label><img id="adPreview" class="ad-preview hidden" alt="Preview"></div>
-    <div class="field"><label>Destination URL</label><input id="adUrl" type="url" placeholder="https://example.com"></div>
-    <div class="field"><label>Call To Action</label><input id="adCta" value="Learn More" maxlength="40"></div>
-    <button class="btn danger" style="width:100%" type="submit" id="saAdPublish"><i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users</button>
+    <div class="field"><label>Advertisement Title *</label><input id="adTitle" required maxlength="120" placeholder="e.g. Annual General Meeting"></div>
+    <div class="field"><label>Description *</label><textarea id="adDesc" rows="4" required maxlength="800" placeholder="Write a clear announcement..."></textarea></div>
+    <div class="field"><label>Advertisement Image *</label><label class="upload-zone-pro" for="adFile"><i class="fa-solid fa-cloud-arrow-up" style="font-size:28px;color:var(--blue)"></i><div style="margin-top:8px;font-weight:800">Choose Image</div><div class="tiny">JPG • JPEG • PNG • WEBP • Any dimensions / file size</div><input id="adFile" type="file" accept="image/*"><div id="adFileName" class="small" style="margin-top:8px"></div></label><img id="adPreview" class="ad-preview hidden" alt="Advertisement preview"></div>
+    <div class="provider-note"><i class="fa-solid fa-database"></i> <b>Automatic Storage:</b> Original image is processed in the browser, optimized WebP is uploaded to Firebase Storage, advertisement data is saved in Firestore, and a local IndexedDB copy is cached for offline viewing.</div>
+    <button class="btn danger" style="width:100%;margin-top:14px" type="submit" id="saAdPublish"><i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users</button>
   </form>`;
   openModal('saEditModal');
-  $('adFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;$('adFileName').textContent=`${f.name} • ${(f.size/1024/1024).toFixed(2)} MB`;$('adPreview').src=URL.createObjectURL(f);$('adPreview').classList.remove('hidden');});
+  $('adFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;$('adFileName').textContent=`${f.name} • ${(f.size/1024/1024).toFixed(2)} MB`;const u=URL.createObjectURL(f);$('adPreview').src=u;$('adPreview').classList.remove('hidden');});
   $('saAdForm').addEventListener('submit',async e=>{
-    e.preventDefault();const btn=$('saAdPublish');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Optimizing & Uploading...';
+    e.preventDefault();const btn=$('saAdPublish');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Processing Image...';
     try{
       const f=$('adFile').files[0];if(!f)throw new Error('Please select an advertisement image.');
-      if(!f.type.startsWith('image/'))throw new Error('Only image uploads are supported for this advertisement.');
-      const blob=await procImg(f,1800,.86);const imageUrl=await upFile(blob,`systemAds/${Date.now()}_${Math.random().toString(36).slice(2,8)}.webp`);
-      await addDoc(collection(db,'advertisements'),{title:$('adTitle').value.trim(),description:$('adDesc').value.trim(),destinationUrl:$('adUrl').value.trim()||null,callToAction:$('adCta').value.trim()||'Learn More',imageUrl,videoUrl:null,status:'active',visibility:'public',audience:'all-users',createdBy:SA_UID,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
-      closeModal('saEditModal');showToast('Advertisement uploaded and published to all users','success');await loadSAData();
-    }catch(err){showToast('Advertisement upload failed: '+(err.message||err),'error');}finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users';}
+      if(!f.type.startsWith('image/'))throw new Error('Please select a valid image file.');
+      const blob=await procImg(f,1800,.86);
+      btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Uploading to Firebase...';
+      const path=`systemAds/${Date.now()}_${Math.random().toString(36).slice(2,9)}.webp`;
+      const imageUrl=await upFile(blob,path,p=>{if(p>5)btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Uploading ${Math.round(p)}%...`;});
+      const adData={title:$('adTitle').value.trim(),description:$('adDesc').value.trim(),imageUrl,storagePath:path,originalFileName:f.name,originalFileSize:f.size,optimizedFileSize:blob.size,mimeType:'image/webp',status:'active',visibility:'public',audience:'all-users',createdBy:SA_UID,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+      const refDoc=await addDoc(collection(db,'advertisements'),adData);
+      const localAd={...adData,id:refDoc.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+      const merged=[localAd,...PUBLIC_ADS].slice(0,30);await cacheAdsLocal(merged);PUBLIC_ADS=merged;SAds=[localAd,...SAds];
+      renderPublicAdsInto('landingAds',PUBLIC_ADS.slice(0,3));renderPublicAdsInto('publicAds',PUBLIC_ADS);
+      closeModal('saEditModal');showToast('Advertisement uploaded, saved and published to all users','success');await loadSAData();
+    }catch(err){console.error('SYSTEM AD UPLOAD',err);showToast('Advertisement upload failed: '+(err.message||err),'error');}
+    finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users';}
   });
 };
-window.deleteSAAd=async id=>{showConfirm('Delete Advertisement','Remove this advertisement from all users?',async()=>{try{await deleteDoc(doc(db,'advertisements',id));showToast('Advertisement deleted','success');await loadSAData();}catch(e){showToast(e.message,'error');}});};
+window.deleteSAAd=async id=>{showConfirm('Delete Advertisement','Remove this advertisement from all users?',async()=>{try{await deleteDoc(doc(db,'advertisements',id));SAds=SAds.filter(a=>a.id!==id);PUBLIC_ADS=PUBLIC_ADS.filter(a=>a.id!==id);await cacheAdsLocal(PUBLIC_ADS);renderPublicAdsInto('landingAds',PUBLIC_ADS.slice(0,3));renderPublicAdsInto('publicAds',PUBLIC_ADS);showToast('Advertisement deleted','success');await loadSAData();}catch(e){showToast(e.message,'error');}});};
 
 function renderSAPartners(){
   return `<div class="section-head"><h2><i class="fa-solid fa-handshake" style="color:var(--red)"></i> Global Partners</h2><button class="btn danger btn-sm" onclick="openSAPartnerForm()"><i class="fa-solid fa-plus"></i> Add Partner</button></div>
