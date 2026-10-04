@@ -15,7 +15,7 @@
 :root{--bg:#07111f;--panel:#0d1929;--panel2:#122238;--line:#21344d;--text:#e8f0f8;--muted:#8ea3b9;--p:#16a979;--p2:#35d39b;--p3:#0d8a63;--blue:#3b82f6;--red:#ef4444;--yellow:#f59e0b;--purple:#8b5cf6;--orange:#f97316;--radius:12px;--font:'Inter',system-ui,sans-serif}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{background:linear-gradient(135deg,#06101c,#0a1423);color:var(--text);font-family:var(--font);line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body{background:linear-gradient(135deg,var(--bg),var(--panel));color:var(--text);font-family:var(--font);line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 button,input,select,textarea{font:inherit}button{cursor:pointer;border:0;background:none}a{color:var(--p2);text-decoration:none}img,video{max-width:100%;display:block}
 .hidden{display:none!important}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:var(--panel)}::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--p3)}
@@ -390,7 +390,7 @@ body,.card,.modal-card,.auth-card,.member-reg-card,.sidebar,.top-bar,.super-nav,
 
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,deleteUser}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,deleteUser,setPersistence,browserLocalPersistence}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import{getFirestore,enableMultiTabIndexedDbPersistence,collection,doc,setDoc,addDoc,getDoc,getDocs,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit,serverTimestamp,Timestamp,writeBatch}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import{getStorage,ref,uploadBytesResumable,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
@@ -400,6 +400,7 @@ const secApp=initializeApp(firebaseConfig,"Secondary");
 const auth=getAuth(fbApp);
 const secAuth=getAuth(secApp);
 const db=getFirestore(fbApp);
+try{await setPersistence(auth,browserLocalPersistence);}catch(e){console.warn('Auth persistence:',e);}
 const storage=getStorage(fbApp);
 
 try{await enableMultiTabIndexedDbPersistence(db);}catch(e){}
@@ -613,7 +614,7 @@ function applyTheme(name,save=true){
   sysSet.theme=key;
   localStorage.setItem('cscms_theme',key);
   document.querySelectorAll('.theme-choice').forEach(x=>x.classList.toggle('active',x.dataset.theme===key));
-  if(save&&CR==='chair')setDoc(doc(db,'systemSettings','theme'),{theme:key,updatedAt:serverTimestamp(),updatedBy:CU?.uid||''},{merge:true}).catch(()=>{});
+  if(save&&CR==='chair')setDoc(doc(db,'systemSettings','theme'),{theme:key,updatedAt:serverTimestamp(),updatedBy:CU?.uid||''},{merge:true}).catch(e=>showToast('Theme saved locally; Firestore save failed: '+(e.message||e),'warning'));
 }
 function loadLocalTheme(){applyTheme(localStorage.getItem('cscms_theme')||sysSet.theme||'blue',false);}
 try{onSnapshot(doc(db,'systemSettings','branding'),s=>{if(s.exists()){const d=s.data();sysSet.branding={logoUrl:d.logoUrl||SYS_LOGO_FILE,logoEnabled:d.logoEnabled!==false};}paintAllLogos();});}catch(e){}
@@ -689,20 +690,38 @@ function loanBalance(l){if(!l)return 0;return Math.max(0,loanTotalDue(l)-loanTot
 
 /* ===== AUTH: SIGN IN ===== */
  $('signInForm').addEventListener('submit',async e=>{
-  e.preventDefault();if(!navigator.onLine)return showToast("Requires internet","error");
-  const btn=$('siSubmitBtn');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i>';
+  e.preventDefault();
+  if(!navigator.onLine)return showToast("Internet connection is required for Sign In","error");
+  const btn=$('siSubmitBtn');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Signing In...';
   try{
     const gid=$('loginGroupId').value.trim(),ni=$('loginNida').value.trim(),pw=$('loginPassword').value;
-    const cr=await signInWithEmailAndPassword(auth,`${ni}@cscms.app`,pw);
+    if(!gid||!ni||!pw)throw new Error('Please enter Group ID, National ID and Password.');
+    const email=`${ni}@cscms.app`;
+    const cr=await signInWithEmailAndPassword(auth,email,pw);
     const ud=await getDoc(doc(db,'users',cr.user.uid));
-    if(!ud.exists()||ud.data().groupId!==gid){await signOut(auth);return showToast("Wrong Group ID","error");}
-    const userData=ud.data();const gd=await getDoc(doc(db,'groups',gid));const groupData=gd.data();
-    if(groupData.status==='suspended'){await signOut(auth);return showToast("Group suspended","error");}
-    if(groupData.expiryDate){const exp=groupData.expiryDate instanceof Timestamp?groupData.expiryDate.toDate():new Date(groupData.expiryDate);if(exp<new Date()){await updateDoc(doc(db,'groups',gid),{status:'expired'});await signOut(auth);return showToast("Plan expired","error");}}
+    if(!ud.exists()){await signOut(auth);throw new Error('User profile was not found in Firestore.');}
+    const userData=ud.data();
+    if(String(userData.groupId||'').trim()!==gid){await signOut(auth);throw new Error('This account does not belong to the specified Group ID.');}
+    const gd=await getDoc(doc(db,'groups',gid));
+    if(!gd.exists()){await signOut(auth);throw new Error('The specified Group ID does not exist.');}
+    const groupData=gd.data();
+    if(groupData.status==='suspended'){await signOut(auth);throw new Error('This group is suspended.');}
+    if(groupData.expiryDate){const exp=groupData.expiryDate instanceof Timestamp?groupData.expiryDate.toDate():new Date(groupData.expiryDate);if(exp<new Date()){await updateDoc(doc(db,'groups',gid),{status:'expired'});await signOut(auth);throw new Error('The group subscription has expired.');}}
     CU={uid:cr.user.uid,...userData};CG={id:gid,...groupData};CGI=gid;CR=userData.role||'member';
-    showToast(`Welcome, ${userData.firstName}!`,"success");initApp();
-  }catch(err){showToast(err.code==='auth/user-not-found'||err.code==='auth/wrong-password'?"Invalid credentials":err.message,"error");}
-  finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-right-to-bracket"></i> Sign In';}
+    sessionStorage.setItem('cscms_last_group',gid);
+    sessionStorage.setItem('cscms_last_uid',cr.user.uid);
+    showScreen('app');
+    try{initApp();}catch(appErr){console.error('INIT APP ERROR',appErr);throw new Error('Login succeeded, but the dashboard could not open: '+(appErr.message||appErr));}
+    showToast(`Welcome, ${userData.firstName||'User'}!`,"success");
+  }catch(err){
+    console.error('SIGN IN ERROR',err);
+    const code=err?.code||'';
+    let msg=err?.message||'Sign In failed.';
+    if(code==='auth/invalid-credential'||code==='auth/user-not-found'||code==='auth/wrong-password')msg='Invalid National ID or Password.';
+    if(code==='auth/too-many-requests')msg='Too many attempts. Please wait and try again.';
+    if(code==='permission-denied')msg='Firestore permission denied. Check Firebase Security Rules.';
+    showToast(msg,"error");
+  }finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-right-to-bracket"></i> Sign In';}
 });
 
 window.logout=()=>signOut(auth).then(()=>{CU=null;CG=null;CGI=null;showScreen('landing');showToast("Logged out","success");});
@@ -1802,10 +1821,10 @@ window.openFinForm=(colName)=>{
   openModal('formModal');
   $('finForm').addEventListener('submit',async e=>{
     e.preventDefault();
-    const data={memberName:$('finMember').value,amount:parseFloat($('finAmount').value),date:$('finDate').value};
+    const data={memberName:$('finMember').value,memberId:MC.find(m=>`${m.firstName||''} ${m.lastName||''}`.trim()===$('finMember').value)?.id||null,amount:parseFloat($('finAmount').value),date:$('finDate').value,groupId:CGI,createdBy:CU?.uid||null,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
     if($('finType'))data.type=$('finType').value;
     if($('finCategory'))data.category=$('finCategory').value;
-    try{await addDoc(col(colName),data);showToast('Saved','success');closeModal('formModal');audit('ADD',colName);}catch(e){showToast(e.message,'error');}
+    try{if(!CGI||!CU?.uid)throw new Error('Your session is not ready. Please sign in again.');const ref=await addDoc(col(colName),data);showToast(`Saved successfully (${ref.id})`,'success');closeModal('formModal');audit('ADD',colName,ref.id);}catch(e){console.error('SAVE ERROR',colName,e);showToast((e?.code==='permission-denied'?'Permission denied by Firestore Rules: ': 'Save failed: ')+(e.message||e),'error');}
   });
 };
 
