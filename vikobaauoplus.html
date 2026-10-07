@@ -393,6 +393,7 @@ body,.card,.modal-card,.auth-card,.member-reg-card,.sidebar,.top-bar,.super-nav,
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,deleteUser,setPersistence,browserSessionPersistence}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import{getFirestore,enableMultiTabIndexedDbPersistence,collection,doc,setDoc,addDoc,getDoc,getDocs,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit,serverTimestamp,Timestamp,writeBatch}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import{getStorage,ref,uploadBytes,uploadBytesResumable,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const firebaseConfig={apiKey:"AIzaSyDSUs6uUjQTPQOkUPcIp2u8Rw9NJVnQOfo",authDomain:"ncrs2-f8da9.firebaseapp.com",projectId:"ncrs2-f8da9",storageBucket:"ncrs2-f8da9.firebasestorage.app",messagingSenderId:"436069918682",appId:"1:436069918682:web:70b56c627315bc782102e3",measurementId:"G-2QCBEJSGKS"};
 const fbApp=initializeApp(firebaseConfig);
@@ -404,6 +405,7 @@ const db=getFirestore(fbApp);
 try{await setPersistence(auth,browserSessionPersistence);}catch(e){console.warn('Auth persistence:',e);}
 /* Remove only stale Firebase Auth local-storage entries left by older versions. */
 try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i)||'';if(k.startsWith('firebase:authUser:'))localStorage.removeItem(k);}}catch(e){console.warn('Firebase auth cleanup:',e);}
+const storage=getStorage(fbApp);
 
 try{await enableMultiTabIndexedDbPersistence(db);}catch(e){}
 
@@ -690,75 +692,43 @@ async function genPDF(ti,h,ro){
   doc.save(`${ti.replace(/\s+/g,'_')}_${today()}.pdf`);showToast('PDF Downloaded','success');
 }
 
-async function procImg(file,mw=1600,q=0.82){
-  return new Promise((res,rej)=>{
-    if(!file||!file.type.startsWith('image/'))return rej(new Error('Invalid image file.'));
-    const reader=new FileReader();
-    reader.onload=e=>{
-      const img=new Image();
-      img.onload=()=>{
-        let w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
-        if(w>mw){h=Math.round(h*(mw/w));w=mw;}
-        const canvas=document.createElement('canvas');
-        canvas.width=Math.max(1,w);canvas.height=Math.max(1,h);
-        const ctx=canvas.getContext('2d',{alpha:true});
-        if(!ctx)return rej(new Error('Your browser cannot process this image.'));
-        ctx.drawImage(img,0,0,w,h);
-
-        const MAX_BYTES=620000; // Keep Firestore document safely below 1 MiB.
-        const make=(quality,attempt=0)=>{
-          canvas.toBlob(blob=>{
-            if(!blob)return rej(new Error('Image conversion failed.'));
-            if(blob.size<=MAX_BYTES||attempt>=10)return res(blob);
-            if(attempt<6){
-              make(Math.max(.42,quality-.07),attempt+1);
-            }else{
-              const scale=.82;
-              w=Math.max(640,Math.round(w*scale));
-              h=Math.max(360,Math.round(h*scale));
-              canvas.width=w;canvas.height=h;
-              ctx.clearRect(0,0,w,h);
-              ctx.drawImage(img,0,0,w,h);
-              make(.62,attempt+1);
-            }
-          },'image/webp',quality);
-        };
-        make(q);
-      };
-      img.onerror=()=>rej(new Error('Could not read the selected image.'));
-      img.src=e.target.result;
-    };
-    reader.onerror=()=>rej(new Error('Could not read the image file.'));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function blobDataUrl(blob){
-  return await new Promise((res,rej)=>{
-    if(!blob)return rej(new Error('No image data available.'));
-    const r=new FileReader();
-    r.onload=()=>res(r.result);
-    r.onerror=()=>rej(new Error('Could not prepare image data.'));
-    r.readAsDataURL(blob);
-  });
-}
-
-/*
- * SYSTEM ADVERTISEMENTS DO NOT USE FIREBASE STORAGE.
- * The image is optimized in-browser and stored as a compact data URL
- * inside the Firestore advertisement document. This removes Storage
- * bucket/rules/timeout dependency from the Create Advertisement flow.
- */
-async function prepareAdvertisementImage(file,progress){
-  if(!navigator.onLine)throw new Error('Internet connection is required to publish an advertisement.');
+async function procImg(file,mw=1800,q=0.86){return new Promise((res,rej)=>{if(!file||!file.type.startsWith('image/'))return rej('Invalid image');const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{let w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;if(w>mw){h=Math.round(h*(mw/w));w=mw;}const c=document.createElement('canvas');c.width=Math.max(1,w);c.height=Math.max(1,h);const ctx=c.getContext('2d',{alpha:true});ctx.drawImage(img,0,0,w,h);const make=(quality,attempt=0)=>c.toBlob(b=>{if(!b)return rej('Image conversion failed');if(b.size>850000&&attempt<6){if(attempt<3)make(Math.max(.5,quality-.08),attempt+1);else{w=Math.max(900,Math.round(w*.82));h=Math.max(900,Math.round(h*.82));c.width=w;c.height=h;ctx.clearRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);make(.72,attempt+1);}}else res(b);},'image/webp',quality);make(q);};img.onerror=()=>rej('Could not read image');img.src=e.target.result;};r.onerror=()=>rej('Could not read image file');r.readAsDataURL(file);});}
+async function upFile(blob,path,cb,timeoutMs=30000){
+  if(!blob)throw new Error('No image data available.');
+  if(!navigator.onLine)throw new Error('Internet connection is required to publish the advertisement to all users.');
   if(!auth.currentUser)throw new Error('Super Admin authentication is not active. Please sign in again.');
-  if(auth.currentUser.uid!==SA_UID)throw new Error('Only the authorized Super Admin can publish System Advertisements.');
-  progress?.('Processing Image...');
-  const blob=await procImg(file,1600,.82);
-  progress?.('Preparing Advertisement Image...');
-  const imageUrl=await blobDataUrl(blob);
-  if(!imageUrl||imageUrl.length>900000)throw new Error('The image is still too large after optimization. Please choose a smaller image.');
-  return {blob,imageUrl};
+  if(auth.currentUser.uid!==SA_UID)throw new Error('Only the authorized Super Admin can upload System Advertisements.');
+  const sr=ref(storage,path);
+  let timer=null,settled=false;
+  try{
+    const uploadPromise=(async()=>{
+      // Direct upload is more reliable here than a resumable task for the
+      // already-optimized WebP files used by System Advertisements.
+      const snap=await uploadBytes(sr,blob,{contentType:'image/webp',cacheControl:'public,max-age=31536000'});
+      if(cb)cb(100,blob.size,blob.size);
+      return await getDownloadURL(snap.ref);
+    })();
+    const timeoutPromise=new Promise((_,reject)=>{
+      timer=setTimeout(()=>{
+        if(!settled)reject(new Error('Firebase Storage did not respond within 30 seconds. This normally means Firebase Storage Rules, the Storage bucket, or the Firebase project configuration needs attention.'));
+      },timeoutMs);
+    });
+    const url=await Promise.race([uploadPromise,timeoutPromise]);
+    settled=true;
+    return url;
+  }catch(err){
+    settled=true;
+    const code=err?.code||'';
+    let msg;
+    if(code==='storage/unauthorized'||code==='storage/unauthenticated')msg='Firebase Storage permission denied. The Storage Rules must allow the authenticated Super Admin to write to systemAds/. UID: '+(auth.currentUser?.uid||'none');
+    else if(code==='storage/unknown')msg='Firebase Storage returned an unknown error. Check the Storage bucket and Firebase Console Storage status.';
+    else if(code==='storage/quota-exceeded')msg='Firebase Storage quota has been exceeded.';
+    else if(code==='storage/canceled')msg='Firebase Storage upload was cancelled.';
+    else if(code==='storage/retry-limit-exceeded')msg='Firebase Storage could not complete the upload. Check internet connectivity and Storage configuration.';
+    else if(code==='storage/invalid-argument')msg='Invalid Firebase Storage upload data.';
+    else msg=err?.message||String(err);
+    throw new Error(msg);
+  }finally{if(timer)clearTimeout(timer);}
 }
 
 /* ===== SYSTEM ADS LOCAL CACHE (IndexedDB — avoids LocalStorage quota problems) ===== */
@@ -2182,7 +2152,7 @@ window.saRejectPayment=async(gid,pid)=>{try{await updateDoc(doc(db,'groups',gid,
 
 function renderSAAds(){
   return `<div class="section-head"><h2><i class="fa-solid fa-bullhorn" style="color:var(--red)"></i> System Ads Control Panel</h2><div class="actions"><button class="btn danger btn-sm" onclick="openSAAdForm()"><i class="fa-solid fa-plus"></i> Create System Advertisement</button><button class="btn outline btn-sm" onclick="loadSAData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button></div></div>
-    <div class="provider-note" style="margin-bottom:16px"><i class="fa-solid fa-cloud-arrow-up"></i> Upload picha ya size yoyote. Mfumo uta-optimize automatically, kuihifadhi pamoja na metadata kwenye Firestore, na kuweka cache ya ndani kupitia IndexedDB. Firebase Storage haihitajiki kwa System Advertisements.</div>
+    <div class="provider-note" style="margin-bottom:16px"><i class="fa-solid fa-cloud-arrow-up"></i> Upload picha ya size yoyote. Mfumo uta-optimize automatically, kuihifadhi Firebase Storage, metadata Firestore, na cache ya ndani ya kifaa kupitia IndexedDB. Tangazo litaonekana kwa visitors na watumiaji wote.</div>
     <div class="ad-grid-pro">${SAds.map(a=>`<article class="ad-tile-pro">${a.imageUrl?`<img class="ad-tile-media" src="${a.imageUrl}" alt="${a.title||''}" loading="lazy">`:a.videoUrl?`<video class="ad-tile-media" src="${a.videoUrl}" controls></video>`:`<div class="ad-tile-media flex-center"><i class="fa-solid fa-bullhorn" style="font-size:34px;color:var(--red)"></i></div>`}<div class="ad-tile-body"><div class="flex-between"><b class="ad-tile-title">${a.title||'Untitled'}</b>${sb(a.status||'active')}</div><div class="ad-tile-desc">${a.description||''}</div><div class="ad-tile-meta"><span class="tiny"><i class="fa-solid fa-globe"></i> All Users</span><button class="btn danger btn-sm" onclick="deleteSAAd('${a.id}')"><i class="fa-solid fa-trash"></i></button></div></div></article>`).join('')||'<div class="card" style="grid-column:1/-1;text-align:center"><p class="small">No system ads published.</p></div>'}</div>`;
 }
 window.openSAAdForm=()=>{
@@ -2190,110 +2160,30 @@ window.openSAAdForm=()=>{
   $('saEditBody').innerHTML=`<form id="saAdForm">
     <div class="field"><label>Advertisement Title *</label><input id="adTitle" required maxlength="120" placeholder="e.g. Annual General Meeting"></div>
     <div class="field"><label>Description *</label><textarea id="adDesc" rows="4" required maxlength="800" placeholder="Write a clear announcement..."></textarea></div>
-    <div class="field"><label>Advertisement Image *</label>
-      <label class="upload-zone-pro" for="adFile">
-        <i class="fa-solid fa-image" style="font-size:28px;color:var(--blue)"></i>
-        <div style="margin-top:8px;font-weight:800">Choose Image</div>
-        <div class="tiny">JPG • JPEG • PNG • WEBP • Any dimensions / file size</div>
-        <input id="adFile" type="file" accept="image/*">
-        <div id="adFileName" class="small" style="margin-top:8px"></div>
-      </label>
-      <img id="adPreview" class="ad-preview hidden" alt="Advertisement preview">
-    </div>
-    <div class="provider-note">
-      <i class="fa-solid fa-database"></i>
-      <b>Automatic Storage:</b> The image is optimized in your browser and saved directly with the advertisement in Firestore. An IndexedDB copy is also cached for offline viewing. Firebase Storage is not required for System Advertisements.
-    </div>
-    <button class="btn danger" style="width:100%;margin-top:14px" type="submit" id="saAdPublish">
-      <i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users
-    </button>
+    <div class="field"><label>Advertisement Image *</label><label class="upload-zone-pro" for="adFile"><i class="fa-solid fa-cloud-arrow-up" style="font-size:28px;color:var(--blue)"></i><div style="margin-top:8px;font-weight:800">Choose Image</div><div class="tiny">JPG • JPEG • PNG • WEBP • Any dimensions / file size</div><input id="adFile" type="file" accept="image/*"><div id="adFileName" class="small" style="margin-top:8px"></div></label><img id="adPreview" class="ad-preview hidden" alt="Advertisement preview"></div>
+    <div class="provider-note"><i class="fa-solid fa-database"></i> <b>Automatic Storage:</b> Original image is processed in the browser, optimized WebP is uploaded to Firebase Storage, advertisement data is saved in Firestore, and a local IndexedDB copy is cached for offline viewing.</div>
+    <button class="btn danger" style="width:100%;margin-top:14px" type="submit" id="saAdPublish"><i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users</button>
   </form>`;
   openModal('saEditModal');
-
-  const fileInput=$('adFile');
-  const preview=$('adPreview');
-  fileInput.addEventListener('change',e=>{
-    const f=e.target.files[0];
-    if(!f){$('adFileName').textContent='';preview.classList.add('hidden');return;}
-    if(!f.type.startsWith('image/')){
-      showToast('Please select a valid image file.','error');
-      fileInput.value='';
-      return;
-    }
-    $('adFileName').textContent=`${f.name} • ${(f.size/1024/1024).toFixed(2)} MB`;
-    const u=URL.createObjectURL(f);
-    preview.onload=()=>URL.revokeObjectURL(u);
-    preview.src=u;
-    preview.classList.remove('hidden');
-  });
-
+  $('adFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;$('adFileName').textContent=`${f.name} • ${(f.size/1024/1024).toFixed(2)} MB`;const u=URL.createObjectURL(f);$('adPreview').src=u;$('adPreview').classList.remove('hidden');});
   $('saAdForm').addEventListener('submit',async e=>{
-    e.preventDefault();
-    const btn=$('saAdPublish');
-    btn.disabled=true;
-
+    e.preventDefault();const btn=$('saAdPublish');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Processing Image...';
     try{
-      const title=$('adTitle').value.trim();
-      const description=$('adDesc').value.trim();
-      const f=fileInput.files[0];
-
-      if(!title)throw new Error('Advertisement title is required.');
-      if(!description)throw new Error('Advertisement description is required.');
-      if(!f)throw new Error('Please select an advertisement image.');
+      const f=$('adFile').files[0];if(!f)throw new Error('Please select an advertisement image.');
       if(!f.type.startsWith('image/'))throw new Error('Please select a valid image file.');
-
-      btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Processing Image...';
-      const prepared=await prepareAdvertisementImage(f,msg=>{
-        btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> ${msg}`;
-      });
-
+      const blob=await procImg(f,1800,.86);
+      btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Connecting to Firebase...';
+      const path=`systemAds/${Date.now()}_${Math.random().toString(36).slice(2,9)}.webp`;
+      const imageUrl=await upFile(blob,path,(p)=>{btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Uploading to Firebase ${p}%...`;});
       btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Saving Advertisement...';
-
-      const adData={
-        title,
-        description,
-        imageUrl:prepared.imageUrl,
-        storageMode:'firestore-data-url',
-        originalFileName:f.name,
-        originalFileSize:f.size,
-        optimizedFileSize:prepared.blob.size,
-        mimeType:'image/webp',
-        status:'active',
-        visibility:'public',
-        audience:'all-users',
-        createdBy:SA_UID,
-        createdAt:serverTimestamp(),
-        updatedAt:serverTimestamp()
-      };
-
+      const adData={title:$('adTitle').value.trim(),description:$('adDesc').value.trim(),imageUrl,storagePath:path,originalFileName:f.name,originalFileSize:f.size,optimizedFileSize:blob.size,mimeType:'image/webp',status:'active',visibility:'public',audience:'all-users',createdBy:SA_UID,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
       const refDoc=await addDoc(collection(db,'advertisements'),adData);
-      const localAd={
-        ...adData,
-        id:refDoc.id,
-        createdAt:new Date().toISOString(),
-        updatedAt:new Date().toISOString()
-      };
-
-      const merged=[localAd,...PUBLIC_ADS.filter(a=>a.id!==localAd.id)].slice(0,30);
-      await cacheAdsLocal(merged);
-      PUBLIC_ADS=merged;
-      SAds=[localAd,...SAds.filter(a=>a.id!==localAd.id)];
-
-      renderPublicAdsInto('landingAds',PUBLIC_ADS.slice(0,3));
-      renderPublicAdsInto('publicAds',PUBLIC_ADS);
-
-      closeModal('saEditModal');
-      showToast('Advertisement uploaded, saved and published to all users','success');
-      await loadSAData();
-    }catch(err){
-      console.error('SYSTEM AD PUBLISH',err);
-      let msg=err?.message||String(err);
-      if(err?.code==='permission-denied')msg='Firestore permission denied. Allow the authorized Super Admin to create documents in advertisements.';
-      showToast('Advertisement upload failed: '+msg,'error');
-    }finally{
-      btn.disabled=false;
-      btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users';
-    }
+      const localAd={...adData,id:refDoc.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+      const merged=[localAd,...PUBLIC_ADS].slice(0,30);await cacheAdsLocal(merged);PUBLIC_ADS=merged;SAds=[localAd,...SAds];
+      renderPublicAdsInto('landingAds',PUBLIC_ADS.slice(0,3));renderPublicAdsInto('publicAds',PUBLIC_ADS);
+      closeModal('saEditModal');showToast('Advertisement uploaded, saved and published to all users','success');await loadSAData();
+    }catch(err){console.error('SYSTEM AD UPLOAD',err);showToast('Advertisement upload failed: '+(err.message||err),'error');}
+    finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Publish to All Users';}
   });
 };
 window.deleteSAAd=async id=>{showConfirm('Delete Advertisement','Remove this advertisement from all users?',async()=>{try{await deleteDoc(doc(db,'advertisements',id));SAds=SAds.filter(a=>a.id!==id);PUBLIC_ADS=PUBLIC_ADS.filter(a=>a.id!==id);await cacheAdsLocal(PUBLIC_ADS);renderPublicAdsInto('landingAds',PUBLIC_ADS.slice(0,3));renderPublicAdsInto('publicAds',PUBLIC_ADS);showToast('Advertisement deleted','success');await loadSAData();}catch(e){showToast(e.message,'error');}});};
