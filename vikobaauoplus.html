@@ -584,7 +584,7 @@ body,.card,.modal-card,.auth-card,.member-reg-card,.sidebar,.top-bar,.super-nav,
 
     <div class="sys-logo sys-logo-sm" id="signupLogo" style="width:56px;height:56px;margin:0 auto 14px"></div>
 
-    <h2>Register Group</h2><p class="small">Works Offline. Syncs when online.</p>
+    <h2>Register Group</h2><p class="small">Internet connection required for secure registration. Data updates in real time when online.</p>
 
   </div>
 
@@ -786,9 +786,7 @@ import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-ap
 
 import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,deleteUser,setPersistence,browserSessionPersistence}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-import{getFirestore,enableMultiTabIndexedDbPersistence,collection,doc,setDoc,addDoc,getDoc,getDocs,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit,serverTimestamp,Timestamp,writeBatch}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-import{getStorage,ref,uploadBytes,uploadBytesResumable,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+import{getFirestore,enableMultiTabIndexedDbPersistence,collection,doc,setDoc,addDoc,getDoc,getDocs,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit,serverTimestamp,Timestamp,writeBatch,runTransaction}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 
 
@@ -811,8 +809,6 @@ try{await setPersistence(auth,browserSessionPersistence);}catch(e){console.warn(
 /* Remove only stale Firebase Auth local-storage entries left by older versions. */
 
 try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i)||'';if(k.startsWith('firebase:authUser:'))localStorage.removeItem(k);}}catch(e){console.warn('Firebase auth cleanup:',e);}
-
-const storage=getStorage(fbApp);
 
 
 
@@ -926,7 +922,7 @@ const I18N={
 
     'Choose Basic':'Chagua Msingi','Choose Pro':'Chagua Kitaalamu','Choose Enterprise':'Chagua Biashara Kubwa',
 
-    'Back':'Rudi','Register Group':'Sajili Kikundi','Works Offline. Syncs when online.':'Inafanya kazi bila mtandao. Husawazisha mtandao unapopatikana.',
+    'Back':'Rudi','Register Group':'Sajili Kikundi','Internet connection required for secure registration. Data updates in real time when online.':'Inafanya kazi bila mtandao. Husawazisha mtandao unapopatikana.',
 
     'First Name *':'Jina la Kwanza *','Middle Name':'Jina la Kati','Last Name *':'Jina la Mwisho *','Phone *':'Simu *','Group Type *':'Aina ya Kikundi *',
 
@@ -994,7 +990,7 @@ const I18N={
 
     'Free Trial':'Essai gratuit','Get Started':'Commencer','Basic':'Basique','Pro':'Professionnel','Enterprise':'Entreprise','Choose Basic':'Choisir Basique','Choose Pro':'Choisir Pro','Choose Enterprise':'Choisir Entreprise',
 
-    'Back':'Retour','Register Group':'Enregistrer le groupe','Works Offline. Syncs when online.':'Fonctionne hors ligne. Synchronisation dès la reconnexion.',
+    'Back':'Retour','Register Group':'Enregistrer le groupe','Internet connection required for secure registration. Data updates in real time when online.':'Fonctionne hors ligne. Synchronisation dès la reconnexion.',
 
     'First Name *':'Prénom *','Middle Name':'Deuxième prénom','Last Name *':'Nom *','Phone *':'Téléphone *','Group Type *':'Type de groupe *','Group Name *':'Nom du groupe *','Country *':'Pays *',
 
@@ -1028,7 +1024,7 @@ const I18N={
 
     'Plans & Pricing':'套餐与价格','Free Trial':'免费试用','Get Started':'开始使用','Basic':'基础版','Pro':'专业版','Enterprise':'企业版','Choose Basic':'选择基础版','Choose Pro':'选择专业版','Choose Enterprise':'选择企业版',
 
-    'Back':'返回','Register Group':'注册群组','Works Offline. Syncs when online.':'支持离线使用，联网后自动同步。','First Name *':'名字 *','Middle Name':'中间名','Last Name *':'姓氏 *','Phone *':'电话 *','Group Type *':'群组类型 *','Group Name *':'群组名称 *','Country *':'国家 *','National ID *':'国家身份证号码 *','Password *':'密码 *','Password':'密码','Select...':'请选择...',
+    'Back':'返回','Register Group':'注册群组','Internet connection required for secure registration. Data updates in real time when online.':'支持离线使用，联网后自动同步。','First Name *':'名字 *','Middle Name':'中间名','Last Name *':'姓氏 *','Phone *':'电话 *','Group Type *':'群组类型 *','Group Name *':'群组名称 *','Country *':'国家 *','National ID *':'国家身份证号码 *','Password *':'密码 *','Password':'密码','Select...':'请选择...',
 
     'Tanzania':'坦桑尼亚','Kenya':'肯尼亚','Uganda':'乌干达','Rwanda':'卢旺达','Burundi':'布隆迪','South Sudan':'南苏丹','Mozambique':'莫桑比克','Malawi':'马拉维','Zambia':'赞比亚',
 
@@ -1174,7 +1170,7 @@ function getLoanLimit(memberId){
 
   const m=MC.find(x=>x.id===memberId); const mult=Number(CG?.maxLoanMultiplier||3)||3;
 
-  return (Number(m?.totalSavings)||memberSavings(m?.firstName+' '+m?.lastName)||0)*mult;
+  return (Number(m?.totalSavings)||memberSavings(memberId)||0)*mult;
 
 }
 
@@ -1273,10 +1269,22 @@ window.showScreen=id=>{
 window.openModal=id=>{const e=$(id);if(e)e.classList.add('show');};
 
 window.closeModal=id=>{const e=$(id);if(e)e.classList.remove('show');};
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));
+});
 
 window.toggleSidebar=()=>{const s=$('sidebar');if(s)s.classList.toggle('open');};
 
-
+window.addEventListener('DOMContentLoaded',()=>{
+  const gs=$('globalSearch');
+  if(!gs)return;
+  gs.addEventListener('input',()=>{
+    const q=gs.value.trim().toLowerCase();
+    document.querySelectorAll('#contentArea table tbody tr').forEach(tr=>{
+      tr.style.display=!q||tr.textContent.toLowerCase().includes(q)?'':'none';
+    });
+  });
+});
 
 window.showToast=(msg,type='success')=>{
 
@@ -1426,80 +1434,6 @@ function blobToDataUrl(blob){
 }
 function adImageSrc(a){return a?.imageDataUrl||a?.imageUrl||'';}
 
-  if(!blob)throw new Error('No image data available.');
-
-  if(!navigator.onLine)throw new Error('Internet connection is required to publish the advertisement to all users.');
-
-  if(!auth.currentUser)throw new Error('Super Admin authentication is not active. Please sign in again.');
-
-  if(auth.currentUser.uid!==SA_UID)throw new Error('Only the authorized Super Admin can upload System Advertisements.');
-
-  const sr=ref(storage,path);
-
-  let timer=null,settled=false;
-
-  try{
-
-    const uploadPromise=(async()=>{
-
-      // Direct upload is more reliable here than a resumable task for the
-
-      // already-optimized WebP files used by System Advertisements.
-
-      const snap=await uploadBytes(sr,blob,{contentType:'image/webp',cacheControl:'public,max-age=31536000'});
-
-      if(cb)cb(100,blob.size,blob.size);
-
-      return await getDownloadURL(snap.ref);
-
-    })();
-
-    const timeoutPromise=new Promise((_,reject)=>{
-
-      timer=setTimeout(()=>{
-
-        if(!settled)reject(new Error('Firebase Storage did not respond within 30 seconds. This normally means Firebase Storage Rules, the Storage bucket, or the Firebase project configuration needs attention.'));
-
-      },timeoutMs);
-
-    });
-
-    const url=await Promise.race([uploadPromise,timeoutPromise]);
-
-    settled=true;
-
-    return url;
-
-  }catch(err){
-
-    settled=true;
-
-    const code=err?.code||'';
-
-    let msg;
-
-    if(code==='storage/unauthorized'||code==='storage/unauthenticated')msg='Firebase Storage permission denied. The Storage Rules must allow the authenticated Super Admin to write to systemAds/. UID: '+(auth.currentUser?.uid||'none');
-
-    else if(code==='storage/unknown')msg='Firebase Storage returned an unknown error. Check the Storage bucket and Firebase Console Storage status.';
-
-    else if(code==='storage/quota-exceeded')msg='Firebase Storage quota has been exceeded.';
-
-    else if(code==='storage/canceled')msg='Firebase Storage upload was cancelled.';
-
-    else if(code==='storage/retry-limit-exceeded')msg='Firebase Storage could not complete the upload. Check internet connectivity and Storage configuration.';
-
-    else if(code==='storage/invalid-argument')msg='Invalid Firebase Storage upload data.';
-
-    else msg=err?.message||String(err);
-
-    throw new Error(msg);
-
-  }finally{if(timer)clearTimeout(timer);}
-
-}
-
-
-
 /* ===== SYSTEM ADS LOCAL CACHE (IndexedDB — avoids LocalStorage quota problems) ===== */
 
 const AD_LOCAL_DB='cscms_system_ads_local_v2';
@@ -1510,53 +1444,23 @@ async function cacheAdsLocal(ads){try{const d=await adLocalDB(),tx=d.transaction
 
 async function readAdsLocal(){try{const d=await adLocalDB();return await new Promise((res,rej)=>{const q=d.transaction('ads','readonly').objectStore('ads').getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error);});}catch(e){return [];}}
 
-async function blobDataUrl(blob){return await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(blob);});}
 
 
-
-
-
-/* ===== OFFLINE QUEUE ===== */
-
-const OM={
-
-  qk:'cscms_oq',
-
-  gq(){return JSON.parse(localStorage.getItem(this.qk))||[];},
-
-  sq(q){localStorage.setItem(this.qk,JSON.stringify(q));},
-
-  add(a,p){const q=this.gq();q.push({id:Date.now(),action:a,payload:p});this.sq(q);showToast("Saved offline","warning");},
-
-  async proc(){
-
-    let q=this.gq();if(!q.length)return;
-
-    showToast(`Syncing ${q.length}...`,"success");let s=0;
-
-    for(const i of q){try{
-
-      switch(i.action){
-
-        case'SIGNUP':await setDoc(doc(db,'groups',i.payload.gid),i.payload.gd);await setDoc(doc(db,'users',i.payload.uid),i.payload.ud);break;
-
-        case'ADD':await addDoc(collection(db,...i.payload.p),i.payload.d);break;
-
-        case'UPD':await updateDoc(doc(db,...i.payload.p),i.payload.d);break;
-
-        case'DEL':await deleteDoc(doc(db,...i.payload.p));break;
-
-      }s++;}catch(e){}}
-
-    if(s){this.sq([]);showToast(`${s} synced!`,"success");}
-
-  }
-
-};
-
-function netUI(on){const b=$('networkBanner');if(on){b.className='online';b.innerHTML='<i class="fa-solid fa-wifi"></i> Back Online';setTimeout(()=>b.style.display='none',3000);OM.proc();}else{b.className='offline';b.innerHTML='<i class="fa-solid fa-wifi"></i> Offline';}}
-
-window.addEventListener('online',()=>netUI(true));window.addEventListener('offline',()=>netUI(false));if(!navigator.onLine)netUI(false);
+/* ===== NETWORK STATUS ===== */
+/* Firebase Authentication cannot create/sign in accounts while offline.
+   We therefore never report an offline registration as successful. */
+function netUI(on){
+  const b=$('networkBanner');
+  if(!b)return;
+  b.className=on?'online':'offline';
+  b.innerHTML=on
+    ?'<i class="fa-solid fa-wifi"></i> Back Online'
+    :'<i class="fa-solid fa-wifi"></i> Offline';
+  if(on)setTimeout(()=>{b.style.display='none';},3000);
+}
+window.addEventListener('online',()=>netUI(true));
+window.addEventListener('offline',()=>netUI(false));
+if(!navigator.onLine)netUI(false);
 
 
 
@@ -1680,11 +1584,26 @@ function mCanEdit(k){if(CR==='chair')return true;const m=MC.find(m=>m.nida===CU?
 
 /* ===== CROSS-SECTION CALCULATIONS ===== */
 
-function memberSavings(name){return SC.filter(s=>s.memberName===name&&s.type==='DEPOSIT').reduce((a,s)=>a+(s.amount||0),0)-SC.filter(s=>s.memberName===name&&s.type==='WITHDRAWAL').reduce((a,s)=>a+(s.amount||0),0);}
-
-function memberShares(name){return SHC.filter(s=>s.memberName===name).reduce((a,s)=>a+(s.amount||0),0);}
-
-function memberShareQty(name){return SHC.filter(s=>s.memberName===name).reduce((a,s)=>a+(s.quantity||0),0);}
+function memberMatchesRecord(record,memberOrId){
+  const m=typeof memberOrId==='object'?memberOrId:MC.find(x=>x.id===memberOrId);
+  const id=typeof memberOrId==='string'?memberOrId:m?.id;
+  const name=`${m?.firstName||''} ${m?.lastName||''}`.trim();
+  const full=`${m?.firstName||''} ${m?.middleName||''} ${m?.lastName||''}`.trim();
+  return record.memberId===id||record.userId===id||record.memberUid===id||
+    (!!name&&String(record.memberName||'').trim()===name)||
+    (!!full&&String(record.memberName||'').trim()===full);
+}
+function memberSavings(memberOrId){
+  const rows=SC.filter(s=>memberMatchesRecord(s,memberOrId));
+  return rows.filter(s=>s.type==='DEPOSIT').reduce((a,s)=>a+(Number(s.amount)||0),0)
+    -rows.filter(s=>s.type==='WITHDRAWAL').reduce((a,s)=>a+(Number(s.amount)||0),0);
+}
+function memberShares(memberOrId){
+  return SHC.filter(s=>memberMatchesRecord(s,memberOrId)).reduce((a,s)=>a+(Number(s.amount)||0),0);
+}
+function memberShareQty(memberOrId){
+  return SHC.filter(s=>memberMatchesRecord(s,memberOrId)).reduce((a,s)=>a+(Number(s.quantity)||0),0);
+}
 
 function loanTotalDue(l){const p=l.amount||0,r=l.interestRate||0,t=l.term||12;return p+(p*r/100*t/12);}
 
@@ -1714,22 +1633,30 @@ function loanBalance(l){if(!l)return 0;return Math.max(0,loanTotalDue(l)-loanTot
 
     const gd={name:gn,type:gt,country:co,plan:'free',status:'trial',expiryDate:exp,createdAt:serverTimestamp(),interestRate:10,sharePrice:10000,maxShares:100,currency:'TZS',logoUrl:null};
 
-    if(!navigator.onLine){
+    if(!fn||!ln||!ni||!ph||!gt||!gn||!co||!pw)throw new Error('Please complete all required fields.');
+    if(pw.length<6)throw new Error('Password must contain at least 6 characters.');
+    if(!navigator.onLine)throw new Error('Internet connection is required to create a secure account.');
 
-      OM.add('SIGNUP',{gid,uid:'p_'+ni,gd,ud:{firstName:fn,lastName:ln,middleName:mn,nida:ni,phone:ph,role:'chair',groupId:gid,createdAt:serverTimestamp()}});
-
-      $('displayedUserId').textContent=gid;openModal('idReminderModal');
-
-    }else{
-
+    let createdUid=null;
+    try{
       const cr=await createUserWithEmailAndPassword(auth,`${ni}@cscms.app`,pw);
+      createdUid=cr.user.uid;
 
-      await setDoc(doc(db,'groups',gid),{...gd,chairpersonId:cr.user.uid});
+      const batch=writeBatch(db);
+      batch.set(doc(db,'groups',gid),{...gd,chairpersonId:cr.user.uid});
+      batch.set(doc(db,'users',cr.user.uid),{firstName:fn,lastName:ln,middleName:mn,nida:ni,phone:ph,role:'chair',groupId:gid,currency:'TZS',shares:0,savings:0,status:'active',createdAt:serverTimestamp()});
+      await batch.commit();
 
-      await setDoc(doc(db,'users',cr.user.uid),{firstName:fn,lastName:ln,middleName:mn,nida:ni,phone:ph,role:'chair',groupId:gid,currency:'TZS',shares:0,savings:0,createdAt:serverTimestamp()});
-
-      $('displayedUserId').textContent=gid;openModal('idReminderModal');showToast("Success!","success");audit('SIGNUP','Auth',gid);
-
+      $('displayedUserId').textContent=gid;
+      openModal('idReminderModal');
+      showToast("Registration successful","success");
+      await audit('SIGNUP','Auth',gid);
+      await signOut(auth);
+    }catch(innerErr){
+      if(createdUid&&auth.currentUser?.uid===createdUid){
+        try{await deleteUser(auth.currentUser);}catch(rollbackErr){console.error('SIGNUP AUTH ROLLBACK',rollbackErr);}
+      }
+      throw innerErr;
     }
 
   }catch(err){showToast(err.code==='auth/email-already-in-use'?"National ID already registered":err.message,"error");}
@@ -1812,9 +1739,9 @@ function loanBalance(l){if(!l)return 0;return Math.max(0,loanTotalDue(l)-loanTot
 
 
 
-window.logout=()=>signOut(auth).then(()=>{CU=null;CG=null;CGI=null;showScreen('landing');showToast("Logged out","success");});
+window.logout=async()=>{try{await signOut(auth);await signOut(secAuth);}finally{CU=null;CG=null;CGI=null;CR='chair';unsubs.forEach(u=>u());unsubs.length=0;showScreen('landing');showToast("Logged out","success");}};
 
-window.logoutSuper=()=>{signOut(auth);CU=null;CG=null;CGI=null;SGroups=[];SUsers=[];SUserCounts={};showScreen('landing');showToast("Super Admin logged out","success");};
+window.logoutSuper=async()=>{try{await signOut(auth);await signOut(secAuth);}finally{CU=null;CG=null;CGI=null;SGroups=[];SUsers=[];SUserCounts={};saUnsubs.forEach(u=>u());saUnsubs=[];showScreen('landing');showToast("Super Admin logged out","success");}};
 
 
 
@@ -3736,9 +3663,9 @@ function renderMembers(){
 
         <td>${trafficBadge(m)}</td>
 
-        <td style="color:var(--p2)">${fmt(memberSavings(m.firstName+' '+m.lastName))}</td>
+        <td style="color:var(--p2)">${fmt(memberSavings(m))}</td>
 
-        <td style="color:var(--purple)">${fmt(memberShares(m.firstName+' '+m.lastName))}</td>
+        <td style="color:var(--purple)">${fmt(memberShares(m))}</td>
 
         ${CR==='chair'?`<td><div class="actions"><button class="btn outline btn-sm" onclick="editMember('${m.id}')"><i class="fa-solid fa-pen"></i></button><button class="btn danger btn-sm" onclick="delMember('${m.id}')"><i class="fa-solid fa-trash"></i></button></div></td>`:''}
 
@@ -3760,7 +3687,7 @@ function renderShares(){return renderFinSection('shares','Shares',SHC,['memberNa
 
 function renderLoans(){return renderFinSection('loans','Loans',LC,['memberName','amount','status','date'],['Member','Amount','Status','Date'],CR==='chair');}
 
-function renderRepayments(){return renderFinSection('repayments','Repayments',RC,['memberName','loanId','amount','date'],['Member','Loan ID','Amount','Date'],false);}
+function renderRepayments(){return `<div class="section-head"><h2><i class="fa-solid fa-money-bill-transfer"></i> Repayments</h2><div class="actions"><button class="btn primary btn-sm" onclick="openRepaymentForm()"><i class="fa-solid fa-plus"></i> Add Repayment</button><button class="btn info btn-sm" onclick="exportSectionPDF('Repayments')"><i class="fa-solid fa-file-pdf"></i> PDF</button></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Member</th><th>Loan ID</th><th>Amount</th><th>Date</th><th>Created By</th></tr></thead><tbody>${RC.slice().reverse().map(r=>`<tr><td>${r.memberName||'N/A'}</td><td>${r.loanId||'N/A'}</td><td style="color:var(--p2)">${fmt(r.amount)}</td><td>${r.date||fD(r.createdAt)}</td><td>${r.createdBy||'N/A'}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--muted)">No repayments recorded</td></tr>'}</tbody></table></div>`;}
 
 function renderWelfare(){return renderFinSection('welfare','Welfare',WC,['memberName','type','amount','date'],['Member','Type','Amount','Date'],CR==='chair');}
 
@@ -3969,53 +3896,143 @@ function renderAudit(){
 /* ===== CRUD OPERATIONS ===== */
 
 window.updateLoanStatus=async(id,status)=>{
-
-  try{await updateDoc(dcol('loans',id),{status});showToast(`Loan ${status.toLowerCase()}`,'success');audit('LOAN_'+status,'Loans',id);}catch(e){showToast(e.message,'error');}
+  if(CR!=='chair')return showToast('Only the Chairperson can approve or reject loans','error');
+  if(!['APPROVED','REJECTED'].includes(status))return showToast('Invalid loan status','error');
+  try{await updateDoc(dcol('loans',id),{status,updatedAt:serverTimestamp()});showToast(`Loan ${status.toLowerCase()}`,'success');audit('LOAN_'+status,'Loans',id);}catch(e){showToast(e.message,'error');}
 
 };
 
 
 
-/* Open generic finance form */
-
+/* ===== FINANCE FORMS ===== */
 window.openFinForm=(colName)=>{
+  if(CR!=='chair')return showToast('Only the Chairperson can add this record','error');
 
-  $('formModalTitle').textContent='Add Record';
+  const isLoan=colName==='loans';
+  $('formModalTitle').textContent=isLoan?'Add Loan':'Add Record';
+  const memberOptions=MC.map(m=>`<option value="${m.id}">${m.firstName||''} ${m.lastName||''}${m.nida?` — ${m.nida}`:''}</option>`).join('');
 
   $('formModalBody').innerHTML=`
-
     <form id="finForm">
-
-      <div class="field"><label>Member Name</label><select id="finMember" required>${MC.map(m=>`<option>${m.firstName} ${m.lastName}</option>`).join('')}</select></div>
-
-      ${colName==='savings'||colName==='welfare'?`<div class="field"><label>Type</label><select id="finType"><option>DEPOSIT</option><option>WITHDRAWAL</option></select></div>`:''}
-
-      ${colName==='cashbook'?`<div class="field"><label>Type</label><select id="finType"><option>INCOME</option><option>EXPENSE</option></select></div><div class="field"><label>Category</label><input id="finCategory" required></div>`:''}
-
-      <div class="field"><label>Amount</label><input id="finAmount" type="number" required></div>
-
-      <div class="field"><label>Date</label><input id="finDate" type="date" value="${today()}" required></div>
-
+      <div class="field"><label>Member</label><select id="finMember" required>${memberOptions}</select></div>
+      ${isLoan?`
+        <div class="row2">
+          <div class="field"><label>Amount</label><input id="finAmount" type="number" min="0.01" step="0.01" required></div>
+          <div class="field"><label>Interest Rate (%)</label><input id="finRate" type="number" min="0" step="0.01" value="${CG?.interestRate??10}" required></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Term (Months)</label><input id="finTerm" type="number" min="1" step="1" value="12" required></div>
+          <div class="field"><label>Due Date</label><input id="finDue" type="date" required></div>
+        </div>
+      `:`
+        ${colName==='savings'||colName==='welfare'?`<div class="field"><label>Type</label><select id="finType"><option value="DEPOSIT">DEPOSIT</option><option value="WITHDRAWAL">WITHDRAWAL</option></select></div>`:''}
+        ${colName==='cashbook'?`<div class="field"><label>Type</label><select id="finType"><option value="INCOME">INCOME</option><option value="EXPENSE">EXPENSE</option></select></div><div class="field"><label>Category</label><input id="finCategory" required></div>`:''}
+        <div class="field"><label>Amount</label><input id="finAmount" type="number" min="0.01" step="0.01" required></div>
+        <div class="field"><label>Date</label><input id="finDate" type="date" value="${today()}" required></div>
+      `}
+      ${isLoan?`<div class="field"><label>Purpose / Note</label><textarea id="finNote" rows="3" placeholder="Optional"></textarea></div>`:''}
       <button class="btn primary" type="submit"><i class="fa-solid fa-check"></i> Save</button>
-
     </form>`;
 
+  if(isLoan){
+    const d=new Date();d.setMonth(d.getMonth()+12);
+    $('finDue').value=d.toISOString().slice(0,10);
+  }
   openModal('formModal');
 
   $('finForm').addEventListener('submit',async e=>{
-
     e.preventDefault();
+    const amount=Number($('finAmount').value);
+    if(!Number.isFinite(amount)||amount<=0)return showToast('Amount must be greater than zero','error');
 
-    const data={memberName:$('finMember').value,memberId:MC.find(m=>`${m.firstName||''} ${m.lastName||''}`.trim()===$('finMember').value)?.id||null,amount:parseFloat($('finAmount').value),date:$('finDate').value,groupId:CGI,createdBy:CU?.uid||null,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+    const member=MC.find(m=>m.id===$('finMember').value);
+    if(!member)return showToast('Please select a valid member','error');
 
-    if($('finType'))data.type=$('finType').value;
+    try{
+      if(isLoan){
+        const rate=Number($('finRate').value),term=Number($('finTerm').value);
+        if(!Number.isFinite(rate)||rate<0||!Number.isFinite(term)||term<1)throw new Error('Enter valid loan rate and term.');
+        const due=new Date($('finDue').value+'T23:59:59');
+        if(Number.isNaN(due.getTime()))throw new Error('Enter a valid due date.');
+        const interestAmount=amount*rate/100*term/12;
+        const ref=await addDoc(col('loans'),{
+          memberId:member.id,memberName:`${member.firstName||''} ${member.lastName||''}`.trim(),nida:member.nida||null,
+          amount,interestRate:rate,term,interestAmount,repaid:0,status:'PENDING',dueDate:due.toISOString().slice(0,10),
+          note:$('finNote').value.trim(),groupId:CGI,createdBy:CU.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()
+        });
+        showToast(`Loan submitted (${ref.id})`,'success');audit('ADD','loans',ref.id);
+      }else{
+        const data={
+          memberName:`${member.firstName||''} ${member.lastName||''}`.trim(),memberId:member.id,nida:member.nida||null,
+          amount,date:$('finDate').value,groupId:CGI,createdBy:CU.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()
+        };
+        if($('finType'))data.type=$('finType').value;
+        if($('finCategory'))data.category=$('finCategory').value.trim();
+        const ref=await addDoc(col(colName),data);
+        showToast(`Saved successfully (${ref.id})`,'success');audit('ADD',colName,ref.id);
+      }
+      closeModal('formModal');
+    }catch(e){
+      console.error('SAVE ERROR',colName,e);
+      showToast((e?.code==='permission-denied'?'Permission denied by Firestore Rules: ':'Save failed: ')+(e.message||e),'error');
+    }
+  });
+};
 
-    if($('finCategory'))data.category=$('finCategory').value;
+window.openRepaymentForm=()=>{
+  if(!CU?.uid||!CGI)return showToast('Your session is not ready. Please sign in again.','error');
 
-    try{if(!CGI||!CU?.uid)throw new Error('Your session is not ready. Please sign in again.');const ref=await addDoc(col(colName),data);showToast(`Saved successfully (${ref.id})`,'success');closeModal('formModal');audit('ADD',colName,ref.id);}catch(e){console.error('SAVE ERROR',colName,e);showToast((e?.code==='permission-denied'?'Permission denied by Firestore Rules: ': 'Save failed: ')+(e.message||e),'error');}
-
+  const eligible=LC.filter(l=>{
+    const owner=l.memberId===CU.uid||l.userId===CU.uid||String(l.nida||'')===String(CU.nida||'')||
+      (l.memberName||'').trim().toLowerCase()===`${CU.firstName||''} ${CU.lastName||''}`.trim().toLowerCase();
+    const status=String(l.status||'APPROVED').toUpperCase();
+    return (CR==='chair'||owner)&&['APPROVED','DISBURSED','ACTIVE','PARTIALLY_PAID'].includes(status)&&loanBalance(l)>0;
   });
 
+  if(!eligible.length)return showToast('No outstanding approved loan is available for repayment.','warning');
+
+  $('formModalTitle').textContent='Record Loan Repayment';
+  $('formModalBody').innerHTML=`
+    <form id="repaymentForm">
+      <div class="field"><label>Loan</label><select id="repLoan" required>
+        ${eligible.map(l=>`<option value="${l.id}" data-balance="${loanBalance(l)}">${l.memberName||'Member'} — ${l.id} — Balance: ${fmt(loanBalance(l))}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Amount</label><input id="repAmount" type="number" min="0.01" step="0.01" required></div>
+      <div class="field"><label>Date</label><input id="repDate" type="date" value="${today()}" required></div>
+      <button class="btn primary" type="submit"><i class="fa-solid fa-money-bill-transfer"></i> Save Repayment</button>
+    </form>`;
+  openModal('formModal');
+
+  $('repaymentForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const loanId=$('repLoan').value,amount=Number($('repAmount').value),date=$('repDate').value;
+    if(!Number.isFinite(amount)||amount<=0)return showToast('Repayment amount must be greater than zero','error');
+    if(!date)return showToast('Please select the repayment date','error');
+
+    try{
+      const loanRef=dcol('loans',loanId),repRef=doc(col('repayments'));
+      await runTransaction(db,async tx=>{
+        const snap=await tx.get(loanRef);
+        if(!snap.exists())throw new Error('Loan no longer exists.');
+        const loan={id:snap.id,...snap.data()};
+        const status=String(loan.status||'APPROVED').toUpperCase();
+        if(!['APPROVED','DISBURSED','ACTIVE','PARTIALLY_PAID'].includes(status))throw new Error('This loan is not open for repayment.');
+        const due=loanTotalDue(loan);
+        const repaid=Number(loan.repaid)||0;
+        const balance=Math.max(0,due-repaid);
+        if(balance<=0)throw new Error('This loan is already fully paid.');
+        if(amount>balance+0.000001)throw new Error(`Repayment exceeds outstanding balance of ${fmt(balance)}.`);
+        const newRepaid=repaid+amount,newBalance=Math.max(0,due-newRepaid);
+        tx.set(repRef,{
+          loanId,memberId:loan.memberId||CU.uid,memberName:loan.memberName||`${CU.firstName||''} ${CU.lastName||''}`.trim(),
+          nida:loan.nida||CU.nida||null,amount,date,groupId:CGI,createdBy:CU.uid,createdAt:serverTimestamp()
+        });
+        tx.update(loanRef,{repaid:newRepaid,status:newBalance<=0.000001?'PAID':'PARTIALLY_PAID',lastPaymentDate:date,updatedAt:serverTimestamp()});
+      });
+      showToast('Repayment saved and loan balance updated','success');
+      closeModal('formModal');audit('REPAYMENT','Repayments',loanId);
+    }catch(e){console.error('REPAYMENT ERROR',e);showToast(e.message||'Repayment failed','error');}
+  });
 };
 
 
@@ -4062,19 +4079,21 @@ window.openMemberForm=()=>{
 
     if(!ni){btn.disabled=false;return showToast('National ID is required','error');}
 
+    let memberAuthUid=null;
     try{
-
+      if(!navigator.onLine)throw new Error('Internet connection is required to create a member account.');
+      if(!fn||!ln||!ni)throw new Error('First name, last name and National ID are required.');
       const existing=MC.find(m=>String(m.nida||'').trim()===ni);if(existing)throw new Error('A member with this National ID already exists in this group.');
 
       const cred=await createUserWithEmailAndPassword(secAuth,`${ni}@cscms.app`,pw);
-
       const memberId=cred.user.uid;
-
+      memberAuthUid=memberId;
       const data={id:memberId,memberId,firstName:fn,middleName:mn,lastName:ln,nida:ni,phone:ph,businessName:biz,role:'member',groupId:CGI,status:'active',createdAt:serverTimestamp(),createdBy:CU.uid};
 
-      await setDoc(doc(db,'users',memberId),{firstName:fn,middleName:mn,lastName:ln,nida:ni,phone:ph,businessName:biz,role:'member',groupId:CGI,status:'active',memberId,createdAt:serverTimestamp(),createdBy:CU.uid});
-
-      await setDoc(doc(db,'groups',CGI,'members',memberId),data);
+      const batch=writeBatch(db);
+      batch.set(doc(db,'users',memberId),{firstName:fn,middleName:mn,lastName:ln,nida:ni,phone:ph,businessName:biz,role:'member',groupId:CGI,status:'active',memberId,createdAt:serverTimestamp(),createdBy:CU.uid});
+      batch.set(doc(db,'groups',CGI,'members',memberId),data);
+      await batch.commit();
 
       await signOut(secAuth).catch(()=>{});
 
@@ -4083,7 +4102,10 @@ window.openMemberForm=()=>{
       closeModal('formModal');openModal('memberCreatedModal');showToast('Member account created successfully','success');audit('MEMBER_REGISTER','Members',`${fn} ${ln} (${memberId})`);
 
     }catch(e){
-
+      if(memberAuthUid&&secAuth.currentUser?.uid===memberAuthUid){
+        try{await deleteUser(secAuth.currentUser);}catch(rollbackErr){console.error('MEMBER AUTH ROLLBACK',rollbackErr);}
+      }
+      await signOut(secAuth).catch(()=>{});
       const msg=e.code==='auth/email-already-in-use'?'This National ID already has a login account.':(e.message||'Member registration failed');showToast(msg,'error');
 
     }finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-user-check"></i> Create Member Account';}
@@ -4150,7 +4172,38 @@ window.delMember=(id)=>{showConfirm('Delete Member','This will permanently remov
 
 window.delFinItem=(cn,id)=>{showConfirm('Delete','Remove this record?',async()=>{try{await deleteDoc(dcol(cn,id));showToast('Deleted','success');}catch(e){showToast(e.message,'error');}});};
 
-window.editFinItem=(cn,id)=>{showToast('Use the form to edit','warning');};
+window.editFinItem=(cn,id)=>{
+  if(CR!=='chair')return showToast('Only the Chairperson can edit records','error');
+  const source={savings:SC,shares:SHC,loans:LC,repayments:RC,welfare:WC,meetings:MTC,cashbook:CC,dividends:DC,penalties:PC,branches:BRC,loanProducts:LPC,kyc:KYC,guarantors:GC,collateral:CLC,announcements:AC}[cn]||[];
+  const item=source.find(x=>x.id===id);
+  if(!item)return showToast('Record not found','error');
+
+  const editable=['amount','date','type','category','status','memberName','quantity','name','location','phone','description','value','interestRate','term','maxAmount','documentType','title'];
+  const fields=editable.filter(k=>Object.prototype.hasOwnProperty.call(item,k));
+  if(!fields.length)return showToast('This record has no editable fields','warning');
+
+  $('formModalTitle').textContent=`Edit ${cn}`;
+  $('formModalBody').innerHTML=`<form id="editFinForm">${fields.map(k=>{
+    const v=item[k]??'';
+    if(k==='type')return `<div class="field"><label>${k}</label><select id="ef_${k}">${['DEPOSIT','WITHDRAWAL','INCOME','EXPENSE','BUY','SELL'].map(x=>`<option ${String(v)===x?'selected':''}>${x}</option>`).join('')}</select></div>`;
+    if(k==='status')return `<div class="field"><label>${k}</label><select id="ef_${k}">${['PENDING','APPROVED','REJECTED','DISBURSED','ACTIVE','PARTIALLY_PAID','PAID','INACTIVE'].map(x=>`<option ${String(v).toUpperCase()===x?'selected':''}>${x}</option>`).join('')}</select></div>`;
+    const type=['amount','quantity','value','interestRate','term','maxAmount'].includes(k)?'number':k==='date'?'date':'text';
+    return `<div class="field"><label>${k}</label><input id="ef_${k}" type="${type}" value="${String(v).replace(/"/g,'&quot;')}" ${['amount','quantity','value','interestRate','term','maxAmount'].includes(k)?'step=\"0.01\"':''}></div>`;
+  }).join('')}<button class="btn primary" type="submit"><i class="fa-solid fa-check"></i> Save Changes</button></form>`;
+  openModal('formModal');
+
+  $('editFinForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const data={updatedAt:serverTimestamp()};
+    fields.forEach(k=>{
+      const el=$(`ef_${k}`);if(!el)return;
+      if(['amount','quantity','value','interestRate','term','maxAmount'].includes(k))data[k]=Number(el.value);
+      else data[k]=el.value.trim();
+    });
+    try{await updateDoc(dcol(cn,id),data);showToast('Updated successfully','success');closeModal('formModal');audit('UPDATE',cn,id);}
+    catch(e){showToast(e.message||'Update failed','error');}
+  });
+};
 
 
 
@@ -4374,4 +4427,4 @@ translateDOM(document);
  
 </script> 
 </body> 
-</html> ( System announcement, Latest Announcement, Partners...hazionekani kwa watumiaji, Kuna makosa katika ku Upload, hakikisha weka Upload image of all size Then mfumo ufanye resize automatically kisha usave, na Kufanya storage Kwenye firestore kisha show ifanye kazi
+</html> 
