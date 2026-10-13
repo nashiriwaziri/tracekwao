@@ -683,6 +683,8 @@ async function initFirebase(){
     const auth=authMod.getAuth(app);
     const db=dbMod.getFirestore(app);
     const storage=storageMod.getStorage(app);
+    // Give resumable uploads enough time on mobile/4G networks; Firebase defaults can be too short for large photos.
+    try{storageMod.setMaxUploadRetryTime(storage,10*60*1000);storageMod.setMaxOperationRetryTime(storage,2*60*1000)}catch(storageConfigError){console.warn('Could not adjust Firebase Storage retry windows:',storageConfigError)}
     fb={...authMod,...dbMod,...storageMod,auth,db,storage};
 
     fb.onAuthStateChanged(auth,async user=>{
@@ -1322,14 +1324,14 @@ async function deleteCompanyRecord(cid){
 }
 async function prepareSystemAdImage(file){
  // Reduce oversized photos in-browser to avoid extremely slow mobile/weak-network uploads.
- if(!file || file.size<=3*1024*1024 || !/^image\/(jpeg|png|webp)$/i.test(file.type)) return file;
+ if(!file || file.size<=1.2*1024*1024 || !/^image\/(jpeg|png|webp)$/i.test(file.type)) return file;
  try{
   const bitmap=await createImageBitmap(file);
-  const maxSide=1800,scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+  const maxSide=1400,scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
   const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
   const ctx=canvas.getContext('2d');if(!ctx){bitmap.close?.();return file}
   ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.84));
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.76));
   if(!blob || blob.size>=file.size)return file;
   return new File([blob],file.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()});
  }catch(err){console.warn('Image optimization skipped:',err);return file}
@@ -1373,7 +1375,7 @@ async function uploadSystemAd(e){
     setSystemAdProgress(`Inapakia picha: ${pct}% (${(snapshot.bytesTransferred/1024/1024).toFixed(2)} / ${(snapshot.totalBytes/1024/1024).toFixed(2)} MB)`,pct);
     if(btn)btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> ${pct}%`;
    },reject,resolve);
-  }),120000,'Kupakia picha',()=>uploadTask?.cancel());
+  }),300000,'Kupakia picha (dakika 5)',()=>uploadTask?.cancel());
   setSystemAdProgress('Picha imepakiwa. Inapata kiungo salama...',100);
   const imageUrl=await withSystemAdTimeout(fb.getDownloadURL(uploadTask.snapshot.ref),30000,'Kupata kiungo cha picha');
   const ad={id:adId,title,description:String($('sysAdDesc')?.value||'').trim(),price:String($('sysAdPrice')?.value||'').trim(),imageUrl,storagePath:path,imageName:file.name||safeName,imageType:file.type||'image/jpeg',imageSize:file.size,status:'Published',visibility:'public',createdAt:ts(),createdBy:CU?.uid||'',createdByEmail:CU?.email||'',updatedAt:ts()};
@@ -1393,7 +1395,8 @@ async function uploadSystemAd(e){
   if(code.includes('storage/unauthorized')||code.includes('permission-denied'))message='Firebase Rules zimekataa ruhusa. Ruhusu Super Administrator kupakia Storage na kuandika systemAds kwenye Firestore.';
   else if(code.includes('storage/bucket-not-found'))message='Firebase Storage bucket haipatikani. Thibitisha storageBucket kwenye Firebase config na uwashe Firebase Storage.';
   else if(code.includes('storage/canceled'))message='Upload imekatishwa. Jaribu tena kwa mtandao imara.';
-  else if(code.includes('storage/retry-limit-exceeded')||code.includes('network-request-failed'))message='Mtandao au Firebase Storage umeshindwa baada ya majaribio. Jaribu tena au tumia picha ndogo.';
+  else if(code.includes('storage/retry-limit-exceeded')||code.includes('network-request-failed'))message='Firebase Storage haikupokea picha kwa sababu ya mtandao au mipaka ya retry. Hakikisha Storage imewezeshwa, bucket ni sahihi, Rules zinaruhusu upload, kisha jaribu mtandao mwingine.';
+  else if(code.includes('storage/unknown'))message='Firebase Storage imerudisha hitilafu isiyojulikana. Thibitisha Storage bucket, Storage Rules, na kama Firebase Storage imewezeshwa kwenye mradi huu.';
   else if(code==='system-ad/timeout')message=err.message+' Hakuna mafanikio yatakayodaiwa mpaka Firestore ithibitishe rekodi.';
   else message=friendlyError(err);
   setSystemAdProgress('Imeshindikana: '+message,null);toast('Tangazo halijachapishwa: '+message,'e');
