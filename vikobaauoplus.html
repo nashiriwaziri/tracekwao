@@ -24,6 +24,9 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
+<!-- SheetJS (XLSX) for Excel export — added in Vikoba upgrade -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
 <style>
 :root {
   --bg: #07111f;
@@ -2664,12 +2667,12 @@ let CU=null,CG=null,CR='chair',CGI=null;
 let MC=[],SC=[],SHC=[],LC=[],RC=[],WC=[],MTC=[],BRC=[],CC=[],DC=[],PC=[],KYC=[],GC=[],CLC=[],AC=[],LPC=[],AUC=[],PTC=[];
 
 let PAYC=[],PARTNERS=[];
-
 /* ===== VIKOBA UPGRADE: Dividends / Fiscal Years / Audit ===== */
 let FYC=[];          // Fiscal Year configurations
 let DPC=[];          // Dividend Periods (with snapshots)
 let DVC=[];          // Dividend records per member
 let ALC=[];          // Detailed Audit Log (with old/new values)
+
 let SPayments=[],SAds=[],SPartners=[];
 
 const SUPPORTED_COUNTRIES=['Tanzania','Kenya','Uganda','Rwanda','Burundi','DRC','Zambia','Malawi','Mozambique','South Africa','Nigeria','Ghana','Ethiopia','Egypt','United Kingdom','United States','Canada','India','United Arab Emirates','Saudi Arabia'];
@@ -5037,16 +5040,26 @@ function initApp(){
 }
 
 const navItems=[
+
   {id:'dashboard',icon:'fa-gauge-high',label:'Dashboard'},
+
   {section:'Management'},{id:'members',icon:'fa-users',label:'Members'},
+
   {section:'Finance'},{id:'savings',icon:'fa-piggy-bank',label:'Savings'},{id:'shares',icon:'fa-chart-pie',label:'Shares'},{id:'loans',icon:'fa-hand-holding-dollar',label:'Loans'},{id:'repayments',icon:'fa-money-bill-transfer',label:'Repayments'},{id:'welfare',icon:'fa-hand-holding-heart',label:'Welfare'},
+
   {section:'Reports'},{id:'reports',icon:'fa-file-chart-column',label:'Reports & Analytics'},{id:'memberdividends',icon:'fa-coins',label:'My Profits & Dividends'},
   {section:'Accounting'},{id:'expenses',icon:'fa-receipt',label:'Income & Expense'},{id:'dividends',icon:'fa-sitemap',label:'Shares, Profits & Dividends'},{id:'penalties',icon:'fa-gavel',label:'Penalties'},
+
   {section:'Operations'},{id:'meetings',icon:'fa-calendar-check',label:'Meetings'},{id:'branches',icon:'fa-code-branch',label:'Branches'},{id:'loanproducts',icon:'fa-landmark',label:'Loan Products'},
+
   {section:'Compliance'},{id:'kyc',icon:'fa-address-card',label:'KYC'},{id:'guarantors',icon:'fa-user-shield',label:'Guarantors'},{id:'collateral',icon:'fa-file-contract',label:'Collateral'},
+
   {section:'Communication'},{id:'announcements',icon:'fa-bullhorn',label:'Announcements'},{id:'systemads',icon:'fa-bullhorn',label:'System Ads'},{id:'partners',icon:'fa-handshake',label:'Partners'},
+
   {section:'Payments'},{id:'payments',icon:'fa-credit-card',label:'Payments & Billing'},
+
   {section:'System'},{id:'pending',icon:'fa-hourglass-half',label:'Pending Approval'},{id:'audit',icon:'fa-clipboard-list',label:'Audit Trail'},{id:'settings',icon:'fa-gear',label:'Appearance & Settings'}
+
 ];
 
 const mAllowed=new Set(['dashboard','members','savings','shares','loans','repayments','welfare','meetings','announcements','systemads','partners','payments','settings','reports','memberdividends']);
@@ -5187,9 +5200,12 @@ function renderSec(id){
     case 'pending':el.innerHTML=renderPending();break;
 
     case 'audit':el.innerHTML=renderAudit();break;
+
     /* ===== VIKOBA UPGRADE: new sections ===== */
     case 'reports':el.innerHTML=renderReports();break;
+
     case 'memberdividends':el.innerHTML=renderMemberDividends();break;
+
     default:el.innerHTML=`<div class="card"><p>Section: ${id}</p></div>`;
 
   }
@@ -5217,6 +5233,7 @@ function renderDashboard(){
     <div class="section-head"><h2>Dashboard</h2><span class="small">${CG.name} - ${CR==='chair'?'Chairperson':'Member'}</span></div>
 
     ${CR==='chair'?`<div class="control-panel"><button class="control-tile" onclick="openMemberForm()"><i class="fa-solid fa-user-plus"></i><b>Add Member</b><span>Create ID + password</span></button><button class="control-tile" onclick="openFinForm('savings')"><i class="fa-solid fa-piggy-bank"></i><b>Add Savings</b><span>Record contribution</span></button><button class="control-tile" onclick="openFinForm('shares')"><i class="fa-solid fa-chart-pie"></i><b>Add Shares</b><span>Buy / record shares</span></button><button class="control-tile" onclick="openFinForm('loans')"><i class="fa-solid fa-hand-holding-dollar"></i><b>Add Loan</b><span>Manage lending</span></button><button class="control-tile" onclick="openFinForm('meetings')"><i class="fa-solid fa-calendar-plus"></i><b>New Meeting</b><span>Schedule meeting</span></button><button class="control-tile" onclick="openFinForm('announcements')"><i class="fa-solid fa-bullhorn"></i><b>Announcement</b><span>Notify the group</span></button><button class="control-tile" onclick="navigateTo('settings')"><i class="fa-solid fa-palette"></i><b>Appearance</b><span>Black / White / Blue</span></button></div>`:''}
+
     ${CR==='member'?`<button class="big-dividend-btn" onclick="navigateTo('memberdividends')" style="margin-bottom:18px"><i class="fa-solid fa-coins"></i><div style="text-align:left"><div>MEMBER PROFITS & DIVIDENDS</div><div style="font-size:11px;font-weight:500;opacity:.85">View your shares, projected/approved/paid dividends and download your statement</div></div><i class="fa-solid fa-arrow-right" style="font-size:18px;margin-left:auto"></i></button>`:''}
     ${CR==='chair'?`<button class="big-dividend-btn" onclick="navigateTo('dividends')" style="margin-bottom:18px;background:linear-gradient(135deg,var(--purple),#5b21b6);box-shadow:0 6px 22px rgba(139,92,246,.25)"><i class="fa-solid fa-sitemap"></i><div style="text-align:left"><div>SHARES, PROFITS & DIVIDENDS ADMIN</div><div style="font-size:11px;font-weight:500;opacity:.85">Calculate annual profit, approve dividends and lock fiscal year</div></div><i class="fa-solid fa-arrow-right" style="font-size:18px;margin-left:auto"></i></button><button class="big-dividend-btn" onclick="navigateTo('reports')" style="margin-bottom:18px"><i class="fa-solid fa-file-chart-column"></i><div style="text-align:left"><div>REPORTS & ANALYTICS</div><div style="font-size:11px;font-weight:500;opacity:.85">Generate PDF/Excel reports for every area of the group</div></div><i class="fa-solid fa-arrow-right" style="font-size:18px;margin-left:auto"></i></button>`:''}
     <div class="metrics-grid">
@@ -6033,317 +6050,221 @@ window.deleteSAPartner=async id=>{showConfirm('Delete Partner','Remove this glob
    VIKOBA UPGRADE — REPORTS, SHARES, PROFITS & DIVIDENDS MODULE
    Added on top of existing system. Does NOT modify existing logic.
    ===================================================================================== */
+
 /* ---------- HELPERS: date filtering, currency, period resolution ---------- */
-function dateInRange(d, fromStr, toStr) {
-  if (!d) return true;
+function dateInRange(d, fromStr, toStr){
+  if(!d) return true;
   let ms;
-  if (typeof d.toMillis === 'function') ms = d.toMillis();
-  else if (typeof d.toDate === 'function') ms = d.toDate().getTime();
-  else if (d && typeof d.seconds === 'number') ms = d.seconds * 1000;
-  else {
-    const p = Date.parse(d);
-    ms = Number.isFinite(p) ? p : Date.now();
-  }
-  if (fromStr) {
-    const f = new Date(fromStr + 'T00:00:00').getTime();
-    if (ms < f) return false;
-  }
-  if (toStr) {
-    const t = new Date(toStr + 'T23:59:59').getTime();
-    if (ms > t) return false;
-  }
+  if(typeof d.toMillis==='function') ms=d.toMillis();
+  else if(typeof d.toDate==='function') ms=d.toDate().getTime();
+  else if(d && typeof d.seconds==='number') ms=d.seconds*1000;
+  else { const p=Date.parse(d); ms=Number.isFinite(p)?p:Date.now(); }
+  if(fromStr){ const f=new Date(fromStr+'T00:00:00').getTime(); if(ms<f) return false; }
+  if(toStr){ const t=new Date(toStr+'T23:59:59').getTime(); if(ms>t) return false; }
   return true;
 }
-
-function recordDateMs(d) {
-  if (!d) return 0;
-  if (typeof d.toMillis === 'function') return d.toMillis();
-  if (typeof d.toDate === 'function') return d.toDate().getTime();
-  if (d && typeof d.seconds === 'number') return d.seconds * 1000;
-  const p = Date.parse(d);
-  return Number.isFinite(p) ? p : 0;
+function recordDateMs(d){ if(!d) return 0; if(typeof d.toMillis==='function') return d.toMillis(); if(typeof d.toDate==='function') return d.toDate().getTime(); if(d && typeof d.seconds==='number') return d.seconds*1000; const p=Date.parse(d); return Number.isFinite(p)?p:0; }
+function fyRange(fy){
+  if(!fy) return {from:null,to:null};
+  const y=Number(fy.year)||new Date().getFullYear();
+  const from=fy.startDate?(fy.startDate instanceof Timestamp?fy.startDate.toDate():new Date(fy.startDate)):new Date(y,0,1);
+  const to=fy.endDate?(fy.endDate instanceof Timestamp?fy.endDate.toDate():new Date(fy.endDate)):new Date(y,11,31,23,59,59);
+  return {from:from.toISOString().slice(0,10),to:to.toISOString().slice(0,10)};
 }
+function groupCurrency(){ return CG?.currency||'TZS'; }
+function fmtMoney(n,currency){ const v=Number(n||0); return v.toLocaleString(undefined,{maximumFractionDigits:2})+(currency?' '+currency:''); }
 
-function fyRange(fy) {
-  if (!fy) return {
-    from: null,
-    to: null
-  };
-  const y = Number(fy.year) || new Date().getFullYear();
-  const from = fy.startDate ? (fy.startDate instanceof Timestamp ? fy.startDate.toDate() : new Date(fy.startDate)) :
-    new Date(y, 0, 1);
-  const to = fy.endDate ? (fy.endDate instanceof Timestamp ? fy.endDate.toDate() : new Date(fy.endDate)) : new Date(
-    y, 11, 31, 23, 59, 59);
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10)
-  };
-}
-
-function groupCurrency() {
-  return CG?.currency || 'TZS';
-}
-
-function fmtMoney(n, currency) {
-  const v = Number(n || 0);
-  return v.toLocaleString(undefined, {
-    maximumFractionDigits: 2
-  }) + (currency ? ' ' + currency : '');
-}
 /* ---------- CALCULATION ENGINE: shares within a period ---------- */
-function calcMemberSharesInPeriod(memberOrId, fromStr, toStr) {
+function calcMemberSharesInPeriod(memberOrId, fromStr, toStr){
   // Returns total VALUE of shares purchased (minus sold) within the date window.
-  const rows = SHC.filter(s => memberMatchesRecord(s, memberOrId));
-  const inRange = rows.filter(s => {
-    const ds = s.date || s.createdAt;
-    return dateInRange(ds, fromStr, toStr);
+  const rows=SHC.filter(s=>memberMatchesRecord(s,memberOrId));
+  const inRange=rows.filter(s=>{
+    const ds=s.date||s.createdAt;
+    return dateInRange(ds,fromStr,toStr);
   });
-  const bought = inRange.filter(s => (s.type || 'BUY') !== 'SELL').reduce((a, s) => a + (Number(s.amount) || 0), 0);
-  const sold = inRange.filter(s => (s.type || 'BUY') === 'SELL').reduce((a, s) => a + (Number(s.amount) || 0), 0);
-  return Math.max(0, bought - sold);
+  const bought=inRange.filter(s=>(s.type||'BUY')!=='SELL').reduce((a,s)=>a+(Number(s.amount)||0),0);
+  const sold=inRange.filter(s=>(s.type||'BUY')==='SELL').reduce((a,s)=>a+(Number(s.amount)||0),0);
+  return Math.max(0,bought-sold);
 }
-
-function calcMemberShareQtyInPeriod(memberOrId, fromStr, toStr) {
-  const rows = SHC.filter(s => memberMatchesRecord(s, memberOrId));
-  const inRange = rows.filter(s => {
-    return dateInRange(s.date || s.createdAt, fromStr, toStr);
-  });
-  const bought = inRange.filter(s => (s.type || 'BUY') !== 'SELL').reduce((a, s) => a + (Number(s.quantity) || 0),
-    0);
-  const sold = inRange.filter(s => (s.type || 'BUY') === 'SELL').reduce((a, s) => a + (Number(s.quantity) || 0), 0);
-  return Math.max(0, bought - sold);
+function calcMemberShareQtyInPeriod(memberOrId, fromStr, toStr){
+  const rows=SHC.filter(s=>memberMatchesRecord(s,memberOrId));
+  const inRange=rows.filter(s=>{ return dateInRange(s.date||s.createdAt,fromStr,toStr); });
+  const bought=inRange.filter(s=>(s.type||'BUY')!=='SELL').reduce((a,s)=>a+(Number(s.quantity)||0),0);
+  const sold=inRange.filter(s=>(s.type||'BUY')==='SELL').reduce((a,s)=>a+(Number(s.quantity)||0),0);
+  return Math.max(0,bought-sold);
 }
-
-function calcAvgSharesInPeriod(memberOrId, fromStr, toStr) {
+function calcAvgSharesInPeriod(memberOrId, fromStr, toStr){
   // Average held shares over the period (monthly buckets).
-  const rows = SHC.filter(s => memberMatchesRecord(s, memberOrId));
-  if (!rows.length) return 0;
-  const f = fromStr ? new Date(fromStr + 'T00:00:00').getTime() : 0;
-  const t = toStr ? new Date(toStr + 'T23:59:59').getTime() : Date.now();
-  if (t <= f) return calcMemberSharesInPeriod(memberOrId, fromStr, toStr);
+  const rows=SHC.filter(s=>memberMatchesRecord(s,memberOrId));
+  if(!rows.length) return 0;
+  const f=fromStr?new Date(fromStr+'T00:00:00').getTime():0;
+  const t=toStr?new Date(toStr+'T23:59:59').getTime():Date.now();
+  if(t<=f) return calcMemberSharesInPeriod(memberOrId,fromStr,toStr);
   // Walk month-by-month from f to t and average the running balance.
-  const months = [];
-  let cur = new Date(f);
-  while (cur.getTime() <= t) {
+  const months=[];
+  let cur=new Date(f);
+  while(cur.getTime()<=t){
     months.push(cur.getTime());
-    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
   }
-  if (!months.length) months.push(t);
-  let sum = 0;
-  months.forEach(mt => {
-    const held = rows.filter(s => {
-      const ds = s.date || s.createdAt;
-      const ms = recordDateMs(ds);
-      return ms <= mt && (s.type || 'BUY') !== 'SELL';
-    }).reduce((a, s) => a + (Number(s.amount) || 0), 0) - rows.filter(s => {
-      const ds = s.date || s.createdAt;
-      const ms = recordDateMs(ds);
-      return ms <= mt && (s.type || 'BUY') === 'SELL';
-    }).reduce((a, s) => a + (Number(s.amount) || 0), 0);
-    sum += Math.max(0, held);
+  if(!months.length) months.push(t);
+  let sum=0;
+  months.forEach(mt=>{
+    const held=rows.filter(s=>{
+      const ds=s.date||s.createdAt;
+      const ms=recordDateMs(ds);
+      return ms<=mt && (s.type||'BUY')!=='SELL';
+    }).reduce((a,s)=>a+(Number(s.amount)||0),0)
+    - rows.filter(s=>{
+      const ds=s.date||s.createdAt;
+      const ms=recordDateMs(ds);
+      return ms<=mt && (s.type||'BUY')==='SELL';
+    }).reduce((a,s)=>a+(Number(s.amount)||0),0);
+    sum+=Math.max(0,held);
   });
-  return sum / months.length;
+  return sum/months.length;
 }
+
 /* ---------- CALCULATION ENGINE: group profit ---------- */
-function calcGroupProfit(fromStr, toStr) {
+function calcGroupProfit(fromStr,toStr){
   // INTEREST collected (repayments marked as interest portion, or computed)
-  const interestEarned = RC.filter(r => dateInRange(r.date || r.createdAt, fromStr, toStr)).reduce((a, r) => {
-    const loan = LC.find(l => l.id === r.loanId);
-    if (!loan) return a;
-    // Interest portion = min(repayment, totalInterest)
-    const totalInterest = Number(loan.interestAmount) || 0;
-    const totalDue = loanTotalDue(loan);
-    if (totalDue <= 0) return a;
-    const portion = (Number(r.amount) || 0) * (totalInterest / totalDue);
-    return a + portion;
-  }, 0);
+  const interestEarned = RC.filter(r=>dateInRange(r.date||r.createdAt,fromStr,toStr))
+    .reduce((a,r)=>{
+      const loan=LC.find(l=>l.id===r.loanId);
+      if(!loan) return a;
+      // Interest portion = min(repayment, totalInterest)
+      const totalInterest=Number(loan.interestAmount)||0;
+      const totalDue=loanTotalDue(loan);
+      if(totalDue<=0) return a;
+      const portion=(Number(r.amount)||0)*(totalInterest/totalDue);
+      return a+portion;
+    },0);
+
   // FINES collected (penalties marked PAID)
-  const finesCollected = PC.filter(p => dateInRange(p.date || p.createdAt, fromStr, toStr)).filter(p => (p.status ||
-    'PAID') === 'PAID').reduce((a, p) => a + (Number(p.amount) || 0), 0);
+  const finesCollected = PC.filter(p=>dateInRange(p.date||p.createdAt,fromStr,toStr))
+    .filter(p=>(p.status||'PAID')==='PAID')
+    .reduce((a,p)=>a+(Number(p.amount)||0),0);
+
   // Other income from cashbook
-  const otherIncome = CC.filter(c => dateInRange(c.date || c.createdAt, fromStr, toStr)).filter(c => (c.type || '')
-    .toUpperCase() === 'INCOME').reduce((a, c) => a + (Number(c.amount) || 0), 0);
+  const otherIncome = CC.filter(c=>dateInRange(c.date||c.createdAt,fromStr,toStr))
+    .filter(c=>(c.type||'').toUpperCase()==='INCOME')
+    .reduce((a,c)=>a+(Number(c.amount)||0),0);
+
   // Operating/expenses
-  const expenses = CC.filter(c => dateInRange(c.date || c.createdAt, fromStr, toStr)).filter(c => (c.type || '')
-    .toUpperCase() === 'EXPENSE').reduce((a, c) => a + (Number(c.amount) || 0), 0);
-  const totalIncome = interestEarned + finesCollected + otherIncome;
-  const netProfit = totalIncome - expenses;
+  const expenses = CC.filter(c=>dateInRange(c.date||c.createdAt,fromStr,toStr))
+    .filter(c=>(c.type||'').toUpperCase()==='EXPENSE')
+    .reduce((a,c)=>a+(Number(c.amount)||0),0);
+
+  const totalIncome = interestEarned+finesCollected+otherIncome;
+  const netProfit = totalIncome-expenses;
   return {
-    interestEarned,
-    finesCollected,
-    otherIncome,
-    totalIncome,
-    expenses,
-    netProfit
+    interestEarned, finesCollected, otherIncome,
+    totalIncome, expenses, netProfit
   };
 }
+
 /* ---------- CALCULATION ENGINE: dividend per member ---------- */
-function calcDividendsForPeriod(period) {
+function calcDividendsForPeriod(period){
   // period: {fyId, year, startDate, endDate, mode: 'total'|'average', reservePct, status, snapshot}
   // If approved snapshot exists, return that.
-  if (period && period.snapshot && period.status === 'APPROVED') {
+  if(period && period.snapshot && period.status==='APPROVED'){
     return period.snapshot;
   }
-  const range = fyRange(period);
-  const profit = calcGroupProfit(range.from, range.to);
-  const reservePct = Number(period?.reservePct || 0);
-  const reserveAmt = profit.netProfit * (reservePct / 100);
-  const distributable = Math.max(0, profit.netProfit - reserveAmt);
+  const range=fyRange(period);
+  const profit=calcGroupProfit(range.from,range.to);
+  const reservePct=Number(period?.reservePct||0);
+  const reserveAmt=profit.netProfit*(reservePct/100);
+  const distributable=Math.max(0,profit.netProfit-reserveAmt);
+
   // Eligible members (must have >=1 share in period)
-  const members = MC.map(m => {
-    const shares = (period?.mode === 'average') ? calcAvgSharesInPeriod(m, range.from, range.to) :
-      calcMemberSharesInPeriod(m, range.from, range.to);
-    const qty = calcMemberShareQtyInPeriod(m, range.from, range.to);
+  const members = MC.map(m=>{
+    const shares = (period?.mode==='average')
+      ? calcAvgSharesInPeriod(m,range.from,range.to)
+      : calcMemberSharesInPeriod(m,range.from,range.to);
+    const qty = calcMemberShareQtyInPeriod(m,range.from,range.to);
+    return { member:m, shares, qty };
+  }).filter(x=>x.shares>0);
+
+  const totalShares = members.reduce((a,x)=>a+x.shares,0);
+  const totalQty = members.reduce((a,x)=>a+x.qty,0);
+
+  const rows = members.map(x=>{
+    const pct = totalShares>0 ? (x.shares/totalShares*100) : 0;
+    const dividend = totalShares>0 ? (x.shares/totalShares)*distributable : 0;
     return {
-      member: m,
-      shares,
-      qty
-    };
-  }).filter(x => x.shares > 0);
-  const totalShares = members.reduce((a, x) => a + x.shares, 0);
-  const totalQty = members.reduce((a, x) => a + x.qty, 0);
-  const rows = members.map(x => {
-    const pct = totalShares > 0 ? (x.shares / totalShares * 100) : 0;
-    const dividend = totalShares > 0 ? (x.shares / totalShares) * distributable : 0;
-    return {
-      memberId: x.member.id,
-      memberName: `${x.member.firstName||''} ${x.member.middleName||''} ${x.member.lastName||''}`.trim(),
-      nida: x.member.nida || null,
-      shareValue: x.shares,
-      shareQty: x.qty,
-      percentage: pct,
-      dividendProjected: dividend,
-      dividendApproved: 0,
-      dividendPaid: 0,
-      outstanding: 0
+      memberId:x.member.id,
+      memberName:`${x.member.firstName||''} ${x.member.middleName||''} ${x.member.lastName||''}`.trim(),
+      nida:x.member.nida||null,
+      shareValue:x.shares,
+      shareQty:x.qty,
+      percentage:pct,
+      dividendProjected:dividend,
+      dividendApproved:0,
+      dividendPaid:0,
+      outstanding:0
     };
   });
   return {
-    profit,
-    reservePct,
-    reserveAmt,
-    distributable,
-    totalShares,
-    totalQty,
-    rows,
-    state: period?.status || 'PROJECTED'
-  };
-}
-/* ---------- AUDIT: with old/new values ---------- */
-async function auditDetailed(action, entity, docId, oldValue, newValue, reason) {
-  try {
-    const entry = {
-      action,
-      entity,
-      docId,
-      oldValue: oldValue || null,
-      newValue: newValue || null,
-      reason: reason || '',
-      user: `${CU?.firstName||''} ${CU?.lastName||''}`.trim(),
-      userId: CU?.uid || '',
-      role: CR,
-      groupId: CGI || null,
-      createdAt: serverTimestamp()
-    };
-    if (CGI) await addDoc(collection(db, 'groups', CGI, 'auditLog'), entry);
-    await audit(action, entity, docId); // legacy
-  } catch (e) {
-    console.warn('auditDetailed failed', e);
-  }
-}
-/* ---------- HELPERS: get current/active fiscal year ---------- */
-function getActiveFY() {
-  return FYC.find(f => f.status === 'ACTIVE') || FYC[0] || {
-    year: new Date().getFullYear()
+    profit, reservePct, reserveAmt, distributable,
+    totalShares, totalQty, rows,
+    state: period?.status||'PROJECTED'
   };
 }
 
-function getPeriodsForFY(fyId) {
-  return DPC.filter(p => p.fyId === fyId).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+/* ---------- AUDIT: with old/new values ---------- */
+async function auditDetailed(action, entity, docId, oldValue, newValue, reason){
+  try{
+    const entry={
+      action, entity, docId,
+      oldValue: oldValue||null,
+      newValue: newValue||null,
+      reason: reason||'',
+      user:`${CU?.firstName||''} ${CU?.lastName||''}`.trim(),
+      userId: CU?.uid||'',
+      role: CR,
+      groupId: CGI||null,
+      createdAt: serverTimestamp()
+    };
+    if(CGI) await addDoc(collection(db,'groups',CGI,'auditLog'),entry);
+    await audit(action,entity,docId); // legacy
+  }catch(e){ console.warn('auditDetailed failed',e); }
 }
+
+/* ---------- HELPERS: get current/active fiscal year ---------- */
+function getActiveFY(){
+  return FYC.find(f=>f.status==='ACTIVE') || FYC[0] || {year:new Date().getFullYear()};
+}
+function getPeriodsForFY(fyId){
+  return DPC.filter(p=>p.fyId===fyId).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+}
+
 /* =====================================================================================
    RENDER: REPORTS & ANALYTICS
    ===================================================================================== */
-function renderReports() {
-  const cur = groupCurrency();
-  const isChair = CR === 'chair';
-  const reports = [{
-    id: 'dashboard',
-    icon: 'fa-gauge-high',
-    title: 'Dashboard Summary',
-    desc: 'Group overview, KPIs, recent activity'
-  }, {
-    id: 'members',
-    icon: 'fa-users',
-    title: 'Member Roster',
-    desc: 'All members with savings, shares, traffic light'
-  }, {
-    id: 'shares',
-    icon: 'fa-chart-pie',
-    title: 'Shares Report',
-    desc: 'Shares purchased per member with history'
-  }, {
-    id: 'savings',
-    icon: 'fa-piggy-bank',
-    title: 'Savings & Contributions',
-    desc: 'Deposits, withdrawals, balances'
-  }, {
-    id: 'loans',
-    icon: 'fa-hand-holding-dollar',
-    title: 'Loans Report',
-    desc: 'Loans issued, outstanding, status'
-  }, {
-    id: 'repayments',
-    icon: 'fa-money-bill-transfer',
-    title: 'Loan Repayments',
-    desc: 'Repayments made and balances'
-  }, {
-    id: 'interest',
-    icon: 'fa-percent',
-    title: 'Interest Earned',
-    desc: 'Interest collected from loans'
-  }, {
-    id: 'penalties',
-    icon: 'fa-gavel',
-    title: 'Penalties Report',
-    desc: 'Fines imposed and collected'
-  }, {
-    id: 'income_expense',
-    icon: 'fa-receipt',
-    title: 'Income & Expense',
-    desc: 'Group revenue and operating costs'
-  }, {
-    id: 'accounting',
-    icon: 'fa-book',
-    title: 'Accounting & Transactions',
-    desc: 'Full transaction ledger'
-  }, {
-    id: 'profit_loss',
-    icon: 'fa-chart-line',
-    title: 'Profit & Loss',
-    desc: 'Net profit / loss statement'
-  }, {
-    id: 'dividends',
-    icon: 'fa-coins',
-    title: 'Dividend Calculation',
-    desc: 'Per-member dividend computation'
-  }, {
-    id: 'annual',
-    icon: 'fa-calendar-days',
-    title: 'Annual Financial Summary',
-    desc: 'End-of-year consolidated report'
-  }, {
-    id: 'meetings',
-    icon: 'fa-calendar-check',
-    title: 'Meetings & Resolutions',
-    desc: 'Meeting attendance and minutes'
-  }];
+function renderReports(){
+  const cur=groupCurrency();
+  const isChair = CR==='chair';
+  const reports=[
+    {id:'dashboard',icon:'fa-gauge-high',title:'Dashboard Summary',desc:'Group overview, KPIs, recent activity'},
+    {id:'members',icon:'fa-users',title:'Member Roster',desc:'All members with savings, shares, traffic light'},
+    {id:'shares',icon:'fa-chart-pie',title:'Shares Report',desc:'Shares purchased per member with history'},
+    {id:'savings',icon:'fa-piggy-bank',title:'Savings & Contributions',desc:'Deposits, withdrawals, balances'},
+    {id:'loans',icon:'fa-hand-holding-dollar',title:'Loans Report',desc:'Loans issued, outstanding, status'},
+    {id:'repayments',icon:'fa-money-bill-transfer',title:'Loan Repayments',desc:'Repayments made and balances'},
+    {id:'interest',icon:'fa-percent',title:'Interest Earned',desc:'Interest collected from loans'},
+    {id:'penalties',icon:'fa-gavel',title:'Penalties Report',desc:'Fines imposed and collected'},
+    {id:'income_expense',icon:'fa-receipt',title:'Income & Expense',desc:'Group revenue and operating costs'},
+    {id:'accounting',icon:'fa-book',title:'Accounting & Transactions',desc:'Full transaction ledger'},
+    {id:'profit_loss',icon:'fa-chart-line',title:'Profit & Loss',desc:'Net profit / loss statement'},
+    {id:'dividends',icon:'fa-coins',title:'Dividend Calculation',desc:'Per-member dividend computation'},
+    {id:'annual',icon:'fa-calendar-days',title:'Annual Financial Summary',desc:'End-of-year consolidated report'},
+    {id:'meetings',icon:'fa-calendar-check',title:'Meetings & Resolutions',desc:'Meeting attendance and minutes'}
+  ];
+
   // Build filter toolbar
-  const fyOptions = FYC.length ? FYC.map(f =>
-      `<option value="${f.id||f.year}">${f.year||'FY'} (${f.status||'-'})</option>`).join('') :
-    `<option value="${new Date().getFullYear()}">${new Date().getFullYear()}</option>`;
-  const memberOptions = MC.map(m => `<option value="${m.id}">${m.firstName||''} ${m.lastName||''}</option>`).join(
-    '');
+  const fyOptions = FYC.length?FYC.map(f=>`<option value="${f.id||f.year}">${f.year||'FY'} (${f.status||'-'})</option>`).join(''):`<option value="${new Date().getFullYear()}">${new Date().getFullYear()}</option>`;
+  const memberOptions = MC.map(m=>`<option value="${m.id}">${m.firstName||''} ${m.lastName||''}</option>`).join('');
+
   return `
     <div class="section-head">
       <h2><i class="fa-solid fa-file-chart-column" style="color:var(--p2)"></i> Reports & Analytics</h2>
@@ -6403,514 +6324,315 @@ function renderReports() {
     </div>
   `;
 }
-window.generateReport = async (type, mode = 'pdf') => {
-  const from = $('rptFrom').value,
-    to = $('rptTo').value;
-  const fyId = $('rptFY').value,
-    memberFilter = $('rptMember').value,
-    statusFilter = $('rptStatus').value,
-    typeFilter = $('rptType').value;
-  const cur = groupCurrency();
-  const isChair = CR === 'chair';
-  const range = {
-    from,
-    to
-  };
+
+window.generateReport=async(type,mode='pdf')=>{
+  const from=$('rptFrom').value, to=$('rptTo').value;
+  const fyId=$('rptFY').value, memberFilter=$('rptMember').value, statusFilter=$('rptStatus').value, typeFilter=$('rptType').value;
+  const cur=groupCurrency();
+  const isChair = CR==='chair';
+  const range={from,to};
   // Apply member scoping for non-chair
-  const scopeFilter = (rec) => isChair ? true : recordBelongsToCurrentMember(rec);
-  let title = 'Report',
-    headers = [],
-    rows = [],
-    totals = {},
-    extraInfo = [];
-  switch (type) {
-    case 'dashboard': {
-      title = 'Dashboard Summary';
-      headers = ['Metric', 'Value'];
-      const totalSavings = SC.filter(s => dateInRange(s.date || s.createdAt, from, to)).reduce((a, s) => a + (s
-        .type === 'DEPOSIT' ? Number(s.amount) || 0 : 0) - (s.type === 'WITHDRAWAL' ? Number(s.amount) ||
-        0 : 0), 0);
-      const totalShares = SHC.filter(s => dateInRange(s.date || s.createdAt, from, to)).reduce((a, s) => a + (
-        Number(s.amount) || 0), 0);
-      const activeLoans = LC.filter(l => l.status === 'DISBURSED' || l.status === 'APPROVED').length;
-      const profit = calcGroupProfit(from, to);
-      rows = [
-        ['Group Name', CG.name || '-'],
-        ['Currency', cur],
-        ['Members (total)', String(MC.length)],
-        ['Total Savings', fmtMoney(totalSavings, cur)],
-        ['Total Shares Value', fmtMoney(totalShares, cur)],
-        ['Active Loans', String(activeLoans)],
-        ['Interest Earned', fmtMoney(profit.interestEarned, cur)],
-        ['Fines Collected', fmtMoney(profit.finesCollected, cur)],
-        ['Other Income', fmtMoney(profit.otherIncome, cur)],
-        ['Expenses', fmtMoney(profit.expenses, cur)],
-        ['Net Profit', fmtMoney(profit.netProfit, cur)]
+  const scopeFilter=(rec)=> isChair ? true : recordBelongsToCurrentMember(rec);
+
+  let title='Report', headers=[], rows=[], totals={}, extraInfo=[];
+
+  switch(type){
+    case 'dashboard':{
+      title='Dashboard Summary';
+      headers=['Metric','Value'];
+      const totalSavings=SC.filter(s=>dateInRange(s.date||s.createdAt,from,to)).reduce((a,s)=>a+(s.type==='DEPOSIT'?Number(s.amount)||0:0)-(s.type==='WITHDRAWAL'?Number(s.amount)||0:0),0);
+      const totalShares=SHC.filter(s=>dateInRange(s.date||s.createdAt,from,to)).reduce((a,s)=>a+(Number(s.amount)||0),0);
+      const activeLoans=LC.filter(l=>l.status==='DISBURSED'||l.status==='APPROVED').length;
+      const profit=calcGroupProfit(from,to);
+      rows=[
+        ['Group Name',CG.name||'-'],
+        ['Currency',cur],
+        ['Members (total)',String(MC.length)],
+        ['Total Savings',fmtMoney(totalSavings,cur)],
+        ['Total Shares Value',fmtMoney(totalShares,cur)],
+        ['Active Loans',String(activeLoans)],
+        ['Interest Earned',fmtMoney(profit.interestEarned,cur)],
+        ['Fines Collected',fmtMoney(profit.finesCollected,cur)],
+        ['Other Income',fmtMoney(profit.otherIncome,cur)],
+        ['Expenses',fmtMoney(profit.expenses,cur)],
+        ['Net Profit',fmtMoney(profit.netProfit,cur)]
       ];
       break;
     }
-    case 'members': {
-      title = 'Member Roster';
-      headers = ['#', 'Name', 'NIDA', 'Phone', 'Role', 'Savings', 'Shares', 'Traffic Light'];
-      let list = MC;
-      if (memberFilter) list = list.filter(m => m.id === memberFilter);
-      rows = list.map((m, i) => [String(i + 1), `${m.firstName||''} ${m.middleName||''} ${m.lastName||''}`
-        .trim(), m.nida || '-', m.phone || '-', m.role || 'member', fmtMoney(memberSavings(m), cur),
-        fmtMoney(memberShares(m), cur), trafficStatus(m).label
-      ]);
-      totals = {
-        'Members': String(list.length),
-        'Total Savings': fmtMoney(list.reduce((a, m) => a + memberSavings(m), 0), cur),
-        'Total Shares': fmtMoney(list.reduce((a, m) => a + memberShares(m), 0), cur)
-      };
+    case 'members':{
+      title='Member Roster';
+      headers=['#','Name','NIDA','Phone','Role','Savings','Shares','Traffic Light'];
+      let list=MC;
+      if(memberFilter) list=list.filter(m=>m.id===memberFilter);
+      rows=list.map((m,i)=>[String(i+1),`${m.firstName||''} ${m.middleName||''} ${m.lastName||''}`.trim(),m.nida||'-',m.phone||'-',m.role||'member',fmtMoney(memberSavings(m),cur),fmtMoney(memberShares(m),cur),trafficStatus(m).label]);
+      totals={'Members':String(list.length),'Total Savings':fmtMoney(list.reduce((a,m)=>a+memberSavings(m),0),cur),'Total Shares':fmtMoney(list.reduce((a,m)=>a+memberShares(m),0),cur)};
       break;
     }
-    case 'shares': {
-      title = 'Shares Report';
-      headers = ['#', 'Date', 'Member', 'Type', 'Qty', 'Amount'];
-      let list = SHC.filter(s => scopeFilter(s) && dateInRange(s.date || s.createdAt, from, to));
-      if (memberFilter) list = list.filter(s => s.memberId === memberFilter || memberMatchesRecord(s, MC.find(
-        m => m.id === memberFilter)));
-      if (typeFilter) list = list.filter(s => (s.type || 'BUY') === typeFilter);
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || b
-        .createdAt));
-      rows = list.map((s, i) => [String(i + 1), fD(s.date || s.createdAt), s.memberName || '-', s.type || 'BUY',
-        String(s.quantity || 0), fmtMoney(s.amount, cur)
-      ]);
-      totals = {
-        'Records': String(list.length),
-        'Total Qty': String(list.reduce((a, s) => a + (Number(s.quantity) || 0), 0)),
-        'Total Value': fmtMoney(list.reduce((a, s) => a + (Number(s.amount) || 0), 0), cur)
-      };
+    case 'shares':{
+      title='Shares Report';
+      headers=['#','Date','Member','Type','Qty','Amount'];
+      let list=SHC.filter(s=>scopeFilter(s)&&dateInRange(s.date||s.createdAt,from,to));
+      if(memberFilter) list=list.filter(s=>s.memberId===memberFilter||memberMatchesRecord(s,MC.find(m=>m.id===memberFilter)));
+      if(typeFilter) list=list.filter(s=>(s.type||'BUY')===typeFilter);
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||b.createdAt));
+      rows=list.map((s,i)=>[String(i+1),fD(s.date||s.createdAt),s.memberName||'-',s.type||'BUY',String(s.quantity||0),fmtMoney(s.amount,cur)]);
+      totals={'Records':String(list.length),'Total Qty':String(list.reduce((a,s)=>a+(Number(s.quantity)||0),0)),'Total Value':fmtMoney(list.reduce((a,s)=>a+(Number(s.amount)||0),0),cur)};
       break;
     }
-    case 'savings': {
-      title = 'Savings & Contributions';
-      headers = ['#', 'Date', 'Member', 'Type', 'Amount'];
-      let list = SC.filter(s => scopeFilter(s) && dateInRange(s.date || s.createdAt, from, to));
-      if (memberFilter) list = list.filter(s => s.memberId === memberFilter || memberMatchesRecord(s, MC.find(
-        m => m.id === memberFilter)));
-      if (typeFilter) list = list.filter(s => (s.type || 'DEPOSIT') === typeFilter);
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || b
-        .createdAt));
-      rows = list.map((s, i) => [String(i + 1), fD(s.date || s.createdAt), s.memberName || '-', s.type ||
-        'DEPOSIT', fmtMoney(s.amount, cur)
-      ]);
-      const deposits = list.filter(s => s.type === 'DEPOSIT').reduce((a, s) => a + (Number(s.amount) || 0), 0);
-      const withdrawals = list.filter(s => s.type === 'WITHDRAWAL').reduce((a, s) => a + (Number(s.amount) ||
-        0), 0);
-      totals = {
-        'Records': String(list.length),
-        'Deposits': fmtMoney(deposits, cur),
-        'Withdrawals': fmtMoney(withdrawals, cur),
-        'Net': fmtMoney(deposits - withdrawals, cur)
-      };
+    case 'savings':{
+      title='Savings & Contributions';
+      headers=['#','Date','Member','Type','Amount'];
+      let list=SC.filter(s=>scopeFilter(s)&&dateInRange(s.date||s.createdAt,from,to));
+      if(memberFilter) list=list.filter(s=>s.memberId===memberFilter||memberMatchesRecord(s,MC.find(m=>m.id===memberFilter)));
+      if(typeFilter) list=list.filter(s=>(s.type||'DEPOSIT')===typeFilter);
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||b.createdAt));
+      rows=list.map((s,i)=>[String(i+1),fD(s.date||s.createdAt),s.memberName||'-',s.type||'DEPOSIT',fmtMoney(s.amount,cur)]);
+      const deposits=list.filter(s=>s.type==='DEPOSIT').reduce((a,s)=>a+(Number(s.amount)||0),0);
+      const withdrawals=list.filter(s=>s.type==='WITHDRAWAL').reduce((a,s)=>a+(Number(s.amount)||0),0);
+      totals={'Records':String(list.length),'Deposits':fmtMoney(deposits,cur),'Withdrawals':fmtMoney(withdrawals,cur),'Net':fmtMoney(deposits-withdrawals,cur)};
       break;
     }
-    case 'loans': {
-      title = 'Loans Report';
-      headers = ['#', 'Date', 'Member', 'Amount', 'Interest', 'Term', 'Status', 'Outstanding'];
-      let list = LC.filter(l => scopeFilter(l) && dateInRange(l.date || l.createdAt, from, to));
-      if (memberFilter) list = list.filter(l => l.memberId === memberFilter);
-      if (statusFilter) list = list.filter(l => l.status === statusFilter);
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || b
-        .createdAt));
-      rows = list.map((l, i) => [String(i + 1), fD(l.date || l.createdAt), l.memberName || '-', fmtMoney(l
-          .amount, cur), fmtMoney(l.interestAmount, cur), String(l.term || 12) + ' mo', l.status || '-',
-        fmtMoney(loanBalance(l), cur)
-      ]);
-      totals = {
-        'Loans': String(list.length),
-        'Total Principal': fmtMoney(list.reduce((a, l) => a + (Number(l.amount) || 0), 0), cur),
-        'Total Outstanding': fmtMoney(list.reduce((a, l) => a + loanBalance(l), 0), cur)
-      };
+    case 'loans':{
+      title='Loans Report';
+      headers=['#','Date','Member','Amount','Interest','Term','Status','Outstanding'];
+      let list=LC.filter(l=>scopeFilter(l)&&dateInRange(l.date||l.createdAt,from,to));
+      if(memberFilter) list=list.filter(l=>l.memberId===memberFilter);
+      if(statusFilter) list=list.filter(l=>l.status===statusFilter);
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||b.createdAt));
+      rows=list.map((l,i)=>[String(i+1),fD(l.date||l.createdAt),l.memberName||'-',fmtMoney(l.amount,cur),fmtMoney(l.interestAmount,cur),String(l.term||12)+' mo',l.status||'-',fmtMoney(loanBalance(l),cur)]);
+      totals={'Loans':String(list.length),'Total Principal':fmtMoney(list.reduce((a,l)=>a+(Number(l.amount)||0),0),cur),'Total Outstanding':fmtMoney(list.reduce((a,l)=>a+loanBalance(l),0),cur)};
       break;
     }
-    case 'repayments': {
-      title = 'Loan Repayments';
-      headers = ['#', 'Date', 'Member', 'Loan ID', 'Amount'];
-      let list = RC.filter(r => scopeFilter(r) && dateInRange(r.date || r.createdAt, from, to));
-      if (memberFilter) list = list.filter(r => r.memberId === memberFilter);
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || a
-        .createdAt));
-      rows = list.map((r, i) => [String(i + 1), fD(r.date || r.createdAt), r.memberName || '-', r.loanId || '-',
-        fmtMoney(r.amount, cur)
-      ]);
-      totals = {
-        'Records': String(list.length),
-        'Total Repaid': fmtMoney(list.reduce((a, r) => a + (Number(r.amount) || 0), 0), cur)
-      };
+    case 'repayments':{
+      title='Loan Repayments';
+      headers=['#','Date','Member','Loan ID','Amount'];
+      let list=RC.filter(r=>scopeFilter(r)&&dateInRange(r.date||r.createdAt,from,to));
+      if(memberFilter) list=list.filter(r=>r.memberId===memberFilter);
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||a.createdAt));
+      rows=list.map((r,i)=>[String(i+1),fD(r.date||r.createdAt),r.memberName||'-',r.loanId||'-',fmtMoney(r.amount,cur)]);
+      totals={'Records':String(list.length),'Total Repaid':fmtMoney(list.reduce((a,r)=>a+(Number(r.amount)||0),0),cur)};
       break;
     }
-    case 'interest': {
-      title = 'Interest Earned';
-      headers = ['#', 'Date', 'Member', 'Loan ID', 'Repayment', 'Interest Portion'];
-      let list = RC.filter(r => scopeFilter(r) && dateInRange(r.date || r.createdAt, from, to));
-      if (memberFilter) list = list.filter(r => r.memberId === memberFilter);
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || a
-        .createdAt));
-      const rowsData = list.map((r, i) => {
-        const loan = LC.find(l => l.id === r.loanId);
-        let interestPortion = 0;
-        if (loan) {
-          const td = loanTotalDue(loan);
-          if (td > 0) interestPortion = (Number(r.amount) || 0) * ((Number(loan.interestAmount) || 0) / td);
-        }
-        return [String(i + 1), fD(r.date || r.createdAt), r.memberName || '-', r.loanId || '-', fmtMoney(r
-          .amount, cur), fmtMoney(interestPortion, cur)];
+    case 'interest':{
+      title='Interest Earned';
+      headers=['#','Date','Member','Loan ID','Repayment','Interest Portion'];
+      let list=RC.filter(r=>scopeFilter(r)&&dateInRange(r.date||r.createdAt,from,to));
+      if(memberFilter) list=list.filter(r=>r.memberId===memberFilter);
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||a.createdAt));
+      const rowsData=list.map((r,i)=>{
+        const loan=LC.find(l=>l.id===r.loanId);
+        let interestPortion=0;
+        if(loan){ const td=loanTotalDue(loan); if(td>0) interestPortion=(Number(r.amount)||0)*((Number(loan.interestAmount)||0)/td); }
+        return [String(i+1),fD(r.date||r.createdAt),r.memberName||'-',r.loanId||'-',fmtMoney(r.amount,cur),fmtMoney(interestPortion,cur)];
       });
-      rows = rowsData;
-      const totalInterest = list.reduce((a, r) => {
-        const loan = LC.find(l => l.id === r.loanId);
-        if (!loan) return a;
-        const td = loanTotalDue(loan);
-        if (td <= 0) return a;
-        return a + (Number(r.amount) || 0) * ((Number(loan.interestAmount) || 0) / td);
-      }, 0);
-      totals = {
-        'Records': String(list.length),
-        'Total Interest': fmtMoney(totalInterest, cur)
-      };
+      rows=rowsData;
+      const totalInterest=list.reduce((a,r)=>{ const loan=LC.find(l=>l.id===r.loanId); if(!loan) return a; const td=loanTotalDue(loan); if(td<=0) return a; return a+(Number(r.amount)||0)*((Number(loan.interestAmount)||0)/td); },0);
+      totals={'Records':String(list.length),'Total Interest':fmtMoney(totalInterest,cur)};
       break;
     }
-    case 'penalties': {
-      title = 'Penalties Report';
-      headers = ['#', 'Date', 'Member', 'Type', 'Amount', 'Status'];
-      let list = PC.filter(p => scopeFilter(p) && dateInRange(p.date || p.createdAt, from, to));
-      if (memberFilter) list = list.filter(p => p.memberId === memberFilter);
-      if (statusFilter) list = list.filter(p => (p.status || 'PAID') === statusFilter);
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || a
-        .createdAt));
-      rows = list.map((p, i) => [String(i + 1), fD(p.date || p.createdAt), p.memberName || '-', p.type || '-',
-        fmtMoney(p.amount, cur), p.status || 'PENDING'
-      ]);
-      const paid = list.filter(p => (p.status || 'PAID') === 'PAID').reduce((a, p) => a + (Number(p.amount) ||
-        0), 0);
-      const unpaid = list.filter(p => (p.status || '') !== 'PAID').reduce((a, p) => a + (Number(p.amount) || 0),
-        0);
-      totals = {
-        'Records': String(list.length),
-        'Collected': fmtMoney(paid, cur),
-        'Outstanding': fmtMoney(unpaid, cur)
-      };
+    case 'penalties':{
+      title='Penalties Report';
+      headers=['#','Date','Member','Type','Amount','Status'];
+      let list=PC.filter(p=>scopeFilter(p)&&dateInRange(p.date||p.createdAt,from,to));
+      if(memberFilter) list=list.filter(p=>p.memberId===memberFilter);
+      if(statusFilter) list=list.filter(p=>(p.status||'PAID')===statusFilter);
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||a.createdAt));
+      rows=list.map((p,i)=>[String(i+1),fD(p.date||p.createdAt),p.memberName||'-',p.type||'-',fmtMoney(p.amount,cur),p.status||'PENDING']);
+      const paid=list.filter(p=>(p.status||'PAID')==='PAID').reduce((a,p)=>a+(Number(p.amount)||0),0);
+      const unpaid=list.filter(p=>(p.status||'')!=='PAID').reduce((a,p)=>a+(Number(p.amount)||0),0);
+      totals={'Records':String(list.length),'Collected':fmtMoney(paid,cur),'Outstanding':fmtMoney(unpaid,cur)};
       break;
     }
-    case 'income_expense': {
-      title = 'Income & Expense';
-      headers = ['#', 'Date', 'Type', 'Category', 'Amount'];
-      let list = CC.filter(c => scopeFilter(c) && dateInRange(c.date || c.createdAt, from, to));
-      if (typeFilter) list = list.filter(c => (c.type || '').toUpperCase() === typeFilter);
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || c
-        .createdAt));
-      rows = list.map((c, i) => [String(i + 1), fD(c.date || c.createdAt), c.type || '-', c.category || '-',
-        fmtMoney(c.amount, cur)
-      ]);
-      const income = list.filter(c => (c.type || '').toUpperCase() === 'INCOME').reduce((a, c) => a + (Number(c
-        .amount) || 0), 0);
-      const expense = list.filter(c => (c.type || '').toUpperCase() === 'EXPENSE').reduce((a, c) => a + (Number(
-        c.amount) || 0), 0);
-      totals = {
-        'Records': String(list.length),
-        'Income': fmtMoney(income, cur),
-        'Expense': fmtMoney(expense, cur),
-        'Net': fmtMoney(income - expense, cur)
-      };
+    case 'income_expense':{
+      title='Income & Expense';
+      headers=['#','Date','Type','Category','Amount'];
+      let list=CC.filter(c=>scopeFilter(c)&&dateInRange(c.date||c.createdAt,from,to));
+      if(typeFilter) list=list.filter(c=>(c.type||'').toUpperCase()===typeFilter);
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||c.createdAt));
+      rows=list.map((c,i)=>[String(i+1),fD(c.date||c.createdAt),c.type||'-',c.category||'-',fmtMoney(c.amount,cur)]);
+      const income=list.filter(c=>(c.type||'').toUpperCase()==='INCOME').reduce((a,c)=>a+(Number(c.amount)||0),0);
+      const expense=list.filter(c=>(c.type||'').toUpperCase()==='EXPENSE').reduce((a,c)=>a+(Number(c.amount)||0),0);
+      totals={'Records':String(list.length),'Income':fmtMoney(income,cur),'Expense':fmtMoney(expense,cur),'Net':fmtMoney(income-expense,cur)};
       break;
     }
-    case 'accounting': {
-      title = 'Accounting & Transactions';
-      headers = ['#', 'Date', 'Source', 'Description', 'Type', 'Amount'];
-      const txs = [];
-      SC.filter(s => scopeFilter(s) && dateInRange(s.date || s.createdAt, from, to)).forEach(s => txs.push({
-        date: s.date || s.createdAt,
-        src: 'Savings',
-        desc: `${s.type} - ${s.memberName||''}`,
-        type: s.type,
-        amount: Number(s.amount) || 0
-      }));
-      SHC.filter(s => scopeFilter(s) && dateInRange(s.date || s.createdAt, from, to)).forEach(s => txs.push({
-        date: s.date || s.createdAt,
-        src: 'Shares',
-        desc: `${s.type||'BUY'} - ${s.memberName||''}`,
-        type: s.type,
-        amount: Number(s.amount) || 0
-      }));
-      RC.filter(r => scopeFilter(r) && dateInRange(r.date || r.createdAt, from, to)).forEach(r => txs.push({
-        date: r.date || r.createdAt,
-        src: 'Repayment',
-        desc: `${r.memberName||''} - ${r.loanId||''}`,
-        type: 'CREDIT',
-        amount: Number(r.amount) || 0
-      }));
-      CC.filter(c => scopeFilter(c) && dateInRange(c.date || c.createdAt, from, to)).forEach(c => txs.push({
-        date: c.date || c.createdAt,
-        src: 'Cashbook',
-        desc: c.category || '',
-        type: c.type,
-        amount: Number(c.amount) || 0
-      }));
-      txs.sort((a, b) => recordDateMs(a.date) - recordDateMs(b.date));
-      rows = txs.map((t, i) => [String(i + 1), fD(t.date), t.src, t.desc, t.type || '-', fmtMoney(t.amount,
-        cur)]);
-      totals = {
-        'Transactions': String(txs.length),
-        'Total Value': fmtMoney(txs.reduce((a, t) => a + t.amount, 0), cur)
-      };
+    case 'accounting':{
+      title='Accounting & Transactions';
+      headers=['#','Date','Source','Description','Type','Amount'];
+      const txs=[];
+      SC.filter(s=>scopeFilter(s)&&dateInRange(s.date||s.createdAt,from,to)).forEach(s=>txs.push({date:s.date||s.createdAt,src:'Savings',desc:`${s.type} - ${s.memberName||''}`,type:s.type,amount:Number(s.amount)||0}));
+      SHC.filter(s=>scopeFilter(s)&&dateInRange(s.date||s.createdAt,from,to)).forEach(s=>txs.push({date:s.date||s.createdAt,src:'Shares',desc:`${s.type||'BUY'} - ${s.memberName||''}`,type:s.type,amount:Number(s.amount)||0}));
+      RC.filter(r=>scopeFilter(r)&&dateInRange(r.date||r.createdAt,from,to)).forEach(r=>txs.push({date:r.date||r.createdAt,src:'Repayment',desc:`${r.memberName||''} - ${r.loanId||''}`,type:'CREDIT',amount:Number(r.amount)||0}));
+      CC.filter(c=>scopeFilter(c)&&dateInRange(c.date||c.createdAt,from,to)).forEach(c=>txs.push({date:c.date||c.createdAt,src:'Cashbook',desc:c.category||'',type:c.type,amount:Number(c.amount)||0}));
+      txs.sort((a,b)=>recordDateMs(a.date)-recordDateMs(b.date));
+      rows=txs.map((t,i)=>[String(i+1),fD(t.date),t.src,t.desc,t.type||'-',fmtMoney(t.amount,cur)]);
+      totals={'Transactions':String(txs.length),'Total Value':fmtMoney(txs.reduce((a,t)=>a+t.amount,0),cur)};
       break;
     }
-    case 'profit_loss': {
-      title = 'Profit & Loss Statement';
-      const p = calcGroupProfit(from, to);
-      headers = ['Item', 'Amount (' + cur + ')'];
-      rows = [
-        ['Interest Earned from Loans', fmtMoney(p.interestEarned, cur)],
-        ['Fines Collected', fmtMoney(p.finesCollected, cur)],
-        ['Other Income', fmtMoney(p.otherIncome, cur)],
-        ['Total Income', fmtMoney(p.totalIncome, cur)],
-        ['Operating Expenses', fmtMoney(p.expenses, cur)],
-        ['Net Profit / (Loss)', fmtMoney(p.netProfit, cur)]
+    case 'profit_loss':{
+      title='Profit & Loss Statement';
+      const p=calcGroupProfit(from,to);
+      headers=['Item','Amount ('+cur+')'];
+      rows=[
+        ['Interest Earned from Loans',fmtMoney(p.interestEarned,cur)],
+        ['Fines Collected',fmtMoney(p.finesCollected,cur)],
+        ['Other Income',fmtMoney(p.otherIncome,cur)],
+        ['Total Income',fmtMoney(p.totalIncome,cur)],
+        ['Operating Expenses',fmtMoney(p.expenses,cur)],
+        ['Net Profit / (Loss)',fmtMoney(p.netProfit,cur)]
       ];
-      totals = {
-        'Net Profit': fmtMoney(p.netProfit, cur)
-      };
+      totals={'Net Profit':fmtMoney(p.netProfit,cur)};
       break;
     }
-    case 'dividends': {
-      title = 'Dividend Calculation Report';
+    case 'dividends':{
+      title='Dividend Calculation Report';
       // Find or build a period for the selected FY/year
-      const fy = FYC.find(f => f.id === fyId) || {
-        year: fyId,
-        startDate: from,
-        endDate: to
-      };
-      const period = DPC.find(p => p.fyId === fyId) || {
-        fyId,
-        year: fy.year,
-        startDate: fy.startDate,
-        endDate: to,
-        mode: 'total',
-        reservePct: 0,
-        status: 'PROJECTED'
-      };
-      const result = calcDividendsForPeriod(period);
-      headers = ['#', 'Member', 'NIDA', 'Share Value', 'Qty', '%', 'Dividend'];
-      let list = result.rows;
-      if (memberFilter) list = list.filter(r => r.memberId === memberFilter);
-      list = list.slice().sort((a, b) => b.shareValue - a.shareValue);
-      rows = list.map((r, i) => [String(i + 1), r.memberName, r.nida || '-', fmtMoney(r.shareValue, cur),
-        String(r.shareQty), r.percentage.toFixed(2) + '%', fmtMoney(r.dividendProjected, cur)
-      ]);
-      totals = {
-        'Eligible Members': String(list.length),
-        'Total Shares': fmtMoney(result.totalShares, cur),
-        'Distributable Profit': fmtMoney(result.distributable, cur),
-        'Total Dividend': fmtMoney(list.reduce((a, r) => a + r.dividendProjected, 0), cur)
-      };
+      const fy=FYC.find(f=>f.id===fyId)||{year:fyId,startDate:from,endDate:to};
+      const period=DPC.find(p=>p.fyId===fyId)||{fyId,year:fy.year,startDate:fy.startDate,endDate:to,mode:'total',reservePct:0,status:'PROJECTED'};
+      const result=calcDividendsForPeriod(period);
+      headers=['#','Member','NIDA','Share Value','Qty','%','Dividend'];
+      let list=result.rows;
+      if(memberFilter) list=list.filter(r=>r.memberId===memberFilter);
+      list=list.slice().sort((a,b)=>b.shareValue-a.shareValue);
+      rows=list.map((r,i)=>[String(i+1),r.memberName,r.nida||'-',fmtMoney(r.shareValue,cur),String(r.shareQty),r.percentage.toFixed(2)+'%',fmtMoney(r.dividendProjected,cur)]);
+      totals={'Eligible Members':String(list.length),'Total Shares':fmtMoney(result.totalShares,cur),'Distributable Profit':fmtMoney(result.distributable,cur),'Total Dividend':fmtMoney(list.reduce((a,r)=>a+r.dividendProjected,0),cur)};
       extraInfo.push(`Reserve %: ${period.reservePct||0}%`);
       extraInfo.push(`Mode: ${period.mode||'total'}`);
       extraInfo.push(`State: ${result.state}`);
       break;
     }
-    case 'annual': {
-      title = 'Annual Financial Summary';
-      const p = calcGroupProfit(from, to);
-      headers = ['Section', 'Value (' + cur + ')'];
-      rows = [
-        ['Opening Members', String(MC.length)],
-        ['Total Savings', fmtMoney(SC.reduce((a, s) => a + (s.type === 'DEPOSIT' ? Number(s.amount) || 0 :
-          0) - (s.type === 'WITHDRAWAL' ? Number(s.amount) || 0 : 0), 0), cur)],
-        ['Total Shares', fmtMoney(SHC.reduce((a, s) => a + (Number(s.amount) || 0), 0), cur)],
-        ['Loans Disbursed', fmtMoney(LC.filter(l => l.status === 'DISBURSED').reduce((a, l) => a + (Number(l
-          .amount) || 0), 0), cur)],
-        ['Loans Outstanding', fmtMoney(LC.reduce((a, l) => a + loanBalance(l), 0), cur)],
-        ['Total Repayments', fmtMoney(RC.reduce((a, r) => a + (Number(r.amount) || 0), 0), cur)],
-        ['Interest Earned', fmtMoney(p.interestEarned, cur)],
-        ['Fines Collected', fmtMoney(p.finesCollected, cur)],
-        ['Total Income', fmtMoney(p.totalIncome, cur)],
-        ['Total Expenses', fmtMoney(p.expenses, cur)],
-        ['Net Profit', fmtMoney(p.netProfit, cur)]
+    case 'annual':{
+      title='Annual Financial Summary';
+      const p=calcGroupProfit(from,to);
+      headers=['Section','Value ('+cur+')'];
+      rows=[
+        ['Opening Members',String(MC.length)],
+        ['Total Savings',fmtMoney(SC.reduce((a,s)=>a+(s.type==='DEPOSIT'?Number(s.amount)||0:0)-(s.type==='WITHDRAWAL'?Number(s.amount)||0:0),0),cur)],
+        ['Total Shares',fmtMoney(SHC.reduce((a,s)=>a+(Number(s.amount)||0),0),cur)],
+        ['Loans Disbursed',fmtMoney(LC.filter(l=>l.status==='DISBURSED').reduce((a,l)=>a+(Number(l.amount)||0),0),cur)],
+        ['Loans Outstanding',fmtMoney(LC.reduce((a,l)=>a+loanBalance(l),0),cur)],
+        ['Total Repayments',fmtMoney(RC.reduce((a,r)=>a+(Number(r.amount)||0),0),cur)],
+        ['Interest Earned',fmtMoney(p.interestEarned,cur)],
+        ['Fines Collected',fmtMoney(p.finesCollected,cur)],
+        ['Total Income',fmtMoney(p.totalIncome,cur)],
+        ['Total Expenses',fmtMoney(p.expenses,cur)],
+        ['Net Profit',fmtMoney(p.netProfit,cur)]
       ];
-      totals = {
-        'Net Profit': fmtMoney(p.netProfit, cur)
-      };
+      totals={'Net Profit':fmtMoney(p.netProfit,cur)};
       break;
     }
-    case 'meetings': {
-      title = 'Meetings & Resolutions';
-      headers = ['#', 'Date', 'Title', 'Location'];
-      let list = MTC.filter(m => dateInRange(m.date || m.createdAt, from, to));
-      list = list.slice().sort((a, b) => recordDateMs(a.date || a.createdAt) - recordDateMs(b.date || b
-        .createdAt));
-      rows = list.map((m, i) => [String(i + 1), fD(m.date || m.createdAt), m.title || '-', m.location || '-']);
-      totals = {
-        'Meetings': String(list.length)
-      };
+    case 'meetings':{
+      title='Meetings & Resolutions';
+      headers=['#','Date','Title','Location'];
+      let list=MTC.filter(m=>dateInRange(m.date||m.createdAt,from,to));
+      list=list.slice().sort((a,b)=>recordDateMs(a.date||a.createdAt)-recordDateMs(b.date||b.createdAt));
+      rows=list.map((m,i)=>[String(i+1),fD(m.date||m.createdAt),m.title||'-',m.location||'-']);
+      totals={'Meetings':String(list.length)};
       break;
     }
     default:
-      title = 'Report';
-      headers = ['Info', 'Value'];
-      rows = [
-        ['Unknown report type', type]
-      ];
+      title='Report'; headers=['Info','Value']; rows=[['Unknown report type',type]];
   }
-  const periodStr = `${from} to ${to}`;
-  const genDate = new Date().toLocaleString();
-  const groupName = CG.name || 'Vikoba Group';
-  const fileName = `Vikoba_${title.replace(/[^a-zA-Z0-9]+/g,'_')}_${to.slice(0,4)||new Date().getFullYear()}`;
-  if (mode === 'excel') return exportReportExcel(title, headers, rows, totals, extraInfo, groupName, periodStr,
-    genDate, fileName);
-  if (mode === 'print') return printReport(title, headers, rows, totals, extraInfo, groupName, periodStr,
-    genDate);
-  return exportReportPDF(title, headers, rows, totals, extraInfo, groupName, periodStr, genDate, fileName);
+
+  const periodStr=`${from} to ${to}`;
+  const genDate=new Date().toLocaleString();
+  const groupName=CG.name||'Vikoba Group';
+  const fileName=`Vikoba_${title.replace(/[^a-zA-Z0-9]+/g,'_')}_${to.slice(0,4)||new Date().getFullYear()}`;
+
+  if(mode==='excel') return exportReportExcel(title,headers,rows,totals,extraInfo,groupName,periodStr,genDate,fileName);
+  if(mode==='print') return printReport(title,headers,rows,totals,extraInfo,groupName,periodStr,genDate);
+  return exportReportPDF(title,headers,rows,totals,extraInfo,groupName,periodStr,genDate,fileName);
 };
+
 /* ---------- PDF EXPORT (enhanced) ---------- */
-async function exportReportPDF(title, headers, rows, totals, extraInfo, groupName, periodStr, genDate, fileName) {
-  const {
-    jsPDF
-  } = window.jspdf;
-  const doc = new jsPDF();
-  let logoUrl = CG?.logoUrl || null;
-  if (!logoUrl && sysSet.branding.logoEnabled) logoUrl = sysSet.branding.logoUrl;
-  if (!logoUrl) logoUrl = SYS_LOGO_FILE;
-  try {
-    const resp = await fetch(logoUrl);
-    const blob = await resp.blob();
-    if (blob.type.startsWith('image/')) {
-      const reader = new FileReader();
-      const base64 = await new Promise((res) => {
-        reader.onload = () => res(reader.result);
-        reader.readAsDataURL(blob);
-      });
-      doc.addImage(base64, 'PNG', 14, 10, 22, 22);
+async function exportReportPDF(title,headers,rows,totals,extraInfo,groupName,periodStr,genDate,fileName){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  let logoUrl=CG?.logoUrl||null;
+  if(!logoUrl&&sysSet.branding.logoEnabled) logoUrl=sysSet.branding.logoUrl;
+  if(!logoUrl) logoUrl=SYS_LOGO_FILE;
+  try{
+    const resp=await fetch(logoUrl); const blob=await resp.blob();
+    if(blob.type.startsWith('image/')){
+      const reader=new FileReader();
+      const base64=await new Promise((res)=>{reader.onload=()=>res(reader.result);reader.readAsDataURL(blob);});
+      doc.addImage(base64,'PNG',14,10,22,22);
     }
-  } catch (e) {}
-  doc.setFontSize(15);
-  doc.setFont(undefined, 'bold');
-  doc.text(groupName, 40, 18);
-  doc.setFontSize(11);
-  doc.setFont(undefined, 'normal');
-  doc.text(title, 40, 25);
+  }catch(e){}
+  doc.setFontSize(15); doc.setFont(undefined,'bold'); doc.text(groupName,40,18);
+  doc.setFontSize(11); doc.setFont(undefined,'normal'); doc.text(title,40,25);
   doc.setFontSize(9);
-  doc.text(`System: CSCMS Pro V5 International`, 14, 40);
-  doc.text(`Report Period: ${periodStr}`, 14, 45);
-  doc.text(`Generated: ${genDate}`, 14, 50);
-  doc.text(`Currency: ${groupCurrency()}`, 14, 55);
-  if (extraInfo && extraInfo.length) {
-    let y = 60;
-    extraInfo.forEach(line => {
-      doc.text(line, 14, y);
-      y += 5;
-    });
+  doc.text(`System: CSCMS Pro V5 International`,14,40);
+  doc.text(`Report Period: ${periodStr}`,14,45);
+  doc.text(`Generated: ${genDate}`,14,50);
+  doc.text(`Currency: ${groupCurrency()}`,14,55);
+  if(extraInfo&&extraInfo.length){
+    let y=60;
+    extraInfo.forEach(line=>{ doc.text(line,14,y); y+=5; });
   }
-  const startY = 60 + (extraInfo ? extraInfo.length * 5 : 0) + 4;
+  const startY=60+(extraInfo?extraInfo.length*5:0)+4;
   doc.autoTable({
     startY,
-    head: [headers],
-    body: rows,
-    styles: {
-      fontSize: 8,
-      cellPadding: 3
-    },
-    headStyles: {
-      fillColor: [13, 25, 41],
-      textColor: [232, 240, 248]
-    },
-    alternateRowStyles: {
-      fillColor: [18, 34, 56]
-    },
-    foot: totals && Object.keys(totals).length ? [Object.keys(totals).map(k =>
-      `${k}: ${totals[k]}`)] : undefined,
-    footStyles: {
-      fillColor: [22, 169, 121],
-      textColor: [255, 255, 255],
-      fontSize: 8
-    }
+    head:[headers],
+    body:rows,
+    styles:{fontSize:8,cellPadding:3},
+    headStyles:{fillColor:[13,25,41],textColor:[232,240,248]},
+    alternateRowStyles:{fillColor:[18,34,56]},
+    foot: totals&&Object.keys(totals).length ? [Object.keys(totals).map(k=>`${k}: ${totals[k]}`)] : undefined,
+    footStyles:{fillColor:[22,169,121],textColor:[255,255,255],fontSize:8}
   });
   // Signature section
-  let endY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : startY + 20;
-  if (endY > 260) {
-    doc.addPage();
-    endY = 20;
-  }
-  doc.setFontSize(9);
-  doc.setTextColor(120, 120, 120);
-  doc.text('Prepared By: _______________________', 14, endY);
-  doc.text('Checked By: ________________________', 80, endY);
-  doc.text('Approved By (Chairperson): ________________________', 14, endY + 18);
-  doc.text(`Signature & Date: ________________________`, 14, endY + 36);
-  doc.setTextColor(0, 0, 0);
+  let endY=doc.lastAutoTable?doc.lastAutoTable.finalY+20:startY+20;
+  if(endY>260){ doc.addPage(); endY=20; }
+  doc.setFontSize(9); doc.setTextColor(120,120,120);
+  doc.text('Prepared By: _______________________',14,endY);
+  doc.text('Checked By: ________________________',80,endY);
+  doc.text('Approved By (Chairperson): ________________________',14,endY+18);
+  doc.text(`Signature & Date: ________________________`,14,endY+36);
+  doc.setTextColor(0,0,0);
   doc.save(`${fileName}.pdf`);
-  showToast('PDF downloaded: ' + fileName + '.pdf', 'success');
+  showToast('PDF downloaded: '+fileName+'.pdf','success');
 }
+
 /* ---------- EXCEL EXPORT ---------- */
-function exportReportExcel(title, headers, rows, totals, extraInfo, groupName, periodStr, genDate, fileName) {
-  if (typeof XLSX === 'undefined') {
-    showToast('Excel library not loaded', 'error');
-    return;
-  }
-  const wb = XLSX.utils.book_new();
+function exportReportExcel(title,headers,rows,totals,extraInfo,groupName,periodStr,genDate,fileName){
+  if(typeof XLSX==='undefined'){ showToast('Excel library not loaded','error'); return; }
+  const wb=XLSX.utils.book_new();
   // Build header banner rows
-  const data = [];
+  const data=[];
   data.push([groupName]);
   data.push([title]);
-  data.push(['System', 'CSCMS Pro V5 International']);
-  data.push(['Report Period', periodStr]);
-  data.push(['Generated', genDate]);
-  data.push(['Currency', groupCurrency()]);
-  if (extraInfo && extraInfo.length) extraInfo.forEach(l => data.push([l]));
+  data.push(['System','CSCMS Pro V5 International']);
+  data.push(['Report Period',periodStr]);
+  data.push(['Generated',genDate]);
+  data.push(['Currency',groupCurrency()]);
+  if(extraInfo&&extraInfo.length) extraInfo.forEach(l=>data.push([l]));
   data.push([]);
   data.push(headers);
-  rows.forEach(r => data.push(r));
-  if (totals && Object.keys(totals).length) {
+  rows.forEach(r=>data.push(r));
+  if(totals&&Object.keys(totals).length){
     data.push([]);
     data.push(['TOTALS']);
-    Object.entries(totals).forEach(([k, v]) => data.push([k, v]));
+    Object.entries(totals).forEach(([k,v])=>data.push([k,v]));
   }
   data.push([]);
   data.push([]);
-  data.push(['Prepared By:', '', 'Checked By:', '', 'Approved By (Chairperson):']);
-  data.push(['Signature & Date:', '', 'Signature & Date:', '', 'Signature & Date:']);
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = headers.map(() => ({
-    wch: 18
-  }));
-  ws['!merges'] = [{
-    s: {
-      r: 0,
-      c: 0
-    },
-    e: {
-      r: 0,
-      c: headers.length - 1
-    }
-  }, {
-    s: {
-      r: 1,
-      c: 0
-    },
-    e: {
-      r: 1,
-      c: headers.length - 1
-    }
-  }];
-  XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 28));
-  XLSX.writeFile(wb, `${fileName}.xlsx`);
-  showToast('Excel downloaded: ' + fileName + '.xlsx', 'success');
+  data.push(['Prepared By:','','Checked By:','','Approved By (Chairperson):']);
+  data.push(['Signature & Date:','','Signature & Date:','','Signature & Date:']);
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=headers.map(()=>({wch:18}));
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:headers.length-1}},{s:{r:1,c:0},e:{r:1,c:headers.length-1}}];
+  XLSX.utils.book_append_sheet(wb,ws,title.slice(0,28));
+  XLSX.writeFile(wb,`${fileName}.xlsx`);
+  showToast('Excel downloaded: '+fileName+'.xlsx','success');
 }
+
 /* ---------- PRINT REPORT ---------- */
-function printReport(title, headers, rows, totals, extraInfo, groupName, periodStr, genDate) {
-  const w = window.open('', '_blank', 'width=1000,height=700');
-  if (!w) {
-    showToast('Please allow popups to print', 'warning');
-    return;
-  }
-  const cur = groupCurrency();
-  const totalsHtml = totals && Object.keys(totals).length ?
-    `<div style="margin-top:10px;padding:10px;background:#0d1929;color:#fff;border-radius:6px">${Object.entries(totals).map(([k,v])=>`<b>${k}:</b> ${v} &nbsp; `).join('')}</div>` :
-    '';
-  w.document.write(
-    `<html><head><title>${title}</title><style>
+function printReport(title,headers,rows,totals,extraInfo,groupName,periodStr,genDate){
+  const w=window.open('','_blank','width=1000,height=700');
+  if(!w){ showToast('Please allow popups to print','warning'); return; }
+  const cur=groupCurrency();
+  const totalsHtml = totals&&Object.keys(totals).length ? `<div style="margin-top:10px;padding:10px;background:#0d1929;color:#fff;border-radius:6px">${Object.entries(totals).map(([k,v])=>`<b>${k}:</b> ${v} &nbsp; `).join('')}</div>`:'';
+  w.document.write(`<html><head><title>${title}</title><style>
 body {
   font-family: Arial, sans-serif;
   padding: 24px;
@@ -6957,42 +6679,34 @@ th {
   width: 200px;
 }
 
-</style></head><body><h1>${groupName}</h1><h2>${title}</h2><div class="info">System: CSCMS Pro V5 International</div><div class="info">Report Period: ${periodStr}</div><div class="info">Generated: ${genDate}</div><div class="info">Currency: ${cur}</div>${extraInfo&&extraInfo.length?extraInfo.map(l=>`<div class="info">${l}</div>`).join(''):''}<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>${totalsHtml}<div class="sig"><div>Prepared By</div><div>Checked By</div><div>Approved By (Chairperson)</div></div></body></html>`
-  );
+</style></head><body><h1>${groupName}</h1><h2>${title}</h2><div class="info">System: CSCMS Pro V5 International</div><div class="info">Report Period: ${periodStr}</div><div class="info">Generated: ${genDate}</div><div class="info">Currency: ${cur}</div>${extraInfo&&extraInfo.length?extraInfo.map(l=>`<div class="info">${l}</div>`).join(''):''}<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>${totalsHtml}<div class="sig"><div>Prepared By</div><div>Checked By</div><div>Approved By (Chairperson)</div></div></body></html>`);
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 400);
+  setTimeout(()=>w.print(),400);
 }
+
 /* =====================================================================================
    RENDER: SHARES, PROFITS & DIVIDENDS (Chairperson Admin)
    ===================================================================================== */
-function renderDividends() {
+function renderDividends(){
   // Override the original simple renderDividends — chair sees admin, member is redirected
-  if (CR !== 'chair') {
+  if(CR!=='chair'){
     // Members should be redirected to member dividends page
     return renderMemberDividends();
   }
   return renderDividendsAdmin();
 }
+function renderDividendsAdmin(){
+  const cur=groupCurrency();
+  const activeFY=getActiveFY();
+  const range=fyRange(activeFY);
+  const periods=getPeriodsForFY(activeFY.id||activeFY.year);
+  const latestPeriod=periods[0]||{fyId:activeFY.id||activeFY.year,year:activeFY.year,startDate:activeFY.startDate,endDate:activeFY.endDate,mode:'total',reservePct:0,status:'PROJECTED'};
+  const result=calcDividendsForPeriod(latestPeriod);
+  const profit=result.profit;
 
-function renderDividendsAdmin() {
-  const cur = groupCurrency();
-  const activeFY = getActiveFY();
-  const range = fyRange(activeFY);
-  const periods = getPeriodsForFY(activeFY.id || activeFY.year);
-  const latestPeriod = periods[0] || {
-    fyId: activeFY.id || activeFY.year,
-    year: activeFY.year,
-    startDate: activeFY.startDate,
-    endDate: activeFY.endDate,
-    mode: 'total',
-    reservePct: 0,
-    status: 'PROJECTED'
-  };
-  const result = calcDividendsForPeriod(latestPeriod);
-  const profit = result.profit;
-  const stateBadge = (st) =>
-    `<span class="div-state-badge state-${(st||'projected').toLowerCase()}">${(st||'PROJECTED').replace('_',' ')}</span>`;
+  const stateBadge = (st)=>`<span class="div-state-badge state-${(st||'projected').toLowerCase()}">${(st||'PROJECTED').replace('_',' ')}</span>`;
+
   return `
     <div class="section-head">
       <h2><i class="fa-solid fa-sitemap" style="color:var(--purple)"></i> Shares, Profits & Dividends</h2>
@@ -7090,11 +6804,12 @@ function renderDividendsAdmin() {
     </div>
   `;
 }
+
 /* ---------- Fiscal Year form ---------- */
-window.openFYForm = () => {
-  if (CR !== 'chair') return showToast('Only the Chairperson can create fiscal years', 'error');
-  $('formModalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus"></i> Create Fiscal Year';
-  $('formModalBody').innerHTML = `<form id="fyForm">
+window.openFYForm=()=>{
+  if(CR!=='chair') return showToast('Only the Chairperson can create fiscal years','error');
+  $('formModalTitle').innerHTML='<i class="fa-solid fa-calendar-plus"></i> Create Fiscal Year';
+  $('formModalBody').innerHTML=`<form id="fyForm">
     <div class="row2">
       <div class="field"><label>Year *</label><input id="fyYear" type="number" value="${new Date().getFullYear()}" required></div>
       <div class="field"><label>Status</label><select id="fyStatus"><option value="ACTIVE">ACTIVE</option><option value="CLOSED">CLOSED</option></select></div>
@@ -7107,34 +6822,32 @@ window.openFYForm = () => {
     <button class="btn primary" type="submit"><i class="fa-solid fa-check"></i> Save Fiscal Year</button>
   </form>`;
   openModal('formModal');
-  $('fyForm').addEventListener('submit', async e => {
+  $('fyForm').addEventListener('submit',async e=>{
     e.preventDefault();
-    const data = {
-      year: Number($('fyYear').value),
-      status: $('fyStatus').value,
-      startDate: $('fyStart').value,
-      endDate: $('fyEnd').value,
-      notes: $('fyNotes').value.trim(),
-      createdBy: CU.uid,
-      createdAt: serverTimestamp()
+    const data={
+      year:Number($('fyYear').value),
+      status:$('fyStatus').value,
+      startDate:$('fyStart').value,
+      endDate:$('fyEnd').value,
+      notes:$('fyNotes').value.trim(),
+      createdBy:CU.uid,
+      createdAt:serverTimestamp()
     };
-    try {
-      const ref = await addDoc(col('fiscalYears'), data);
-      auditDetailed('FY_CREATE', 'fiscalYears', ref.id, null, data, 'Chairperson created fiscal year');
-      showToast('Fiscal year created', 'success');
+    try{
+      const ref=await addDoc(col('fiscalYears'),data);
+      auditDetailed('FY_CREATE','fiscalYears',ref.id,null,data,'Chairperson created fiscal year');
+      showToast('Fiscal year created','success');
       closeModal('formModal');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
+    }catch(err){ showToast(err.message,'error'); }
   });
 };
+
 /* ---------- Period / Calculation form ---------- */
-window.openPeriodForm = () => {
-  if (CR !== 'chair') return showToast('Only the Chairperson can calculate dividends', 'error');
-  const fyOptions = FYC.length ? FYC.map(f => `<option value="${f.id}">${f.year} (${f.status})</option>`).join(
-    '') : `<option value="">No fiscal year — create one first</option>`;
-  $('formModalTitle').innerHTML = '<i class="fa-solid fa-calculator"></i> Calculate Dividend Period';
-  $('formModalBody').innerHTML = `<form id="periodForm">
+window.openPeriodForm=()=>{
+  if(CR!=='chair') return showToast('Only the Chairperson can calculate dividends','error');
+  const fyOptions=FYC.length?FYC.map(f=>`<option value="${f.id}">${f.year} (${f.status})</option>`).join(''):`<option value="">No fiscal year — create one first</option>`;
+  $('formModalTitle').innerHTML='<i class="fa-solid fa-calculator"></i> Calculate Dividend Period';
+  $('formModalBody').innerHTML=`<form id="periodForm">
     <div class="provider-note" style="margin-bottom:12px"><i class="fa-solid fa-info-circle"></i> The system will calculate dividends based on shares purchased within the period and the net profit. You can review, then approve & lock — only the Chairperson can approve.</div>
     <div class="row2">
       <div class="field"><label>Title *</label><input id="pTitle" placeholder="e.g. Q4 2026 Dividend" required></div>
@@ -7151,138 +6864,102 @@ window.openPeriodForm = () => {
     <button class="btn primary" type="submit"><i class="fa-solid fa-check"></i> Calculate & Save as PRELIMINARY</button>
   </form>`;
   openModal('formModal');
-  $('periodForm').addEventListener('submit', async e => {
+  $('periodForm').addEventListener('submit',async e=>{
     e.preventDefault();
-    const fyId = $('pFY').value;
-    if (!fyId) return showToast('Please create a fiscal year first', 'error');
-    const fy = FYC.find(f => f.id === fyId);
-    const data = {
-      title: $('pTitle').value.trim(),
+    const fyId=$('pFY').value;
+    if(!fyId) return showToast('Please create a fiscal year first','error');
+    const fy=FYC.find(f=>f.id===fyId);
+    const data={
+      title:$('pTitle').value.trim(),
       fyId,
-      year: fy?.year || new Date().getFullYear(),
-      startDate: $('pStart').value,
-      endDate: $('pEnd').value,
-      mode: $('pMode').value,
-      reservePct: Number($('pReserve').value) || 0,
-      status: 'PRELIMINARY',
-      createdBy: CU.uid,
-      createdAt: serverTimestamp()
+      year:fy?.year||new Date().getFullYear(),
+      startDate:$('pStart').value,
+      endDate:$('pEnd').value,
+      mode:$('pMode').value,
+      reservePct:Number($('pReserve').value)||0,
+      status:'PRELIMINARY',
+      createdBy:CU.uid,
+      createdAt:serverTimestamp()
     };
-    try {
-      const ref = await addDoc(col('dividendPeriods'), data);
-      auditDetailed('PERIOD_CREATE', 'dividendPeriods', ref.id, null, data,
-        'Chairperson created dividend period');
-      showToast('Dividend period created as PRELIMINARY. Review and approve to lock.', 'success');
+    try{
+      const ref=await addDoc(col('dividendPeriods'),data);
+      auditDetailed('PERIOD_CREATE','dividendPeriods',ref.id,null,data,'Chairperson created dividend period');
+      showToast('Dividend period created as PRELIMINARY. Review and approve to lock.','success');
       closeModal('formModal');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
+    }catch(err){ showToast(err.message,'error'); }
   });
 };
+
 /* ---------- Approve & Lock period (Chairperson ONLY) ---------- */
-window.approvePeriod = async (periodId) => {
-  if (CR !== 'chair') return showToast('Only the Chairperson can approve dividends', 'error');
-  const period = DPC.find(p => p.id === periodId);
-  if (!period) return showToast('Period not found', 'error');
-  if (period.status === 'APPROVED') return showToast('This period is already approved', 'warning');
-  showConfirm('Approve & Lock Dividend Period',
-    'Once approved, this period will be LOCKED. The calculated dividends will be saved as a snapshot and cannot be edited. Are you sure?',
-    async () => {
-      try {
-        const result = calcDividendsForPeriod(period);
-        const snapshot = {
-          profit: result.profit,
-          reservePct: result.reservePct,
-          reserveAmt: result.reserveAmt,
-          distributable: result.distributable,
-          totalShares: result.totalShares,
-          totalQty: result.totalQty,
-          rows: result.rows.map(r => ({
-            ...r
-          })),
-          approvedAt: new Date().toISOString(),
-          approvedBy: CU.uid,
-          approvedByName: `${CU.firstName||''} ${CU.lastName||''}`.trim()
-        };
-        // Use a batch: update period + create dividend records per member
-        const batch = writeBatch(db);
-        const periodRef = dcol('dividendPeriods', periodId);
-        batch.update(periodRef, {
-          status: 'APPROVED',
-          approvedAt: serverTimestamp(),
-          approvedBy: CU.uid,
-          snapshot
+window.approvePeriod=async(periodId)=>{
+  if(CR!=='chair') return showToast('Only the Chairperson can approve dividends','error');
+  const period=DPC.find(p=>p.id===periodId);
+  if(!period) return showToast('Period not found','error');
+  if(period.status==='APPROVED') return showToast('This period is already approved','warning');
+  showConfirm('Approve & Lock Dividend Period','Once approved, this period will be LOCKED. The calculated dividends will be saved as a snapshot and cannot be edited. Are you sure?',async()=>{
+    try{
+      const result=calcDividendsForPeriod(period);
+      const snapshot={
+        profit:result.profit,
+        reservePct:result.reservePct,
+        reserveAmt:result.reserveAmt,
+        distributable:result.distributable,
+        totalShares:result.totalShares,
+        totalQty:result.totalQty,
+        rows:result.rows.map(r=>({...r})),
+        approvedAt:new Date().toISOString(),
+        approvedBy:CU.uid,
+        approvedByName:`${CU.firstName||''} ${CU.lastName||''}`.trim()
+      };
+      // Use a batch: update period + create dividend records per member
+      const batch=writeBatch(db);
+      const periodRef=dcol('dividendPeriods',periodId);
+      batch.update(periodRef,{status:'APPROVED',approvedAt:serverTimestamp(),approvedBy:CU.uid,snapshot});
+      // Remove old dividend records for this period (if any) then add new
+      const oldRecords=DVC.filter(d=>d.periodId===periodId);
+      oldRecords.forEach(d=>batch.delete(dcol('dividends',d.id)));
+      result.rows.forEach(r=>{
+        const newRef=doc(col('dividends'));
+        batch.set(newRef,{
+          periodId, fyId:period.fyId, year:period.year,
+          memberId:r.memberId, memberName:r.memberName, nida:r.nida||null,
+          shareValue:r.shareValue, shareQty:r.shareQty, percentage:r.percentage,
+          amount:r.dividendProjected, paidAmount:0,
+          status:'APPROVED', approvedAt:serverTimestamp(),
+          groupId:CGI, createdBy:CU.uid, createdAt:serverTimestamp()
         });
-        // Remove old dividend records for this period (if any) then add new
-        const oldRecords = DVC.filter(d => d.periodId === periodId);
-        oldRecords.forEach(d => batch.delete(dcol('dividends', d.id)));
-        result.rows.forEach(r => {
-          const newRef = doc(col('dividends'));
-          batch.set(newRef, {
-            periodId,
-            fyId: period.fyId,
-            year: period.year,
-            memberId: r.memberId,
-            memberName: r.memberName,
-            nida: r.nida || null,
-            shareValue: r.shareValue,
-            shareQty: r.shareQty,
-            percentage: r.percentage,
-            amount: r.dividendProjected,
-            paidAmount: 0,
-            status: 'APPROVED',
-            approvedAt: serverTimestamp(),
-            groupId: CGI,
-            createdBy: CU.uid,
-            createdAt: serverTimestamp()
-          });
-        });
-        await batch.commit();
-        await auditDetailed('PERIOD_APPROVE', 'dividendPeriods', periodId, {
-          status: period.status
-        }, {
-          status: 'APPROVED'
-        }, 'Chairperson approved and locked dividend period');
-        showToast('Period APPROVED and LOCKED. ' + result.rows.length + ' dividend records created.',
-          'success');
-      } catch (err) {
-        showToast('Approval failed: ' + err.message, 'error');
-      }
-    });
+      });
+      await batch.commit();
+      await auditDetailed('PERIOD_APPROVE','dividendPeriods',periodId,{status:period.status},{status:'APPROVED'},'Chairperson approved and locked dividend period');
+      showToast('Period APPROVED and LOCKED. '+result.rows.length+' dividend records created.','success');
+    }catch(err){ showToast('Approval failed: '+err.message,'error'); }
+  });
 };
+
 /* ---------- Mark all dividends as paid ---------- */
-window.markPeriodPaid = async (periodId) => {
-  if (CR !== 'chair') return showToast('Only the Chairperson can mark dividends as paid', 'error');
-  showConfirm('Mark All Dividends as Paid',
-    'This will mark all approved dividends in this period as PAID. Continue?', async () => {
-      try {
-        const batch = writeBatch(db);
-        DVC.filter(d => d.periodId === periodId && d.status === 'APPROVED').forEach(d => {
-          batch.update(dcol('dividends', d.id), {
-            status: 'PAID',
-            paidAt: serverTimestamp(),
-            paidBy: CU.uid,
-            paidAmount: d.amount
-          });
-        });
-        await batch.commit();
-        await auditDetailed('DIVIDEND_PAID', 'dividends', periodId, null, {
-          status: 'PAID'
-        }, 'Chairperson marked all dividends as paid');
-        showToast('All dividends marked as PAID', 'success');
-      } catch (err) {
-        showToast(err.message, 'error');
-      }
-    });
+window.markPeriodPaid=async(periodId)=>{
+  if(CR!=='chair') return showToast('Only the Chairperson can mark dividends as paid','error');
+  showConfirm('Mark All Dividends as Paid','This will mark all approved dividends in this period as PAID. Continue?',async()=>{
+    try{
+      const batch=writeBatch(db);
+      DVC.filter(d=>d.periodId===periodId && d.status==='APPROVED').forEach(d=>{
+        batch.update(dcol('dividends',d.id),{status:'PAID',paidAt:serverTimestamp(),paidBy:CU.uid,paidAmount:d.amount});
+      });
+      await batch.commit();
+      await auditDetailed('DIVIDEND_PAID','dividends',periodId,null,{status:'PAID'},'Chairperson marked all dividends as paid');
+      showToast('All dividends marked as PAID','success');
+    }catch(err){ showToast(err.message,'error'); }
+  });
 };
+
 /* ---------- View period detail ---------- */
-window.viewPeriodDetail = (periodId) => {
-  const period = DPC.find(p => p.id === periodId);
-  if (!period) return showToast('Period not found', 'error');
-  const result = calcDividendsForPeriod(period);
-  const cur = groupCurrency();
-  $('formModalTitle').innerHTML = `<i class="fa-solid fa-eye"></i> ${period.title||'Period Detail'}`;
-  $('formModalBody').innerHTML = `
+window.viewPeriodDetail=(periodId)=>{
+  const period=DPC.find(p=>p.id===periodId);
+  if(!period) return showToast('Period not found','error');
+  const result=calcDividendsForPeriod(period);
+  const cur=groupCurrency();
+  $('formModalTitle').innerHTML=`<i class="fa-solid fa-eye"></i> ${period.title||'Period Detail'}`;
+  $('formModalBody').innerHTML=`
     <div class="row4" style="margin-bottom:14px">
       <div class="card"><span class="small">Status</span><h4>${period.status||'PROJECTED'}</h4></div>
       <div class="card"><span class="small">Mode</span><h4>${period.mode||'total'}</h4></div>
@@ -7297,182 +6974,109 @@ window.viewPeriodDetail = (periodId) => {
   `;
   openModal('formModal');
 };
+
 /* ---------- Delete period (only if not approved) ---------- */
-window.deletePeriod = (periodId) => {
-  if (CR !== 'chair') return showToast('Only the Chairperson can delete periods', 'error');
-  const period = DPC.find(p => p.id === periodId);
-  if (!period) return;
-  if (period.status === 'APPROVED') return showToast('Cannot delete an approved/locked period', 'error');
-  showConfirm('Delete Dividend Period', 'Remove this period? This cannot be undone.', async () => {
-    try {
-      await deleteDoc(dcol('dividendPeriods', periodId));
-      const batch = writeBatch(db);
-      DVC.filter(d => d.periodId === periodId).forEach(d => batch.delete(dcol('dividends', d.id)));
+window.deletePeriod=(periodId)=>{
+  if(CR!=='chair') return showToast('Only the Chairperson can delete periods','error');
+  const period=DPC.find(p=>p.id===periodId);
+  if(!period) return;
+  if(period.status==='APPROVED') return showToast('Cannot delete an approved/locked period','error');
+  showConfirm('Delete Dividend Period','Remove this period? This cannot be undone.',async()=>{
+    try{
+      await deleteDoc(dcol('dividendPeriods',periodId));
+      const batch=writeBatch(db);
+      DVC.filter(d=>d.periodId===periodId).forEach(d=>batch.delete(dcol('dividends',d.id)));
       await batch.commit();
-      await auditDetailed('PERIOD_DELETE', 'dividendPeriods', periodId, null, null,
-        'Chairperson deleted period');
-      showToast('Period deleted', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
+      await auditDetailed('PERIOD_DELETE','dividendPeriods',periodId,null,null,'Chairperson deleted period');
+      showToast('Period deleted','success');
+    }catch(err){ showToast(err.message,'error'); }
   });
 };
+
 /* ---------- Export dividend admin Excel/PDF ---------- */
-window.exportDividendAdminExcel = () => {
-  if (typeof XLSX === 'undefined') {
-    return showToast('Excel library not loaded', 'error');
-  }
-  const activeFY = getActiveFY();
-  const period = DPC.find(p => p.fyId === (activeFY.id || activeFY.year)) || {
-    fyId: activeFY.id,
-    year: activeFY.year,
-    startDate: activeFY.startDate,
-    endDate: activeFY.endDate,
-    mode: 'total',
-    reservePct: 0,
-    status: 'PROJECTED'
-  };
-  const result = calcDividendsForPeriod(period);
-  const cur = groupCurrency();
-  const data = [];
+window.exportDividendAdminExcel=()=>{
+  if(typeof XLSX==='undefined'){ return showToast('Excel library not loaded','error'); }
+  const activeFY=getActiveFY();
+  const period=DPC.find(p=>p.fyId===(activeFY.id||activeFY.year))||{fyId:activeFY.id,year:activeFY.year,startDate:activeFY.startDate,endDate:activeFY.endDate,mode:'total',reservePct:0,status:'PROJECTED'};
+  const result=calcDividendsForPeriod(period);
+  const cur=groupCurrency();
+  const data=[];
   data.push([CG.name]);
   data.push(['Group Dividend Report']);
-  data.push(['Fiscal Year', String(period.year)]);
-  data.push(['Period', `${fD(period.startDate)} to ${fD(period.endDate)}`]);
-  data.push(['Status', period.status || 'PROJECTED']);
-  data.push(['Mode', period.mode || 'total']);
-  data.push(['Reserve %', period.reservePct || 0]);
-  data.push(['Net Profit', result.profit.netProfit]);
-  data.push(['Distributable', result.distributable]);
+  data.push(['Fiscal Year',String(period.year)]);
+  data.push(['Period',`${fD(period.startDate)} to ${fD(period.endDate)}`]);
+  data.push(['Status',period.status||'PROJECTED']);
+  data.push(['Mode',period.mode||'total']);
+  data.push(['Reserve %',period.reservePct||0]);
+  data.push(['Net Profit',result.profit.netProfit]);
+  data.push(['Distributable',result.distributable]);
   data.push([]);
-  data.push(['#', 'Member', 'Member ID', 'NIDA', 'Share Value', 'Qty', '%', 'Dividend']);
-  result.rows.slice().sort((a, b) => b.shareValue - a.shareValue).forEach((r, i) => data.push([i + 1, r
-    .memberName, r.memberId, r.nida || '-', r.shareValue, r.shareQty, r.percentage.toFixed(2), r
-    .dividendProjected
-  ]));
+  data.push(['#','Member','Member ID','NIDA','Share Value','Qty','%','Dividend']);
+  result.rows.slice().sort((a,b)=>b.shareValue-a.shareValue).forEach((r,i)=>data.push([i+1,r.memberName,r.memberId,r.nida||'-',r.shareValue,r.shareQty,r.percentage.toFixed(2),r.dividendProjected]));
   data.push([]);
-  data.push(['TOTAL', '', '', '', '', result.totalQty, '100%', result.rows.reduce((a, r) => a + r
-    .dividendProjected, 0)]);
-  data.push([]);
-  data.push([]);
-  data.push(['Prepared By:', '', 'Approved By (Chairperson):', '', 'Signature & Date:']);
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{
-    wch: 5
-  }, {
-    wch: 30
-  }, {
-    wch: 24
-  }, {
-    wch: 18
-  }, {
-    wch: 14
-  }, {
-    wch: 8
-  }, {
-    wch: 10
-  }, {
-    wch: 16
-  }];
-  ws['!merges'] = [{
-    s: {
-      r: 0,
-      c: 0
-    },
-    e: {
-      r: 0,
-      c: 7
-    }
-  }, {
-    s: {
-      r: 1,
-      c: 0
-    },
-    e: {
-      r: 1,
-      c: 7
-    }
-  }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Dividends');
-  XLSX.writeFile(wb, `Vikoba_Dividend_Report_${period.year||new Date().getFullYear()}.xlsx`);
-  showToast('Excel downloaded', 'success');
+  data.push(['TOTAL','','','','',result.totalQty,'100%',result.rows.reduce((a,r)=>a+r.dividendProjected,0)]);
+  data.push([]);data.push([]);
+  data.push(['Prepared By:','','Approved By (Chairperson):','','Signature & Date:']);
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:5},{wch:30},{wch:24},{wch:18},{wch:14},{wch:8},{wch:10},{wch:16}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}},{s:{r:1,c:0},e:{r:1,c:7}}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Dividends');
+  XLSX.writeFile(wb,`Vikoba_Dividend_Report_${period.year||new Date().getFullYear()}.xlsx`);
+  showToast('Excel downloaded','success');
 };
-window.exportDividendAdminPDF = async () => {
-  const activeFY = getActiveFY();
-  const period = DPC.find(p => p.fyId === (activeFY.id || activeFY.year)) || {
-    fyId: activeFY.id,
-    year: activeFY.year,
-    startDate: activeFY.startDate,
-    endDate: activeFY.endDate,
-    mode: 'total',
-    reservePct: 0,
-    status: 'PROJECTED'
-  };
-  const result = calcDividendsForPeriod(period);
-  const cur = groupCurrency();
-  const headers = ['#', 'Member', 'Member ID', 'Share Value', '%', 'Dividend'];
-  const rows = result.rows.slice().sort((a, b) => b.shareValue - a.shareValue).map((r, i) => [String(i + 1), r
-    .memberName, r.memberId, fmtMoney(r.shareValue, cur), r.percentage.toFixed(2) + '%', fmtMoney(r
-      .dividendProjected, cur)
-  ]);
-  const totals = {
-    'Members': String(result.rows.length),
-    'Total Shares': fmtMoney(result.totalShares, cur),
-    'Distributable': fmtMoney(result.distributable, cur),
-    'Total Dividend': fmtMoney(result.rows.reduce((a, r) => a + r.dividendProjected, 0), cur)
-  };
-  const extra = [`Fiscal Year: ${period.year}`, `Mode: ${period.mode||'total'}`,
-    `Reserve: ${period.reservePct||0}%`, `Status: ${period.status||'PROJECTED'}`,
-    `Net Profit: ${fmtMoney(result.profit.netProfit,cur)}`
-  ];
-  await exportReportPDF('Group Dividend Report', headers, rows, totals, extra, CG.name,
-    `${fD(period.startDate)} to ${fD(period.endDate)}`, new Date().toLocaleString(),
-    `Vikoba_Dividend_Report_${period.year||new Date().getFullYear()}`);
+window.exportDividendAdminPDF=async()=>{
+  const activeFY=getActiveFY();
+  const period=DPC.find(p=>p.fyId===(activeFY.id||activeFY.year))||{fyId:activeFY.id,year:activeFY.year,startDate:activeFY.startDate,endDate:activeFY.endDate,mode:'total',reservePct:0,status:'PROJECTED'};
+  const result=calcDividendsForPeriod(period);
+  const cur=groupCurrency();
+  const headers=['#','Member','Member ID','Share Value','%','Dividend'];
+  const rows=result.rows.slice().sort((a,b)=>b.shareValue-a.shareValue).map((r,i)=>[String(i+1),r.memberName,r.memberId,fmtMoney(r.shareValue,cur),r.percentage.toFixed(2)+'%',fmtMoney(r.dividendProjected,cur)]);
+  const totals={'Members':String(result.rows.length),'Total Shares':fmtMoney(result.totalShares,cur),'Distributable':fmtMoney(result.distributable,cur),'Total Dividend':fmtMoney(result.rows.reduce((a,r)=>a+r.dividendProjected,0),cur)};
+  const extra=[`Fiscal Year: ${period.year}`,`Mode: ${period.mode||'total'}`,`Reserve: ${period.reservePct||0}%`,`Status: ${period.status||'PROJECTED'}`,`Net Profit: ${fmtMoney(result.profit.netProfit,cur)}`];
+  await exportReportPDF('Group Dividend Report',headers,rows,totals,extra,CG.name,`${fD(period.startDate)} to ${fD(period.endDate)}`,new Date().toLocaleString(),`Vikoba_Dividend_Report_${period.year||new Date().getFullYear()}`);
 };
+
 /* =====================================================================================
    RENDER: MEMBER PROFITS & DIVIDENDS (Member self-service view)
    ===================================================================================== */
-function renderMemberDividends() {
-  const cur = groupCurrency();
-  const me = MC.find(m => m.nida === CU?.nida) || MC.find(m => m.id === CU?.uid);
-  const isChair = CR === 'chair';
+function renderMemberDividends(){
+  const cur=groupCurrency();
+  const me=MC.find(m=>m.nida===CU?.nida)||MC.find(m=>m.id===CU?.uid);
+  const isChair=CR==='chair';
   // For chair viewing as themselves, or viewing group report:
-  if (isChair) {
+  if(isChair){
     // Chair can see all members' dividends, plus a group report button
     return renderMemberDividendsChairView();
   }
-  if (!me) {
+  if(!me){
     return `<div class="section-head"><h2><i class="fa-solid fa-coins"></i> My Profits & Dividends</h2></div>
       <div class="card" style="text-align:center;padding:40px"><i class="fa-solid fa-user-slash" style="font-size:48px;color:var(--muted);display:block;margin-bottom:12px"></i><p class="small">Your member profile was not found. Please contact the Chairperson.</p></div>`;
   }
+
   // Calculate member's own data across all periods
-  const myDividends = DVC.filter(d => d.memberId === me.id || d.nida === me.nida);
-  const totalShares = memberShares(me);
-  const totalSavings = memberSavings(me);
-  const activeFY = getActiveFY();
-  const range = fyRange(activeFY);
-  const mySharesInPeriod = calcMemberSharesInPeriod(me, range.from, range.to);
-  const myQtyInPeriod = calcMemberShareQtyInPeriod(me, range.from, range.to);
+  const myDividends=DVC.filter(d=>d.memberId===me.id||d.nida===me.nida);
+  const totalShares=memberShares(me);
+  const totalSavings=memberSavings(me);
+  const activeFY=getActiveFY();
+  const range=fyRange(activeFY);
+  const mySharesInPeriod=calcMemberSharesInPeriod(me,range.from,range.to);
+  const myQtyInPeriod=calcMemberShareQtyInPeriod(me,range.from,range.to);
   // Projected dividend (using latest period or active FY)
-  const latestPeriod = DPC.find(p => p.fyId === (activeFY.id || activeFY.year));
-  let projectedDividend = 0,
-    projectedState = 'PROJECTED';
-  if (latestPeriod) {
-    const result = calcDividendsForPeriod(latestPeriod);
-    const myRow = result.rows.find(r => r.memberId === me.id);
-    if (myRow) {
-      projectedDividend = myRow.dividendProjected;
-      projectedState = result.state;
-    }
+  const latestPeriod=DPC.find(p=>p.fyId===(activeFY.id||activeFY.year));
+  let projectedDividend=0, projectedState='PROJECTED';
+  if(latestPeriod){
+    const result=calcDividendsForPeriod(latestPeriod);
+    const myRow=result.rows.find(r=>r.memberId===me.id);
+    if(myRow){ projectedDividend=myRow.dividendProjected; projectedState=result.state; }
   }
-  const totalApproved = myDividends.filter(d => d.status === 'APPROVED' || d.status === 'PAID').reduce((a, d) => a +
-    (Number(d.amount) || 0), 0);
-  const totalPaid = myDividends.filter(d => d.status === 'PAID').reduce((a, d) => a + (Number(d.paidAmount || d
-    .amount) || 0), 0);
-  const totalOutstanding = Math.max(0, totalApproved - totalPaid);
-  const stateBadge = (st) =>
-    `<span class="div-state-badge state-${(st||'projected').toLowerCase()}">${(st||'PROJECTED').replace('_',' ')}</span>`;
+
+  const totalApproved=myDividends.filter(d=>d.status==='APPROVED'||d.status==='PAID').reduce((a,d)=>a+(Number(d.amount)||0),0);
+  const totalPaid=myDividends.filter(d=>d.status==='PAID').reduce((a,d)=>a+(Number(d.paidAmount||d.amount)||0),0);
+  const totalOutstanding=Math.max(0,totalApproved-totalPaid);
+
+  const stateBadge=(st)=>`<span class="div-state-badge state-${(st||'projected').toLowerCase()}">${(st||'PROJECTED').replace('_',' ')}</span>`;
+
   return `
     <div class="section-head">
       <h2><i class="fa-solid fa-coins" style="color:var(--p2)"></i> My Profits & Dividends</h2>
@@ -7528,9 +7132,10 @@ function renderMemberDividends() {
     </div>
   `;
 }
+
 /* Chairperson view of member dividends page = list of all members with dividends */
-function renderMemberDividendsChairView() {
-  const cur = groupCurrency();
+function renderMemberDividendsChairView(){
+  const cur=groupCurrency();
   return `
     <div class="section-head">
       <h2><i class="fa-solid fa-coins" style="color:var(--p2)"></i> Member Profits & Dividends (All Members)</h2>
@@ -7564,14 +7169,13 @@ function renderMemberDividendsChairView() {
     </div>
   `;
 }
-window.viewMemberDividendDetail = (memberId) => {
-  const m = MC.find(x => x.id === memberId);
-  if (!m) return;
-  const cur = groupCurrency();
-  const dv = DVC.filter(d => d.memberId === m.id || d.nida === m.nida);
-  $('formModalTitle').innerHTML =
-    `<i class="fa-solid fa-eye"></i> ${m.firstName||''} ${m.lastName||''} - Dividend History`;
-  $('formModalBody').innerHTML = `
+window.viewMemberDividendDetail=(memberId)=>{
+  const m=MC.find(x=>x.id===memberId);
+  if(!m) return;
+  const cur=groupCurrency();
+  const dv=DVC.filter(d=>d.memberId===m.id||d.nida===m.nida);
+  $('formModalTitle').innerHTML=`<i class="fa-solid fa-eye"></i> ${m.firstName||''} ${m.lastName||''} - Dividend History`;
+  $('formModalBody').innerHTML=`
     <div class="row3" style="margin-bottom:14px">
       <div class="card"><span class="small">Total Shares</span><h4 style="color:var(--purple);margin:4px 0">${fmtMoney(memberShares(m),cur)}</h4></div>
       <div class="card"><span class="small">Approved Dividends</span><h4 style="color:var(--p2);margin:4px 0">${fmtMoney(dv.filter(d=>d.status==='APPROVED'||d.status==='PAID').reduce((a,d)=>a+(Number(d.amount)||0),0),cur)}</h4></div>
@@ -7584,184 +7188,96 @@ window.viewMemberDividendDetail = (memberId) => {
   `;
   openModal('formModal');
 };
+
 /* ---------- Member self-service download ---------- */
-window.downloadMyDividendStatement = () => {
-  if (typeof XLSX === 'undefined') return showToast('Excel library not loaded', 'error');
-  const me = MC.find(m => m.nida === CU?.nida) || MC.find(m => m.id === CU?.uid);
-  if (!me) return showToast('Member profile not found', 'error');
-  const cur = groupCurrency();
-  const dv = DVC.filter(d => d.memberId === me.id || d.nida === me.nida);
-  const totalApproved = dv.filter(d => d.status === 'APPROVED' || d.status === 'PAID').reduce((a, d) => a + (
-    Number(d.amount) || 0), 0);
-  const totalPaid = dv.filter(d => d.status === 'PAID').reduce((a, d) => a + (Number(d.paidAmount || d.amount) ||
-    0), 0);
-  const data = [];
+window.downloadMyDividendStatement=()=>{
+  if(typeof XLSX==='undefined') return showToast('Excel library not loaded','error');
+  const me=MC.find(m=>m.nida===CU?.nida)||MC.find(m=>m.id===CU?.uid);
+  if(!me) return showToast('Member profile not found','error');
+  const cur=groupCurrency();
+  const dv=DVC.filter(d=>d.memberId===me.id||d.nida===me.nida);
+  const totalApproved=dv.filter(d=>d.status==='APPROVED'||d.status==='PAID').reduce((a,d)=>a+(Number(d.amount)||0),0);
+  const totalPaid=dv.filter(d=>d.status==='PAID').reduce((a,d)=>a+(Number(d.paidAmount||d.amount)||0),0);
+  const data=[];
   data.push([CG.name]);
   data.push(['My Dividend Statement']);
-  data.push(['Member Name', `${me.firstName||''} ${me.middleName||''} ${me.lastName||''}`.trim()]);
-  data.push(['Member ID', me.id]);
-  data.push(['National ID', me.nida || '-']);
-  data.push(['Generated', new Date().toLocaleString()]);
-  data.push(['Currency', cur]);
+  data.push(['Member Name',`${me.firstName||''} ${me.middleName||''} ${me.lastName||''}`.trim()]);
+  data.push(['Member ID',me.id]);
+  data.push(['National ID',me.nida||'-']);
+  data.push(['Generated',new Date().toLocaleString()]);
+  data.push(['Currency',cur]);
   data.push([]);
   data.push(['SUMMARY']);
-  data.push(['Total Shares', memberShares(me)]);
-  data.push(['Total Savings', memberSavings(me)]);
-  data.push(['Approved Dividends', totalApproved]);
-  data.push(['Paid Dividends', totalPaid]);
-  data.push(['Outstanding', Math.max(0, totalApproved - totalPaid)]);
+  data.push(['Total Shares',memberShares(me)]);
+  data.push(['Total Savings',memberSavings(me)]);
+  data.push(['Approved Dividends',totalApproved]);
+  data.push(['Paid Dividends',totalPaid]);
+  data.push(['Outstanding',Math.max(0,totalApproved-totalPaid)]);
   data.push([]);
   data.push(['DIVIDEND HISTORY']);
-  data.push(['Year', 'Share Value', 'Percentage', 'Dividend Amount', 'Paid Amount', 'Outstanding', 'Status']);
-  dv.slice().sort((a, b) => String(b.year || '').localeCompare(String(a.year || ''))).forEach(d => data.push([d
-    .year, d.shareValue, d.percentage, d.amount, d.paidAmount || 0, Math.max(0, (d.amount || 0) - (d
-      .paidAmount || 0)), d.status
-  ]));
+  data.push(['Year','Share Value','Percentage','Dividend Amount','Paid Amount','Outstanding','Status']);
+  dv.slice().sort((a,b)=>String(b.year||'').localeCompare(String(a.year||''))).forEach(d=>data.push([d.year,d.shareValue,d.percentage,d.amount,d.paidAmount||0,Math.max(0,(d.amount||0)-(d.paidAmount||0)),d.status]));
   data.push([]);
   data.push(['SHARE PURCHASE HISTORY']);
-  data.push(['Date', 'Type', 'Quantity', 'Amount']);
-  SHC.filter(s => memberMatchesRecord(s, me)).slice().sort((a, b) => recordDateMs(b.date || b.createdAt) -
-    recordDateMs(a.date || a.createdAt)).forEach(s => data.push([fD(s.date || s.createdAt), s.type || 'BUY', s
-    .quantity || 0, s.amount || 0
-  ]));
-  data.push([]);
-  data.push([]);
-  data.push(['Member Signature:', '', 'Date:']);
-  data.push(['', '']);
-  data.push(['Verified By (Chairperson):', '', 'Date:']);
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{
-    wch: 24
-  }, {
-    wch: 18
-  }, {
-    wch: 14
-  }, {
-    wch: 18
-  }, {
-    wch: 18
-  }, {
-    wch: 14
-  }, {
-    wch: 14
-  }];
-  ws['!merges'] = [{
-    s: {
-      r: 0,
-      c: 0
-    },
-    e: {
-      r: 0,
-      c: 6
-    }
-  }, {
-    s: {
-      r: 1,
-      c: 0
-    },
-    e: {
-      r: 1,
-      c: 6
-    }
-  }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'My Dividend');
-  XLSX.writeFile(wb, `Vikoba_My_Dividend_Statement_${me.lastName||'member'}_${today()}.xlsx`);
-  showToast('Your dividend statement downloaded', 'success');
+  data.push(['Date','Type','Quantity','Amount']);
+  SHC.filter(s=>memberMatchesRecord(s,me)).slice().sort((a,b)=>recordDateMs(b.date||b.createdAt)-recordDateMs(a.date||a.createdAt)).forEach(s=>data.push([fD(s.date||s.createdAt),s.type||'BUY',s.quantity||0,s.amount||0]));
+  data.push([]);data.push([]);
+  data.push(['Member Signature:','','Date:']);
+  data.push(['','']);
+  data.push(['Verified By (Chairperson):','','Date:']);
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:24},{wch:18},{wch:14},{wch:18},{wch:18},{wch:14},{wch:14}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:6}},{s:{r:1,c:0},e:{r:1,c:6}}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'My Dividend');
+  XLSX.writeFile(wb,`Vikoba_My_Dividend_Statement_${me.lastName||'member'}_${today()}.xlsx`);
+  showToast('Your dividend statement downloaded','success');
 };
+
 /* ---------- Group dividend Excel/PDF download (chair only) ---------- */
-window.downloadGroupDividendExcel = () => {
-  if (CR !== 'chair') return showToast('Chairperson only', 'error');
-  if (typeof XLSX === 'undefined') return showToast('Excel library not loaded', 'error');
-  const cur = groupCurrency();
-  const data = [];
+window.downloadGroupDividendExcel=()=>{
+  if(CR!=='chair') return showToast('Chairperson only','error');
+  if(typeof XLSX==='undefined') return showToast('Excel library not loaded','error');
+  const cur=groupCurrency();
+  const data=[];
   data.push([CG.name]);
   data.push(['Group Dividend Report']);
-  data.push(['Generated', new Date().toLocaleString()]);
-  data.push(['Currency', cur]);
+  data.push(['Generated',new Date().toLocaleString()]);
+  data.push(['Currency',cur]);
   data.push([]);
-  data.push(['#', 'Member', 'Member ID', 'NIDA', 'Total Shares', 'Approved Dividends', 'Paid', 'Outstanding']);
-  MC.forEach((m, i) => {
-    const dv = DVC.filter(d => d.memberId === m.id || d.nida === m.nida);
-    const approved = dv.filter(d => d.status === 'APPROVED' || d.status === 'PAID').reduce((a, d) => a + (
-      Number(d.amount) || 0), 0);
-    const paid = dv.filter(d => d.status === 'PAID').reduce((a, d) => a + (Number(d.paidAmount || d.amount) ||
-      0), 0);
-    data.push([i + 1, `${m.firstName||''} ${m.middleName||''} ${m.lastName||''}`.trim(), m.id, m.nida || '-',
-      memberShares(m), approved, paid, Math.max(0, approved - paid)
-    ]);
+  data.push(['#','Member','Member ID','NIDA','Total Shares','Approved Dividends','Paid','Outstanding']);
+  MC.forEach((m,i)=>{
+    const dv=DVC.filter(d=>d.memberId===m.id||d.nida===m.nida);
+    const approved=dv.filter(d=>d.status==='APPROVED'||d.status==='PAID').reduce((a,d)=>a+(Number(d.amount)||0),0);
+    const paid=dv.filter(d=>d.status==='PAID').reduce((a,d)=>a+(Number(d.paidAmount||d.amount)||0),0);
+    data.push([i+1,`${m.firstName||''} ${m.middleName||''} ${m.lastName||''}`.trim(),m.id,m.nida||'-',memberShares(m),approved,paid,Math.max(0,approved-paid)]);
   });
   data.push([]);
-  data.push(['TOTAL', '', '', '', MC.reduce((a, m) => a + memberShares(m), 0), DVC.filter(d => d.status ===
-    'APPROVED' || d.status === 'PAID').reduce((a, d) => a + (Number(d.amount) || 0), 0), DVC.filter(d => d
-    .status === 'PAID').reduce((a, d) => a + (Number(d.paidAmount || d.amount) || 0), 0), '']);
-  data.push([]);
-  data.push([]);
-  data.push(['Prepared By:', '', 'Approved By (Chairperson):', '', 'Date:']);
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{
-    wch: 5
-  }, {
-    wch: 30
-  }, {
-    wch: 24
-  }, {
-    wch: 18
-  }, {
-    wch: 14
-  }, {
-    wch: 18
-  }, {
-    wch: 14
-  }, {
-    wch: 14
-  }];
-  ws['!merges'] = [{
-    s: {
-      r: 0,
-      c: 0
-    },
-    e: {
-      r: 0,
-      c: 7
-    }
-  }, {
-    s: {
-      r: 1,
-      c: 0
-    },
-    e: {
-      r: 1,
-      c: 7
-    }
-  }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Group Dividends');
-  XLSX.writeFile(wb, `Vikoba_Group_Dividend_Report_${today()}.xlsx`);
-  showToast('Group dividend Excel downloaded', 'success');
+  data.push(['TOTAL','','','',MC.reduce((a,m)=>a+memberShares(m),0),DVC.filter(d=>d.status==='APPROVED'||d.status==='PAID').reduce((a,d)=>a+(Number(d.amount)||0),0),DVC.filter(d=>d.status==='PAID').reduce((a,d)=>a+(Number(d.paidAmount||d.amount)||0),0),'']);
+  data.push([]);data.push([]);
+  data.push(['Prepared By:','','Approved By (Chairperson):','','Date:']);
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:5},{wch:30},{wch:24},{wch:18},{wch:14},{wch:18},{wch:14},{wch:14}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}},{s:{r:1,c:0},e:{r:1,c:7}}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Group Dividends');
+  XLSX.writeFile(wb,`Vikoba_Group_Dividend_Report_${today()}.xlsx`);
+  showToast('Group dividend Excel downloaded','success');
 };
-window.downloadGroupDividendPDF = async () => {
-  if (CR !== 'chair') return showToast('Chairperson only', 'error');
-  const cur = groupCurrency();
-  const headers = ['#', 'Member', 'Total Shares', 'Approved', 'Paid', 'Outstanding'];
-  const rows = MC.map((m, i) => {
-    const dv = DVC.filter(d => d.memberId === m.id || d.nida === m.nida);
-    const approved = dv.filter(d => d.status === 'APPROVED' || d.status === 'PAID').reduce((a, d) => a + (
-      Number(d.amount) || 0), 0);
-    const paid = dv.filter(d => d.status === 'PAID').reduce((a, d) => a + (Number(d.paidAmount || d
-      .amount) || 0), 0);
-    return [String(i + 1), `${m.firstName||''} ${m.lastName||''}`, fmtMoney(memberShares(m), cur), fmtMoney(
-      approved, cur), fmtMoney(paid, cur), fmtMoney(Math.max(0, approved - paid), cur)];
+window.downloadGroupDividendPDF=async()=>{
+  if(CR!=='chair') return showToast('Chairperson only','error');
+  const cur=groupCurrency();
+  const headers=['#','Member','Total Shares','Approved','Paid','Outstanding'];
+  const rows=MC.map((m,i)=>{
+    const dv=DVC.filter(d=>d.memberId===m.id||d.nida===m.nida);
+    const approved=dv.filter(d=>d.status==='APPROVED'||d.status==='PAID').reduce((a,d)=>a+(Number(d.amount)||0),0);
+    const paid=dv.filter(d=>d.status==='PAID').reduce((a,d)=>a+(Number(d.paidAmount||d.amount)||0),0);
+    return [String(i+1),`${m.firstName||''} ${m.lastName||''}`,fmtMoney(memberShares(m),cur),fmtMoney(approved,cur),fmtMoney(paid,cur),fmtMoney(Math.max(0,approved-paid),cur)];
   });
-  const totals = {
-    'Members': String(MC.length),
-    'Total Shares': fmtMoney(MC.reduce((a, m) => a + memberShares(m), 0), cur),
-    'Total Approved': fmtMoney(DVC.filter(d => d.status === 'APPROVED' || d.status === 'PAID').reduce((a,
-      d) => a + (Number(d.amount) || 0), 0), cur)
-  };
-  await exportReportPDF('Group Dividend Report', headers, rows, totals, [], CG.name, 'All Time', new Date()
-    .toLocaleString(), `Vikoba_Group_Dividend_Report_${today()}`);
+  const totals={'Members':String(MC.length),'Total Shares':fmtMoney(MC.reduce((a,m)=>a+memberShares(m),0),cur),'Total Approved':fmtMoney(DVC.filter(d=>d.status==='APPROVED'||d.status==='PAID').reduce((a,d)=>a+(Number(d.amount)||0),0),cur)};
+  await exportReportPDF('Group Dividend Report',headers,rows,totals,[],CG.name,'All Time',new Date().toLocaleString(),`Vikoba_Group_Dividend_Report_${today()}`);
 };
+
 /* =====================================================================================
    END VIKOBA UPGRADE
    ===================================================================================== */
