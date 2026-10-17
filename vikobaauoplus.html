@@ -3868,6 +3868,30 @@ window.openSidebarMenu = () => {
   window.toggleSidebar();
 };
 
+
+/* ================================
+   GLOBAL ERROR HANDLER
+   Shows JavaScript errors visibly
+   so the user can see what failed.
+================================ */
+window.addEventListener('error', (e) => {
+  console.error('Global JS Error:', e.error || e.message);
+  // Don't show toast for script-loading errors (they're noise)
+  if(e.message && e.message.includes('Failed to fetch')) return;
+  // Show a subtle toast for any uncaught error
+  try {
+    showToast('⚠️ ' + (e.message || 'Unknown error').substring(0, 100), 'warning');
+  } catch(_){}
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled Promise Rejection:', e.reason);
+  try {
+    const msg = (e.reason && (e.reason.message || e.reason)) || 'Promise rejected';
+    showToast('⚠️ ' + String(msg).substring(0, 100), 'warning');
+  } catch(_){}
+});
+
 /* ===== CONSTANTS ===== */
 
 const SYS_LOGO_FILE="vikobabrand-icon4.svg - Copy.png";
@@ -5712,6 +5736,7 @@ function renderSAContent(){
        </div>`
     : '';
 
+  try{
   switch(sTab){
 
     case 'sa-dashboard':el.innerHTML=renderSADashboard();initSACharts();break;
@@ -5735,6 +5760,10 @@ function renderSAContent(){
     default:el.innerHTML=saBackBtn+'<p>Unknown section</p>';
 
   }
+}catch(renderErr){
+  console.error('renderSAContent error for tab:', sTab, renderErr);
+  el.innerHTML = `<div class="section-nav-row"><button class="return-to-menu-btn sa" onclick="saNavigate('sa-dashboard')"><i class="fa-solid fa-house"></i> Return to Menu</button></div><div class="card" style="text-align:center;padding:30px"><i class="fa-solid fa-triangle-exclamation" style="font-size:42px;color:var(--red);display:block;margin-bottom:14px"></i><h3 style="margin-bottom:8px">Failed to Load Section</h3><p class="small" style="margin-bottom:18px">The section <b>'${sTab}'</b> could not be loaded. Error: <code>${renderErr.message||renderErr}</code></p><div class="flex gap-sm" style="justify-content:center"><button class="btn primary" onclick="saNavigate('sa-dashboard')"><i class="fa-solid fa-house"></i> Dashboard</button><button class="btn outline" onclick="location.reload()"><i class="fa-solid fa-arrows-rotate"></i> Reload Page</button></div></div>`;
+}
 
 }
 
@@ -7116,6 +7145,335 @@ function loadData(){
 
 /* ===== RENDER SECTIONS ===== */
 
+/* ---------- MODULE SCHEMAS ----------
+   Each schema describes how a module's Excel import/export/template/edit
+   should behave. Field keys match the Firestore document fields used by
+   the existing onSnapshot listeners, so imported rows appear in the
+   regular lists automatically once committed.
+*/
+const MODULE_SCHEMAS = {
+  members: {
+    label: 'Members', icon: 'fa-users', collection: 'members',
+    requiresChair: true,
+    fields: [
+      {key:'firstName', label:'First Name', type:'text', required:true, group:'Personal'},
+      {key:'middleName', label:'Middle Name', type:'text', group:'Personal'},
+      {key:'lastName', label:'Last Name', type:'text', required:true, group:'Personal'},
+      {key:'nida', label:'National ID', type:'text', required:true, group:'Personal', unique:true},
+      {key:'phone', label:'Phone', type:'phone', group:'Personal'},
+      {key:'email', label:'Email', type:'email', group:'Personal'},
+      {key:'gender', label:'Gender', type:'text', group:'Personal'},
+      {key:'dob', label:'Date of Birth', type:'date', group:'Personal'},
+      {key:'address', label:'Address', type:'text', group:'Personal'},
+      {key:'region', label:'Region', type:'text', group:'Personal'},
+      {key:'district', label:'District', type:'text', group:'Personal'},
+      {key:'occupation', label:'Occupation', type:'text', group:'Personal'},
+      {key:'businessName', label:'Business Name', type:'text', group:'Personal'},
+      {key:'nextOfKin', label:'Next of Kin', type:'text', group:'Personal'},
+      {key:'nextOfKinPhone', label:'Next of Kin Phone', type:'phone', group:'Personal'},
+      {key:'membershipStatus', label:'Membership Status', type:'text', group:'Personal'},
+      {key:'registrationDate', label:'Registration Date', type:'date', group:'Personal'}
+    ],
+    duplicateKeys: ['nida'],
+    defaults: { role: 'member', status: 'active' }
+  },
+  savings: {
+    label: 'Savings', icon: 'fa-piggy-bank', collection: 'savings',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Transaction'},
+      {key:'nida', label:'National ID', type:'text', group:'Transaction'},
+      {key:'type', label:'Type (DEPOSIT/WITHDRAWAL)', type:'text', required:true, group:'Transaction', enum:['DEPOSIT','WITHDRAWAL']},
+      {key:'amount', label:'Amount', type:'currency', required:true, group:'Transaction'},
+      {key:'date', label:'Date', type:'date', required:true, group:'Transaction'},
+      {key:'referenceNo', label:'Reference No', type:'text', group:'Transaction'},
+      {key:'description', label:'Description', type:'text', group:'Transaction'}
+    ],
+    duplicateKeys: ['memberName','date','amount','type'],
+    defaults: { type: 'DEPOSIT' }
+  },
+  shares: {
+    label: 'Shares', icon: 'fa-chart-pie', collection: 'shares',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Shares'},
+      {key:'nida', label:'National ID', type:'text', group:'Shares'},
+      {key:'type', label:'Type (BUY/SELL)', type:'text', group:'Shares', enum:['BUY','SELL']},
+      {key:'quantity', label:'Quantity', type:'number', required:true, group:'Shares'},
+      {key:'amount', label:'Amount', type:'currency', required:true, group:'Shares'},
+      {key:'date', label:'Date', type:'date', required:true, group:'Shares'},
+      {key:'shareCertificate', label:'Certificate No', type:'text', group:'Shares'},
+      {key:'referenceNo', label:'Reference No', type:'text', group:'Shares'}
+    ],
+    duplicateKeys: ['memberName','date','amount'],
+    defaults: { type: 'BUY' }
+  },
+  loans: {
+    label: 'Loans', icon: 'fa-hand-holding-dollar', collection: 'loans',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Loan'},
+      {key:'nida', label:'National ID', type:'text', group:'Loan'},
+      {key:'amount', label:'Loan Amount', type:'currency', required:true, group:'Loan'},
+      {key:'interestRate', label:'Interest Rate (%)', type:'percentage', group:'Loan'},
+      {key:'term', label:'Term (Months)', type:'number', group:'Loan'},
+      {key:'dueDate', label:'Due Date', type:'date', group:'Loan'},
+      {key:'purpose', label:'Purpose', type:'text', group:'Loan'},
+      {key:'status', label:'Status', type:'text', group:'Loan', enum:['PENDING','APPROVED','REJECTED','DISBURSED','PAID']}
+    ],
+    duplicateKeys: ['memberName','amount','date'],
+    defaults: { status: 'PENDING', interestRate: 10, term: 12 }
+  },
+  repayments: {
+    label: 'Loan Repayments', icon: 'fa-money-bill-transfer', collection: 'repayments',
+    requiresChair: true,
+    fields: [
+      {key:'loanId', label:'Loan ID', type:'text', required:true, group:'Repayment'},
+      {key:'memberName', label:'Member Name', type:'text', group:'Repayment'},
+      {key:'amount', label:'Amount', type:'currency', required:true, group:'Repayment'},
+      {key:'date', label:'Date', type:'date', required:true, group:'Repayment'},
+      {key:'referenceNo', label:'Reference No', type:'text', group:'Repayment'}
+    ],
+    duplicateKeys: ['loanId','date','amount'],
+    defaults: {}
+  },
+  welfare: {
+    label: 'Social Fund / Welfare', icon: 'fa-hand-holding-heart', collection: 'welfare',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Welfare'},
+      {key:'type', label:'Type (DEPOSIT/WITHDRAWAL)', type:'text', required:true, group:'Welfare', enum:['DEPOSIT','WITHDRAWAL']},
+      {key:'amount', label:'Amount', type:'currency', required:true, group:'Welfare'},
+      {key:'date', label:'Date', type:'date', required:true, group:'Welfare'},
+      {key:'reason', label:'Reason', type:'text', group:'Welfare'}
+    ],
+    duplicateKeys: ['memberName','date','amount','type'],
+    defaults: { type: 'DEPOSIT' }
+  },
+  meetings: {
+    label: 'Meetings', icon: 'fa-calendar-check', collection: 'meetings',
+    requiresChair: true,
+    fields: [
+      {key:'title', label:'Title', type:'text', required:true, group:'Meeting'},
+      {key:'date', label:'Date', type:'date', required:true, group:'Meeting'},
+      {key:'location', label:'Location', type:'text', group:'Meeting'},
+      {key:'attendance', label:'Attendance Count', type:'number', group:'Meeting'},
+      {key:'agenda', label:'Agenda', type:'text', group:'Meeting'},
+      {key:'minutes', label:'Minutes', type:'text', group:'Meeting'},
+      {key:'status', label:'Status', type:'text', group:'Meeting', enum:['SCHEDULED','HELD','CANCELLED']}
+    ],
+    duplicateKeys: ['title','date'],
+    defaults: { status: 'SCHEDULED' }
+  },
+  cashbook: {
+    label: 'Income & Expense', icon: 'fa-receipt', collection: 'cashbook',
+    requiresChair: true,
+    fields: [
+      {key:'type', label:'Type (INCOME/EXPENSE)', type:'text', required:true, group:'Cashbook', enum:['INCOME','EXPENSE']},
+      {key:'category', label:'Category', type:'text', required:true, group:'Cashbook'},
+      {key:'amount', label:'Amount', type:'currency', required:true, group:'Cashbook'},
+      {key:'date', label:'Date', type:'date', required:true, group:'Cashbook'},
+      {key:'description', label:'Description', type:'text', group:'Cashbook'},
+      {key:'referenceNo', label:'Reference No', type:'text', group:'Cashbook'}
+    ],
+    duplicateKeys: ['type','category','amount','date'],
+    defaults: { type: 'INCOME' }
+  },
+  penalties: {
+    label: 'Penalties', icon: 'fa-gavel', collection: 'penalties',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Penalty'},
+      {key:'type', label:'Type', type:'text', group:'Penalty'},
+      {key:'amount', label:'Amount', type:'currency', required:true, group:'Penalty'},
+      {key:'date', label:'Date', type:'date', required:true, group:'Penalty'},
+      {key:'reason', label:'Reason', type:'text', group:'Penalty'},
+      {key:'status', label:'Status', type:'text', group:'Penalty', enum:['PENDING','PAID','WAIVED']}
+    ],
+    duplicateKeys: ['memberName','date','amount','type'],
+    defaults: { status: 'PENDING' }
+  },
+  branches: {
+    label: 'Branches', icon: 'fa-code-branch', collection: 'branches',
+    requiresChair: true,
+    fields: [
+      {key:'name', label:'Branch Name', type:'text', required:true, group:'Branch'},
+      {key:'location', label:'Location', type:'text', group:'Branch'},
+      {key:'phone', label:'Phone', type:'phone', group:'Branch'},
+      {key:'manager', label:'Manager', type:'text', group:'Branch'},
+      {key:'status', label:'Status', type:'text', group:'Branch', enum:['ACTIVE','INACTIVE']}
+    ],
+    duplicateKeys: ['name'],
+    defaults: { status: 'ACTIVE' }
+  },
+  loanProducts: {
+    label: 'Loan Products', icon: 'fa-landmark', collection: 'loanProducts',
+    requiresChair: true,
+    fields: [
+      {key:'name', label:'Product Name', type:'text', required:true, group:'Product'},
+      {key:'interestRate', label:'Interest Rate (%)', type:'percentage', group:'Product'},
+      {key:'maxAmount', label:'Max Amount', type:'currency', group:'Product'},
+      {key:'maxTerm', label:'Max Term (Months)', type:'number', group:'Product'},
+      {key:'description', label:'Description', type:'text', group:'Product'},
+      {key:'status', label:'Status', type:'text', group:'Product', enum:['ACTIVE','INACTIVE']}
+    ],
+    duplicateKeys: ['name'],
+    defaults: { status: 'ACTIVE', interestRate: 10 }
+  },
+  kyc: {
+    label: 'KYC', icon: 'fa-address-card', collection: 'kyc',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'KYC'},
+      {key:'nida', label:'National ID', type:'text', group:'KYC'},
+      {key:'documentType', label:'Document Type', type:'text', group:'KYC'},
+      {key:'documentNumber', label:'Document Number', type:'text', group:'KYC'},
+      {key:'issueDate', label:'Issue Date', type:'date', group:'KYC'},
+      {key:'expiryDate', label:'Expiry Date', type:'date', group:'KYC'},
+      {key:'status', label:'Status', type:'text', group:'KYC', enum:['PENDING','VERIFIED','REJECTED']}
+    ],
+    duplicateKeys: ['memberName','documentNumber'],
+    defaults: { status: 'PENDING' }
+  },
+  guarantors: {
+    label: 'Guarantors', icon: 'fa-user-shield', collection: 'guarantors',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Guarantor'},
+      {key:'loanId', label:'Loan ID', type:'text', group:'Guarantor'},
+      {key:'guarantorName', label:'Guarantor Name', type:'text', group:'Guarantor'},
+      {key:'amount', label:'Guaranteed Amount', type:'currency', group:'Guarantor'},
+      {key:'date', label:'Date', type:'date', group:'Guarantor'},
+      {key:'status', label:'Status', type:'text', group:'Guarantor', enum:['ACTIVE','RELEASED']}
+    ],
+    duplicateKeys: ['memberName','loanId','guarantorName'],
+    defaults: { status: 'ACTIVE' }
+  },
+  collateral: {
+    label: 'Collateral', icon: 'fa-file-contract', collection: 'collateral',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Collateral'},
+      {key:'loanId', label:'Loan ID', type:'text', group:'Collateral'},
+      {key:'description', label:'Description', type:'text', group:'Collateral'},
+      {key:'value', label:'Value', type:'currency', group:'Collateral'},
+      {key:'date', label:'Date Registered', type:'date', group:'Collateral'},
+      {key:'status', label:'Status', type:'text', group:'Collateral', enum:['HELD','RELEASED']}
+    ],
+    duplicateKeys: ['memberName','loanId','description'],
+    defaults: { status: 'HELD' }
+  },
+  dividends: {
+    label: 'Dividends', icon: 'fa-coins', collection: 'dividends',
+    requiresChair: true,
+    fields: [
+      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Dividend'},
+      {key:'year', label:'Year', type:'number', group:'Dividend'},
+      {key:'shareValue', label:'Share Value', type:'currency', group:'Dividend'},
+      {key:'percentage', label:'Percentage', type:'percentage', group:'Dividend'},
+      {key:'amount', label:'Dividend Amount', type:'currency', group:'Dividend'},
+      {key:'paidAmount', label:'Paid Amount', type:'currency', group:'Dividend'},
+      {key:'status', label:'Status', type:'text', group:'Dividend', enum:['PROJECTED','APPROVED','PAID']}
+    ],
+    duplicateKeys: ['memberName','year'],
+    defaults: { status: 'PROJECTED' }
+  },
+  announcements: {
+    label: 'Announcements', icon: 'fa-bullhorn', collection: 'announcements',
+    requiresChair: true,
+    fields: [
+      {key:'title', label:'Title', type:'text', required:true, group:'Announcement'},
+      {key:'body', label:'Body', type:'text', group:'Announcement'},
+      {key:'status', label:'Status', type:'text', group:'Announcement', enum:['DRAFT','PUBLISHED','ARCHIVED']},
+      {key:'date', label:'Date', type:'date', group:'Announcement'}
+    ],
+    duplicateKeys: ['title','date'],
+    defaults: { status: 'PUBLISHED' }
+  },
+  payments: {
+    label: 'Payments', icon: 'fa-credit-card', collection: 'payments',
+    requiresChair: true,
+    fields: [
+      {key:'invoiceNo', label:'Invoice No', type:'text', group:'Payment'},
+      {key:'memberName', label:'Member Name', type:'text', group:'Payment'},
+      {key:'purpose', label:'Purpose', type:'text', group:'Payment'},
+      {key:'amount', label:'Amount', type:'currency', group:'Payment'},
+      {key:'currency', label:'Currency', type:'text', group:'Payment'},
+      {key:'method', label:'Payment Method', type:'text', group:'Payment'},
+      {key:'reference', label:'Reference', type:'text', group:'Payment'},
+      {key:'status', label:'Status', type:'text', group:'Payment', enum:['PENDING','PAID','CONFIRMED','FAILED','CANCELLED']}
+    ],
+    duplicateKeys: ['invoiceNo'],
+    defaults: { status: 'PENDING', currency: 'TZS' }
+  }
+};
+
+/* ---------- ALIAS BUILDER for ALL module schemas ---------- */
+const MODULE_COLUMN_ALIASES = {};
+function buildModuleAliases(){
+  Object.entries(MODULE_SCHEMAS).forEach(([modKey, schema]) => {
+    MODULE_COLUMN_ALIASES[modKey] = {};
+    schema.fields.forEach(f => {
+      const norm = normalizeStr(f.label);
+      if(!MODULE_COLUMN_ALIASES[modKey][f.key]) MODULE_COLUMN_ALIASES[modKey][f.key] = [];
+      MODULE_COLUMN_ALIASES[modKey][f.key].push(norm);
+      // Also add the field key itself
+      MODULE_COLUMN_ALIASES[modKey][f.key].push(normalizeStr(f.key));
+    });
+  });
+  // Add common aliases reused across modules
+  const common = {
+    memberName: ['member','name','member name','jina','jina kamili','customer','client','full name','full_name'],
+    amount: ['amount','kiasi','value','thamani','sum','total'],
+    date: ['date','tarehe','day','transaction date','txn date'],
+    type: ['type','aina','category','category type'],
+    status: ['status','hali','state'],
+    referenceNo: ['reference','ref','ref no','reference no','reference number','txn ref','risiti'],
+    nida: ['nida','national id','national id number','id number','namba ya kitambulisho','identity','nid']
+  };
+  Object.entries(common).forEach(([k, aliases]) => {
+    Object.keys(MODULE_COLUMN_ALIASES).forEach(modKey => {
+      const schema = MODULE_SCHEMAS[modKey];
+      if(schema.fields.some(f => f.key === k)){
+        if(!MODULE_COLUMN_ALIASES[modKey][k]) MODULE_COLUMN_ALIASES[modKey][k] = [];
+        aliases.forEach(a => {
+          if(!MODULE_COLUMN_ALIASES[modKey][k].includes(normalizeStr(a))){
+            MODULE_COLUMN_ALIASES[modKey][k].push(normalizeStr(a));
+          }
+        });
+      }
+    });
+  });
+}
+buildModuleAliases();
+
+/* ---------- SMART MATCH for any module ---------- */
+function smartMatchModuleColumn(modKey, header){
+  const norm = normalizeStr(header);
+  if(!norm) return null;
+  const aliases = MODULE_COLUMN_ALIASES[modKey] || {};
+  // 1. Direct match against field keys/labels
+  const schema = MODULE_SCHEMAS[modKey];
+  if(schema){
+    for(const f of schema.fields){
+      if(normalizeStr(f.key) === norm || normalizeStr(f.label) === norm) return f.key;
+    }
+  }
+  // 2. Alias map
+  for(const [fieldKey, list] of Object.entries(aliases)){
+    if(list.includes(norm)) return fieldKey;
+  }
+  // 3. Fuzzy contains
+  for(const [fieldKey, list] of Object.entries(aliases)){
+    for(const a of list){
+      if(a.length > 3 && (norm.includes(a) || a.includes(norm))) return fieldKey;
+    }
+  }
+  return null;
+}
+
+
+
 function renderSec(id){
 
   const el=$('contentArea');if(!el)return;
@@ -7133,6 +7491,7 @@ function renderSec(id){
        </div>`
     : '';
 
+  try{
   switch(id){
 
     case 'dashboard':el.innerHTML=renderDashboard();break;
@@ -7189,6 +7548,10 @@ function renderSec(id){
     default:el.innerHTML=backBtn+`<div class="card"><p>Section: ${id}</p></div>`;
 
   }
+}catch(renderErr){
+  console.error('renderSec error for section:', id, renderErr);
+  el.innerHTML = `<div class="section-nav-row"><button class="return-to-menu-btn" onclick="openSidebarMenu()"><i class="fa-solid fa-bars"></i> Return to Menu</button></div><div class="card" style="text-align:center;padding:30px"><i class="fa-solid fa-triangle-exclamation" style="font-size:42px;color:var(--red);display:block;margin-bottom:14px"></i><h3 style="margin-bottom:8px">Failed to Load Section</h3><p class="small" style="margin-bottom:18px">The section <b>'${id}'</b> could not be loaded. Error: <code>${renderErr.message||renderErr}</code></p><div class="flex gap-sm" style="justify-content:center"><button class="btn primary" onclick="navigateTo('dashboard')"><i class="fa-solid fa-house"></i> Dashboard</button><button class="btn outline" onclick="location.reload()"><i class="fa-solid fa-arrows-rotate"></i> Reload Page</button></div></div>`;
+}
 
 }
 
@@ -7284,9 +7647,12 @@ function renderAppearanceSettings(){
 
 function renderMembers(){
 
+  let _actionBar = '';
+  try { _actionBar = moduleActionBar('members',CR==='chair',MC.length); } catch(e){ console.warn('moduleActionBar failed for members', e); }
+
   return `
 
-    ${moduleActionBar('members',CR==='chair',MC.length)}
+    ${_actionBar}
 
     <div class="section-head"><h2><i class="fa-solid fa-users"></i> Members</h2>
 
@@ -7343,7 +7709,7 @@ function renderShares(){return renderFinSection('shares','Shares',SHC,['memberNa
 
 function renderLoans(){return renderFinSection('loans','Loans',LC,['memberName','amount','status','date'],['Member','Amount','Status','Date'],CR==='chair');}
 
-function renderRepayments(){return `${moduleActionBar('repayments',CR==='chair',RC.length)}<div class="table-wrap"><table class="table"><thead><tr><th>Member</th><th>Loan ID</th><th>Amount</th><th>Date</th><th>Created By</th><th>Actions</th></tr></thead><tbody>${RC.slice().reverse().map(r=>`<tr><td>${r.memberName||'N/A'}</td><td>${r.loanId||'N/A'}</td><td style="color:var(--p2)">${fmt(r.amount)}</td><td>${r.date||fD(r.createdAt)}</td><td>${r.createdBy||'N/A'}</td><td>${moduleRowActions('repayments',r.id,CR==='chair')}</td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">No repayments recorded</td></tr>'}</tbody></table></div>`;}
+function renderRepayments(){let _ab='';try{_ab=moduleActionBar('repayments',CR==='chair',RC.length);}catch(e){}return `${_ab}<div class="table-wrap"><table class="table"><thead><tr><th>Member</th><th>Loan ID</th><th>Amount</th><th>Date</th><th>Created By</th><th>Actions</th></tr></thead><tbody>${RC.slice().reverse().map(r=>`<tr><td>${r.memberName||'N/A'}</td><td>${r.loanId||'N/A'}</td><td style="color:var(--p2)">${fmt(r.amount)}</td><td>${r.date||fD(r.createdAt)}</td><td>${r.createdBy||'N/A'}</td><td>${moduleRowActions('repayments',r.id,CR==='chair')}</td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">No repayments recorded</td></tr>'}</tbody></table></div>`;}
 
 function renderWelfare(){return renderFinSection('welfare','Social Fund',WC,['memberName','type','amount','date'],['Member','Type','Amount','Date'],CR==='chair');}
 
@@ -7368,8 +7734,15 @@ function renderAnnouncements(){return renderFinSection('announcements','Announce
 function renderFinSection(colName,title,items,fields,headers,canAdd){
   // Map collection name to module key (most match directly)
   const moduleKey = colName;
-  const hasSchema = !!MODULE_SCHEMAS[moduleKey];
-  const actionBar = hasSchema ? moduleActionBar(moduleKey, canAdd, items.length) : '';
+  // Defensive: check that MODULE_SCHEMAS exists
+  let hasSchema = false;
+  let actionBar = '';
+  try {
+    hasSchema = !!(typeof MODULE_SCHEMAS !== 'undefined' && MODULE_SCHEMAS && MODULE_SCHEMAS[moduleKey]);
+    if(hasSchema) actionBar = moduleActionBar(moduleKey, canAdd, items.length);
+  } catch(e) {
+    console.warn('moduleActionBar failed for', moduleKey, e);
+  }
   return `
     ${actionBar}
     <div class="table-wrap"><table class="table">
@@ -7398,9 +7771,11 @@ function renderPayments(){
 
   const pending=mine.filter(p=>(p.status||'PENDING').toUpperCase()==='PENDING');
 
+  let _ab='';
+  try { _ab = moduleActionBar('payments',CR==='chair',mine.length); } catch(e){}
   return `
 
-    ${moduleActionBar('payments',CR==='chair',mine.length)}
+    ${_ab}
 
     <div class="section-head"><h2><i class="fa-solid fa-credit-card"></i> Payments & Billing</h2>
 
@@ -10596,333 +10971,6 @@ translateDOM(document);
    This block is purely ADDITIVE — no existing functions are removed.
    ======================================================================= */
 
-/* ---------- MODULE SCHEMAS ----------
-   Each schema describes how a module's Excel import/export/template/edit
-   should behave. Field keys match the Firestore document fields used by
-   the existing onSnapshot listeners, so imported rows appear in the
-   regular lists automatically once committed.
-*/
-const MODULE_SCHEMAS = {
-  members: {
-    label: 'Members', icon: 'fa-users', collection: 'members',
-    requiresChair: true,
-    fields: [
-      {key:'firstName', label:'First Name', type:'text', required:true, group:'Personal'},
-      {key:'middleName', label:'Middle Name', type:'text', group:'Personal'},
-      {key:'lastName', label:'Last Name', type:'text', required:true, group:'Personal'},
-      {key:'nida', label:'National ID', type:'text', required:true, group:'Personal', unique:true},
-      {key:'phone', label:'Phone', type:'phone', group:'Personal'},
-      {key:'email', label:'Email', type:'email', group:'Personal'},
-      {key:'gender', label:'Gender', type:'text', group:'Personal'},
-      {key:'dob', label:'Date of Birth', type:'date', group:'Personal'},
-      {key:'address', label:'Address', type:'text', group:'Personal'},
-      {key:'region', label:'Region', type:'text', group:'Personal'},
-      {key:'district', label:'District', type:'text', group:'Personal'},
-      {key:'occupation', label:'Occupation', type:'text', group:'Personal'},
-      {key:'businessName', label:'Business Name', type:'text', group:'Personal'},
-      {key:'nextOfKin', label:'Next of Kin', type:'text', group:'Personal'},
-      {key:'nextOfKinPhone', label:'Next of Kin Phone', type:'phone', group:'Personal'},
-      {key:'membershipStatus', label:'Membership Status', type:'text', group:'Personal'},
-      {key:'registrationDate', label:'Registration Date', type:'date', group:'Personal'}
-    ],
-    duplicateKeys: ['nida'],
-    defaults: { role: 'member', status: 'active' }
-  },
-  savings: {
-    label: 'Savings', icon: 'fa-piggy-bank', collection: 'savings',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Transaction'},
-      {key:'nida', label:'National ID', type:'text', group:'Transaction'},
-      {key:'type', label:'Type (DEPOSIT/WITHDRAWAL)', type:'text', required:true, group:'Transaction', enum:['DEPOSIT','WITHDRAWAL']},
-      {key:'amount', label:'Amount', type:'currency', required:true, group:'Transaction'},
-      {key:'date', label:'Date', type:'date', required:true, group:'Transaction'},
-      {key:'referenceNo', label:'Reference No', type:'text', group:'Transaction'},
-      {key:'description', label:'Description', type:'text', group:'Transaction'}
-    ],
-    duplicateKeys: ['memberName','date','amount','type'],
-    defaults: { type: 'DEPOSIT' }
-  },
-  shares: {
-    label: 'Shares', icon: 'fa-chart-pie', collection: 'shares',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Shares'},
-      {key:'nida', label:'National ID', type:'text', group:'Shares'},
-      {key:'type', label:'Type (BUY/SELL)', type:'text', group:'Shares', enum:['BUY','SELL']},
-      {key:'quantity', label:'Quantity', type:'number', required:true, group:'Shares'},
-      {key:'amount', label:'Amount', type:'currency', required:true, group:'Shares'},
-      {key:'date', label:'Date', type:'date', required:true, group:'Shares'},
-      {key:'shareCertificate', label:'Certificate No', type:'text', group:'Shares'},
-      {key:'referenceNo', label:'Reference No', type:'text', group:'Shares'}
-    ],
-    duplicateKeys: ['memberName','date','amount'],
-    defaults: { type: 'BUY' }
-  },
-  loans: {
-    label: 'Loans', icon: 'fa-hand-holding-dollar', collection: 'loans',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Loan'},
-      {key:'nida', label:'National ID', type:'text', group:'Loan'},
-      {key:'amount', label:'Loan Amount', type:'currency', required:true, group:'Loan'},
-      {key:'interestRate', label:'Interest Rate (%)', type:'percentage', group:'Loan'},
-      {key:'term', label:'Term (Months)', type:'number', group:'Loan'},
-      {key:'dueDate', label:'Due Date', type:'date', group:'Loan'},
-      {key:'purpose', label:'Purpose', type:'text', group:'Loan'},
-      {key:'status', label:'Status', type:'text', group:'Loan', enum:['PENDING','APPROVED','REJECTED','DISBURSED','PAID']}
-    ],
-    duplicateKeys: ['memberName','amount','date'],
-    defaults: { status: 'PENDING', interestRate: 10, term: 12 }
-  },
-  repayments: {
-    label: 'Loan Repayments', icon: 'fa-money-bill-transfer', collection: 'repayments',
-    requiresChair: true,
-    fields: [
-      {key:'loanId', label:'Loan ID', type:'text', required:true, group:'Repayment'},
-      {key:'memberName', label:'Member Name', type:'text', group:'Repayment'},
-      {key:'amount', label:'Amount', type:'currency', required:true, group:'Repayment'},
-      {key:'date', label:'Date', type:'date', required:true, group:'Repayment'},
-      {key:'referenceNo', label:'Reference No', type:'text', group:'Repayment'}
-    ],
-    duplicateKeys: ['loanId','date','amount'],
-    defaults: {}
-  },
-  welfare: {
-    label: 'Social Fund / Welfare', icon: 'fa-hand-holding-heart', collection: 'welfare',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Welfare'},
-      {key:'type', label:'Type (DEPOSIT/WITHDRAWAL)', type:'text', required:true, group:'Welfare', enum:['DEPOSIT','WITHDRAWAL']},
-      {key:'amount', label:'Amount', type:'currency', required:true, group:'Welfare'},
-      {key:'date', label:'Date', type:'date', required:true, group:'Welfare'},
-      {key:'reason', label:'Reason', type:'text', group:'Welfare'}
-    ],
-    duplicateKeys: ['memberName','date','amount','type'],
-    defaults: { type: 'DEPOSIT' }
-  },
-  meetings: {
-    label: 'Meetings', icon: 'fa-calendar-check', collection: 'meetings',
-    requiresChair: true,
-    fields: [
-      {key:'title', label:'Title', type:'text', required:true, group:'Meeting'},
-      {key:'date', label:'Date', type:'date', required:true, group:'Meeting'},
-      {key:'location', label:'Location', type:'text', group:'Meeting'},
-      {key:'attendance', label:'Attendance Count', type:'number', group:'Meeting'},
-      {key:'agenda', label:'Agenda', type:'text', group:'Meeting'},
-      {key:'minutes', label:'Minutes', type:'text', group:'Meeting'},
-      {key:'status', label:'Status', type:'text', group:'Meeting', enum:['SCHEDULED','HELD','CANCELLED']}
-    ],
-    duplicateKeys: ['title','date'],
-    defaults: { status: 'SCHEDULED' }
-  },
-  cashbook: {
-    label: 'Income & Expense', icon: 'fa-receipt', collection: 'cashbook',
-    requiresChair: true,
-    fields: [
-      {key:'type', label:'Type (INCOME/EXPENSE)', type:'text', required:true, group:'Cashbook', enum:['INCOME','EXPENSE']},
-      {key:'category', label:'Category', type:'text', required:true, group:'Cashbook'},
-      {key:'amount', label:'Amount', type:'currency', required:true, group:'Cashbook'},
-      {key:'date', label:'Date', type:'date', required:true, group:'Cashbook'},
-      {key:'description', label:'Description', type:'text', group:'Cashbook'},
-      {key:'referenceNo', label:'Reference No', type:'text', group:'Cashbook'}
-    ],
-    duplicateKeys: ['type','category','amount','date'],
-    defaults: { type: 'INCOME' }
-  },
-  penalties: {
-    label: 'Penalties', icon: 'fa-gavel', collection: 'penalties',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Penalty'},
-      {key:'type', label:'Type', type:'text', group:'Penalty'},
-      {key:'amount', label:'Amount', type:'currency', required:true, group:'Penalty'},
-      {key:'date', label:'Date', type:'date', required:true, group:'Penalty'},
-      {key:'reason', label:'Reason', type:'text', group:'Penalty'},
-      {key:'status', label:'Status', type:'text', group:'Penalty', enum:['PENDING','PAID','WAIVED']}
-    ],
-    duplicateKeys: ['memberName','date','amount','type'],
-    defaults: { status: 'PENDING' }
-  },
-  branches: {
-    label: 'Branches', icon: 'fa-code-branch', collection: 'branches',
-    requiresChair: true,
-    fields: [
-      {key:'name', label:'Branch Name', type:'text', required:true, group:'Branch'},
-      {key:'location', label:'Location', type:'text', group:'Branch'},
-      {key:'phone', label:'Phone', type:'phone', group:'Branch'},
-      {key:'manager', label:'Manager', type:'text', group:'Branch'},
-      {key:'status', label:'Status', type:'text', group:'Branch', enum:['ACTIVE','INACTIVE']}
-    ],
-    duplicateKeys: ['name'],
-    defaults: { status: 'ACTIVE' }
-  },
-  loanProducts: {
-    label: 'Loan Products', icon: 'fa-landmark', collection: 'loanProducts',
-    requiresChair: true,
-    fields: [
-      {key:'name', label:'Product Name', type:'text', required:true, group:'Product'},
-      {key:'interestRate', label:'Interest Rate (%)', type:'percentage', group:'Product'},
-      {key:'maxAmount', label:'Max Amount', type:'currency', group:'Product'},
-      {key:'maxTerm', label:'Max Term (Months)', type:'number', group:'Product'},
-      {key:'description', label:'Description', type:'text', group:'Product'},
-      {key:'status', label:'Status', type:'text', group:'Product', enum:['ACTIVE','INACTIVE']}
-    ],
-    duplicateKeys: ['name'],
-    defaults: { status: 'ACTIVE', interestRate: 10 }
-  },
-  kyc: {
-    label: 'KYC', icon: 'fa-address-card', collection: 'kyc',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'KYC'},
-      {key:'nida', label:'National ID', type:'text', group:'KYC'},
-      {key:'documentType', label:'Document Type', type:'text', group:'KYC'},
-      {key:'documentNumber', label:'Document Number', type:'text', group:'KYC'},
-      {key:'issueDate', label:'Issue Date', type:'date', group:'KYC'},
-      {key:'expiryDate', label:'Expiry Date', type:'date', group:'KYC'},
-      {key:'status', label:'Status', type:'text', group:'KYC', enum:['PENDING','VERIFIED','REJECTED']}
-    ],
-    duplicateKeys: ['memberName','documentNumber'],
-    defaults: { status: 'PENDING' }
-  },
-  guarantors: {
-    label: 'Guarantors', icon: 'fa-user-shield', collection: 'guarantors',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Guarantor'},
-      {key:'loanId', label:'Loan ID', type:'text', group:'Guarantor'},
-      {key:'guarantorName', label:'Guarantor Name', type:'text', group:'Guarantor'},
-      {key:'amount', label:'Guaranteed Amount', type:'currency', group:'Guarantor'},
-      {key:'date', label:'Date', type:'date', group:'Guarantor'},
-      {key:'status', label:'Status', type:'text', group:'Guarantor', enum:['ACTIVE','RELEASED']}
-    ],
-    duplicateKeys: ['memberName','loanId','guarantorName'],
-    defaults: { status: 'ACTIVE' }
-  },
-  collateral: {
-    label: 'Collateral', icon: 'fa-file-contract', collection: 'collateral',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Collateral'},
-      {key:'loanId', label:'Loan ID', type:'text', group:'Collateral'},
-      {key:'description', label:'Description', type:'text', group:'Collateral'},
-      {key:'value', label:'Value', type:'currency', group:'Collateral'},
-      {key:'date', label:'Date Registered', type:'date', group:'Collateral'},
-      {key:'status', label:'Status', type:'text', group:'Collateral', enum:['HELD','RELEASED']}
-    ],
-    duplicateKeys: ['memberName','loanId','description'],
-    defaults: { status: 'HELD' }
-  },
-  dividends: {
-    label: 'Dividends', icon: 'fa-coins', collection: 'dividends',
-    requiresChair: true,
-    fields: [
-      {key:'memberName', label:'Member Name', type:'text', required:true, group:'Dividend'},
-      {key:'year', label:'Year', type:'number', group:'Dividend'},
-      {key:'shareValue', label:'Share Value', type:'currency', group:'Dividend'},
-      {key:'percentage', label:'Percentage', type:'percentage', group:'Dividend'},
-      {key:'amount', label:'Dividend Amount', type:'currency', group:'Dividend'},
-      {key:'paidAmount', label:'Paid Amount', type:'currency', group:'Dividend'},
-      {key:'status', label:'Status', type:'text', group:'Dividend', enum:['PROJECTED','APPROVED','PAID']}
-    ],
-    duplicateKeys: ['memberName','year'],
-    defaults: { status: 'PROJECTED' }
-  },
-  announcements: {
-    label: 'Announcements', icon: 'fa-bullhorn', collection: 'announcements',
-    requiresChair: true,
-    fields: [
-      {key:'title', label:'Title', type:'text', required:true, group:'Announcement'},
-      {key:'body', label:'Body', type:'text', group:'Announcement'},
-      {key:'status', label:'Status', type:'text', group:'Announcement', enum:['DRAFT','PUBLISHED','ARCHIVED']},
-      {key:'date', label:'Date', type:'date', group:'Announcement'}
-    ],
-    duplicateKeys: ['title','date'],
-    defaults: { status: 'PUBLISHED' }
-  },
-  payments: {
-    label: 'Payments', icon: 'fa-credit-card', collection: 'payments',
-    requiresChair: true,
-    fields: [
-      {key:'invoiceNo', label:'Invoice No', type:'text', group:'Payment'},
-      {key:'memberName', label:'Member Name', type:'text', group:'Payment'},
-      {key:'purpose', label:'Purpose', type:'text', group:'Payment'},
-      {key:'amount', label:'Amount', type:'currency', group:'Payment'},
-      {key:'currency', label:'Currency', type:'text', group:'Payment'},
-      {key:'method', label:'Payment Method', type:'text', group:'Payment'},
-      {key:'reference', label:'Reference', type:'text', group:'Payment'},
-      {key:'status', label:'Status', type:'text', group:'Payment', enum:['PENDING','PAID','CONFIRMED','FAILED','CANCELLED']}
-    ],
-    duplicateKeys: ['invoiceNo'],
-    defaults: { status: 'PENDING', currency: 'TZS' }
-  }
-};
-
-/* ---------- ALIAS BUILDER for ALL module schemas ---------- */
-const MODULE_COLUMN_ALIASES = {};
-function buildModuleAliases(){
-  Object.entries(MODULE_SCHEMAS).forEach(([modKey, schema]) => {
-    MODULE_COLUMN_ALIASES[modKey] = {};
-    schema.fields.forEach(f => {
-      const norm = normalizeStr(f.label);
-      if(!MODULE_COLUMN_ALIASES[modKey][f.key]) MODULE_COLUMN_ALIASES[modKey][f.key] = [];
-      MODULE_COLUMN_ALIASES[modKey][f.key].push(norm);
-      // Also add the field key itself
-      MODULE_COLUMN_ALIASES[modKey][f.key].push(normalizeStr(f.key));
-    });
-  });
-  // Add common aliases reused across modules
-  const common = {
-    memberName: ['member','name','member name','jina','jina kamili','customer','client','full name','full_name'],
-    amount: ['amount','kiasi','value','thamani','sum','total'],
-    date: ['date','tarehe','day','transaction date','txn date'],
-    type: ['type','aina','category','category type'],
-    status: ['status','hali','state'],
-    referenceNo: ['reference','ref','ref no','reference no','reference number','txn ref','risiti'],
-    nida: ['nida','national id','national id number','id number','namba ya kitambulisho','identity','nid']
-  };
-  Object.entries(common).forEach(([k, aliases]) => {
-    Object.keys(MODULE_COLUMN_ALIASES).forEach(modKey => {
-      const schema = MODULE_SCHEMAS[modKey];
-      if(schema.fields.some(f => f.key === k)){
-        if(!MODULE_COLUMN_ALIASES[modKey][k]) MODULE_COLUMN_ALIASES[modKey][k] = [];
-        aliases.forEach(a => {
-          if(!MODULE_COLUMN_ALIASES[modKey][k].includes(normalizeStr(a))){
-            MODULE_COLUMN_ALIASES[modKey][k].push(normalizeStr(a));
-          }
-        });
-      }
-    });
-  });
-}
-buildModuleAliases();
-
-/* ---------- SMART MATCH for any module ---------- */
-function smartMatchModuleColumn(modKey, header){
-  const norm = normalizeStr(header);
-  if(!norm) return null;
-  const aliases = MODULE_COLUMN_ALIASES[modKey] || {};
-  // 1. Direct match against field keys/labels
-  const schema = MODULE_SCHEMAS[modKey];
-  if(schema){
-    for(const f of schema.fields){
-      if(normalizeStr(f.key) === norm || normalizeStr(f.label) === norm) return f.key;
-    }
-  }
-  // 2. Alias map
-  for(const [fieldKey, list] of Object.entries(aliases)){
-    if(list.includes(norm)) return fieldKey;
-  }
-  // 3. Fuzzy contains
-  for(const [fieldKey, list] of Object.entries(aliases)){
-    for(const a of list){
-      if(a.length > 3 && (norm.includes(a) || a.includes(norm))) return fieldKey;
-    }
-  }
-  return null;
-}
-
 /* ---------- GENERIC MODULE STATE ---------- */
 let moduleImportState = {
   modKey: null,
@@ -11618,6 +11666,8 @@ window.deleteModuleRecord = (modKey, recordId) => {
 
 /* ---------- GENERIC MODULE ACTION BAR (used by renderFinSection + module renders) ---------- */
 function moduleActionBar(modKey, canAdd, recordCount){
+  // Defensive: handle case where MODULE_SCHEMAS isn't loaded yet
+  if(typeof MODULE_SCHEMAS === 'undefined' || !MODULE_SCHEMAS) return '';
   const schema = MODULE_SCHEMAS[modKey];
   if(!schema) return '';
   const isChair = CR === 'chair';
@@ -11704,6 +11754,10 @@ window.openModuleAddForm = (modKey) => {
 /* ---------- ENHANCED ROW ACTIONS (view + edit + delete) ---------- */
 function moduleRowActions(modKey, recordId, canEdit){
   if(!canEdit) return '';
+  // Defensive: if module functions aren't available, return basic edit/delete
+  const canEditRec = (typeof editModuleRecord === 'function') || (window.editModuleRecord);
+  const canDel = (typeof deleteModuleRecord === 'function') || (window.deleteModuleRecord);
+  const canView = (typeof viewModuleRecord === 'function') || (window.viewModuleRecord);
   return `
     <div class="actions">
       <button class="btn ghost btn-sm btn-view" onclick="viewModuleRecord('${modKey}','${recordId}')" title="View Details"><i class="fa-solid fa-eye"></i></button>
