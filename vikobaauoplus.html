@@ -3380,10 +3380,10 @@ tr.row-duplicate td { background: rgba(245,158,11,.04) !important; }
 
       <!-- SUPER ADMIN NAV ARROWS: Go Back / Go Forward -->
       <div class="nav-arrows" title="Navigate Back / Forward">
-        <button id="saNavArrowBack" class="nav-arrow-btn sa-nav-arrow-back" onclick="saGoBack()" title="Go Back" aria-label="Go Back" disabled>
+        <button id="saNavArrowBack" class="nav-arrow-btn sa-nav-arrow-back no-history" onclick="saGoBack()" title="Go Back" aria-label="Go Back">
           <i class="fa-solid fa-chevron-left"></i>
         </button>
-        <button id="saNavArrowFwd" class="nav-arrow-btn sa-nav-arrow-forward" onclick="saGoForward()" title="Go Forward" aria-label="Go Forward" disabled>
+        <button id="saNavArrowFwd" class="nav-arrow-btn sa-nav-arrow-forward no-history" onclick="saGoForward()" title="Go Forward" aria-label="Go Forward">
           <i class="fa-solid fa-chevron-right"></i>
         </button>
       </div>
@@ -3437,10 +3437,10 @@ tr.row-duplicate td { background: rgba(245,158,11,.04) !important; }
 
       <!-- BROWSER-STYLE NAV ARROWS: Go Back / Go Forward -->
       <div class="nav-arrows" title="Navigate Back / Forward">
-        <button id="navArrowBack" class="nav-arrow-btn nav-arrow-back" onclick="goBack()" title="Go Back" aria-label="Go Back" disabled>
+        <button id="navArrowBack" class="nav-arrow-btn nav-arrow-back no-history" onclick="goBack()" title="Go Back" aria-label="Go Back">
           <i class="fa-solid fa-chevron-left"></i>
         </button>
-        <button id="navArrowFwd" class="nav-arrow-btn nav-arrow-forward" onclick="goForward()" title="Go Forward" aria-label="Go Forward" disabled>
+        <button id="navArrowFwd" class="nav-arrow-btn nav-arrow-forward no-history" onclick="goForward()" title="Go Forward" aria-label="Go Forward">
           <i class="fa-solid fa-chevron-right"></i>
         </button>
       </div>
@@ -3791,8 +3791,8 @@ function updateNavArrowState() {
   const fwdBtns  = document.querySelectorAll('.nav-arrow-forward');
   const canBack = navIndex > 0;
   const canFwd  = navIndex < navHistory.length - 1;
-  backBtns.forEach(b => { b.disabled = !canBack; });
-  fwdBtns.forEach(b  => { b.disabled = !canFwd;  });
+  backBtns.forEach(b => { b.classList.toggle('no-history', !canBack); });
+  fwdBtns.forEach(b  => { b.classList.toggle('no-history', !canFwd);  });
 }
 
 /* ================================
@@ -3848,9 +3848,25 @@ function updateSANavArrowState() {
   const fwdBtns  = document.querySelectorAll('.sa-nav-arrow-forward');
   const canBack = saNavIndex > 0;
   const canFwd  = saNavIndex < saNavHistory.length - 1;
-  backBtns.forEach(b => { b.disabled = !canBack; });
-  fwdBtns.forEach(b  => { b.disabled = !canFwd;  });
+  backBtns.forEach(b => { b.classList.toggle('no-history', !canBack); });
+  fwdBtns.forEach(b  => { b.classList.toggle('no-history', !canFwd);  });
 }
+
+
+/* Open the sidebar menu (used by 'Return to Menu' button) */
+window.openSidebarMenu = () => {
+  const s = $('sidebar');
+  const btn = $('menuToggle');
+  const backdrop = $('sidebarBackdrop');
+  if(!s) return;
+  // If sidebar is already open, just close it
+  if(s.classList.contains('open')){
+    window.toggleSidebar();
+    return;
+  }
+  // Open it
+  window.toggleSidebar();
+};
 
 /* ===== CONSTANTS ===== */
 
@@ -4347,10 +4363,25 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = e.target.closest('.nav-btn');
       if(!btn) return;
       // Always auto-close on ALL screen sizes (mobile, tablet, desktop)
+      // Small delay so the click registers first, then the sidebar slides out.
       setTimeout(() => {
         const s = $('sidebar');
         if(s && s.classList.contains('open')) window.toggleSidebar();
-      }, 80);
+      }, 60);
+    });
+  }
+
+  // Also auto-close when a Super Admin nav button is clicked.
+  const saNav = $('superNav');
+  if(saNav){
+    saNav.addEventListener('click', e => {
+      const btn = e.target.closest('.snav-btn');
+      if(!btn) return;
+      // Super Admin sidebar is full-width and doesn't need closing on desktop,
+      // but on mobile it does.
+      if(window.innerWidth <= 768){
+        // No sidebar to close in super admin (uses horizontal nav) — nothing to do
+      }
     });
   }
 });
@@ -5674,7 +5705,11 @@ function renderSAContent(){
 
   // Back button — shown on every Super Admin section except the dashboard
   const saBackBtn = sTab !== 'sa-dashboard'
-    ? `<button class="section-back-btn sa" onclick="saNavigate('sa-dashboard')" title="Return to Super Admin Dashboard"><i class="fa-solid fa-chevron-left"></i> <i class="fa-solid fa-house"></i> Return to Home Screen</button>`
+    ? `<div class="section-nav-row">
+         <button class="return-to-menu-btn sa" onclick="saNavigate('sa-dashboard')" title="Return to Super Admin Dashboard">
+           <i class="fa-solid fa-chevron-left"></i> <i class="fa-solid fa-house"></i> Return to Menu
+         </button>
+       </div>`
     : '';
 
   switch(sTab){
@@ -7088,7 +7123,14 @@ function renderSec(id){
   // Back button HTML — shown on every section except dashboard.
   // "Return to Home Screen" takes the user back to the Dashboard.
   const backBtn = id !== 'dashboard'
-    ? `<button class="section-back-btn" onclick="navigateTo('dashboard')" title="Return to Dashboard"><i class="fa-solid fa-chevron-left"></i> <i class="fa-solid fa-house"></i> Return to Home Screen</button>`
+    ? `<div class="section-nav-row">
+         <button class="return-to-menu-btn" onclick="openSidebarMenu()" title="Open navigation menu">
+           <i class="fa-solid fa-bars"></i> Return to Menu
+         </button>
+         <button class="return-to-dashboard-btn" onclick="navigateTo('dashboard')" title="Return to Dashboard">
+           <i class="fa-solid fa-chevron-left"></i> <i class="fa-solid fa-house"></i> Dashboard
+         </button>
+       </div>`
     : '';
 
   switch(id){
@@ -8612,9 +8654,10 @@ th {
 }
 
 
+
 /* ================================
    BROWSER-STYLE NAV ARROWS
-   (Go Back / Go Forward)
+   (Go Back / Go Forward) — always visible
 ================================ */
 .nav-arrows {
   display: inline-flex;
@@ -8626,8 +8669,8 @@ th {
   padding: 3px;
 }
 .nav-arrow-btn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8636,37 +8679,120 @@ th {
   color: var(--text);
   border-radius: 7px;
   cursor: pointer;
-  transition: background .15s, color .15s, transform .1s, opacity .15s;
+  transition: background .15s, color .15s, transform .1s;
   font-size: 14px;
   flex-shrink: 0;
+  /* Always fully visible — never faint */
+  opacity: 1 !important;
+  filter: none !important;
+  pointer-events: auto !important;
 }
-.nav-arrow-btn:hover:not(:disabled) {
-  background: rgba(22,169,121,.14);
+.nav-arrow-btn:hover {
+  background: rgba(22,169,121,.18);
   color: var(--p2);
   transform: translateY(-1px);
 }
-.nav-arrow-btn:active:not(:disabled) {
+.nav-arrow-btn:active {
   transform: scale(.94);
 }
-.nav-arrow-btn:disabled {
-  opacity: .3;
-  cursor: not-allowed;
-  filter: grayscale(.7);
+/* Visual hint when there is no history — but still CLICKABLE */
+.nav-arrow-btn.no-history {
+  opacity: .85 !important;
+  color: var(--muted);
+}
+.nav-arrow-btn.no-history:hover {
+  background: rgba(245,158,11,.18);
+  color: var(--yellow);
 }
 .nav-arrow-btn .fa-solid {
-  font-size: 14px;
+  font-size: 15px;
 }
-/* Make sure arrows remain visible on small screens */
 @media (max-width: 768px) {
   .nav-arrow-btn {
-    width: 30px;
-    height: 30px;
-    font-size: 13px;
+    width: 32px;
+    height: 32px;
   }
   .nav-arrow-btn .fa-solid {
-    font-size: 13px;
+    font-size: 14px;
   }
 }
+
+/* ================================
+   "RETURN TO MENU" button
+   Prominent, always visible in every section
+================================ */
+.return-to-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--p), var(--p3));
+  color: #fff;
+  border: 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform .15s, filter .15s, box-shadow .15s;
+  box-shadow: 0 4px 14px rgba(22,169,121,.3);
+  letter-spacing: .3px;
+}
+.return-to-menu-btn:hover {
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(22,169,121,.45);
+}
+.return-to-menu-btn:active {
+  transform: translateY(0);
+}
+.return-to-menu-btn i {
+  font-size: 14px;
+}
+/* Super Admin variant (red) */
+.return-to-menu-btn.sa {
+  background: linear-gradient(135deg, var(--red), #b91c1c);
+  box-shadow: 0 4px 14px rgba(239,68,68,.3);
+}
+.return-to-menu-btn.sa:hover {
+  box-shadow: 0 8px 22px rgba(239,68,68,.45);
+}
+/* Combined back-row containing BOTH "Return to Menu" (open sidebar)
+   AND "Return to Dashboard" (go home) */
+.section-nav-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.section-nav-row .return-to-menu-btn {
+  margin-bottom: 0;
+}
+.section-nav-row .return-to-dashboard-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.section-nav-row .return-to-dashboard-btn:hover {
+  border-color: var(--p);
+  color: var(--p2);
+  transform: translateY(-1px);
+}
+.section-nav-row .return-to-dashboard-btn i {
+  font-size: 13px;
+}
+
 /* Sub-section "Return Home" button styling — keeps it consistent */
 .section-back-btn {
   display: inline-flex;
@@ -8694,14 +8820,6 @@ th {
 }
 .section-back-btn i {
   font-size: 13px;
-}
-/* Super Admin variant */
-.section-back-btn.sa {
-  background: linear-gradient(135deg, var(--red), #b91c1c);
-  box-shadow: 0 3px 12px rgba(239,68,68,.25);
-}
-.section-back-btn.sa:hover {
-  box-shadow: 0 6px 18px rgba(239,68,68,.35);
 }
 
 </style></head><body><h1>${groupName}</h1><h2>${title}</h2><div class="info">System: CSCMS Pro V5 International</div><div class="info">Report Period: ${periodStr}</div><div class="info">Generated: ${genDate}</div><div class="info">Currency: ${cur}</div>${extraInfo&&extraInfo.length?extraInfo.map(l=>`<div class="info">${l}</div>`).join(''):''}<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>${totalsHtml}<div class="sig"><div>Prepared By</div><div>Checked By</div><div>Approved By (Chairperson)</div></div></body></html>`);
