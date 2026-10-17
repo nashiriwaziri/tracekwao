@@ -767,6 +767,11 @@ to {
 }
 /* Hamburger button — clean, subtle, only highlights when sidebar is open.
    No pulse animation, no forced !important visibility. */
+.menu-toggle-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
 .menu-toggle {
   width: 36px;
   height: 36px;
@@ -797,6 +802,48 @@ to {
   background: rgba(22, 169, 121, .18);
   border-color: var(--p);
   color: var(--p2);
+}
+/* "Menu" label — appears only when hovering over the hamburger button area.
+   Disappears when the cursor leaves or when a choice has been selected.
+   Positioned above the button as a tooltip. */
+.menu-label {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
+}
+.menu-label::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--panel);
+}
+.menu-toggle-wrap:hover .menu-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* When a choice has been selected (sidebar was opened and an item clicked),
+   we add .selected to the wrapper to hide the "Menu" label permanently. */
+.menu-toggle-wrap.selected .menu-label {
+  opacity: 0 !important;
 }
 
 /* ================================
@@ -3276,7 +3323,10 @@ to {
 
     <div class="flex gap-md" style="align-items:center">
 
-      <button id="menuToggle" class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu" aria-expanded="false"><i class="fa-solid fa-bars" style="font-size:16px"></i></button>
+      <div class="menu-toggle-wrap" id="menuToggleWrap">
+        <button id="menuToggle" class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu" aria-expanded="false"><i class="fa-solid fa-bars" style="font-size:16px"></i></button>
+        <span class="menu-label" id="menuLabel">Menu</span>
+      </div>
 
       <div class="sys-logo sys-logo-xs" id="topLogo" style="width:28px;height:28px"></div>
 
@@ -4047,6 +4097,10 @@ document.addEventListener('DOMContentLoaded', () => {
     nav.addEventListener('click', e => {
       const btn = e.target.closest('.nav-btn');
       if(!btn) return;
+      // Mark the menu toggle wrapper as "selected" so the "Menu" tooltip
+      // disappears permanently after the first choice.
+      const wrap = document.getElementById('menuToggleWrap');
+      if(wrap) wrap.classList.add('selected');
       // Always auto-close on ALL screen sizes (mobile, tablet, desktop)
       setTimeout(() => {
         const s = $('sidebar');
@@ -6712,6 +6766,15 @@ window.navigateTo=id=>{
   const it=navItems.find(n=>n.id===id);
 
   $('pageTitle').textContent=it?tr(it.label):tr(id);
+
+  // When returning to Dashboard (home), reset the "selected" state so the
+  // "Menu" tooltip can appear again on hover. For other sections, mark as
+  // selected so the tooltip stays hidden while the user is browsing.
+  const wrap = document.getElementById('menuToggleWrap');
+  if(wrap){
+    if(id === 'dashboard') wrap.classList.remove('selected');
+    else wrap.classList.add('selected');
+  }
 
   renderSec(id);
 
