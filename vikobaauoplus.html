@@ -2934,7 +2934,7 @@ to {
 
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 
-import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,deleteUser,setPersistence,browserLocalPersistence,onAuthStateChanged}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,deleteUser,setPersistence,indexedDBLocalPersistence,browserLocalPersistence,onAuthStateChanged}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 import{getFirestore,initializeFirestore,CACHE_SIZE_UNLIMITED,collection,doc,setDoc,addDoc,getDoc,getDocs,updateDoc,deleteDoc,onSnapshot,query,orderBy,limit,serverTimestamp,Timestamp,writeBatch,runTransaction,enableIndexedDbPersistence}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -2952,6 +2952,84 @@ const auth=getAuth(fbApp);
 
 const secAuth=getAuth(secApp);
 
+/* === FIX: localStorage quota exceeded error ===
+   The old code used browserLocalPersistence, which stores the auth user object
+   (including a large STS token + refresh token) in localStorage. localStorage
+   has a tiny quota (~5MB per origin) and once it fills up, every setItem call
+   throws "Failed to execute 'setItem' on 'Storage': ... exceeded the quota".
+   Switching to indexedDBLocalPersistence moves the auth state into IndexedDB,
+   which has a much larger quota (hundreds of MB) and avoids the error entirely.
+   We also defensively clear out any stale firebase:authUser: entries that may
+   have been left by the old browserLocalPersistence before switching. */
+
+/* Safe localStorage wrapper — never throws, even if quota is exceeded.
+   This prevents the "Failed to execute 'setItem' on 'Storage'" error from
+   crashing the entire app. Writes silently fail if storage is full. */
+const safeStorage = {
+  set(key, value){
+    try { localStorage.setItem(key, value); return true; }
+    catch(e){
+      console.warn('localStorage.setItem failed (quota?) — clearing old entries and retrying:', e);
+      // Try to free up space by removing old firebase entries
+      try{
+        const toRemove=[];
+        for(let i=0;i<localStorage.length;i++){
+          const k=localStorage.key(i)||'';
+          if(k.startsWith('firebase:authUser:') || k.startsWith('firebase:dependencies:'))
+            toRemove.push(k);
+        }
+        toRemove.forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
+        // Retry
+        try{ localStorage.setItem(key, value); return true; }catch(_){ return false; }
+      }catch(_){ return false; }
+    }
+  },
+  get(key){
+    try { return localStorage.getItem(key); }
+    catch(e){ return null; }
+  },
+  remove(key){
+    try { localStorage.removeItem(key); }
+    catch(e){}
+  }
+};
+// Patch localStorage globally so all existing code benefits from the safe wrapper
+const _origSetItem = localStorage.setItem.bind(localStorage);
+const _origGetItem = localStorage.getItem.bind(localStorage);
+localStorage.setItem = function(key, value){
+  try { _origSetItem(key, value); }
+  catch(e){
+    console.warn('localStorage.setItem quota exceeded — clearing stale firebase entries');
+    // Auto-clear old firebase auth entries and retry
+    try{
+      const keys=[];
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i)||'';
+        if(k.startsWith('firebase:authUser:') || k.startsWith('firebase:dependencies:'))
+          keys.push(k);
+      }
+      keys.forEach(k=>{try{_origGetItem(k); localStorage.removeItem(k);}catch(_){}});
+      try{ _origSetItem(key, value); }catch(_){ /* give up silently */ }
+    }catch(_){}
+  }
+};
+localStorage.getItem = function(key){
+  try { return _origGetItem(key); }
+  catch(e){ return null; }
+};
+
+try{
+  // Defensive cleanup: remove old localStorage auth entries that may be
+  // bloated or duplicated. This prevents quota errors on startup.
+  const toRemove=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i)||'';
+    if(k.startsWith('firebase:authUser:') || k.startsWith('firebase:dependencies:'))
+      toRemove.push(k);
+  }
+  toRemove.forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+}catch(e){console.warn('localStorage cleanup:',e);}
+
 /* Initialize Firestore with UNLIMITED cache so all group data (members, savings,
    loans, dividends, etc.) is available offline. */
 try{
@@ -2964,18 +3042,33 @@ try{
 }
 const db=window.__db;
 
-/* AUTH PERSISTENCE: local storage so login survives tab/browser close.
-   This is the single most important change for offline support. */
-try{await setPersistence(auth,browserLocalPersistence);}catch(e){console.warn('Auth persistence:',e);}
-try{await setPersistence(secAuth,browserLocalPersistence);}catch(e){}
+/* AUTH PERSISTENCE: Use indexedDBLocalPersistence so the auth state lives in
+   IndexedDB (huge quota) instead of localStorage (tiny quota that overflows).
+   This fixes the "exceeded the quota" error while still keeping the user
+   logged in across browser restarts — essential for offline use. */
+try{
+  await setPersistence(auth, indexedDBLocalPersistence);
+}catch(e){
+  console.warn('Auth persistence (primary) — falling back to browserLocalPersistence:',e);
+  // Last-resort fallback: in-memory persistence (no offline login, but no crash)
+  try{await setPersistence(auth, browserLocalPersistence);}catch(e2){
+    console.warn('Auth persistence fallback failed:',e2);
+  }
+}
+try{
+  await setPersistence(secAuth, indexedDBLocalPersistence);
+}catch(e){
+  try{await setPersistence(secAuth, browserLocalPersistence);}catch(e2){}
+}
 
-/* NOTE: We no longer delete firebase:authUser: entries from localStorage.
-   Those entries ARE the cached login that makes offline use possible. */
+/* NOTE: Auth persistence is set ABOVE using indexedDBLocalPersistence,
+   which avoids the localStorage quota error. The auth state is now stored
+   in IndexedDB (large quota) instead of localStorage (tiny quota). */
 
 /* ===== OFFLINE SESSION RESTORATION =====
-   If the user was previously logged in, Firebase Auth (with localPersistence)
-   can restore their session from localStorage WITHOUT needing a network
-   connection. This listener fires on page load and:
+   If the user was previously logged in, Firebase Auth (with
+   indexedDBLocalPersistence) can restore their session from IndexedDB
+   WITHOUT needing a network connection. This listener fires on page load and:
    1. If a cached user exists, loads their profile from Firestore cache
    2. If offline and profile is in cache, logs them in automatically
    3. If offline and profile is NOT in cache, shows a helpful message
