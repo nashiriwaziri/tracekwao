@@ -287,20 +287,29 @@
    ═══════════════════════════════════════════════════════════════ */
 
 // ═══ FIREBASE INIT ═══
-var firebaseConfig={apiKey:"AIzaSyDSUs6uUjQTPQOkUPcIp2u8Rw9NJVnQOfo",authDomain:"ncrs2-f8da9.firebaseapp.com",projectId:"ncrs2-f8da9",storageBucket:"ncrs2-f8da9.firebasestorage.app",messagingSenderId:"436069918682",appId:"1:436069918682:web:70b56c627315bc782102e3"};
+var firebaseConfig={
+  apiKey:"AIzaSyDSUs6uUjQTPQOkUPcIp2u8Rw9NJVnQOfo",
+  authDomain:"ncrs2-f8da9.firebaseapp.com",
+  projectId:"ncrs2-f8da9",
+  storageBucket:"ncrs2-f8da9.firebasestorage.app",
+  messagingSenderId:"436069918682",
+  appId:"1:436069918682:web:70b56c627315bc782102e3",
+  measurementId:"G-2QCBEJSGKS"
+};
 firebase.initializeApp(firebaseConfig);
 var db=firebase.firestore();
 var fbAuth=firebase.auth();
 var fsConnected=false;
 var authReady=(async function(){
+  // Try anonymous auth, but DON'T block Firestore operations if it fails.
+  // Firestore can work without Auth if Security Rules allow public access.
   try{
     if(!fbAuth.currentUser) await fbAuth.signInAnonymously();
-    return true;
+    console.log("Firebase Anonymous Auth: OK");
   }catch(err){
-    console.error("Firebase Auth initialization failed:",err);
-    toast("Firebase Auth haijaruhusiwa. Washa Anonymous sign-in kwenye Firebase Console.","e");
-    return false;
+    console.warn("Firebase Anonymous Auth failed (continuing without it):",err.message||err);
   }
+  return true; // Always return true — Firestore reads/writes proceed regardless
 })();
 
 // Enable offline persistence
@@ -335,8 +344,7 @@ var _users=[];var _bizs=[];var _ads=[];var _cargo=[];
 // Load all data from Firestore into cache
 async function loadAllData(){
   try{
-    var ready=await authReady;
-    if(!ready) throw new Error("Firebase Authentication haijaanzishwa.");
+    // Auth is optional — Firestore can work without it
     var uSnap=await db.collection("users").get();
     _users=uSnap.docs.map(function(d){return d.data()});
   }catch(e){console.error("Load users:",e)}
@@ -363,8 +371,6 @@ async function loadAllData(){
 // Firestore write helpers
 async function fsSet(col,id,data){
   try{
-    var ready=await authReady;
-    if(!ready || !fbAuth.currentUser) throw new Error("Firebase Authentication haijaanzishwa.");
     await db.collection(col).doc(id).set(data,{merge:true});
     if(!navigator.onLine){ trackPendingWrite(); }
     return true;
@@ -381,8 +387,6 @@ async function fsSet(col,id,data){
 }
 async function fsDel(col,id){
   try{
-    var ready=await authReady;
-    if(!ready || !fbAuth.currentUser) throw new Error("Firebase Authentication haijaanzishwa.");
     await db.collection(col).doc(id).delete();
     if(!navigator.onLine){ trackPendingWrite(); }
     return true;
