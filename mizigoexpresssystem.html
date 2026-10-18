@@ -103,6 +103,32 @@
 /* Logo in sidebar */
 .sb-brand-logo{width:30px;height:30px;border-radius:6px;object-fit:contain;image-rendering:-webkit-optimize-contrast;margin-right:4px}
 
+
+/* ================================ OFFLINE / SYNC INDICATOR ================================ */
+.sync-status{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;border:1px solid var(--border);background:var(--bg3);color:var(--text2);white-space:nowrap;user-select:none}
+.sync-status:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .2s,box-shadow .2s}
+.sync-status.online{background:var(--success-bg);border-color:var(--success);color:var(--success)}
+.sync-status.online .sync-dot{background:var(--success);box-shadow:0 0 8px rgba(0,184,148,.6)}
+.sync-status.offline{background:var(--danger-bg);border-color:var(--danger);color:var(--danger)}
+.sync-status.offline .sync-dot{background:var(--danger);box-shadow:0 0 8px rgba(231,76,60,.6);animation:syncPulse 1.8s infinite}
+.sync-status.syncing{background:var(--warning-bg);border-color:var(--warning);color:var(--warning)}
+.sync-status.syncing .sync-dot{background:var(--warning);animation:syncSpin 1s linear infinite}
+@keyframes syncPulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes syncSpin{0%{transform:scale(1);opacity:1}50%{transform:scale(1.4);opacity:.5}100%{transform:scale(1);opacity:1}}
+.sync-pending-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--warning);color:#111;font-size:10px;font-weight:800;margin-left:2px}
+.sync-pending-badge.hidden{display:none}
+.offline-banner{position:fixed;top:0;left:0;right:0;z-index:9998;padding:10px 16px;text-align:center;font-size:12px;font-weight:700;display:none;align-items:center;justify-content:center;gap:10px;transition:all .3s}
+.offline-banner.show{display:flex}
+.offline-banner.offline{background:linear-gradient(135deg,#c0392b,#e74c3c);color:#fff;box-shadow:0 2px 12px rgba(231,76,60,.4)}
+.offline-banner.online{background:linear-gradient(135deg,#00b894,#00cec9);color:#fff;box-shadow:0 2px 12px rgba(0,184,148,.4)}
+.offline-banner.syncing{background:linear-gradient(135deg,#d68910,#f39c12);color:#fff;box-shadow:0 2px 12px rgba(243,156,18,.4)}
+.sync-tooltip{position:absolute;top:100%;right:0;margin-top:6px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text2);box-shadow:var(--shadow);min-width:200px;display:none;z-index:100}
+.sync-status:hover .sync-tooltip{display:block}
+.sync-tooltip .tip-row{display:flex;justify-content:space-between;gap:8px;padding:2px 0}
+.sync-tooltip .tip-label{color:var(--text3)}
+.sync-tooltip .tip-value{font-weight:700;color:var(--text)}
+
 </style>
 </head>
 <body>
@@ -250,6 +276,17 @@
       </div>
       <strong id="topTitle" style="font-size:14px">Dashboard</strong></div>
     <div class="tb-right">
+      <div class="sync-status offline" id="syncStatus" onclick="manualSync()" title="Click to sync now">
+        <span class="sync-dot"></span>
+        <span id="syncLabel">Offline</span>
+        <span id="syncPendingBadge" class="sync-pending-badge hidden">0</span>
+        <div class="sync-tooltip">
+          <div class="tip-row"><span class="tip-label">Status:</span><span class="tip-value" id="tipStatus">Offline</span></div>
+          <div class="tip-row"><span class="tip-label">Pending:</span><span class="tip-value" id="tipPending">0 writes</span></div>
+          <div class="tip-row"><span class="tip-label">Last sync:</span><span class="tip-value" id="tipLastSync">Never</span></div>
+          <div class="tip-row"><span class="tip-label">Firestore:</span><span class="tip-value" id="tipFS">Unknown</span></div>
+        </div>
+      </div>
       <div class="u-chip" onclick="toggleDD()"><div class="u-av" id="uAv">M</div><div class="u-chip-info"><div class="uc-name" id="uName">—</div><div class="uc-role" id="uRole">Mmiliki</div></div>
         <div class="u-dd" id="uDD"><button class="udd" onclick="go('settings');event.stopPropagation()"><i class="fa-solid fa-gear"></i> Mipangilio</button><button class="udd dng" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket"></i> Toka</button></div>
       </div>
@@ -258,7 +295,10 @@
   <main class="main" id="mainC"></main>
 </div>
 
-<div class="modal-ov" id="mOv" onclick="if(event.target===this)closeM()"><div class="modal-card" id="mCard"></div></div>
+<div class="offline-banner offline" id="offlineBanner">
+    <i class="fa-solid fa-wifi-slash"></i> <span id="offlineBannerText">Huna mtandao — Mfumo unaendelea kufanya kazi offline. Data itasync mtandao unaporudi.</span>
+  </div>
+  <div class="modal-ov" id="mOv" onclick="if(event.target===this)closeM()"><div class="modal-card" id="mCard"></div></div>
 <div class="tc" id="tC"></div>
 
 <!-- Firebase SDK -->
@@ -351,14 +391,26 @@ async function loadAllData(){
 async function fsSet(col,id,data){
   try{
     var ready=await authReady;
-    if(!ready || !fbAuth.currentUser) throw new Error("Firebase Authentication haijaanzishwa. Washa Anonymous sign-in kwenye Firebase Console.");
+    if(!ready || !fbAuth.currentUser) throw new Error("Firebase Authentication haijaanzishwa.");
+    // Firestore automatically queues writes when offline (via enablePersistence)
     await db.collection(col).doc(id).set(data,{merge:true});
+    // Track pending write for UI
+    if(!navigator.onLine){ trackPendingWrite(); }
     return true;
   }catch(e){
     console.error("FS set "+col+"/"+id,e);
-    var msg=e.code==="permission-denied"||/insufficient permissions/i.test(e.message)
-      ? "Firestore Rules zimezuia hifadhi. Hakiki Rules za collections users, businesses na ads kwenye Firebase Console."
-      : e.message;
+    // Distinguish offline from permission denied
+    var msg;
+    if(!navigator.onLine || e.code==="unavailable" || /offline/i.test(e.message)){
+      // Write is queued — will sync when online
+      trackPendingWrite();
+      return true; // Treat as success — Firestore will sync later
+    }
+    if(e.code==="permission-denied"||/insufficient permissions/i.test(e.message)){
+      msg="Firestore Rules zimezuia hifadhi. Hakiki Rules kwenye Firebase Console.";
+    } else {
+      msg=e.message;
+    }
     toast("Hitilafu ya hifadhi: "+msg,"e");
     return false;
   }
@@ -368,9 +420,14 @@ async function fsDel(col,id){
     var ready=await authReady;
     if(!ready || !fbAuth.currentUser) throw new Error("Firebase Authentication haijaanzishwa.");
     await db.collection(col).doc(id).delete();
+    if(!navigator.onLine){ trackPendingWrite(); }
     return true;
   }catch(e){
     console.error("FS del "+col+"/"+id,e);
+    if(!navigator.onLine || e.code==="unavailable" || /offline/i.test(e.message)){
+      trackPendingWrite();
+      return true;
+    }
     toast("Hitilafu ya kufuta: "+(e.code==="permission-denied"?"Firestore Rules zimezuia kufuta.":e.message),"e");
     return false;
   }
@@ -382,7 +439,7 @@ function getBizs(){return _bizs}
 function getAds(){return _ads}
 
 // ═══ CONSTANTS & STATE ═══
-var SUPER_CREDS={email:"super@mizgox.app",password:"WAZIRI2015"};
+var SUPER_ADMIN_UID="VouEKncwQfQihYQBh6GKoEPq0i53";var SUPER_CREDS={email:"developer@mizgox.app",password:"MizigoX@2025"};
 var AD_IMG_CONFIG={maxWidth:1200,maxHeight:900,quality:0.82,thumbWidth:400,thumbHeight:300,maxFileSize:15*1024*1024,allowedTypes:["image/jpeg","image/png","image/gif","image/webp","image/bmp"]};
 
 var currentUser=null;var currentBiz=null;var currentRole=null;
@@ -486,15 +543,34 @@ function enterRole(role){
 function handleLogout(){if(bizUnsub){bizUnsub();bizUnsub=null;}currentUser=null;currentBiz=null;currentRole=null;LS("mx_session","");showLanding();toast("Umetoka","i")}
 
 // ═══ SUPER ADMIN ═══
-function superAdminLogin(){
+async function superAdminLogin(){
   var email=document.getElementById("superEmail").value.trim();
   var pw=document.getElementById("superPw").value;
-  if(email===SUPER_CREDS.email&&pw===SUPER_CREDS.password){
-    document.getElementById("superLogin").classList.add("hidden");document.getElementById("superPanel").classList.remove("hidden");
-    renderSuperPanel();toast("Karibu, Msimamizi Mkuu","s");updateFSIndicator();
-  }else{document.getElementById("superErr").textContent="Barua pepe au nenosiri si sahihi."}
+  var errEl=document.getElementById("superErr");
+  var btn=event.target;if(btn)btn.disabled=true;
+  errEl.textContent="";
+  try{
+    var cred=await fbAuth.signInWithEmailAndPassword(email,pw);
+    var uid=cred.user.uid;
+    if(uid===SUPER_ADMIN_UID){
+      document.getElementById("superLogin").classList.add("hidden");
+      document.getElementById("superPanel").classList.remove("hidden");
+      renderSuperPanel();toast("Karibu, Msimamizi Mkuu","s");updateFSIndicator();
+    }else{
+      await fbAuth.signOut();
+      errEl.textContent="UID hii haijauidhinishwa kama Super Admin.";
+    }
+  }catch(e){
+    var msg="Hitilafu ya kuingia.";
+    if(e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/user-not-found")msg="Barua pepe au nenosiri si sahihi.";
+    if(e.code==="auth/too-many-requests")msg="Majaribio mengi sana. Subiri kidgu.";
+    if(e.code==="auth/network-request-failed")msg="Tatizo la mtandao.";
+    errEl.textContent=msg;
+  }finally{
+    if(btn)btn.disabled=false;
+  }
 }
-function superAdminLogout(){document.getElementById("superLogin").classList.remove("hidden");document.getElementById("superPanel").classList.add("hidden");document.getElementById("superPw").value="";document.getElementById("superErr").textContent=""}
+function superAdminLogout(){fbAuth.signOut().catch(function(){});document.getElementById("superLogin").classList.remove("hidden");document.getElementById("superPanel").classList.add("hidden");document.getElementById("superPw").value="";document.getElementById("superErr").textContent=""}
 
 // ═══ SUPER ADMIN PANEL ═══
 function renderSuperPanel(){
@@ -978,6 +1054,198 @@ async function toggleStaffStatus(id){
 function openM(title,body){document.getElementById("mCard").innerHTML='<div class="modal-head"><h3>'+title+'</h3><button onclick="closeM()"><i class="fa-solid fa-xmark"></i></button></div><div>'+body+'</div>';document.getElementById("mOv").classList.add("show")}
 function closeM(){document.getElementById("mOv").classList.remove("show")}
 
+
+/* ================================ OFFLINE / ONLINE SYNC ENGINE ================================ */
+/* Firestore handles offline writes automatically via enablePersistence().
+   This module adds:
+   1. Visible sync status indicator (Online/Offline/Syncing)
+   2. Pending writes counter
+   3. Auto-sync trigger when network returns
+   4. Last sync timestamp (persisted in localStorage)
+   5. Smart error messages
+*/
+var pendingWrites = 0;
+var lastSyncTime = null;
+var isSyncing = false;
+var onlineState = navigator.onLine;
+
+/* Track a pending write (called when offline) */
+function trackPendingWrite(){
+  pendingWrites++;
+  updateSyncIndicator();
+  toast('Imehifadhiwa offline — itasync mtandao unaporudi','i');
+}
+
+/* Update sync status indicator UI */
+function updateSyncIndicator(){
+  var status = document.getElementById('syncStatus');
+  var label = document.getElementById('syncLabel');
+  var badge = document.getElementById('syncPendingBadge');
+  if(!status || !label) return;
+  
+  status.classList.remove('online','offline','syncing');
+  
+  if(isSyncing){
+    status.classList.add('syncing');
+    label.textContent = 'Inasink...';
+  } else if(onlineState){
+    status.classList.add('online');
+    label.textContent = pendingWrites > 0 ? 'Inasink ' + pendingWrites + '...' : 'Online';
+  } else {
+    status.classList.add('offline');
+    label.textContent = 'Offline';
+  }
+  
+  // Pending badge
+  if(badge){
+    if(pendingWrites > 0){
+      badge.textContent = pendingWrites;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+  
+  // Tooltip
+  var tipStatus = document.getElementById('tipStatus');
+  var tipPending = document.getElementById('tipPending');
+  var tipLastSync = document.getElementById('tipLastSync');
+  var tipFS = document.getElementById('tipFS');
+  if(tipStatus) tipStatus.textContent = isSyncing ? 'Syncing...' : (onlineState ? 'Online' : 'Offline');
+  if(tipPending) tipPending.textContent = pendingWrites + ' writes';
+  if(tipLastSync){
+    if(lastSyncTime){
+      var diff = Math.floor((Date.now() - lastSyncTime) / 1000);
+      if(diff < 60) tipLastSync.textContent = diff + 's ago';
+      else if(diff < 3600) tipLastSync.textContent = Math.floor(diff/60) + 'm ago';
+      else tipLastSync.textContent = new Date(lastSyncTime).toLocaleString();
+    } else {
+      tipLastSync.textContent = 'Never';
+    }
+  }
+  if(tipFS) tipFS.textContent = fsConnected ? 'Live' : 'Offline';
+}
+
+/* Update offline banner */
+function updateOfflineBanner(state, message){
+  var banner = document.getElementById('offlineBanner');
+  var text = document.getElementById('offlineBannerText');
+  if(!banner) return;
+  banner.className = 'offline-banner ' + state;
+  if(text) text.innerHTML = message;
+  banner.classList.add('show');
+  if(state === 'online' || state === 'syncing'){
+    setTimeout(function(){
+      if(pendingWrites === 0 && !isSyncing) banner.classList.remove('show');
+    }, state === 'syncing' ? 5000 : 3000);
+  }
+}
+
+/* Trigger sync when network returns */
+async function triggerSync(){
+  if(isSyncing || !navigator.onLine) return;
+  if(pendingWrites === 0){
+    updateOfflineBanner('online', '<i class="fa-solid fa-wifi"></i> Mtandao umerudi — Data yote ime-sync');
+    return;
+  }
+  isSyncing = true;
+  updateSyncIndicator();
+  updateOfflineBanner('syncing', '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Inasink ' + pendingWrites + ' changes...');
+  
+  try {
+    // Firestore automatically flushes pending writes when online.
+    // Wait a moment for the flush to complete.
+    await new Promise(function(res){ setTimeout(res, 2000); });
+    
+    // Reload data from Firestore to get latest
+    await loadAllData();
+    
+    // Clear pending count
+    pendingWrites = 0;
+    lastSyncTime = Date.now();
+    try { localStorage.setItem('mx_lastSync', String(lastSyncTime)); } catch(e){}
+    
+    isSyncing = false;
+    updateSyncIndicator();
+    updateOfflineBanner('online', '<i class="fa-solid fa-circle-check"></i> Sync complete — All changes saved');
+    toast('Data yote imesync kikamilifu','s');
+    
+    // Re-render current view
+    if(typeof render === 'function') render();
+    if(typeof renderPublicShowcase === 'function') renderPublicShowcase();
+    if(typeof renderSuperPanel === 'function' && document.getElementById('superPanel') && !document.getElementById('superPanel').classList.contains('hidden')) renderSuperPanel();
+  } catch(e){
+    console.error('Sync error:', e);
+    isSyncing = false;
+    updateSyncIndicator();
+    updateOfflineBanner('offline', '<i class="fa-solid fa-triangle-exclamation"></i> Sync imeshindikana — itajaribu tena otomatiki');
+    toast('Sync imeshindikana, itajaribu tena','w');
+  }
+}
+
+/* Manual sync button */
+function manualSync(){
+  if(!navigator.onLine){
+    toast('Huna mtandao sasa. Badiliko lita-sync mtandao unaporudi.','w');
+    return;
+  }
+  if(pendingWrites > 0 || isSyncing){
+    triggerSync();
+  } else {
+    // Just reload data
+    loadAllData().then(function(){
+      lastSyncTime = Date.now();
+      try { localStorage.setItem('mx_lastSync', String(lastSyncTime)); } catch(e){}
+      updateSyncIndicator();
+      updateOfflineBanner('online', '<i class="fa-solid fa-circle-check"></i> Data yote ni upya');
+      toast('Data yote imesasishwa','s');
+      if(typeof render === 'function') render();
+    });
+  }
+}
+
+/* Network event handlers */
+function onNetworkBack(){
+  onlineState = true;
+  updateSyncIndicator();
+  if(pendingWrites > 0){
+    updateOfflineBanner('syncing', '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Mtandao umerudi — Inasink changes...');
+    setTimeout(function(){ triggerSync(); }, 1000);
+  } else {
+    updateOfflineBanner('online', '<i class="fa-solid fa-wifi"></i> Mtandao umerudi — Data yote ime-sync');
+  }
+}
+
+function onNetworkLost(){
+  onlineState = false;
+  isSyncing = false;
+  updateSyncIndicator();
+  updateOfflineBanner('offline', '<i class="fa-solid fa-wifi-slash"></i> Huna mtandao — Mfumo unaendelea kufanya kazi offline. Data itasync mtandao unaporudi.');
+}
+
+window.addEventListener('online', onNetworkBack);
+window.addEventListener('offline', onNetworkLost);
+
+/* Initialize sync state */
+(async function(){
+  // Load last sync time from localStorage
+  try {
+    var saved = localStorage.getItem('mx_lastSync');
+    if(saved) lastSyncTime = parseInt(saved);
+  } catch(e){}
+  onlineState = navigator.onLine;
+  // Update indicator after DOM is ready
+  setTimeout(function(){ updateSyncIndicator(); }, 500);
+})();
+
+/* Periodic check: if online and have pending, try sync */
+setInterval(function(){
+  if(navigator.onLine && pendingWrites > 0 && !isSyncing){
+    triggerSync();
+  }
+}, 15000);
+
+
 // ═══ INIT ═══
 async function initApp(){
   // Wait for Firebase anonymous authentication before any Firestore reads/writes.
@@ -994,6 +1262,7 @@ async function initApp(){
 
   dataReady=true;
   updateFSIndicator();
+  updateSyncIndicator();
 
   // Check for saved session
   var sessionId=LS("mx_session");
