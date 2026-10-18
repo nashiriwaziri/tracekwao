@@ -1082,6 +1082,34 @@ img {
   transition: transform .2s ease;
 }
 
+
+/* ================================ MEETING CARDS ================================ */
+.meeting-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.meeting-card {
+  transition: all .2s;
+}
+.meeting-card:hover {
+  border-color: var(--p);
+  box-shadow: 0 4px 18px rgba(0,0,0,.15);
+}
+.meeting-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meeting-card .badge {
+  font-size: 9px;
+  padding: 3px 9px;
+}
+.meeting-card .badge.held { background: #0b3a2c; color: #55e1ae; }
+.meeting-card .badge.scheduled { background: #0c2d4a; color: #60a5fa; }
+.meeting-card .badge.cancelled { background: #40151a; color: #ff7b85; }
+.meeting-card .badge.postponed { background: #3c2b08; color: #ffc857; }
+
 </style>
 
 </head>
@@ -4260,13 +4288,18 @@ const MODULE_SCHEMAS = {
     {key:'reason',label:'Reason',type:'text',group:'Welfare'}
   ], duplicateKeys:['memberName','date','amount','type'], defaults:{ type:'DEPOSIT' } },
   meetings: { label:'Meetings', icon:'fa-calendar-check', collection:'meetings', requiresChair:true, fields:[
-    {key:'title',label:'Title',type:'text',required:true,group:'Meeting'},
-    {key:'date',label:'Date',type:'date',required:true,group:'Meeting'},
-    {key:'location',label:'Location',type:'text',group:'Meeting'},
-    {key:'attendance',label:'Attendance Count',type:'number',group:'Meeting'},
+    {key:'title',label:'Meeting Title',type:'text',required:true,group:'Meeting'},
+    {key:'date',label:'Meeting Date',type:'date',required:true,group:'Meeting'},
+    {key:'location',label:'Meeting Location/Venue',type:'text',required:true,group:'Meeting'},
     {key:'agenda',label:'Agenda',type:'text',group:'Meeting'},
-    {key:'minutes',label:'Minutes',type:'text',group:'Meeting'},
-    {key:'status',label:'Status',type:'text',group:'Meeting',enum:['SCHEDULED','HELD','CANCELLED']}
+    {key:'attendanceCount',label:'Attendance Count',type:'number',group:'Attendance'},
+    {key:'attendees',label:'Attendees (Names)',type:'text',group:'Attendance'},
+    {key:'attendanceFile',label:'Attendance File (PDF/Image)',type:'file',group:'Attendance'},
+    {key:'summary',label:'Meeting Summary (Muhtasari)',type:'text',group:'Summary'},
+    {key:'summaryFile',label:'Summary File (PDF/Image/Doc)',type:'file',group:'Summary'},
+    {key:'minutes',label:'Minutes',type:'text',group:'Summary'},
+    {key:'chairpersonNotes',label:'Chairperson Notes',type:'text',group:'Summary'},
+    {key:'status',label:'Status',type:'text',group:'Meeting',enum:['SCHEDULED','HELD','CANCELLED','POSTPONED']}
   ], duplicateKeys:['title','date'], defaults:{ status:'SCHEDULED' } },
   cashbook: { label:'Income & Expense', icon:'fa-receipt', collection:'cashbook', requiresChair:true, fields:[
     {key:'type',label:'Type (INCOME/EXPENSE)',type:'text',required:true,group:'Cashbook',enum:['INCOME','EXPENSE']},
@@ -4716,7 +4749,86 @@ function renderRepayments(){let _ab='';try{_ab=moduleActionBar('repayments',CR==
 
 function renderWelfare(){return renderFinSection('welfare','Welfare',WC,['memberName','type','amount','date'],['Member','Type','Amount','Date'],CR==='chair');}
 
-function renderMeetings(){return renderFinSection('meetings','Meetings',MTC,['title','date','location'],['Title','Date','Location'],CR==='chair');}
+function renderMeetings(){
+  let _ab='';
+  try{_ab=moduleActionBar('meetings',CR==='chair',MTC.length);}catch(e){console.warn('moduleActionBar failed',e);}
+  const sorted = MTC.slice().sort((a,b) => {
+    const da = a.date || a.createdAt?.seconds || 0;
+    const db = b.date || b.createdAt?.seconds || 0;
+    return String(db).localeCompare(String(da));
+  });
+  return `
+    ${_ab}
+    <div class="section-head">
+      <h2><i class="fa-solid fa-calendar-check"></i> Meetings & Summaries</h2>
+      ${CR==='chair'?`<button class="btn primary btn-sm" onclick="openMeetingForm()"><i class="fa-solid fa-plus"></i> New Meeting</button>`:''}
+    </div>
+    <div class="card" style="margin-bottom:14px;padding:12px 16px">
+      <div class="small"><i class="fa-solid fa-circle-info" style="color:var(--blue)"></i> <b>Meetings Module:</b> Chairperson can upload Meeting Summary (Muhtasari) and Attendance files. All members can view and download meeting summaries as PDF.</div>
+    </div>
+    ${sorted.length ? `
+      <div class="meeting-list">
+        ${sorted.map(m => renderMeetingCard(m)).join('')}
+      </div>
+    ` : '<div class="card" style="text-align:center;padding:40px"><i class="fa-solid fa-calendar-xmark" style="font-size:48px;color:var(--muted);display:block;margin-bottom:14px"></i><p class="small">No meetings recorded yet. Click "New Meeting" to create the first one.</p></div>'}
+  `;
+}
+
+/* Render a single meeting as a card with summary/attendance files */
+function renderMeetingCard(m){
+  const hasSummaryFile = !!(m.summaryFile && m.summaryFileData);
+  const hasAttendanceFile = !!(m.attendanceFile && m.attendanceFileData);
+  const hasSummaryText = !!(m.summary && m.summary.trim());
+  const hasAttendees = !!(m.attendees && m.attendees.trim());
+  const statusClass = (m.status||'SCHEDULED').toLowerCase();
+  const isChair = CR === 'chair';
+  return `
+    <div class="card meeting-card" style="margin-bottom:14px;border-left:4px solid var(--p)">
+      <div class="flex-between wrap" style="margin-bottom:10px">
+        <div style="flex:1;min-width:0">
+          <h3 style="margin:0 0 4px;font-size:16px"><i class="fa-solid fa-calendar-day" style="color:var(--p2)"></i> ${escHTML(m.title || 'Untitled Meeting')}</h3>
+          <div class="small" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">
+            <span><i class="fa-solid fa-calendar"></i> <b>Date:</b> ${fD(m.date || m.createdAt)}</span>
+            <span><i class="fa-solid fa-location-dot"></i> <b>Venue:</b> ${escHTML(m.location || 'N/A')}</span>
+            ${m.attendanceCount ? `<span><i class="fa-solid fa-users"></i> <b>Attended:</b> ${m.attendanceCount}</span>` : ''}
+          </div>
+        </div>
+        <div class="flex gap-sm wrap" style="align-items:flex-start">
+          <span class="badge ${statusClass==='held'?'ok':statusClass==='cancelled'?'bad':statusClass==='postponed'?'warn':'info-b'}">${m.status || 'SCHEDULED'}</span>
+        </div>
+      </div>
+      ${m.agenda ? `<div style="margin:8px 0;padding:8px 12px;background:var(--panel2);border-radius:8px;border-left:3px solid var(--blue)"><b style="font-size:11px;color:var(--muted)">AGENDA</b><div class="small" style="margin-top:4px">${escHTML(m.agenda)}</div></div>` : ''}
+      ${hasSummaryText ? `<div style="margin:8px 0;padding:8px 12px;background:rgba(22,169,121,.05);border-radius:8px;border-left:3px solid var(--p)"><b style="font-size:11px;color:var(--p2)"><i class="fa-solid fa-file-lines"></i> MUHTASARI (SUMMARY)</b><div class="small" style="margin-top:4px;white-space:pre-wrap">${escHTML(m.summary)}</div></div>` : ''}
+      ${hasAttendees ? `<div style="margin:8px 0;padding:8px 12px;background:var(--panel2);border-radius:8px;border-left:3px solid var(--purple)"><b style="font-size:11px;color:var(--purple)"><i class="fa-solid fa-user-check"></i> WALIOHUDHURIA (ATTENDEES)</b><div class="small" style="margin-top:4px;white-space:pre-wrap">${escHTML(m.attendees)}</div></div>` : ''}
+      ${m.chairpersonNotes ? `<div style="margin:8px 0;padding:8px 12px;background:rgba(245,158,11,.05);border-radius:8px;border-left:3px solid var(--yellow)"><b style="font-size:11px;color:var(--yellow)"><i class="fa-solid fa-user-tie"></i> CHAIRPERSON NOTES</b><div class="small" style="margin-top:4px">${escHTML(m.chairpersonNotes)}</div></div>` : ''}
+      <!-- Files section -->
+      ${(hasSummaryFile || hasAttendanceFile) ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);display:flex;gap:8px;flex-wrap:wrap">
+          ${hasSummaryFile ? `
+            <button class="btn info btn-sm" onclick="viewMeetingFile('${m.id}','summary')"><i class="fa-solid fa-file-pdf"></i> View Summary File</button>
+            <button class="btn outline btn-sm" onclick="downloadMeetingFile('${m.id}','summary')"><i class="fa-solid fa-download"></i> Download Summary</button>
+          ` : ''}
+          ${hasAttendanceFile ? `
+            <button class="btn purple btn-sm" onclick="viewMeetingFile('${m.id}','attendance')"><i class="fa-solid fa-users-viewfinder"></i> View Attendance File</button>
+            <button class="btn outline btn-sm" onclick="downloadMeetingFile('${m.id}','attendance')"><i class="fa-solid fa-download"></i> Download Attendance</button>
+          ` : ''}
+        </div>
+      ` : ''}
+      <!-- Actions -->
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="btn outline btn-sm" onclick="viewMeetingDetails('${m.id}')"><i class="fa-solid fa-eye"></i> View Details</button>
+        <button class="btn info btn-sm" onclick="downloadMeetingPDF('${m.id}')"><i class="fa-solid fa-file-pdf"></i> Download PDF</button>
+        ${isChair ? `
+          <button class="btn primary btn-sm" onclick="editMeeting('${m.id}')"><i class="fa-solid fa-pen"></i> Edit</button>
+          ${hasSummaryFile || hasAttendanceFile ? '' : `<button class="btn outline btn-sm" onclick="uploadMeetingFiles('${m.id}')"><i class="fa-solid fa-upload"></i> Upload Files</button>`}
+          ${hasSummaryFile ? `<button class="btn outline btn-sm" onclick="uploadMeetingFiles('${m.id}','summary')"><i class="fa-solid fa-pen"></i> Update Summary File</button>` : ''}
+          ${hasAttendanceFile ? `<button class="btn outline btn-sm" onclick="uploadMeetingFiles('${m.id}','attendance')"><i class="fa-solid fa-pen"></i> Update Attendance File</button>` : ''}
+          <button class="btn danger btn-sm" onclick="deleteMeeting('${m.id}')"><i class="fa-solid fa-trash"></i></button>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
 
 function renderExpenses(){return renderFinSection('cashbook','Income & Expense',CC,['type','category','amount','date'],['Type','Category','Amount','Date'],CR==='chair');}
 
@@ -6824,6 +6936,7 @@ function renderModuleImportWizard(){
         <div class="provider-note" style="margin-bottom:12px">
           <i class="fa-solid ${schema.icon}"></i>
           Importing into: <b>${schema.label}</b> (${moduleImportState.modKey})
+          ${moduleImportState.modKey === 'meetings' ? '<br><br><i class="fa-solid fa-info-circle"></i> <b>Import Words:</b> You can import meetings from a text/CSV file or type/paste meeting details directly. Excel/CSV files are also supported — column names are auto-detected.' : ''}
         </div>
         <div class="import-dropzone" onclick="clickById('moduleImportFileInput')">
           <i class="fa-solid fa-cloud-arrow-up"></i>
@@ -8991,7 +9104,7 @@ function moduleActionBar(modKey, canAdd, recordCount){
       <span class="ab-count">${recordCount||0} records</span>
       <span class="ab-spacer"></span>
       ${isChair && canAdd ? `<button class="btn primary btn-sm" onclick="openModuleAddForm('${modKey}')"><i class="fa-solid fa-plus"></i> Add</button>` : ''}
-      ${isChair && canAdd ? `<button class="btn info btn-sm" onclick="openModuleImport('${modKey}')"><i class="fa-solid fa-file-excel"></i> Import Excel</button>` : ''}
+      ${isChair && canAdd ? `<button class="btn info btn-sm" onclick="openModuleImport('${modKey}')"><i class="fa-solid ${modKey === 'meetings' ? 'fa-file-import' : 'fa-file-excel'}"></i> ${modKey === 'meetings' ? 'Import Words' : 'Import Excel'}</button>` : ''}
       ${isChair && canAdd ? `<button class="btn outline btn-sm" onclick="downloadModuleTemplate('${modKey}')"><i class="fa-solid fa-download"></i> Template</button>` : ''}
       <button class="btn outline btn-sm" onclick="exportModuleExcel('${modKey}','xlsx')"><i class="fa-solid fa-file-excel"></i> Export Excel</button>
       <button class="btn outline btn-sm" onclick="exportModuleExcel('${modKey}','csv')"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
@@ -9265,6 +9378,431 @@ function getCacheBustedLogoUrl(url){
   const sep = url.includes('?') ? '&' : '?';
   return url + sep + 'v=' + (CG?.logoUpdatedAt?.seconds || Date.now());
 }
+
+/* ================================ MEETING FUNCTIONS (Chairperson + Members) ================================ */
+
+/* Open the New Meeting form (Chairperson only) */
+window.openMeetingForm = () => {
+  if(CR !== 'chair') return showToast('Only the Chairperson can create meetings','error');
+  $('formModalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus" style="color:var(--p2)"></i> New Meeting';
+  const memberCheckboxes = MC.map(m => `<label style="display:flex;align-items:center;gap:6px;font-size:11px;padding:4px 8px;background:var(--panel2);border-radius:6px;border:1px solid var(--line);cursor:pointer"><input type="checkbox" value="${m.id}" data-name="${escHTML((m.firstName||'')+' '+(m.lastName||''))}" data-nida="${m.nida||''}"> ${escHTML((m.firstName||'')+' '+(m.middleName||'')+' '+(m.lastName||''))}</label>`).join('');
+  $('formModalBody').innerHTML = `
+    <form id="meetingForm" autocomplete="off">
+      <div class="provider-note" style="margin-bottom:12px"><i class="fa-solid fa-shield-halved"></i> Chairperson can record meeting details, upload Muhtasari (summary) and attendance files. All members will be able to view and download them.</div>
+      <div class="field"><label>Meeting Title *</label><input id="mtTitle" required placeholder="e.g. Monthly Meeting - January 2026"></div>
+      <div class="row2">
+        <div class="field"><label>Meeting Date *</label><input id="mtDate" type="date" required value="${today()}"></div>
+        <div class="field"><label>Meeting Location / Venue *</label><input id="mtLocation" required placeholder="e.g. Office ya Kikundi, Dar es Salaam"></div>
+      </div>
+      <div class="field"><label>Agenda (Ajenda)</label><textarea id="mtAgenda" rows="3" placeholder="Maada ya kikao..."></textarea></div>
+      <div class="field"><label>Meeting Summary / Muhtasari wa Kikao</label><textarea id="mtSummary" rows="5" placeholder="Andika muhtasari wa kikao hapa..."></textarea></div>
+      <div class="field"><label>Waliohudhuria (Attendees Names)</label>
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <button type="button" class="btn outline btn-sm" onclick="document.querySelectorAll('#mtAttendeesCheckboxes input').forEach(c=>c.checked=true)"><i class="fa-solid fa-check-double"></i> Select All</button>
+          <button type="button" class="btn outline btn-sm" onclick="document.querySelectorAll('#mtAttendeesCheckboxes input').forEach(c=>c.checked=false)"><i class="fa-solid fa-xmark"></i> Clear</button>
+        </div>
+        <div id="mtAttendeesCheckboxes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;max-height:200px;overflow-y:auto;padding:8px;background:var(--panel2);border-radius:8px;border:1px solid var(--line)">${memberCheckboxes}</div>
+      </div>
+      <div class="field"><label>Chairperson Notes (Maelezo ya Mwenyekiti)</label><textarea id="mtNotes" rows="2" placeholder="Optional"></textarea></div>
+      <div class="field"><label>Status</label><select id="mtStatus"><option value="SCHEDULED">SCHEDULED</option><option value="HELD" selected>HELD</option><option value="CANCELLED">CANCELLED</option><option value="POSTPONED">POSTPONED</option></select></div>
+      <div class="provider-note" style="margin-top:10px"><i class="fa-solid fa-info-circle"></i> After creating the meeting, you can upload the Summary file (PDF/Image) and Attendance file separately via "Upload Files" button.</div>
+      <button class="btn primary" type="submit" id="mtSubmitBtn"><i class="fa-solid fa-check"></i> Create Meeting</button>
+    </form>
+  `;
+  openModal('formModal');
+  $('meetingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('mtSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+    try {
+      // Collect selected attendees
+      const selected = Array.from(document.querySelectorAll('#mtAttendeesCheckboxes input:checked')).map(c => ({
+        memberId: c.value,
+        name: c.dataset.name,
+        nida: c.dataset.nida
+      }));
+      const attendeesText = selected.map(s => s.name).join('\n');
+      const data = {
+        title: $('mtTitle').value.trim(),
+        date: $('mtDate').value,
+        location: $('mtLocation').value.trim(),
+        agenda: $('mtAgenda').value.trim(),
+        summary: $('mtSummary').value.trim(),
+        attendees: attendeesText,
+        attendeesList: selected,
+        attendanceCount: selected.length,
+        chairpersonNotes: $('mtNotes').value.trim(),
+        status: $('mtStatus').value,
+        groupId: CGI,
+        createdBy: CU.uid,
+        createdByName: `${CU.firstName||''} ${CU.lastName||''}`.trim(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      const ref = await addDoc(col('meetings'), data);
+      await audit('MEETING_CREATE', 'Meetings', `Created meeting: ${data.title} on ${data.date} at ${data.location}`);
+      showToast('Meeting created successfully', 'success');
+      closeModal('formModal');
+    } catch(err) {
+      showToast('Failed to create meeting: ' + (err.message || err), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Create Meeting';
+    }
+  });
+};
+
+/* Edit a meeting (Chairperson only) */
+window.editMeeting = (id) => {
+  if(CR !== 'chair') return showToast('Only the Chairperson can edit meetings','error');
+  const m = MTC.find(x => x.id === id);
+  if(!m) return showToast('Meeting not found','error');
+  const selectedIds = new Set((m.attendeesList || []).map(a => a.memberId));
+  const memberCheckboxes = MC.map(mm => `<label style="display:flex;align-items:center;gap:6px;font-size:11px;padding:4px 8px;background:var(--panel2);border-radius:6px;border:1px solid var(--line);cursor:pointer"><input type="checkbox" value="${mm.id}" data-name="${escHTML((mm.firstName||'')+' '+(mm.lastName||''))}" data-nida="${mm.nida||''}" ${selectedIds.has(mm.id) ? 'checked' : ''}> ${escHTML((mm.firstName||'')+' '+(mm.middleName||'')+' '+(mm.lastName||''))}</label>`).join('');
+  $('formModalTitle').innerHTML = '<i class="fa-solid fa-pen" style="color:var(--p2)"></i> Edit Meeting';
+  $('formModalBody').innerHTML = `
+    <form id="editMeetingForm" autocomplete="off">
+      <div class="field"><label>Meeting Title *</label><input id="mtTitle" required value="${escHTML(m.title || '')}"></div>
+      <div class="row2">
+        <div class="field"><label>Meeting Date *</label><input id="mtDate" type="date" required value="${m.date || ''}"></div>
+        <div class="field"><label>Meeting Location / Venue *</label><input id="mtLocation" required value="${escHTML(m.location || '')}"></div>
+      </div>
+      <div class="field"><label>Agenda</label><textarea id="mtAgenda" rows="3">${escHTML(m.agenda || '')}</textarea></div>
+      <div class="field"><label>Meeting Summary / Muhtasari</label><textarea id="mtSummary" rows="5">${escHTML(m.summary || '')}</textarea></div>
+      <div class="field"><label>Waliohudhuria (Attendees)</label>
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <button type="button" class="btn outline btn-sm" onclick="document.querySelectorAll('#mtAttendeesCheckboxes input').forEach(c=>c.checked=true)"><i class="fa-solid fa-check-double"></i> Select All</button>
+          <button type="button" class="btn outline btn-sm" onclick="document.querySelectorAll('#mtAttendeesCheckboxes input').forEach(c=>c.checked=false)"><i class="fa-solid fa-xmark"></i> Clear</button>
+        </div>
+        <div id="mtAttendeesCheckboxes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;max-height:200px;overflow-y:auto;padding:8px;background:var(--panel2);border-radius:8px;border:1px solid var(--line)">${memberCheckboxes}</div>
+      </div>
+      <div class="field"><label>Chairperson Notes</label><textarea id="mtNotes" rows="2">${escHTML(m.chairpersonNotes || '')}</textarea></div>
+      <div class="field"><label>Status</label><select id="mtStatus"><option value="SCHEDULED" ${m.status==='SCHEDULED'?'selected':''}>SCHEDULED</option><option value="HELD" ${m.status==='HELD'?'selected':''}>HELD</option><option value="CANCELLED" ${m.status==='CANCELLED'?'selected':''}>CANCELLED</option><option value="POSTPONED" ${m.status==='POSTPONED'?'selected':''}>POSTPONED</option></select></div>
+      <button class="btn primary" type="submit"><i class="fa-solid fa-check"></i> Save Changes</button>
+    </form>
+  `;
+  openModal('formModal');
+  $('editMeetingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const selected = Array.from(document.querySelectorAll('#mtAttendeesCheckboxes input:checked')).map(c => ({
+        memberId: c.value,
+        name: c.dataset.name,
+        nida: c.dataset.nida
+      }));
+      const attendeesText = selected.map(s => s.name).join('\n');
+      const updates = {
+        title: $('mtTitle').value.trim(),
+        date: $('mtDate').value,
+        location: $('mtLocation').value.trim(),
+        agenda: $('mtAgenda').value.trim(),
+        summary: $('mtSummary').value.trim(),
+        attendees: attendeesText,
+        attendeesList: selected,
+        attendanceCount: selected.length,
+        chairpersonNotes: $('mtNotes').value.trim(),
+        status: $('mtStatus').value,
+        updatedAt: serverTimestamp()
+      };
+      await updateDoc(dcol('meetings', id), updates);
+      await audit('MEETING_EDIT', 'Meetings', `Edited meeting: ${updates.title}`);
+      showToast('Meeting updated successfully', 'success');
+      closeModal('formModal');
+    } catch(err) {
+      showToast('Update failed: ' + (err.message || err), 'error');
+    }
+  });
+};
+
+/* Upload Meeting Files (Summary or Attendance) — Chairperson only */
+window.uploadMeetingFiles = (id, type = null) => {
+  if(CR !== 'chair') return showToast('Only the Chairperson can upload meeting files','error');
+  const m = MTC.find(x => x.id === id);
+  if(!m) return showToast('Meeting not found','error');
+  const isSummary = type !== 'attendance'; // default is summary
+  const titlePrefix = isSummary ? 'Summary (Muhtasari)' : 'Attendance (Waliohudhuria)';
+  $('formModalTitle').innerHTML = `<i class="fa-solid fa-upload" style="color:var(--p2)"></i> Upload ${titlePrefix} File`;
+  $('formModalBody').innerHTML = `
+    <form id="uploadMeetingFileForm">
+      <div class="provider-note" style="margin-bottom:12px"><i class="fa-solid fa-info-circle"></i> Upload a file for: <b>${escHTML(m.title)}</b> (${fD(m.date)})</div>
+      <div class="field">
+        <label>Choose ${titlePrefix} File *</label>
+        <label class="upload-zone-pro" for="meetingFileInput" style="display:block">
+          <i class="fa-solid fa-cloud-arrow-up" style="font-size:28px;color:var(--p2)"></i>
+          <div style="margin-top:8px;font-weight:800">Choose File</div>
+          <div class="tiny">PDF • JPG • PNG • WEBP • DOC • DOCX (max 5MB)</div>
+          <input id="meetingFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,image/*,application/pdf" style="display:none">
+          <div id="meetingFileName" class="small" style="margin-top:8px"></div>
+        </label>
+      </div>
+      <div class="provider-note"><i class="fa-solid fa-database"></i> File will be stored in Firestore as base64 data. Large files may take longer to upload. Members will be able to view/download the file.</div>
+      <button class="btn primary" type="submit" id="uploadFileBtn"><i class="fa-solid fa-cloud-arrow-up"></i> Upload ${titlePrefix} File</button>
+    </form>
+  `;
+  openModal('formModal');
+  $('meetingFileInput').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if(!f) return;
+    $('meetingFileName').textContent = `${f.name} • ${(f.size/1024/1024).toFixed(2)} MB`;
+  });
+  $('uploadMeetingFileForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('uploadFileBtn');
+    const f = $('meetingFileInput').files[0];
+    if(!f) return showToast('Please choose a file','error');
+    if(f.size > 5 * 1024 * 1024) return showToast('File too large. Maximum size is 5MB.','error');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...';
+    try {
+      // Read file as base64 data URL
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result || ''));
+        r.onerror = () => rej(new Error('Could not read file'));
+        r.readAsDataURL(f);
+      });
+      // Firestore limit is ~1MB per field
+      if(dataUrl.length > 950000) {
+        // For images, try to compress
+        if(f.type.startsWith('image/')){
+          showToast('Compressing image...', 'warning');
+          const blob = await procImg(f, 1600, 0.82, 600000);
+          const compressed = await blobToDataUrl(blob);
+          if(compressed.length > 950000) throw new Error('Image still too large after compression. Please use a smaller image.');
+          const updates = {
+            [isSummary ? 'summaryFile' : 'attendanceFile']: f.name,
+            [isSummary ? 'summaryFileData' : 'attendanceFileData']: compressed,
+            [isSummary ? 'summaryFileType' : 'attendanceFileType']: blob.type,
+            updatedAt: serverTimestamp()
+          };
+          await updateDoc(dcol('meetings', id), updates);
+        } else {
+          throw new Error('File too large for Firestore (max ~700KB for non-images). Please compress it or use a smaller file.');
+        }
+      } else {
+        const updates = {
+          [isSummary ? 'summaryFile' : 'attendanceFile']: f.name,
+          [isSummary ? 'summaryFileData' : 'attendanceFileData']: dataUrl,
+          [isSummary ? 'summaryFileType' : 'attendanceFileType']: f.type,
+          updatedAt: serverTimestamp()
+        };
+        await updateDoc(dcol('meetings', id), updates);
+      }
+      await audit('MEETING_FILE_UPLOAD', 'Meetings', `Uploaded ${titlePrefix} file for meeting: ${m.title}`);
+      showToast(`${titlePrefix} file uploaded successfully`, 'success');
+      closeModal('formModal');
+    } catch(err) {
+      showToast('Upload failed: ' + (err.message || err), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Upload ${titlePrefix} File`;
+    }
+  });
+};
+
+/* View a meeting file (Summary or Attendance) — All users */
+window.viewMeetingFile = (id, type) => {
+  const m = MTC.find(x => x.id === id);
+  if(!m) return showToast('Meeting not found','error');
+  const fileName = type === 'summary' ? m.summaryFile : m.attendanceFile;
+  const fileData = type === 'summary' ? m.summaryFileData : m.attendanceFileData;
+  const fileType = type === 'summary' ? m.summaryFileType : m.attendanceFileType;
+  if(!fileData) return showToast('No file to view','warning');
+  // Open in new tab/window
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow popups to view the file','warning'); return; }
+  if(fileType && fileType.startsWith('image/')){
+    w.document.write(`<html><head><title>${escHTML(fileName || 'Meeting File')}</title></head><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${fileData}" alt="${escHTML(fileName||'')}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`);
+  } else if(fileType === 'application/pdf' || (fileData && fileData.startsWith('data:application/pdf'))){
+    // PDF — embed in iframe
+    w.document.write(`<html><head><title>${escHTML(fileName || 'Meeting PDF')}</title></head><body style="margin:0"><iframe src="${fileData}" style="width:100vw;height:100vh;border:0"></iframe></body></html>`);
+  } else {
+    // Other files — download directly
+    const a = document.createElement('a');
+    a.href = fileData;
+    a.download = fileName || 'meeting-file';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    w.close();
+  }
+};
+
+/* Download a meeting file — All users */
+window.downloadMeetingFile = (id, type) => {
+  const m = MTC.find(x => x.id === id);
+  if(!m) return showToast('Meeting not found','error');
+  const fileName = type === 'summary' ? m.summaryFile : m.attendanceFile;
+  const fileData = type === 'summary' ? m.summaryFileData : m.attendanceFileData;
+  if(!fileData) return showToast('No file to download','warning');
+  const a = document.createElement('a');
+  a.href = fileData;
+  a.download = fileName || `meeting-${type}-${id}.bin`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('File downloaded','success');
+};
+
+/* View full meeting details — All users */
+window.viewMeetingDetails = (id) => {
+  const m = MTC.find(x => x.id === id);
+  if(!m) return showToast('Meeting not found','error');
+  const hasSummaryFile = !!(m.summaryFile && m.summaryFileData);
+  const hasAttendanceFile = !!(m.attendanceFile && m.attendanceFileData);
+  $('formModalTitle').innerHTML = '<i class="fa-solid fa-eye" style="color:var(--blue)"></i> Meeting Details';
+  $('formModalBody').innerHTML = `
+    <div class="record-detail-grid">
+      <div class="record-detail-field"><label>Meeting Title</label><span>${escHTML(m.title || 'N/A')}</span></div>
+      <div class="record-detail-field"><label>Date</label><span>${fD(m.date || m.createdAt)}</span></div>
+      <div class="record-detail-field"><label>Location</label><span>${escHTML(m.location || 'N/A')}</span></div>
+      <div class="record-detail-field"><label>Status</label><span>${m.status || 'N/A'}</span></div>
+      <div class="record-detail-field"><label>Attendance Count</label><span>${m.attendanceCount || 0}</span></div>
+      <div class="record-detail-field"><label>Created By</label><span>${escHTML(m.createdByName || 'N/A')}</span></div>
+    </div>
+    ${m.agenda ? `<div style="margin-top:12px"><b>Agenda:</b><div class="small" style="margin-top:4px;padding:8px;background:var(--panel2);border-radius:8px;white-space:pre-wrap">${escHTML(m.agenda)}</div></div>` : ''}
+    ${m.summary ? `<div style="margin-top:12px"><b>Meeting Summary (Muhtasari):</b><div class="small" style="margin-top:4px;padding:8px;background:rgba(22,169,121,.05);border-radius:8px;white-space:pre-wrap">${escHTML(m.summary)}</div></div>` : ''}
+    ${m.attendees ? `<div style="margin-top:12px"><b>Waliohudhuria (Attendees):</b><div class="small" style="margin-top:4px;padding:8px;background:var(--panel2);border-radius:8px;white-space:pre-wrap">${escHTML(m.attendees)}</div></div>` : ''}
+    ${m.chairpersonNotes ? `<div style="margin-top:12px"><b>Chairperson Notes:</b><div class="small" style="margin-top:4px;padding:8px;background:rgba(245,158,11,.05);border-radius:8px;white-space:pre-wrap">${escHTML(m.chairpersonNotes)}</div></div>` : ''}
+    ${(hasSummaryFile || hasAttendanceFile) ? `
+      <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)">
+        <b>Uploaded Files:</b>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          ${hasSummaryFile ? `
+            <button class="btn info btn-sm" onclick="viewMeetingFile('${m.id}','summary')"><i class="fa-solid fa-file-pdf"></i> View Summary File (${escHTML(m.summaryFile || '')})</button>
+            <button class="btn outline btn-sm" onclick="downloadMeetingFile('${m.id}','summary')"><i class="fa-solid fa-download"></i> Download</button>
+          ` : ''}
+          ${hasAttendanceFile ? `
+            <button class="btn purple btn-sm" onclick="viewMeetingFile('${m.id}','attendance')"><i class="fa-solid fa-users-viewfinder"></i> View Attendance File (${escHTML(m.attendanceFile || '')})</button>
+            <button class="btn outline btn-sm" onclick="downloadMeetingFile('${m.id}','attendance')"><i class="fa-solid fa-download"></i> Download</button>
+          ` : ''}
+        </div>
+      </div>
+    ` : ''}
+    <div class="flex gap-sm" style="justify-content:flex-end;margin-top:16px">
+      <button class="btn info" onclick="downloadMeetingPDF('${m.id}')"><i class="fa-solid fa-file-pdf"></i> Download as PDF</button>
+      <button class="btn mutedbtn" onclick="closeModal('formModal')">Close</button>
+    </div>
+  `;
+  openModal('formModal');
+};
+
+/* Download meeting as PDF — All users */
+window.downloadMeetingPDF = async (id) => {
+  const m = MTC.find(x => x.id === id);
+  if(!m) return showToast('Meeting not found','error');
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    // Try to add group logo at top-left
+    let logoUrl = CG?.logoUrl || null;
+    if(!logoUrl && sysSet.branding.logoEnabled) logoUrl = sysSet.branding.logoUrl;
+    if(!logoUrl) logoUrl = SYS_LOGO_FILE;
+    try {
+      const resp = await fetch(logoUrl);
+      const blob = await resp.blob();
+      if(blob.type.startsWith('image/')){
+        const reader = new FileReader();
+        const base64 = await new Promise((res) => { reader.onload = () => res(reader.result); reader.readAsDataURL(blob); });
+        doc.addImage(base64, 'PNG', 14, 10, 22, 22);
+      }
+    } catch(e){}
+    // Header
+    doc.setFontSize(15); doc.setFont(undefined, 'bold');
+    doc.text(CG?.name || 'CSCMS Group', 40, 18);
+    doc.setFontSize(11); doc.setFont(undefined, 'normal');
+    doc.text('Meeting Minutes & Summary', 40, 25);
+    // Meeting details
+    doc.setFontSize(10);
+    doc.text(`Meeting Title: ${m.title || 'N/A'}`, 14, 42);
+    doc.text(`Date: ${fD(m.date || m.createdAt)}`, 14, 48);
+    doc.text(`Location: ${m.location || 'N/A'}`, 14, 54);
+    doc.text(`Status: ${m.status || 'N/A'}`, 14, 60);
+    doc.text(`Attendance: ${m.attendanceCount || 0} members`, 14, 66);
+    doc.text(`Created By: ${m.createdByName || 'N/A'}`, 14, 72);
+    let y = 80;
+    // Agenda
+    if(m.agenda){
+      doc.setFont(undefined, 'bold'); doc.text('AGENDA:', 14, y);
+      doc.setFont(undefined, 'normal');
+      const agendaLines = doc.splitTextToSize(m.agenda, 180);
+      doc.text(agendaLines, 14, y + 5);
+      y += 5 + (agendaLines.length * 5) + 4;
+    }
+    // Summary
+    if(m.summary){
+      if(y > 250){ doc.addPage(); y = 20; }
+      doc.setFont(undefined, 'bold'); doc.text('MEETING SUMMARY (MUHTASARI):', 14, y);
+      doc.setFont(undefined, 'normal');
+      const summaryLines = doc.splitTextToSize(m.summary, 180);
+      doc.text(summaryLines, 14, y + 5);
+      y += 5 + (summaryLines.length * 5) + 4;
+    }
+    // Attendees
+    if(m.attendees){
+      if(y > 250){ doc.addPage(); y = 20; }
+      doc.setFont(undefined, 'bold'); doc.text('WALIOHUDHURIA (ATTENDEES):', 14, y);
+      doc.setFont(undefined, 'normal');
+      const attendeeLines = doc.splitTextToSize(m.attendees, 180);
+      doc.text(attendeeLines, 14, y + 5);
+      y += 5 + (attendeeLines.length * 5) + 4;
+    }
+    // Chairperson Notes
+    if(m.chairpersonNotes){
+      if(y > 250){ doc.addPage(); y = 20; }
+      doc.setFont(undefined, 'bold'); doc.text('CHAIRPERSON NOTES:', 14, y);
+      doc.setFont(undefined, 'normal');
+      const notesLines = doc.splitTextToSize(m.chairpersonNotes, 180);
+      doc.text(notesLines, 14, y + 5);
+      y += 5 + (notesLines.length * 5) + 4;
+    }
+    // Files info
+    if(m.summaryFile || m.attendanceFile){
+      if(y > 250){ doc.addPage(); y = 20; }
+      doc.setFont(undefined, 'bold'); doc.text('UPLOADED FILES:', 14, y);
+      doc.setFont(undefined, 'normal');
+      if(m.summaryFile){ doc.text(`- Summary File: ${m.summaryFile}`, 14, y + 5); y += 5; }
+      if(m.attendanceFile){ doc.text(`- Attendance File: ${m.attendanceFile}`, 14, y + 5); y += 5; }
+      y += 6;
+    }
+    // Signature section
+    if(y > 240){ doc.addPage(); y = 20; }
+    y += 10;
+    doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+    doc.text('Chairperson Signature: _______________________', 14, y);
+    doc.text('Secretary Signature: ________________________', 14, y + 12);
+    doc.text(`Date: ________________________`, 14, y + 24);
+    doc.setTextColor(0, 0, 0);
+    // Footer
+    doc.setFontSize(8); doc.setTextColor(150, 150, 150);
+    doc.text(`Generated by CSCMS Pro V5 • ${new Date().toLocaleString()}`, 14, 290);
+    // Save
+    const fileName = `Meeting_${(m.title || 'Untitled').replace(/[^a-zA-Z0-9]+/g, '_')}_${(m.date || today()).slice(0,10)}.pdf`;
+    doc.save(fileName);
+    showToast('PDF downloaded: ' + fileName, 'success');
+  } catch(err) {
+    showToast('PDF generation failed: ' + (err.message || err), 'error');
+  }
+};
+
+/* Delete a meeting — Chairperson only */
+window.deleteMeeting = (id) => {
+  if(CR !== 'chair') return showToast('Only the Chairperson can delete meetings','error');
+  const m = MTC.find(x => x.id === id);
+  if(!m) return;
+  showConfirm('Delete Meeting', `Are you sure you want to delete the meeting "${m.title}"? This will also remove all uploaded files.`, async () => {
+    try {
+      await deleteDoc(dcol('meetings', id));
+      await audit('MEETING_DELETE', 'Meetings', `Deleted meeting: ${m.title}`);
+      showToast('Meeting deleted', 'success');
+    } catch(err) {
+      showToast('Delete failed: ' + (err.message || err), 'error');
+    }
+  });
+};
+
+
 /* ===== INIT ===== */ 
 loadLocalTheme(); 
 paintAllLogos(); 
