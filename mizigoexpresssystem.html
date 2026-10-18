@@ -640,8 +640,17 @@ async function deleteSuperBiz(i){
 
 function renderSuperAdsTab(){
   var h="";
-  // Form
-  h+='<div class="cp-card"><h3><i class="fa-solid fa-bullhorn"></i> '+(editingAdIdx!==null?"Hariri Tangazo":"Tangazo Jipya")+'</h3>';
+  var latestCount=_ads.filter(function(a){return(a.category||'system')==='latest'}).length;
+  var systemCount=_ads.filter(function(a){return(a.category||'system')==='system'}).length;
+  var isEditing=editingAdIdx!==null&&editingAdIdx>=0&&editingAdIdx<_ads.length;
+  // Form header with clear mode indication
+  h+='<div class="cp-card" style="'+(isEditing?'border:2px solid var(--warning)':'')+'">';
+  h+='<h3><i class="fa-solid '+(isEditing?'fa-pen':'fa-plus')+'" style="color:'+(isEditing?'var(--warning)':'var(--primary2)')+'"></i> '+(isEditing?'Hariri Tangazo #'+(editingAdIdx+1):'Tangazo Jipya')+'</h3>';
+  if(isEditing){
+    h+='<div style="background:var(--warning-bg);color:var(--warning);padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:14px"><i class="fa-solid fa-pen"></i> Unakariri tangazo: <b>'+esc(_ads[editingAdIdx].title)+'</b>. Fanya mabadiliko kisha bofya "Hifadhi Mabadiliko".</div>';
+  }else{
+    h+='<div style="background:var(--success-bg);color:var(--success);padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:14px"><i class="fa-solid fa-circle-info"></i> Unaweza kuunda <b>matangazo mengi</b> ya Latest au System. Kila tangazo litaonekana kwenye section yake kwenye Landing page.</div>';
+  }
   h+='<div class="fg"><label>Kichwa <span class="req">*</span></label><input class="fi" type="text" id="adTitle" placeholder="Mf: Usafirishaji wa haraka Dar-Tz"></div>';
   h+='<div class="fg"><label>Maelezo <span class="req">*</span></label><textarea class="fi" id="adDesc" rows="3" placeholder="Eleza huduma au tangazo..."></textarea></div>';
   h+='<div class="fg"><label>Bei / Toleo</label><input class="fi" type="text" id="adPrice" placeholder="Mf: $29/mo au Bure"></div>';
@@ -655,23 +664,34 @@ function renderSuperAdsTab(){
   h+='<div class="upload-hint">PNG, JPG, GIF, WebP, BMP — Hadi 15MB — Itaresize otomatiki</div></div>';
   h+='<div id="adImgPreviewArea"></div><div class="ad-img-progress" id="adImgProgress"><span></span></div></div>';
   h+='<div style="display:flex;gap:10px;margin-top:8px">';
-  h+='<button class="btn btn-p" onclick="saveAd()"><i class="fa-solid fa-floppy-disk"></i> Hifadhi</button>';
-  h+='<button class="btn btn-o" onclick="cancelAdForm()"><i class="fa-solid fa-xmark"></i> Ghairi</button></div></div>';
-  // List
+  h+='<button class="btn btn-p" onclick="saveAd()"><i class="fa-solid fa-floppy-disk"></i> '+(isEditing?'Hifadhi Mabadiliko':'Hifadhi Tangazo')+'</button>';
+  h+='<button class="btn btn-o" onclick="cancelAdForm()"><i class="fa-solid fa-xmark"></i> '+(isEditing?'Ghairi Mabadiliko':'Futa Fomu')+'</button>';
+  if(isEditing)h+='<button class="btn btn-s" onclick="newAdForm()"><i class="fa-solid fa-plus"></i> Tangazo Jipya Badala</button>';
+  h+='</div></div>';
+  // List — with category badges and separate counts
   h+='<div class="cp-card"><h3><i class="fa-solid fa-list"></i> Matangazo Yote ('+_ads.length+')</h3>';
-  if(_ads.length===0)h+=emptyState("fa-bullhorn","Hakuna matangazo bado");
+  h+='<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
+  h+='<span class="cat-badge-latest"><i class="fa-solid fa-bolt"></i> Latest: '+latestCount+'</span>';
+  h+='<span class="cat-badge-system"><i class="fa-solid fa-globe"></i> System: '+systemCount+'</span>';
+  h+='<button class="btn btn-p btn-sm" onclick="newAdForm()"><i class="fa-solid fa-plus"></i> Tangazo Jipya</button>';
+  h+='</div>';
+  if(_ads.length===0)h+=emptyState("fa-bullhorn","Hakuna matangazo bado. Bofya 'Tangazo Jipya' kuunda la kwanza.");
   else{
     h+='<div class="ad-grid">';
     _ads.forEach(function(ad,i){
-      h+='<div class="ad-item">';
+      var adCat=ad.category||'system';
+      h+='<div class="ad-item" style="'+(editingAdIdx===i?'border:2px solid var(--warning)':'')+'">';
       if(ad.image)h+='<img class="ad-item-img" src="'+ad.image+'" alt="'+esc(ad.title)+'" onclick="openLightbox(this.src)">';
-      else h+='<div class="pub-ph" style="height:180px"><i class="fa-solid fa-image"></i></div>';
-      h+='<div class="ad-item-body"><h4>'+esc(ad.title)+'</h4><p>'+esc(ad.desc)+'</p>';
+      else h+='<div class="pub-ph" style="height:180px"><i class="fa-solid '+(adCat==='latest'?'fa-bolt':'fa-bullhorn')+'" style="color:'+(adCat==='latest'?'var(--warning)':'var(--info)')+'"></i></div>';
+      h+='<div class="ad-item-body">';
+      h+='<span class="cat-badge-'+adCat+'"><i class="fa-solid '+(adCat==='latest'?'fa-bolt':'fa-globe')+'"></i> '+(adCat==='latest'?'Latest':'System')+'</span>';
+      h+='<h4>'+esc(ad.title)+'</h4><p>'+esc(ad.desc)+'</p>';
       if(ad.price)h+='<span class="pub-price">'+esc(ad.price)+'</span>';
+      if(ad.contactName)h+='<small style="display:block;margin-top:4px;color:var(--text3);font-size:10px"><i class="fa-solid fa-user"></i> '+esc(ad.contactName)+'</small>';
       h+='<div class="ad-meta"><span>'+(ad.date||"—")+'</span>';
       if(ad.imgInfo)h+='<span>📷 '+ad.imgInfo+'</span>';
       h+='</div><div class="ad-item-actions">';
-      h+='<button class="btn btn-o btn-xs" onclick="editAd('+i+')"><i class="fa-solid fa-pen"></i> Hariri</button>';
+      h+='<button class="btn btn-w btn-xs" onclick="editAd('+i+')"><i class="fa-solid fa-pen"></i> Hariri</button>';
       h+='<button class="btn btn-d btn-xs" onclick="deleteAd('+i+')"><i class="fa-solid fa-trash"></i> Futa</button>';
       h+='</div></div></div>';
     });h+='</div>';
@@ -774,14 +794,42 @@ async function saveAd(){
   }else{
     obj.id="ad_"+Date.now();
     var ok=await fsSet("ads",obj.id,obj);if(!ok)return;
-    _ads.push(obj);toast("Tangazo limehifadhiwa kwenye Firestore!","s");
+    _ads.push(obj);toast("Tangazo limehifadhiwa! Unaweza kuunda lingine.","s");
   }
-  currentAdImage=null;renderSuperPanel();renderPublicShowcase();
+  currentAdImage=null;
+  // Clear form for next announcement
+  cancelAdForm();
+  renderSuperPanel();renderPublicShowcase();
 }
 
-function cancelAdForm(){currentAdImage=null;editingAdIdx=null;var t=document.getElementById("adTitle");if(t)t.value="";var d=document.getElementById("adDesc");if(d)d.value="";var p=document.getElementById("adPrice");if(p)p.value="";var a=document.getElementById("adImgPreviewArea");if(a)a.innerHTML=""}
+function newAdForm(){
+  currentAdImage=null;editingAdIdx=null;
+  renderSuperPanel();
+  setTimeout(function(){var f=document.querySelector("#superBody .cp-card");if(f)f.scrollIntoView({behavior:"smooth"});},100);
+  toast("Fomu mpya imeandaliwa","i");
+}
 
-function editAd(i){if(i<0||i>=_ads.length)return;editingAdIdx=i;renderSuperPanel();toast("Hariri: "+_ads[i].title,"i")}
+function cancelAdForm(){
+  currentAdImage=null;editingAdIdx=null;
+  var t=document.getElementById("adTitle");if(t)t.value="";
+  var d=document.getElementById("adDesc");if(d)d.value="";
+  var p=document.getElementById("adPrice");if(p)p.value="";
+  var cn=document.getElementById("adContactName");if(cn)cn.value="";
+  var cp=document.getElementById("adContactPhone");if(cp)cp.value="";
+  var ce=document.getElementById("adContactEmail");if(ce)ce.value="";
+  var cat=document.getElementById("adCategory");if(cat)cat.value="latest";
+  var a=document.getElementById("adImgPreviewArea");if(a)a.innerHTML="";
+  var fi=document.getElementById("adFileInput");if(fi)fi.value="";
+  var sp=document.getElementById("superBody");if(sp)renderSuperPanel();
+}
+
+function editAd(i){
+  if(i<0||i>=_ads.length)return;
+  editingAdIdx=i;
+  renderSuperPanel();
+  setTimeout(function(){var f=document.querySelector("#superBody .cp-card");if(f)f.scrollIntoView({behavior:"smooth"});},100);
+  toast("Unakariri: "+_ads[i].title,"i");
+}
 
 async function deleteAd(i){
   if(i<0||i>=_ads.length)return;var ad=_ads[i];
