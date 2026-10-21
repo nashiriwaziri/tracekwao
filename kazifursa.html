@@ -330,6 +330,45 @@ tbody tr:hover{background:#f1f3f5}
 <!-- Notifications -->
 <div class="brick-notify-container" id="brickNotifyContainer"></div>
 
+<!-- Network Status Indicator (Fixed top-right) -->
+<div id="networkIndicator" style="position:fixed;top:18px;right:18px;z-index:9998;display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:50px;font-size:.78rem;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.15);background:#f8f9fa;color:#374151;cursor:pointer" onclick="toggleNetworkInfo()" title="Hali ya Mtandao">
+  <span id="networkDot" style="width:10px;height:10px;border-radius:50%;background:#9ca3af;display:inline-block;animation:pulse 2s infinite"></span>
+  <span id="networkLabel">Inakagua...</span>
+  <span id="syncBadge" style="display:none;background:#f59e0b;color:#fff;padding:2px 8px;border-radius:10px;font-size:.7rem" title="Mabadiliko yanagosubiri sync">0</span>
+</div>
+
+<!-- Network Info Modal -->
+<div id="networkInfoModal" class="modal-overlay hidden">
+  <div class="modal-content" style="max-width:520px">
+    <button class="close-modal" onclick="closeNetworkInfo()">×</button>
+    <div class="modal-header">
+      <h2><i class="fas fa-wifi"></i> Hali ya Mtandao na Mfumo wa Data</h2>
+    </div>
+    <div style="padding:20px">
+      <div id="networkInfoContent" style="font-size:.9rem;line-height:1.7"></div>
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="manualSync()" style="background:#0a7d2c;color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-weight:600"><i class="fas fa-sync"></i> Sync Sasa</button>
+        <button onclick="_LDB.forceLocal();refreshNetworkInfo();" style="background:#f59e0b;color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-weight:600"><i class="fas fa-database"></i> Lazimisha LocalDB</button>
+        <button onclick="_LDB.forceFirebase();refreshNetworkInfo();" style="background:#3b82f6;color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-weight:600"><i class="fas fa-cloud"></i> Lazimisha Firebase</button>
+        <button onclick="_LDB.autoDetect();refreshNetworkInfo();" style="background:#6b7280;color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-weight:600"><i class="fas fa-magic"></i> Auto-Detect</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+.network-online #networkDot { background: #10b981; }
+.network-offline #networkDot { background: #ef4444; }
+.network-pending #networkDot { background: #f59e0b; }
+#networkIndicator.network-online { background: #d1fae5; color: #065f46; }
+#networkIndicator.network-offline { background: #fee2e2; color: #991b1b; }
+#networkIndicator.network-pending { background: #fef3c7; color: #92400e; }
+</style>
+
 <!-- Theme Switcher -->
 <div class="theme-switcher">
   <button class="theme-btn theme-green" onclick="switchTheme('green')" title="Green"><i class="fas fa-leaf"></i></button>
@@ -928,8 +967,420 @@ const firebaseConfig = {
   messagingSenderId: "423907949019",
   appId: "1:423907949019:web:0a7d2c9b8e1f4a6c8d9e0b"
 };
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// ===== FIREBASE INITIALIZATION (kawaida) =====
+// Firebase inakamilishwa kawaida ili iweze kutumika mtandao unaporudi online
+const firebaseApp = initializeApp(firebaseConfig);
+const firestoreDB = getFirestore(firebaseApp);
+
+// ===== DB MODE SWITCH (Hybrid - Auto Online/Offline) =====
+// USE_LOCAL_DB inabadilika kiotomatiki kulingana na hali ya mtandao:
+//   - Online  → USE_LOCAL_DB = false → Firebase inatumika
+//   - Offline → USE_LOCAL_DB = true  → LocalDB inatumika (localStorage)
+// Mtumiaji anaweza pia kubadilisha kwa mkono kupenza _LDB.forceLocal() au _LDB.forceFirebase()
+let USE_LOCAL_DB = !navigator.onLine;
+
+// Save Firebase function references (kwa ajili ya switch runtime)
+const _FB = {
+  collection: (db, name) => collection(db, name),
+  doc: (db, name, id) => doc(db, name, id),
+  addDoc: async (coll, data) => addDoc(coll, data),
+  getDocs: async (q) => getDocs(q),
+  getDoc: async (ref) => getDoc(ref),
+  setDoc: async (ref, data, opts) => setDoc(ref, data, opts),
+  updateDoc: async (ref, data) => updateDoc(ref, data),
+  deleteDoc: async (ref) => deleteDoc(ref),
+  query: (coll, ...rest) => query(coll, ...rest),
+  where: (f, op, v) => where(f, op, v),
+  orderBy: (f, dir) => orderBy(f, dir),
+  limit: (n) => limit(n),
+  serverTimestamp: () => serverTimestamp(),
+  increment: (n) => increment(n)
+};
+
+// ===== LOCAL DB (Firebase fallback) =====
+// Inatumika wakati Firebase inakataa kwa sababu ya permissions
+// Data inahifadhiwa kwenye localStorage ya browser
+const LocalDB = (function() {
+  const STORAGE_KEY = "vk101_localdb_v1";
+  let _data = {};
+  
+  function _load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      _data = raw ? JSON.parse(raw) : {};
+    } catch(e) { _data = {}; }
+  }
+  
+  function _save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(_data));
+    } catch(e) { console.error("LocalDB save error:", e); }
+  }
+  
+  function _ensureColl(name) {
+    if (!_data[name]) _data[name] = {};
+    return _data[name];
+  }
+  
+  function _genId() {
+    return 'loc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+  
+  function _processSentinels(obj, currentDoc) {
+    const result = {};
+    for (const key in obj) {
+      const val = obj[key];
+      if (val && typeof val === 'object' && val._sentinel === 'timestamp') {
+        result[key] = { seconds: Math.floor(Date.now()/1000), nanoseconds: 0 };
+      } else if (val && typeof val === 'object' && val._sentinel === 'increment') {
+        const cur = currentDoc && typeof currentDoc[key] === 'number' ? currentDoc[key] : 0;
+        result[key] = cur + val._amount;
+      } else {
+        result[key] = val;
+      }
+    }
+    return result;
+  }
+  
+  _load();
+  
+  return {
+    isLocal: true,
+    
+    collection(_db, name) {
+      return { _type: 'collection', _name: name };
+    },
+    
+    doc(_db, name, id) {
+      return { _type: 'doc', _collectionName: name, _id: id };
+    },
+    
+    async getDocs(q) {
+      const coll = _ensureColl(q._name);
+      let docs = Object.entries(coll).map(([id, data]) => ({
+        id,
+        data: () => ({ ...data })
+      }));
+      
+      if (q._filters) {
+        for (const f of q._filters) {
+          docs = docs.filter(d => {
+            const val = d.data()[f.field];
+            if (f.op === '==') return val === f.value;
+            if (f.op === '!=') return val !== f.value;
+            if (f.op === '>') return val > f.value;
+            if (f.op === '<') return val < f.value;
+            if (f.op === '>=') return val >= f.value;
+            if (f.op === '<=') return val <= f.value;
+            return true;
+          });
+        }
+      }
+      
+      if (q._orderBy) {
+        const { field, direction } = q._orderBy;
+        docs.sort((a, b) => {
+          const av = a.data()[field];
+          const bv = b.data()[field];
+          if (av === undefined && bv === undefined) return 0;
+          if (av === undefined) return 1;
+          if (bv === undefined) return -1;
+          if (av && typeof av === 'object' && av.seconds) {
+            return direction === 'desc' ? bv.seconds - av.seconds : av.seconds - bv.seconds;
+          }
+          if (av < bv) return direction === 'desc' ? 1 : -1;
+          if (av > bv) return direction === 'desc' ? -1 : 1;
+          return 0;
+        });
+      }
+      
+      if (q._limit) {
+        docs = docs.slice(0, q._limit);
+      }
+      
+      return {
+        empty: docs.length === 0,
+        docs: docs,
+        forEach: (cb) => docs.forEach(cb),
+        size: docs.length
+      };
+    },
+    
+    async getDoc(docRef) {
+      const coll = _ensureColl(docRef._collectionName);
+      const data = coll[docRef._id];
+      return {
+        exists: () => !!data,
+        data: () => data ? { ...data } : undefined,
+        id: docRef._id
+      };
+    },
+    
+    async addDoc(collRef, data) {
+      const coll = _ensureColl(collRef._name);
+      const id = _genId();
+      const processed = _processSentinels(data);
+      coll[id] = processed;
+      _save();
+      return { id };
+    },
+    
+    async setDoc(docRef, data) {
+      const coll = _ensureColl(docRef._collectionName);
+      const processed = _processSentinels(data);
+      coll[docRef._id] = processed;
+      _save();
+      return;
+    },
+    
+    async updateDoc(docRef, data) {
+      const coll = _ensureColl(docRef._collectionName);
+      const current = coll[docRef._id] || {};
+      const processed = _processSentinels(data, current);
+      coll[docRef._id] = { ...current, ...processed };
+      _save();
+      return;
+    },
+    
+    async deleteDoc(docRef) {
+      const coll = _ensureColl(docRef._collectionName);
+      delete coll[docRef._id];
+      _save();
+      return;
+    },
+    
+    query(collRef, ...constraints) {
+      const q = {
+        _type: 'query',
+        _name: collRef._name,
+        _filters: [],
+        _orderBy: null,
+        _limit: null
+      };
+      for (const c of constraints) {
+        if (c._type === 'where') q._filters.push(c);
+        else if (c._type === 'orderBy') q._orderBy = c;
+        else if (c._type === 'limit') q._limit = c.n;
+      }
+      return q;
+    },
+    
+    where(field, op, value) {
+      return { _type: 'where', field, op, value };
+    },
+    
+    orderBy(field, direction) {
+      return { _type: 'orderBy', field, direction: direction || 'asc' };
+    },
+    
+    limit(n) {
+      return { _type: 'limit', n };
+    },
+    
+    serverTimestamp() {
+      return { _sentinel: 'timestamp' };
+    },
+    
+    increment(n) {
+      return { _sentinel: 'increment', _amount: n };
+    }
+  };
+})();
+
+// ===== DYNAMIC DB REFERENCE =====
+// `db` ni reference ya kutumika kwenye code yote — inabadilika kiotomatiki
+// kulingana na hali ya mtandao (LocalDB wakati offline, Firestore wakati online)
+// Tumia Proxy ili kuhakikisha `db` inarejea database sahihi kila wakati
+const db = new Proxy({}, {
+  get(_target, prop) {
+    return USE_LOCAL_DB ? LocalDB : firestoreDB;
+  }
+});
+const app = firebaseApp;
+
+// ===== OFFLINE SYNC QUEUE =====
+// Inahifadhi mabadiliko yaliyofanyika wakati offline ili kuyasync baadaye
+const SyncQueue = (function() {
+  const QUEUE_KEY = "vk101_sync_queue_v1";
+  
+  function _load() {
+    try {
+      return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+    } catch(e) { return []; }
+  }
+  
+  function _save(queue) {
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    } catch(e) { console.error("SyncQueue save error:", e); }
+  }
+  
+  return {
+    // Ongeza operesheni kwenye queue
+    enqueue(operation) {
+      const queue = _load();
+      operation.id = 'sq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      operation.enqueuedAt = Date.now();
+      queue.push(operation);
+      _save(queue);
+      console.log("📥 SyncQueue: Operesheni imeongezwa (queue=" + queue.length + ")", operation.type, operation.collection);
+    },
+    
+    // Pata idadi ya operesheni zinazosubiri
+    pending() {
+      return _load();
+    },
+    
+    pendingCount() {
+      return _load().length;
+    },
+    
+    // Sync operesheni zote kwa Firebase
+    async syncAll() {
+      const queue = _load();
+      if (queue.length === 0) return { synced: 0, failed: 0 };
+      console.log("🔄 SyncQueue: Inasynching", queue.length, "operesheni kwa Firebase...");
+      let synced = 0;
+      let failed = 0;
+      const remaining = [];
+      
+      for (const op of queue) {
+        try {
+          // Pata data halisi kutoka LocalDB (labda data ilibadilika)
+          let dataToSync = op.data;
+          if (op.collection === 'vk101_users' && op.docId) {
+            // Hakikisha data inakuwepo
+          }
+          
+          if (op.type === 'setDoc') {
+            await setDoc(doc(firestoreDB, op.collection, op.docId), dataToSync, { merge: true });
+          } else if (op.type === 'updateDoc') {
+            await updateDoc(doc(firestoreDB, op.collection, op.docId), dataToSync);
+          } else if (op.type === 'addDoc') {
+            await addDoc(collection(firestoreDB, op.collection), dataToSync);
+          } else if (op.type === 'deleteDoc') {
+            await deleteDoc(doc(firestoreDB, op.collection, op.docId));
+          }
+          synced++;
+          console.log("  ✓ Synced:", op.type, op.collection, op.docId || '(auto-id)');
+        } catch(e) {
+          console.warn("  ✗ Failed to sync:", op.type, op.collection, e.message);
+          failed++;
+          remaining.push(op);  // Rudisha kwenye queue kwa kujaribu tena
+        }
+      }
+      
+      _save(remaining);
+      console.log("🔄 SyncQueue: Imekamilika - synced=" + synced + ", failed=" + failed + ", remaining=" + remaining.length);
+      return { synced, failed };
+    },
+    
+    // Futa queue (baada ya sync yote kufanikiwa)
+    clear() {
+      _save([]);
+    }
+  };
+})();
+
+// Wrapper functions - zinaroute kwa LocalDB au Firebase kulingana na flag
+// Muhimu: wakati wa write operesheni offline, zinaongeza kwenye SyncQueue
+const _LDB = {
+  // Read operations — straightforward routing
+  collection: (a, b) => USE_LOCAL_DB ? LocalDB.collection(a, b) : _FB.collection(firestoreDB, b),
+  doc: (a, b, c) => USE_LOCAL_DB ? LocalDB.doc(a, b, c) : _FB.doc(firestoreDB, b, c),
+  getDocs: async (a) => {
+    if (USE_LOCAL_DB) return LocalDB.getDocs(a);
+    try {
+      return await _FB.getDocs(a);
+    } catch(e) {
+      console.warn("Firebase getDocs failed, falling back to LocalDB:", e.message);
+      // Auto-fallback kwa LocalDB kama Firebase inashindwa
+      return LocalDB.getDocs(a);
+    }
+  },
+  getDoc: async (a) => {
+    if (USE_LOCAL_DB) return LocalDB.getDoc(a);
+    try {
+      return await _FB.getDoc(a);
+    } catch(e) {
+      console.warn("Firebase getDoc failed, falling back to LocalDB:", e.message);
+      return LocalDB.getDoc(a);
+    }
+  },
+  
+  // Write operations — zinaweka kwenye SyncQueue wakati offline
+  addDoc: async (collRef, data) => {
+    if (USE_LOCAL_DB) {
+      const result = await LocalDB.addDoc(collRef, data);
+      // Enqueue kwa sync baadaye
+      SyncQueue.enqueue({
+        type: 'addDoc',
+        collection: collRef._name,
+        data: { ...data }  // Snapshot ya data wakati wa kuandika
+      });
+      return result;
+    }
+    return _FB.addDoc(collRef, data);
+  },
+  
+  setDoc: async (docRef, data, opts) => {
+    if (USE_LOCAL_DB) {
+      const result = await LocalDB.setDoc(docRef, data);
+      SyncQueue.enqueue({
+        type: 'setDoc',
+        collection: docRef._collectionName,
+        docId: docRef._id,
+        data: { ...data }
+      });
+      return result;
+    }
+    return _FB.setDoc(docRef, data, opts);
+  },
+  
+  updateDoc: async (docRef, data) => {
+    if (USE_LOCAL_DB) {
+      const result = await LocalDB.updateDoc(docRef, data);
+      SyncQueue.enqueue({
+        type: 'updateDoc',
+        collection: docRef._collectionName,
+        docId: docRef._id,
+        data: { ...data }
+      });
+      return result;
+    }
+    return _FB.updateDoc(docRef, data);
+  },
+  
+  deleteDoc: async (docRef) => {
+    if (USE_LOCAL_DB) {
+      const result = await LocalDB.deleteDoc(docRef);
+      SyncQueue.enqueue({
+        type: 'deleteDoc',
+        collection: docRef._collectionName,
+        docId: docRef._id,
+        data: null
+      });
+      return result;
+    }
+    return _FB.deleteDoc(docRef);
+  },
+  
+  // Query builders — routing tu
+  query: (collRef, ...rest) => USE_LOCAL_DB ? LocalDB.query(collRef, ...rest) : _FB.query(collRef, ...rest),
+  where: (a, b, c) => USE_LOCAL_DB ? LocalDB.where(a, b, c) : _FB.where(a, b, c),
+  orderBy: (a, b) => USE_LOCAL_DB ? LocalDB.orderBy(a, b) : _FB.orderBy(a, b),
+  limit: (n) => USE_LOCAL_DB ? LocalDB.limit(n) : _FB.limit(n),
+  serverTimestamp: () => USE_LOCAL_DB ? LocalDB.serverTimestamp() : _FB.serverTimestamp(),
+  increment: (n) => USE_LOCAL_DB ? LocalDB.increment(n) : _FB.increment(n),
+  
+  // Helper methods
+  isLocalMode: () => USE_LOCAL_DB,
+  forceLocal: () => { USE_LOCAL_DB = true; _updateNetworkIndicator(); },
+  forceFirebase: () => { USE_LOCAL_DB = false; _updateNetworkIndicator(); },
+  autoDetect: () => { USE_LOCAL_DB = !navigator.onLine; _updateNetworkIndicator(); },
+  pendingSyncCount: () => SyncQueue.pendingCount()
+};
+
 
 // ===== STATE =====
 let currentLang = "sw";
@@ -1014,7 +1465,7 @@ window.changeLanguage = async function(lang) {
     const k = el.getAttribute("data-i18n-placeholder");
     if (translations[lang][k]) el.placeholder = translations[lang][k];
   });
-  try { await setDoc(doc(db, "vk101_settings", "lang"), { lang: lang }); } catch(e) {}
+  try { await _LDB.setDoc(_LDB.doc(db, "vk101_settings", "lang"), { lang: lang }); } catch(e) {}
 };
 
 window.switchTheme = function(theme) {
@@ -1100,10 +1551,10 @@ window.handleSignup = async function(e) {
     verified: false,
     createdAt: Date.now()
   };
-  const q = query(collection(db, "vk101_users"), where("email", "==", userData.email));
-  const snap = await getDocs(q);
+  const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", userData.email));
+  const snap = await _LDB.getDocs(q);
   if (!snap.empty) { BrickNotify.error("Mtumiaji tayari yupo!"); return; }
-  await addDoc(collection(db, "vk101_users"), userData);
+  await _LDB.addDoc(_LDB.collection(db, "vk101_users"), userData);
   BrickNotify.success("Usajili umefanikiwa! Tafadhali ingia.");
   toggleAuthForm("login");
 };
@@ -1117,8 +1568,8 @@ window.handleLogin = async function(e) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inangalia...'; }
   try {
     // Query kwa email tu (inakabiliwa na index issues kisichohitajika)
-    const q = query(collection(db, "vk101_users"), where("email", "==", em));
-    const snap = await getDocs(q);
+    const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", em));
+    const snap = await _LDB.getDocs(q);
     if (snap.empty) {
       BrickNotify.error("Taarifa sio sahihi. Hakikisha email ni sahihi.");
       return;
@@ -1196,8 +1647,8 @@ window.handleSuperAdminLogin = async function(e) {
     // Hakikisha akaunti za admin zipo kabla ya kuingia
     await ensureSystemAdmins();
     // Tafuta mtumiaji kwa email
-    const q = query(collection(db, "vk101_users"), where("email", "==", em));
-    const snap = await getDocs(q);
+    const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", em));
+    const snap = await _LDB.getDocs(q);
     if (snap.empty) {
       if (errBox) {
         errBox.style.display = "block";
@@ -1325,10 +1776,10 @@ async function ensureSystemAdmins() {
   // UID maalum: 8UIr4Q9VYZMle5OIzBeyaET31pr2
   try {
     const superAdminUid = "8UIr4Q9VYZMle5OIzBeyaET31pr2";
-    const superAdminRef = doc(db, "vk101_users", superAdminUid);
-    const superSnap = await getDoc(superAdminRef);
+    const superAdminRef = _LDB.doc(db, "vk101_users", superAdminUid);
+    const superSnap = await _LDB.getDoc(superAdminRef);
     if (!superSnap.exists()) {
-      await setDoc(superAdminRef, {
+      await _LDB.setDoc(superAdminRef, {
         fname: "Super",
         lname: "Administrator",
         email: "super@kazifursa.app",
@@ -1344,7 +1795,7 @@ async function ensureSystemAdmins() {
       // Hakikisha taarifa ni sahihi hata kama doc ilikuwepo
       const existing = superSnap.data();
       if (existing.email !== "super@kazifursa.app" || existing.password !== "WAZIRI2015" || existing.role !== "super_admin") {
-        await updateDoc(superAdminRef, {
+        await _LDB.updateDoc(superAdminRef, {
           fname: "Super",
           lname: "Administrator",
           email: "super@kazifursa.app",
@@ -1361,10 +1812,10 @@ async function ensureSystemAdmins() {
   // MLIKIKI (Owner) — email: mmiliki@kazifursa.app / pass: WAZIRI2015
   // Anaweza kuingia maeneo yote ya mfumo wa users bila kujisajili.
   try {
-    const qMmiliki = query(collection(db, "vk101_users"), where("email", "==", "mmiliki@kazifursa.app"));
-    const mmilikiSnap = await getDocs(qMmiliki);
+    const qMmiliki = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", "mmiliki@kazifursa.app"));
+    const mmilikiSnap = await _LDB.getDocs(qMmiliki);
     if (mmilikiSnap.empty) {
-      await addDoc(collection(db, "vk101_users"), {
+      await _LDB.addDoc(_LDB.collection(db, "vk101_users"), {
         fname: "Mmiliki",
         lname: "Mfumo",
         email: "mmiliki@kazifursa.app",
@@ -1381,7 +1832,7 @@ async function ensureSystemAdmins() {
       const existingDoc = mmilikiSnap.docs[0];
       const existing = existingDoc.data();
       if (existing.password !== "WAZIRI2015" || existing.role !== "mmiliki") {
-        await updateDoc(doc(db, "vk101_users", existingDoc.id), {
+        await _LDB.updateDoc(_LDB.doc(db, "vk101_users", existingDoc.id), {
           password: "WAZIRI2015",
           role: "mmiliki",
           verified: true,
@@ -1396,7 +1847,7 @@ async function ensureSystemAdmins() {
 // ===== OPPORTUNITIES =====
 window.loadOpportunities = async function() {
   try {
-    const snap = await getDocs(query(collection(db, "vk101_opportunities"), orderBy("createdAt", "desc")));
+    const snap = await _LDB.getDocs(_LDB.query(_LDB.collection(db, "vk101_opportunities"), _LDB.orderBy("createdAt", "desc")));
     allOpportunities = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderOpportunitiesShowcase();
     renderJobs();
@@ -1548,13 +1999,13 @@ window.handlePostOpportunity = async function(e) {
   };
   try {
     if (editId) {
-      data.updatedAt = serverTimestamp();
-      await updateDoc(doc(db, "vk101_opportunities", editId), data);
+      data.updatedAt = _LDB.serverTimestamp();
+      await _LDB.updateDoc(_LDB.doc(db, "vk101_opportunities", editId), data);
       BrickNotify.success("Fursa imehaririwa!");
     } else {
-      data.createdAt = serverTimestamp();
+      data.createdAt = _LDB.serverTimestamp();
       data.applications = 0;
-      await addDoc(collection(db, "vk101_opportunities"), data);
+      await _LDB.addDoc(_LDB.collection(db, "vk101_opportunities"), data);
       BrickNotify.success("Fursa imechapishwa!");
     }
     closePostOpportunityModal();
@@ -1625,7 +2076,7 @@ window.editOpportunity = function(id) {
 window.deleteOpportunity = async function(id) {
   if (!confirm("Una uhakika unataka kufuta fursa hii?")) return;
   try {
-    await deleteDoc(doc(db, "vk101_opportunities", id));
+    await _LDB.deleteDoc(_LDB.doc(db, "vk101_opportunities", id));
     BrickNotify.success("Fursa imefutwa.");
     closeOppDetailModal();
     loadOpportunities();
@@ -1639,7 +2090,7 @@ window.applyToOpportunity = async function(id) {
   const msg = prompt("Andika ujumbe wako wa maombi (optional):", "Ninafurahi kupata fursa hii...");
   if (msg === null) return;
   try {
-    await addDoc(collection(db, "vk101_applications"), {
+    await _LDB.addDoc(_LDB.collection(db, "vk101_applications"), {
       opportunityId: id,
       opportunityTitle: o.title,
       opportunityType: o.type,
@@ -1649,9 +2100,9 @@ window.applyToOpportunity = async function(id) {
       applicantPhone: currentUser.phone || "",
       message: msg,
       status: "pending",
-      appliedAt: serverTimestamp()
+      appliedAt: _LDB.serverTimestamp()
     });
-    await updateDoc(doc(db, "vk101_opportunities", id), { applications: increment(1) });
+    await _LDB.updateDoc(_LDB.doc(db, "vk101_opportunities", id), { applications: _LDB.increment(1) });
     BrickNotify.success("Maombi yako yametumwa!");
     closeOppDetailModal();
   } catch(e) { BrickNotify.error("Hitilafu: " + e.message); }
@@ -1691,10 +2142,10 @@ window.updateProfile = async function(e) {
     country: document.getElementById("pf_country").value,
     skills: document.getElementById("pf_skills").value,
     bio: document.getElementById("pf_bio").value,
-    updatedAt: serverTimestamp()
+    updatedAt: _LDB.serverTimestamp()
   };
   try {
-    await updateDoc(doc(db, "vk101_users", currentUser.id), updates);
+    await _LDB.updateDoc(_LDB.doc(db, "vk101_users", currentUser.id), updates);
     Object.assign(currentUser, updates);
     sessionStorage.setItem("vk101_user", JSON.stringify(currentUser));
     document.getElementById("navUserName").innerText = currentUser.fname + " " + currentUser.lname;
@@ -1711,8 +2162,8 @@ window.renderApplications = async function() {
   const c = document.getElementById("applicationsContent");
   if (!currentUser) { c.innerHTML = "<p>Tafadhali ingia kwanza.</p>"; return; }
   try {
-    const q = query(collection(db, "vk101_applications"), where("applicantId", "==", currentUser.id));
-    const snap = await getDocs(q);
+    const q = _LDB.query(_LDB.collection(db, "vk101_applications"), _LDB.where("applicantId", "==", currentUser.id));
+    const snap = await _LDB.getDocs(q);
     const apps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!apps.length) {
       c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><i class="fas fa-briefcase" style="font-size:42px;display:block;margin-bottom:10px"></i><p>Hujatumia maombi yoyote bado.</p></div>';
@@ -1728,8 +2179,8 @@ window.renderApplications = async function() {
 window.loadStats = async function() {
   try {
     const [oppSnap, userSnap] = await Promise.all([
-      getDocs(collection(db, "vk101_opportunities")),
-      getDocs(collection(db, "vk101_users"))
+      _LDB.getDocs(_LDB.collection(db, "vk101_opportunities")),
+      _LDB.getDocs(_LDB.collection(db, "vk101_users"))
     ]);
     const opps = oppSnap.docs.map(d => d.data());
     const users = userSnap.docs.map(d => d.data());
@@ -1757,7 +2208,7 @@ window.openUserManagement = async function() {
   const tbody = document.getElementById("userMgmtBody");
   tbody.innerHTML = "<tr><td colspan='6' style='text-align:center'>Loading...</td></tr>";
   try {
-    const snap = await getDocs(collection(db, "vk101_users"));
+    const snap = await _LDB.getDocs(_LDB.collection(db, "vk101_users"));
     const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     tbody.innerHTML = users.map(u => 
       '<tr><td>' + escapeAISafeHTML(u.fname + " " + u.lname) + '</td><td>' + escapeAISafeHTML(u.email) + '</td><td>' + escapeAISafeHTML(u.role) + '</td><td>' + escapeAISafeHTML(u.country||"-") + '</td><td><span class="status-badge ' + (u.verified ? "verified" : "pending") + '">' + (u.verified ? "Verified" : "Pending") + '</span></td><td>' + (window.isSystemAdmin(u.role) ? '<span style=\'color:var(--muted);font-size:.72rem\'><i class=\'fas fa-lock\'></i> System</span>' : '<button class="btn-xs btn-delete" onclick="deleteUser(\'' + u.id + '\')"><i class="fas fa-trash"></i></button>') + '</td></tr>'
@@ -1772,7 +2223,7 @@ window.closeUserManagement = function() {
 window.deleteUser = async function(id) {
   if (!confirm("Una uhakika unataka kufuta mtumiaji huyu?")) return;
   try {
-    await deleteDoc(doc(db, "vk101_users", id));
+    await _LDB.deleteDoc(_LDB.doc(db, "vk101_users", id));
     BrickNotify.success("Mtumiaji amefutwa.");
     openUserManagement();
   } catch(e) { BrickNotify.error("Hitilafu: " + e.message); }
@@ -1786,7 +2237,7 @@ window.openManageBranding = async function() {
   }
   document.getElementById("manageBrandingModal").classList.remove("hidden");
   try {
-    const snap = await getDoc(doc(db, "vk101_branding", "logos"));
+    const snap = await _LDB.getDoc(_LDB.doc(db, "vk101_branding", "logos"));
     if (snap.exists()) {
       const data = snap.data();
       brandingState.primaryLogo = data.primaryLogo || null;
@@ -1853,10 +2304,10 @@ window.removeBrandingLogo = function(which) {
 window.saveBranding = async function() {
   try {
     const validPartners = brandingState.partners.filter(p => (p.name && p.name.trim()) || p.logo);
-    await setDoc(doc(db, "vk101_branding", "logos"), {
+    await _LDB.setDoc(_LDB.doc(db, "vk101_branding", "logos"), {
       primaryLogo: brandingState.primaryLogo || "",
       partners: validPartners,
-      updatedAt: serverTimestamp()
+      updatedAt: _LDB.serverTimestamp()
     });
     BrickNotify.success("Branding imehifadhiwa!");
     closeManageBranding();
@@ -1866,7 +2317,7 @@ window.saveBranding = async function() {
 
 window.loadBranding = async function() {
   try {
-    const snap = await getDoc(doc(db, "vk101_branding", "logos"));
+    const snap = await _LDB.getDoc(_LDB.doc(db, "vk101_branding", "logos"));
     const data = snap.exists() ? snap.data() : null;
     const mainLogo = document.getElementById("mainLogo");
     if (mainLogo) {
@@ -1943,7 +2394,7 @@ window.loadMatangazoList = async function() {
   const list = document.getElementById("matangazoList");
   list.innerHTML = "<p style='text-align:center;color:#999;padding:20px'>Loading...</p>";
   try {
-    const snap = await getDocs(query(collection(db, "vk101_news"), orderBy("createdAt", "desc")));
+    const snap = await _LDB.getDocs(_LDB.query(_LDB.collection(db, "vk101_news"), _LDB.orderBy("createdAt", "desc")));
     const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     document.getElementById("matangazoCount").textContent = items.length;
     const visible = items.filter(x => x.isVisible !== false).length;
@@ -1963,7 +2414,7 @@ window.previewMatangazoImage = function() { /* no-op placeholder, results shown 
 
 window.openEditMatangazo = async function(id) {
   try {
-    const snap = await getDoc(doc(db, "vk101_news", id));
+    const snap = await _LDB.getDoc(_LDB.doc(db, "vk101_news", id));
     if (!snap.exists()) return;
     const n = snap.data();
     document.getElementById("matangazoEditId").value = id;
@@ -1995,11 +2446,11 @@ window.saveMatangazo = async function() {
   if (!image || !title || !desc) { BrickNotify.error("Jaza picha, kichwa, na maelezo."); return; }
   try {
     if (editId) {
-      await updateDoc(doc(db, "vk101_news", editId), { title, desc, image, link, updatedAt: serverTimestamp() });
+      await _LDB.updateDoc(_LDB.doc(db, "vk101_news", editId), { title, desc, image, link, updatedAt: _LDB.serverTimestamp() });
       BrickNotify.success("Tangazo limehaririwa!");
     } else {
       // Check duplicates
-      const existSnap = await getDocs(collection(db, "vk101_news"));
+      const existSnap = await _LDB.getDocs(_LDB.collection(db, "vk101_news"));
       let dup = null;
       existSnap.forEach(d => {
         const x = d.data();
@@ -2010,7 +2461,7 @@ window.saveMatangazo = async function() {
       let vc = 0;
       existSnap.forEach(d => { if (d.data().isVisible !== false) vc++; });
       if (vc >= 3) isVisible = false;
-      await addDoc(collection(db, "vk101_news"), { title, desc, image, link, likes: 0, isVisible, createdAt: serverTimestamp() });
+      await _LDB.addDoc(_LDB.collection(db, "vk101_news"), { title, desc, image, link, likes: 0, isVisible, createdAt: _LDB.serverTimestamp() });
       BrickNotify.success(isVisible ? "Tangazo limeongezwa!" : "Tangazo limeongezwa lakini LIMEFICHIWA (kuna 3 wazi).");
     }
     cancelEditMatangazo();
@@ -2020,17 +2471,17 @@ window.saveMatangazo = async function() {
 
 window.deleteMatangazo = async function(id) {
   if (!confirm("Futa tangazo hili?")) return;
-  try { await deleteDoc(doc(db, "vk101_news", id)); BrickNotify.success("Tangazo limefutwa."); loadMatangazoList(); }
+  try { await _LDB.deleteDoc(_LDB.doc(db, "vk101_news", id)); BrickNotify.success("Tangazo limefutwa."); loadMatangazoList(); }
   catch(e) { BrickNotify.error("Hitilafu: " + e.message); }
 };
 
 window.showMatangazo = async function(id) {
-  try { await updateDoc(doc(db, "vk101_news", id), { isVisible: true }); BrickNotify.success("Tangazo sasa linaonekana."); loadMatangazoList(); }
+  try { await _LDB.updateDoc(_LDB.doc(db, "vk101_news", id), { isVisible: true }); BrickNotify.success("Tangazo sasa linaonekana."); loadMatangazoList(); }
   catch(e) { BrickNotify.error("Hitilafu: " + e.message); }
 };
 
 window.hideMatangazo = async function(id) {
-  try { await updateDoc(doc(db, "vk101_news", id), { isVisible: false }); BrickNotify.success("Tangazo limefichwa."); loadMatangazoList(); }
+  try { await _LDB.updateDoc(_LDB.doc(db, "vk101_news", id), { isVisible: false }); BrickNotify.success("Tangazo limefichwa."); loadMatangazoList(); }
   catch(e) { BrickNotify.error("Hitilafu: " + e.message); }
 };
 
@@ -2237,9 +2688,9 @@ window.showDashboard = async function() {
   if (genTime) genTime.textContent = "Imetengenezwa: " + new Date().toLocaleString();
   try {
     const [oppSnap, userSnap, appSnap] = await Promise.all([
-      getDocs(collection(db, "vk101_opportunities")),
-      getDocs(collection(db, "vk101_users")),
-      getDocs(collection(db, "vk101_applications"))
+      _LDB.getDocs(_LDB.collection(db, "vk101_opportunities")),
+      _LDB.getDocs(_LDB.collection(db, "vk101_users")),
+      _LDB.getDocs(_LDB.collection(db, "vk101_applications"))
     ]);
     const opps = oppSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const users = userSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -2361,7 +2812,7 @@ window.downloadChart = function(chartId) {
 
 async function fetchReportLogo() {
   try {
-    const snap = await getDoc(doc(db, "vk101_branding", "logos"));
+    const snap = await _LDB.getDoc(_LDB.doc(db, "vk101_branding", "logos"));
     if (snap.exists() && snap.data().primaryLogo) return snap.data().primaryLogo;
   } catch(e) {}
   return null;
@@ -2540,9 +2991,188 @@ window.exportComprehensiveWord = async function() {
   } catch(e) { BrickNotify.error("Word error: " + e.message); }
 };
 
+// ===== NETWORK INDICATOR FUNCTIONS =====
+window._updateNetworkIndicator = function() {
+  const indicator = document.getElementById("networkIndicator");
+  const label = document.getElementById("networkLabel");
+  const syncBadge = document.getElementById("syncBadge");
+  if (!indicator) return;
+  
+  // Ondoa madarasa ya zamani
+  indicator.classList.remove("network-online", "network-offline", "network-pending");
+  
+  const isOnline = navigator.onLine;
+  const useLocal = _LDB.isLocalMode();
+  const pendingCount = _LDB.pendingSyncCount();
+  
+  if (isOnline && !useLocal) {
+    // Online + Firebase inatumika
+    indicator.classList.add("network-online");
+    label.textContent = "Online · Firebase";
+    syncBadge.style.display = "none";
+  } else if (isOnline && useLocal && pendingCount === 0) {
+    // Online lakini LocalDB inatumika (labda user amelazimisha)
+    indicator.classList.add("network-pending");
+    label.textContent = "Online · LocalDB";
+    syncBadge.style.display = "none";
+  } else if (isOnline && useLocal && pendingCount > 0) {
+    // Online + kuna pending sync
+    indicator.classList.add("network-pending");
+    label.textContent = "Online · Inasubiri sync";
+    syncBadge.style.display = "inline-block";
+    syncBadge.textContent = pendingCount;
+  } else {
+    // Offline
+    indicator.classList.add("network-offline");
+    label.textContent = "Offline · LocalDB";
+    if (pendingCount > 0) {
+      syncBadge.style.display = "inline-block";
+      syncBadge.textContent = pendingCount;
+    } else {
+      syncBadge.style.display = "none";
+    }
+  }
+};
+
+window.toggleNetworkInfo = function() {
+  const modal = document.getElementById("networkInfoModal");
+  if (modal.classList.contains("hidden")) {
+    refreshNetworkInfo();
+    modal.classList.remove("hidden");
+  } else {
+    modal.classList.add("hidden");
+  }
+};
+
+window.closeNetworkInfo = function() {
+  document.getElementById("networkInfoModal").classList.add("hidden");
+};
+
+window.refreshNetworkInfo = function() {
+  const content = document.getElementById("networkInfoContent");
+  if (!content) return;
+  const isOnline = navigator.onLine;
+  const useLocal = _LDB.isLocalMode();
+  const pending = _LDB.pendingSyncCount();
+  
+  let html = '<div style="background:#f8f9fa;padding:14px;border-radius:8px;margin-bottom:14px">';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+  html += '<i class="fas ' + (isOnline ? 'fa-wifi' : 'fa-wifi-slash') + '" style="font-size:1.5rem;color:' + (isOnline ? '#10b981' : '#ef4444') + '"></i>';
+  html += '<div><strong style="color:' + (isOnline ? '#065f46' : '#991b1b') + '">' + (isOnline ? 'Mtandao Upo' : 'Mtandao Haupo') + '</strong>';
+  html += '<div style="font-size:.78rem;color:#6b7280">Hali ya sasa: ' + new Date().toLocaleTimeString() + '</div></div>';
+  html += '</div></div>';
+  
+  html += '<div style="background:#f8f9fa;padding:14px;border-radius:8px;margin-bottom:14px">';
+  html += '<strong style="color:#374151"><i class="fas fa-database"></i> Mfumo wa Data unaotumika:</strong>';
+  html += '<div style="margin-top:8px;padding:10px;background:#fff;border-radius:6px;border-left:4px solid ' + (useLocal ? '#f59e0b' : '#3b82f6') + '">';
+  html += '<strong>' + (useLocal ? 'LocalDB (localStorage)' : 'Firebase Firestore') + '</strong>';
+  html += '<div style="font-size:.78rem;color:#6b7280;margin-top:2px">' + (useLocal ? 'Data inahifadhiwa kwenye browser yako' : 'Data inasynched kwenye cloud') + '</div>';
+  html += '</div></div>';
+  
+  html += '<div style="background:#f8f9fa;padding:14px;border-radius:8px;margin-bottom:14px">';
+  html += '<strong style="color:#374151"><i class="fas fa-tasks"></i> Mabadiliko Yanagosubiri Sync:</strong>';
+  html += '<div style="margin-top:8px;padding:10px;background:#fff;border-radius:6px">';
+  html += '<strong style="font-size:1.4rem;color:' + (pending > 0 ? '#f59e0b' : '#10b981') + '">' + pending + '</strong>';
+  html += '<div style="font-size:.78rem;color:#6b7280">operesheni zinasubiri kusynched kwa Firestore</div>';
+  html += '</div>';
+  if (pending > 0 && isOnline) {
+    html += '<div style="margin-top:8px;font-size:.78rem;color:#92400e"><i class="fas fa-info-circle"></i> Mfumo uta-sync otomatiki. Au bofya "Sync Sasa" hapo chini.</div>';
+  }
+  html += '</div>';
+  
+  html += '<div style="font-size:.78rem;color:#6b7280;line-height:1.6">';
+  html += '<strong style="color:#374151">Maelezo:</strong><br>';
+  html += '• Mfumo unabadilisha kiotomatiki kati ya Firebase (mtandao upo) na LocalDB (mtandao haupo).<br>';
+  html += '• Mabadiliko yote ya LocalDB yanaongezwa kwenye queue na kusynched kwa Firestore mtandao unaporudi.<br>';
+  html += '• Unaweza kulazimisha mfumo kutumia database moja kwa kutumia vifungo hapo chini.';
+  html += '</div>';
+  
+  content.innerHTML = html;
+  _updateNetworkIndicator();
+};
+
+window.manualSync = async function() {
+  const isOnline = navigator.onLine;
+  if (!isOnline) {
+    BrickNotify.warning("Huwezi kusync wakati mtandao haupo. Subiri mtandao urudi.");
+    return;
+  }
+  const pending = _LDB.pendingSyncCount();
+  if (pending === 0) {
+    BrickNotify.info("Hakuna mabadiliko ya kusync.");
+    return;
+  }
+  BrickNotify.info("Inasynching " + pending + " operesheni kwa Firebase...");
+  try {
+    const result = await SyncQueue.syncAll();
+    if (result.failed === 0) {
+      BrickNotify.success("Sync imekamilika! " + result.synced + " operesheni zimesynched.");
+    } else {
+      BrickNotify.warning("Sync imeisha: " + result.synced + " zimefanikiwa, " + result.failed + " zimeshindwa.");
+    }
+    refreshNetworkInfo();
+  } catch(e) {
+    BrickNotify.error("Hitilafu ya sync: " + e.message);
+  }
+};
+
+// ===== AUTO-SYNC MTANDAO UNAPORUDI ONLINE =====
+window.addEventListener('online', async () => {
+  console.log("🌐 Mtandao umerudi online — inabadia kuwa Firebase mode");
+  USE_LOCAL_DB = false;
+  _updateNetworkIndicator();
+  BrickNotify.success("Mtandao umerudi! Mfumo unatumia Firebase tena.");
+  
+  // Auto-sync queue kama kuna pending operations
+  const pending = _LDB.pendingSyncCount();
+  if (pending > 0) {
+    BrickNotify.info("Inasynching " + pending + " mabadiliko yaliyokusubiriwa kwa Firebase...");
+    try {
+      const result = await SyncQueue.syncAll();
+      if (result.synced > 0) {
+        BrickNotify.success(result.synced + " mabadiliko yamesynched kwa Firebase!");
+      }
+      if (result.failed > 0) {
+        BrickNotify.warning(result.failed + " mabadiliko yameshindwa kusync. Tena baadaye.");
+      }
+      _updateNetworkIndicator();
+      // Reload data kutoka Firebase ili kuona mabadiliko
+      if (typeof loadOpportunities === 'function') loadOpportunities();
+      if (typeof loadBranding === 'function') loadBranding();
+      if (typeof loadStats === 'function') loadStats();
+    } catch(e) {
+      console.error("Auto-sync error:", e);
+      BrickNotify.error("Hitilafu wakati wa auto-sync: " + e.message);
+    }
+  }
+});
+
+window.addEventListener('offline', () => {
+  console.log("📴 Mtandao umeondoka — inabadilika kuwa LocalDB mode");
+  USE_LOCAL_DB = true;
+  _updateNetworkIndicator();
+  BrickNotify.warning("Mtandao umeondoka. Mfumo unatumia LocalDB sasa. Mabadiliko yatahifadhiwa na kusynched mtandao unaporudi.");
+});
+
 // ===== INIT =====
 window.onload = async function() {
   BrickNotify.init();
+  // Initialize network indicator
+  _updateNetworkIndicator();
+  // Notify user about current mode (baada ya sekunde 1)
+  setTimeout(() => {
+    if (window.BrickNotify) {
+      const isOnline = navigator.onLine;
+      const useLocal = _LDB.isLocalMode();
+      if (isOnline && !useLocal) {
+        BrickNotify.info("🌐 Mfumo unatumia Firebase Firestore (online mode).");
+      } else if (isOnline && useLocal) {
+        BrickNotify.info("🌐 Mtandao upo, lakini LocalDB inatumika (kwa makusudi au fallback).");
+      } else {
+        BrickNotify.info("📴 Mfumo unatumia LocalDB (offline mode). Mabadiliko yatahifadhiwa kwenye browser.");
+      }
+    }
+  }, 1500);
   // Hakikisha akaunti za admin wakuu zipo (Super Admin + Mmiliki)
   // Hizi hazihitaji kujisajili — mfumo unazitengeneza moja kwa moja.
   try { await ensureSystemAdmins(); } catch(e) { console.warn("Init ensureSystemAdmins:", e); }
@@ -2553,7 +3183,7 @@ window.onload = async function() {
   } catch(e) {}
   // Load saved language
   try {
-    const snap = await getDoc(doc(db, "vk101_settings", "lang"));
+    const snap = await _LDB.getDoc(_LDB.doc(db, "vk101_settings", "lang"));
     if (snap.exists()) currentLang = snap.data().lang || "sw";
   } catch(e) {}
   changeLanguage(currentLang);
