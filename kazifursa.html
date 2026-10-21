@@ -687,9 +687,7 @@ tbody tr:hover{background:#f1f3f5}
         <!-- Signup Form -->
         <div id="signupFormContainer" style="display:none">
           <div class="modal-header"><h2>Unda Akaunti Yako</h2></div>
-          <form onsubmit="handleSignup(event)">
-            <label style="margin-bottom:8px"><strong>Chagua Aina ya Akaunti:</strong></label>
-          </form>
+          <label style="margin-bottom:8px;display:block"><strong>Chagua Aina ya Akaunti:</strong></label>
           <div class="role-grid" id="roleGrid">
             <div class="role-card selected" data-role="youth" onclick="selectRole(this)"><i class="fas fa-user-graduate"></i><div class="role-name">Kijana / Mwombaji</div><div class="role-desc">Tafuta kazi na mafunzo</div></div>
             <div class="role-card" data-role="employer" onclick="selectRole(this)"><i class="fas fa-building"></i><div class="role-name">Mwajiri</div><div class="role-desc">Tangaza ajira</div></div>
@@ -716,7 +714,7 @@ tbody tr:hover{background:#f1f3f5}
               </div>
               <div class="form-group"><label>Nenosiri</label><div class="password-wrapper"><input type="password" id="su_pass" required><span class="toggle-password" onclick="togglePass('su_pass',this)">👁️</span></div></div>
               <div class="form-group"><label>Thibitisha Nenosiri</label><div class="password-wrapper"><input type="password" id="su_cpass" required><span class="toggle-password" onclick="togglePass('su_cpass',this)">👁️</span></div></div>
-              <button type="submit" class="btn-submit">Jisajili Bure</button>
+              <button type="submit" class="btn-submit" id="signupSubmitBtn">Jisajili Bure</button>
             </div>
           </form>
           <div class="switch-auth">Una akaunti? <a onclick="toggleAuthForm('login')">Ingia Hapa</a></div>
@@ -764,8 +762,10 @@ tbody tr:hover{background:#f1f3f5}
         <i class="fas fa-lock"></i> Nenosiri limefichwa kwa usalama wa mfumo.<br>
         Wasiliana na <strong style="color:#ffd700">Mmiliki wa Mfumo</strong> kupata nenosiri halali.
       </div>
-      <div style="margin-top:14px;text-align:center">
+      <div style="margin-top:10px;text-align:center">
         <a onclick="closeSuperAdminLogin();openModal('login')" style="color:#d1fae5;font-size:.82rem;cursor:pointer;text-decoration:underline">← Rudi kwenye Login ya Kawaida</a>
+        <span style="color:rgba(255,255,255,.2);margin:0 8px">|</span>
+        <a onclick="debugSuperAdmin()" style="color:#9ca3af;font-size:.74rem;cursor:pointer;text-decoration:underline"><i class="fas fa-bug"></i> Tatizo la Login?</a>
       </div>
     </div>
   </div>
@@ -1286,16 +1286,56 @@ const SyncQueue = (function() {
 // Muhimu: wakati wa write operesheni offline, zinaongeza kwenye SyncQueue
 const _LDB = {
   // Read operations — straightforward routing
-  collection: (a, b) => USE_LOCAL_DB ? LocalDB.collection(a, b) : _FB.collection(firestoreDB, b),
-  doc: (a, b, c) => USE_LOCAL_DB ? LocalDB.doc(a, b, c) : _FB.doc(firestoreDB, b, c),
+  collection: (a, b) => {
+    if (USE_LOCAL_DB) return LocalDB.collection(a, b);
+    const fbColl = _FB.collection(firestoreDB, b);
+    if (fbColl) {
+      fbColl._name = b;
+      fbColl._collectionName = b;
+    }
+    return fbColl;
+  },
+  doc: (a, b, c) => {
+    if (USE_LOCAL_DB) return LocalDB.doc(a, b, c);
+    // Tumia Firebase doc ref lakini ongeza _collectionName na _id kwa ajili ya fallback
+    const fbRef = _FB.doc(firestoreDB, b, c);
+    // Decorate na metadata ya LocalDB-compatible
+    if (fbRef) {
+      fbRef._collectionName = b;
+      fbRef._id = c;
+      fbRef._name = b;
+    }
+    return fbRef;
+  },
   getDocs: async (a) => {
     if (USE_LOCAL_DB) return LocalDB.getDocs(a);
     try {
       return await _FB.getDocs(a);
     } catch(e) {
       console.warn("Firebase getDocs failed, falling back to LocalDB:", e.message);
-      // Auto-fallback kwa LocalDB kama Firebase inashindwa
-      return LocalDB.getDocs(a);
+      // Convert Firebase query to LocalDB-compatible query
+      // Firebase query: { _coll: { _name: 'vk101_users' }, _constraints: [{field, op, value}] }
+      // LocalDB query: { _name: 'vk101_users', _filters: [{field, op, value}] }
+      let collName = a._name || (a._coll && a._coll._name) || (a._coll && a._coll._collectionName);
+      if (!collName) {
+        console.error("Cannot determine collection name from query:", a);
+        return { empty: true, docs: [], forEach: () => {}, size: 0 };
+      }
+      const localCollRef = LocalDB.collection(db, collName);
+      const localConstraints = [];
+      if (a._constraints && Array.isArray(a._constraints)) {
+        for (const c of a._constraints) {
+          if (c._type === 'where' || (c.field && c.op)) {
+            localConstraints.push(LocalDB.where(c.field, c.op, c.value));
+          } else if (c._type === 'orderBy' || (c.field && c.direction)) {
+            localConstraints.push(LocalDB.orderBy(c.field, c.direction));
+          } else if (c._type === 'limit' || c.n) {
+            localConstraints.push(LocalDB.limit(c.n));
+          }
+        }
+      }
+      const localQuery = LocalDB.query(localCollRef, ...localConstraints);
+      return LocalDB.getDocs(localQuery);
     }
   },
   getDoc: async (a) => {
@@ -1304,23 +1344,47 @@ const _LDB = {
       return await _FB.getDoc(a);
     } catch(e) {
       console.warn("Firebase getDoc failed, falling back to LocalDB:", e.message);
-      return LocalDB.getDoc(a);
+      // Convert Firebase doc ref to LocalDB doc ref
+      let collName = a._collectionName || (a._name) || (a.path && a.path.split('/')[0]);
+      let docId = a._id || (a.path && a.path.split('/')[1]);
+      if (!collName || !docId) {
+        console.error("Cannot determine collection/docId from ref:", a);
+        return { exists: () => false, data: () => undefined, id: 'unknown' };
+      }
+      const localDocRef = LocalDB.doc(db, collName, docId);
+      return LocalDB.getDoc(localDocRef);
     }
   },
   
   // Write operations — zinaweka kwenye SyncQueue wakati offline
+  // Muhimu: Kama Firebase inashindwa, inaandika kwenye LocalDB na kuongeza kwenye SyncQueue
   addDoc: async (collRef, data) => {
     if (USE_LOCAL_DB) {
       const result = await LocalDB.addDoc(collRef, data);
-      // Enqueue kwa sync baadaye
       SyncQueue.enqueue({
         type: 'addDoc',
         collection: collRef._name,
-        data: { ...data }  // Snapshot ya data wakati wa kuandika
+        data: { ...data }
       });
       return result;
     }
-    return _FB.addDoc(collRef, data);
+    // Online mode - jaribu Firebase kwanza, fallback kwa LocalDB
+    try {
+      return await _FB.addDoc(collRef, data);
+    } catch(e) {
+      console.warn("Firebase addDoc failed, falling back to LocalDB:", e.message);
+      // Andika kwenye LocalDB badala yake
+      const result = await LocalDB.addDoc(collRef, data);
+      // Ondoa _name kwa sababu LocalDB addDoc inatumia collRef tofauti
+      // Tafuta collection name kutoka collRef ya Firebase
+      const collName = collRef._name || (collRef && collRef.path ? collRef.path.split('/')[0] : 'unknown');
+      SyncQueue.enqueue({
+        type: 'addDoc',
+        collection: collName,
+        data: { ...data }
+      });
+      return result;
+    }
   },
   
   setDoc: async (docRef, data, opts) => {
@@ -1334,7 +1398,23 @@ const _LDB = {
       });
       return result;
     }
-    return _FB.setDoc(docRef, data, opts);
+    try {
+      return await _FB.setDoc(docRef, data, opts);
+    } catch(e) {
+      console.warn("Firebase setDoc failed, falling back to LocalDB:", e.message);
+      // Tengeneza LocalDB doc ref kwa kutumia info kutoka Firebase ref
+      const collName = docRef._collectionName || (docRef && docRef.path ? docRef.path.split('/')[0] : 'unknown');
+      const docId = docRef._id || (docRef && docRef.path ? docRef.path.split('/')[1] : 'unknown');
+      const localDocRef = LocalDB.doc(db, collName, docId);
+      const result = await LocalDB.setDoc(localDocRef, data);
+      SyncQueue.enqueue({
+        type: 'setDoc',
+        collection: collName,
+        docId: docId,
+        data: { ...data }
+      });
+      return result;
+    }
   },
   
   updateDoc: async (docRef, data) => {
@@ -1348,7 +1428,22 @@ const _LDB = {
       });
       return result;
     }
-    return _FB.updateDoc(docRef, data);
+    try {
+      return await _FB.updateDoc(docRef, data);
+    } catch(e) {
+      console.warn("Firebase updateDoc failed, falling back to LocalDB:", e.message);
+      const collName = docRef._collectionName || (docRef && docRef.path ? docRef.path.split('/')[0] : 'unknown');
+      const docId = docRef._id || (docRef && docRef.path ? docRef.path.split('/')[1] : 'unknown');
+      const localDocRef = LocalDB.doc(db, collName, docId);
+      const result = await LocalDB.updateDoc(localDocRef, data);
+      SyncQueue.enqueue({
+        type: 'updateDoc',
+        collection: collName,
+        docId: docId,
+        data: { ...data }
+      });
+      return result;
+    }
   },
   
   deleteDoc: async (docRef) => {
@@ -1362,7 +1457,22 @@ const _LDB = {
       });
       return result;
     }
-    return _FB.deleteDoc(docRef);
+    try {
+      return await _FB.deleteDoc(docRef);
+    } catch(e) {
+      console.warn("Firebase deleteDoc failed, falling back to LocalDB:", e.message);
+      const collName = docRef._collectionName || (docRef && docRef.path ? docRef.path.split('/')[0] : 'unknown');
+      const docId = docRef._id || (docRef && docRef.path ? docRef.path.split('/')[1] : 'unknown');
+      const localDocRef = LocalDB.doc(db, collName, docId);
+      const result = await LocalDB.deleteDoc(localDocRef);
+      SyncQueue.enqueue({
+        type: 'deleteDoc',
+        collection: collName,
+        docId: docId,
+        data: null
+      });
+      return result;
+    }
   },
   
   // Query builders — routing tu
@@ -1529,34 +1639,96 @@ window.selectRole = function(card) {
 
 window.handleSignup = async function(e) {
   e.preventDefault();
-  if (document.getElementById("su_pass").value !== document.getElementById("su_cpass").value) {
-    BrickNotify.error("Nenosiri hazilingani!");
-    return;
+  const btn = document.getElementById("signupSubmitBtn");
+  const originalText = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inasajili...'; }
+  
+  try {
+    // Validate passwords match
+    const passValue = document.getElementById("su_pass").value;
+    const cpassValue = document.getElementById("su_cpass").value;
+    if (passValue !== cpassValue) {
+      BrickNotify.error("Nenosiri hazilingani! Hakikisha uneno siri na uthibitisho wake ni sawa.");
+      return;
+    }
+    if (passValue.length < 4) {
+      BrickNotify.error("Nenosiri lazima kiwe na herufi 4 au zaidi.");
+      return;
+    }
+    
+    // Zuia mtu kujisajili kwa email za mfumo (super admin / mmiliki)
+    const reservedEmails = ["super@kazifursa.app", "mmiliki@kazifursa.app", "admin@vijanakazi101.com"];
+    const enteredEmail = (document.getElementById("su_email").value || "").trim().toLowerCase();
+    if (reservedEmails.includes(enteredEmail)) {
+      BrickNotify.error("Email hii imehifadhiwa kwa akaunti za mfumo. Tumia email nyingine.");
+      return;
+    }
+    
+    const userData = {
+      fname: document.getElementById("su_fname").value.trim(),
+      lname: document.getElementById("su_lname").value.trim(),
+      email: enteredEmail,
+      phone: document.getElementById("su_phone").value.trim(),
+      country: document.getElementById("su_country").value,
+      role: document.getElementById("su_role").value,
+      password: passValue,
+      verified: false,
+      createdAt: Date.now()
+    };
+    
+    console.log("Signup attempt:", userData.email, "| role:", userData.role);
+    
+    // Angalia kama mtumiaji yupo (jaribu database kuu kwanza, kisha LocalDB kama fallback)
+    let userExists = false;
+    try {
+      const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", userData.email));
+      const snap = await _LDB.getDocs(q);
+      if (!snap.empty) userExists = true;
+    } catch(e) {
+      console.warn("Main DB check failed, trying LocalDB:", e.message);
+    }
+    
+    // Fallback: angalia LocalDB moja kwa moja
+    if (!userExists) {
+      try {
+        const oldFlag = USE_LOCAL_DB;
+        USE_LOCAL_DB = true;
+        const localQ = LocalDB.query(LocalDB.collection(db, "vk101_users"), LocalDB.where("email", "==", userData.email));
+        const localSnap = await LocalDB.getDocs(localQ);
+        if (!localSnap.empty) userExists = true;
+        USE_LOCAL_DB = oldFlag;
+      } catch(e) {
+        console.warn("LocalDB check failed:", e.message);
+      }
+    }
+    
+    if (userExists) {
+      BrickNotify.error("Mtumiaji mwenye email hii tayari yupo! Tumia email nyingine au ingia.");
+      return;
+    }
+    
+    // Ongeza mtumiaji mpya
+    await _LDB.addDoc(_LDB.collection(db, "vk101_users"), userData);
+    console.log("User registered successfully:", userData.email);
+    BrickNotify.success("Usajili umefanikiwa! Sasa unaweza kuingia.");
+    
+    // Futa form
+    e.target.reset();
+    document.getElementById("su_role").value = "youth";
+    document.querySelectorAll(".role-card").forEach(c => c.classList.remove("selected"));
+    document.querySelector('.role-card[data-role="youth"]')?.classList.add("selected");
+    
+    // Elekeza kwenye login
+    toggleAuthForm("login");
+    // Pre-fill email ya login
+    const loginEmail = document.getElementById("loginEmail");
+    if (loginEmail) loginEmail.value = userData.email;
+  } catch(err) {
+    console.error("handleSignup error:", err);
+    BrickNotify.error("Hitilafu ya usajili: " + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
   }
-  // Zuia mtu kujisajili kwa email za mfumo (super admin / mmiliki)
-  const reservedEmails = ["super@kazifursa.app", "mmiliki@kazifursa.app", "admin@vijanakazi101.com"];
-  const enteredEmail = (document.getElementById("su_email").value || "").trim().toLowerCase();
-  if (reservedEmails.includes(enteredEmail)) {
-    BrickNotify.error("Email hii imehifadhiwa kwa akaunti za mfumo. Tumia email nyingine.");
-    return;
-  }
-  const userData = {
-    fname: document.getElementById("su_fname").value,
-    lname: document.getElementById("su_lname").value,
-    email: document.getElementById("su_email").value,
-    phone: document.getElementById("su_phone").value,
-    country: document.getElementById("su_country").value,
-    role: document.getElementById("su_role").value,
-    password: document.getElementById("su_pass").value,
-    verified: false,
-    createdAt: Date.now()
-  };
-  const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", userData.email));
-  const snap = await _LDB.getDocs(q);
-  if (!snap.empty) { BrickNotify.error("Mtumiaji tayari yupo!"); return; }
-  await _LDB.addDoc(_LDB.collection(db, "vk101_users"), userData);
-  BrickNotify.success("Usajili umefanikiwa! Tafadhali ingia.");
-  toggleAuthForm("login");
 };
 
 window.handleLogin = async function(e) {
@@ -1567,28 +1739,54 @@ window.handleLogin = async function(e) {
   const originalText = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inangalia...'; }
   try {
-    // Query kwa email tu (inakabiliwa na index issues kisichohitajika)
-    const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", em));
-    const snap = await _LDB.getDocs(q);
-    if (snap.empty) {
-      BrickNotify.error("Taarifa sio sahihi. Hakikisha email ni sahihi.");
-      return;
-    }
-    // Pata mtumiaji wa kwanza anayelingana (kwa kawaida huwa ni mmoja tu)
     let matchedUser = null;
     let matchedDocId = null;
-    snap.forEach(d => {
-      const data = d.data();
-      // Linganisha nenosiri kwa JavaScript (si kwenye query)
-      if (data && data.password === p) {
-        matchedUser = data;
-        matchedDocId = d.id;
+    
+    // Jaribu database kuu kwanza
+    try {
+      const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", em));
+      const snap = await _LDB.getDocs(q);
+      if (!snap.empty) {
+        snap.forEach(d => {
+          const data = d.data();
+          if (data && data.password === p) {
+            matchedUser = data;
+            matchedDocId = d.id;
+          }
+        });
       }
-    });
+    } catch(e) {
+      console.warn("Main DB login check failed:", e.message);
+    }
+    
+    // Fallback: Jaribu LocalDB moja kwa moja
     if (!matchedUser) {
-      BrickNotify.error("Taarifa sio sahihi. Nenosiri si sahihi.");
+      console.log("Login: trying LocalDB fallback...");
+      const oldFlag = USE_LOCAL_DB;
+      USE_LOCAL_DB = true;
+      try {
+        const localQ = LocalDB.query(LocalDB.collection(db, "vk101_users"), LocalDB.where("email", "==", em));
+        const localSnap = await LocalDB.getDocs(localQ);
+        if (!localSnap.empty) {
+          localSnap.forEach(d => {
+            const data = d.data();
+            if (data && data.password === p) {
+              matchedUser = data;
+              matchedDocId = d.id;
+            }
+          });
+        }
+      } catch(e) {
+        console.error("LocalDB fallback login error:", e);
+      }
+      USE_LOCAL_DB = oldFlag;
+    }
+    
+    if (!matchedUser) {
+      BrickNotify.error("Taarifa sio sahihi. Hakikisha email na nenosiri ni sahihi.");
       return;
     }
+    
     matchedUser.id = matchedDocId;
     // Zuia mtu asiye Super Admin kujaribu kuingia kupitia login ya kawaida
     // (Super Admin ana dirisha lake mahsusi)
@@ -1601,6 +1799,7 @@ window.handleLogin = async function(e) {
     }
     sessionStorage.setItem("vk101_user", JSON.stringify(matchedUser));
     showSite(matchedUser);
+    BrickNotify.success("Karibu " + matchedUser.fname + "! Umeingia kwa usalama.");
   } catch(err) {
     console.error("handleLogin:", err);
     BrickNotify.error("Hitilafu ya kiufundi: " + err.message);
@@ -1634,6 +1833,121 @@ window.closeSuperAdminLogin = function() {
   }
 };
 
+// Function ya kurekebisha tatizo la Super Admin login
+window.debugSuperAdmin = async function() {
+  const errBox = document.getElementById("superAdminLoginError");
+  if (errBox) {
+    errBox.style.display = "block";
+    errBox.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inakagua mfumo...';
+  }
+  
+  let report = [];
+  report.push("🔍 M Ripoti ya Tatizo la Login:");
+  report.push("=".repeat(50));
+  report.push(" navigator.onLine: " + navigator.onLine);
+  report.push(" USE_LOCAL_DB: " + USE_LOCAL_DB);
+  report.push(" _LDB.isLocalMode(): " + _LDB.isLocalMode());
+  report.push("");
+  
+  // Angalia LocalDB data
+  try {
+    const stored = localStorage.getItem("vk101_localdb_v1");
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const users = parsed.vk101_users || {};
+      report.push("📦 LocalDB Users Count: " + Object.keys(users).length);
+      Object.entries(users).forEach(([id, data]) => {
+        report.push("  - " + data.email + " | " + data.role + " | uid: " + id);
+      });
+      
+      // Angalia Super Admin UID maalum
+      if (users["8UIr4Q9VYZMle5OIzBeyaET31pr2"]) {
+        report.push("✓ Super Admin UID 8UIr4Q9VYZMle5OIzBeyaET31pr2 IPO kwenye LocalDB");
+      } else {
+        report.push("✗ Super Admin UID 8UIr4Q9VYZMle5OIzBeyaET31pr2 HAMO kwenye LocalDB");
+      }
+    } else {
+      report.push("✗ Hakuna data kwenye localStorage (vk101_localdb_v1)");
+    }
+  } catch(e) {
+    report.push("✗ Error reading LocalDB: " + e.message);
+  }
+  
+  report.push("");
+  report.push("🔄 Inajaribu kuunda akaunti za mfumo tena...");
+  
+  try {
+    // Force create kwenye LocalDB
+    const oldFlag = USE_LOCAL_DB;
+    USE_LOCAL_DB = true;
+    await ensureSystemAdmins();
+    USE_LOCAL_DB = oldFlag;
+    report.push("✓ ensureSystemAdmins imekamilika");
+  } catch(e) {
+    report.push("✗ ensureSystemAdmins error: " + e.message);
+  }
+  
+  // Angalia tena baada ya kujaribu
+  try {
+    const stored = localStorage.getItem("vk101_localdb_v1");
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const users = parsed.vk101_users || {};
+      report.push("");
+      report.push("📦 LocalDB baada ya ensureSystemAdmins:");
+      Object.entries(users).forEach(([id, data]) => {
+        report.push("  - " + data.email + " | " + data.role + " | uid: " + id);
+      });
+    }
+  } catch(e) {}
+  
+  report.push("");
+  report.push("📌 Maelekezo:");
+  report.push("1. Kama Super Admin hamo kwenye LocalDB, tumia kitufe cha 'Reset LocalDB'");
+  report.push("2. Kama mtandao upo na Firebase inakataa, LocalDB itatumika kwa login");
+  report.push("3. Console ya browser ina maelezo zaidi");
+  
+  const reportText = report.join("\n");
+  console.log(reportText);
+  
+  // Onyesha kwenye errBox
+  if (errBox) {
+    errBox.style.display = "block";
+    errBox.innerHTML = '<i class="fas fa-bug"></i> Tatizo limechunguzwa. Angalia console ya browser (F12) kwa maelezo. <button onclick="resetLocalDB()" style="background:#dc3545;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;margin-left:8px;font-size:.78rem">Reset LocalDB</button>';
+  }
+  
+  // Onyesha pia alert ya maelezo muhimu
+  alert(reportText);
+};
+
+// Function ya kufuta LocalDB na kuanzisha upya
+window.resetLocalDB = async function() {
+  if (!confirm("Una uhakika unataka kufuta LocalDB yote? Hii itafuta data yote iliyo kwenye browser (lakini sio Firebase).")) return;
+  
+  try {
+    localStorage.removeItem("vk101_localdb_v1");
+    localStorage.removeItem("vk101_sync_queue_v1");
+    console.log("LocalDB imefutwa. Inaunda upya akaunti za mfumo...");
+    
+    // Unda upya akaunti za mfumo
+    USE_LOCAL_DB = true;
+    await ensureSystemAdmins();
+    
+    BrickNotify.success("LocalDB imefutwa na akaunti za mfumo zimeundwa upya. Jaribu kuingia tena.");
+    
+    // Onyesha akaunti zilizoundwa
+    const stored = localStorage.getItem("vk101_localdb_v1");
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const users = parsed.vk101_users || {};
+      console.log("Akaunti zilizoundwa:", Object.values(users).map(u => u.email + " (" + u.role + ")"));
+    }
+  } catch(e) {
+    console.error("Reset LocalDB error:", e);
+    BrickNotify.error("Hitilafu wakati wa kufuta: " + e.message);
+  }
+};
+
 window.handleSuperAdminLogin = async function(e) {
   e.preventDefault();
   const em = (document.getElementById("superAdminEmail").value || "").trim().toLowerCase();
@@ -1644,42 +1958,87 @@ window.handleSuperAdminLogin = async function(e) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inathibitisha...'; }
   if (errBox) errBox.style.display = "none";
   try {
-    // Hakikisha akaunti za admin zipo kabla ya kuingia
-    await ensureSystemAdmins();
-    // Tafuta mtumiaji kwa email
+    // Hakikisha akaunti za admin zipo kabla ya kuingia (kwenye database yoyote)
+    try { await ensureSystemAdmins(); } catch(e) { console.warn("ensureSystemAdmins:", e); }
+    
+    // Tafuta mtumiaji kwa email kwenye database inayotumika sasa
     const q = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", em));
     const snap = await _LDB.getDocs(q);
-    if (snap.empty) {
-      if (errBox) {
-        errBox.style.display = "block";
-        errBox.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Akaunti ya Super Admin haijapatikana. Hakikisha email ni sahihi.';
-      }
-      return;
-    }
+    
     let matchedUser = null;
     let matchedDocId = null;
-    snap.forEach(d => {
-      const data = d.data();
-      if (data && data.password === p) {
-        matchedUser = data;
-        matchedDocId = d.id;
-      }
-    });
+    
+    if (!snap.empty) {
+      snap.forEach(d => {
+        const data = d.data();
+        if (data && data.password === p && data.role === "super_admin") {
+          matchedUser = data;
+          matchedDocId = d.id;
+        }
+      });
+    }
+    
+    // Fallback: Tafuta kwenye LocalDB moja kwa moja (kama Firebase ilishindwa au data haipo)
     if (!matchedUser) {
+      console.log("Tafuta kwenye LocalDB kwa fallback...");
+      const oldFlag = USE_LOCAL_DB;
+      USE_LOCAL_DB = true;
+      try {
+        const localQ = LocalDB.query(LocalDB.collection(db, "vk101_users"), LocalDB.where("email", "==", em));
+        const localSnap = await LocalDB.getDocs(localQ);
+        if (!localSnap.empty) {
+          localSnap.forEach(d => {
+            const data = d.data();
+            if (data && data.password === p && data.role === "super_admin") {
+              matchedUser = data;
+              matchedDocId = d.id;
+            }
+          });
+        }
+      } catch(e) {
+        console.error("LocalDB fallback error:", e);
+      }
+      USE_LOCAL_DB = oldFlag;
+    }
+    
+    // Fallback ya mwisho: Tafuta kwa UID maalum wa Super Admin kwenye LocalDB
+    if (!matchedUser && em === "super@kazifursa.app") {
+      console.log("Tafuta Super Admin kwa UID maalum...");
+      const oldFlag = USE_LOCAL_DB;
+      USE_LOCAL_DB = true;
+      try {
+        const localDocRef = LocalDB.doc(db, "vk101_users", "8UIr4Q9VYZMle5OIzBeyaET31pr2");
+        const localSnap = await LocalDB.getDoc(localDocRef);
+        if (localSnap.exists()) {
+          const data = localSnap.data();
+          if (data && data.password === p && data.role === "super_admin") {
+            matchedUser = data;
+            matchedDocId = "8UIr4Q9VYZMle5OIzBeyaET31pr2";
+          }
+        }
+      } catch(e) {
+        console.error("LocalDB UID fallback error:", e);
+      }
+      USE_LOCAL_DB = oldFlag;
+    }
+    
+    if (!matchedUser) {
+      // Onyesha ujumbe wa kina ili mtumiaji ajue tatizo
+      let errMsg = 'Akaunti ya Super Admin haijapatikana.';
+      if (em !== "super@kazifursa.app") {
+        errMsg = 'Email sio sahihi. Tumia: super@kazifursa.app';
+      } else if (p !== "WAZIRI2015") {
+        errMsg = 'Nenosiri si sahihi. Jaribu tena.';
+      } else {
+        errMsg = 'Akaunti haijapatikana kwenye database yoyote. <button onclick="debugSuperAdmin()" style="background:#3b82f6;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-left:6px;font-size:.78rem">Kagua Tatizo</button>';
+      }
       if (errBox) {
         errBox.style.display = "block";
-        errBox.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Nenosiri si sahihi. Jaribu tena.';
+        errBox.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' + errMsg;
       }
       return;
     }
-    // Hakikisha ni Super Admin kweli
-    if (matchedUser.role !== "super_admin") {
-      if (errBox) {
-        errBox.style.display = "block";
-        errBox.innerHTML = '<i class="fas fa-ban"></i> Akaunti hii si Super Administrator. Tumia login ya kawaida.';
-      }
-      return;
-    }
+    
     matchedUser.id = matchedDocId;
     sessionStorage.setItem("vk101_user", JSON.stringify(matchedUser));
     // Funga dirisha la Super Admin na onyesha tovuti
@@ -1692,7 +2051,7 @@ window.handleSuperAdminLogin = async function(e) {
     console.error("handleSuperAdminLogin:", err);
     if (errBox) {
       errBox.style.display = "block";
-      errBox.innerHTML = '<i class="fas fa-times-circle"></i> Hitilafu ya kiufundi: ' + err.message;
+      errBox.innerHTML = '<i class="fas fa-times-circle"></i> Hitilafu ya kiufundi: ' + err.message + ' <button onclick="debugSuperAdmin()" style="background:#3b82f6;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;margin-left:6px;font-size:.78rem">Kagua Tatizo</button>';
     }
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
@@ -1771,11 +2130,14 @@ window.isSystemAdmin = function(role) {
 
 // Auto-create akaunti za admin wakuu (Super Admin na Mmiliki)
 // Hawahitaji kujisajili — mfumo unawatengeneza moja kwa moja.
+// Muhimu: Kama Firebase inashindwa, akaunti zinaundwa kwenye LocalDB kwa uhakika.
 async function ensureSystemAdmins() {
-  // SUPER ADMIN — email: super@kazifursa.app / pass: WAZIRI2015
-  // UID maalum: 8UIr4Q9VYZMle5OIzBeyaET31pr2
+  const superAdminUid = "8UIr4Q9VYZMle5OIzBeyaET31pr2";
+  
+  // === SUPER ADMIN ===
+  // Hatua 1: Jaribu kwenye database inayotumika sasa
+  let superAdminCreated = false;
   try {
-    const superAdminUid = "8UIr4Q9VYZMle5OIzBeyaET31pr2";
     const superAdminRef = _LDB.doc(db, "vk101_users", superAdminUid);
     const superSnap = await _LDB.getDoc(superAdminRef);
     if (!superSnap.exists()) {
@@ -1791,10 +2153,10 @@ async function ensureSystemAdmins() {
         createdAt: Date.now()
       });
       console.log("Super Admin ameundwa: super@kazifursa.app / WAZIRI2015 (uid: " + superAdminUid + ")");
+      superAdminCreated = true;
     } else {
-      // Hakikisha taarifa ni sahihi hata kama doc ilikuwepo
       const existing = superSnap.data();
-      if (existing.email !== "super@kazifursa.app" || existing.password !== "WAZIRI2015" || existing.role !== "super_admin") {
+      if (!existing || existing.email !== "super@kazifursa.app" || existing.password !== "WAZIRI2015" || existing.role !== "super_admin") {
         await _LDB.updateDoc(superAdminRef, {
           fname: "Super",
           lname: "Administrator",
@@ -1806,11 +2168,57 @@ async function ensureSystemAdmins() {
         });
         console.log("Super Admin taarifa zimesasishwa: super@kazifursa.app");
       }
+      superAdminCreated = true;
     }
-  } catch(e) { console.warn("ensureSystemAdmins (super):", e); }
+  } catch(e) {
+    console.warn("ensureSystemAdmins (Firebase super):", e.message);
+  }
+  
+  // Hatua 2: HAKIKA akaunti ipo kwenye LocalDB (fallback wa kudumu)
+  // Hii inahakikisha kwamba hata kama Firebase inashindwa, mtumiaji anaweza kuingia
+  if (!superAdminCreated || _LDB.isLocalMode() === false) {
+    try {
+      // Badilisha kwa LocalDB temporarily kuhakikisha akaunti ipo
+      const oldFlag = USE_LOCAL_DB;
+      USE_LOCAL_DB = true;
+      const localSuperRef = LocalDB.doc(db, "vk101_users", superAdminUid);
+      const localSuperSnap = await LocalDB.getDoc(localSuperRef);
+      if (!localSuperSnap.exists()) {
+        await LocalDB.setDoc(localSuperRef, {
+          fname: "Super",
+          lname: "Administrator",
+          email: "super@kazifursa.app",
+          password: "WAZIRI2015",
+          role: "super_admin",
+          country: "tanzania",
+          verified: true,
+          isSystemAccount: true,
+          createdAt: Date.now()
+        });
+        console.log("Super Admin ameundwa kwenye LocalDB: super@kazifursa.app");
+      } else {
+        const localExisting = localSuperSnap.data();
+        if (!localExisting || localExisting.email !== "super@kazifursa.app" || localExisting.password !== "WAZIRI2015" || localExisting.role !== "super_admin") {
+          await LocalDB.updateDoc(localSuperRef, {
+            fname: "Super",
+            lname: "Administrator",
+            email: "super@kazifursa.app",
+            password: "WAZIRI2015",
+            role: "super_admin",
+            verified: true,
+            isSystemAccount: true
+          });
+          console.log("Super Admin taarifa zimesasishwa kwenye LocalDB");
+        }
+      }
+      USE_LOCAL_DB = oldFlag;
+    } catch(e) {
+      console.error("ensureSystemAdmins (LocalDB super) FAILED:", e);
+    }
+  }
 
-  // MLIKIKI (Owner) — email: mmiliki@kazifursa.app / pass: WAZIRI2015
-  // Anaweza kuingia maeneo yote ya mfumo wa users bila kujisajili.
+  // === MLIKIKI (Owner) ===
+  let mmilikiCreated = false;
   try {
     const qMmiliki = _LDB.query(_LDB.collection(db, "vk101_users"), _LDB.where("email", "==", "mmiliki@kazifursa.app"));
     const mmilikiSnap = await _LDB.getDocs(qMmiliki);
@@ -1827,11 +2235,11 @@ async function ensureSystemAdmins() {
         createdAt: Date.now()
       });
       console.log("Mmiliki ameundwa: mmiliki@kazifursa.app / WAZIRI2015");
+      mmilikiCreated = true;
     } else {
-      // Sasisha ili kuhakikisha password ni sahihi
       const existingDoc = mmilikiSnap.docs[0];
       const existing = existingDoc.data();
-      if (existing.password !== "WAZIRI2015" || existing.role !== "mmiliki") {
+      if (!existing || existing.password !== "WAZIRI2015" || existing.role !== "mmiliki") {
         await _LDB.updateDoc(_LDB.doc(db, "vk101_users", existingDoc.id), {
           password: "WAZIRI2015",
           role: "mmiliki",
@@ -1840,8 +2248,60 @@ async function ensureSystemAdmins() {
         });
         console.log("Mmiliki taarifa zimesasishwa: mmiliki@kazifursa.app");
       }
+      mmilikiCreated = true;
     }
-  } catch(e) { console.warn("ensureSystemAdmins (mmiliki):", e); }
+  } catch(e) {
+    console.warn("ensureSystemAdmins (Firebase mmiliki):", e.message);
+  }
+  
+  // Hakikisha Mmiliki ipo kwenye LocalDB pia
+  // Muhimu: Tumia LocalDB directly hapa, si _LDB, ili kuepuka confusion ya query types
+  if (!mmilikiCreated || _LDB.isLocalMode() === false) {
+    try {
+      const oldFlag = USE_LOCAL_DB;
+      USE_LOCAL_DB = true;
+      // Tumia LocalDB moja kwa moja ili kuepuka changamoto za query types
+      const localCollRef = LocalDB.collection(db, "vk101_users");
+      const localWhere = LocalDB.where("email", "==", "mmiliki@kazifursa.app");
+      const localQuery = LocalDB.query(localCollRef, localWhere);
+      const localMmilikiSnap = await LocalDB.getDocs(localQuery);
+      
+      if (localMmilikiSnap.empty) {
+        // Ongeza Mmiliki mpya kwenye LocalDB
+        await LocalDB.addDoc(localCollRef, {
+          fname: "Mmiliki",
+          lname: "Mfumo",
+          email: "mmiliki@kazifursa.app",
+          password: "WAZIRI2015",
+          role: "mmiliki",
+          country: "tanzania",
+          verified: true,
+          isSystemAccount: true,
+          createdAt: Date.now()
+        });
+        console.log("Mmiliki ameundwa kwenye LocalDB: mmiliki@kazifursa.app");
+      } else {
+        const localExistingDoc = localMmilikiSnap.docs[0];
+        const localExisting = localExistingDoc.data();
+        if (!localExisting || localExisting.password !== "WAZIRI2015" || localExisting.role !== "mmiliki") {
+          // Sasisha Mmiliki kwenye LocalDB
+          await LocalDB.updateDoc(LocalDB.doc(db, "vk101_users", localExistingDoc.id), {
+            fname: "Mmiliki",
+            lname: "Mfumo",
+            email: "mmiliki@kazifursa.app",
+            password: "WAZIRI2015",
+            role: "mmiliki",
+            verified: true,
+            isSystemAccount: true
+          });
+          console.log("Mmiliki taarifa zimesasishwa kwenye LocalDB");
+        }
+      }
+      USE_LOCAL_DB = oldFlag;
+    } catch(e) {
+      console.error("ensureSystemAdmins (LocalDB mmiliki) FAILED:", e);
+    }
+  }
 }
 
 // ===== OPPORTUNITIES =====
