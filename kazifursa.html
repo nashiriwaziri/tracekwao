@@ -331,7 +331,7 @@ tbody tr:hover{background:#f1f3f5}
 <div class="brick-notify-container" id="brickNotifyContainer"></div>
 
 <!-- Network Status Indicator (Fixed top-right) -->
-<div id="networkIndicator" style="position:fixed;top:18px;right:18px;z-index:9998;display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:50px;font-size:.78rem;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.15);background:#f8f9fa;color:#374151;cursor:pointer" onclick="toggleNetworkInfo()" title="Hali ya Mtandao">
+<div id="networkIndicator" style="position:fixed;top:18px;right:18px;z-index:500;display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:50px;font-size:.78rem;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.15);background:#f8f9fa;color:#374151;cursor:pointer" onclick="toggleNetworkInfo()" title="Hali ya Mtandao">
   <span id="networkDot" style="width:10px;height:10px;border-radius:50%;background:#9ca3af;display:inline-block;animation:pulse 2s infinite"></span>
   <span id="networkLabel">Inakagua...</span>
   <span id="syncBadge" style="display:none;background:#f59e0b;color:#fff;padding:2px 8px;border-radius:10px;font-size:.7rem" title="Mabadiliko yanagosubiri sync">0</span>
@@ -438,7 +438,7 @@ tbody tr:hover{background:#f1f3f5}
   <div class="hero-buttons">
     <button class="btn-primary" onclick="scrollToSearch()"><i class="fas fa-search"></i> Tafuta Fursa</button>
     <button class="btn-tertiary" onclick="openFaceScanModal()"><i class="fas fa-magnifying-glass-chart"></i> Tafuta kwa AI</button>
-    <button class="btn-secondary" onclick="openModal('signup')"><i class="fas fa-user-plus"></i> Jisajili Bure</button>
+    <button class="btn-secondary" onclick="handleHeroSignup()" id="heroSignupBtn"><i class="fas fa-user-plus"></i> Jisajili Bure</button>
   </div>
 </header>
 
@@ -625,7 +625,7 @@ tbody tr:hover{background:#f1f3f5}
 <!-- ===== MODALS ===== -->
 
 <!-- AUTH MODAL -->
-<div id="authModal" class="modal-overlay">
+<div id="authModal" class="modal-overlay hidden">
   <div class="modal-content wide" style="max-width:900px;padding:0">
     <button class="close-modal" onclick="closeModal()" id="closeModalBtn">×</button>
     <div class="modal-split">
@@ -951,12 +951,76 @@ tbody tr:hover{background:#f1f3f5}
 </div>
 
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import {
-  getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc,
-  query, where, serverTimestamp, onSnapshot, orderBy, increment, limit
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+<script>
+// === DYNAMIC FIREBASE LOADING (with fallback to LocalDB) ===
+// Ikiwa Firebase CDN haipatikani, mfumo unaendelea na LocalDB tu
+let firebaseApp = null;
+let firestoreDB = null;
+let collection = null;
+let doc = null;
+let addDoc = null;
+let getDocs = null;
+let getDoc = null;
+let setDoc = null;
+let updateDoc = null;
+let deleteDoc = null;
+let query = null;
+let where = null;
+let orderBy = null;
+let limit = null;
+let serverTimestamp = null;
+let increment = null;
+let onSnapshot = null;
+let _firebaseAvailable = false;
+let _firebaseLoaded = false;
+
+// Stubs za muda (zitarudisha error zinaofahamika)
+function _fbNotAvailable() {
+  const err = new Error("Firebase haupatikani. Tumia LocalDB mode.");
+  err.code = "firebase-unavailable";
+  return err;
+}
+
+// Async function ya kupakia Firebase
+async function _loadFirebase() {
+  if (_firebaseLoaded) return _firebaseAvailable;
+  _firebaseLoaded = true;
+  try {
+    console.log("🔥 Inapakia Firebase SDK...");
+    const appModule = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js");
+    const fsModule = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+    firebaseApp = appModule.initializeApp(firebaseConfig);
+    firestoreDB = fsModule.getFirestore(firebaseApp);
+    // Assign functions
+    collection = fsModule.collection;
+    doc = fsModule.doc;
+    addDoc = fsModule.addDoc;
+    getDocs = fsModule.getDocs;
+    getDoc = fsModule.getDoc;
+    setDoc = fsModule.setDoc;
+    updateDoc = fsModule.updateDoc;
+    deleteDoc = fsModule.deleteDoc;
+    query = fsModule.query;
+    where = fsModule.where;
+    orderBy = fsModule.orderBy;
+    limit = fsModule.limit;
+    serverTimestamp = fsModule.serverTimestamp;
+    increment = fsModule.increment;
+    onSnapshot = fsModule.onSnapshot;
+    _firebaseAvailable = true;
+    console.log("✅ Firebase imeloadiwa kwa mafanikio!");
+    return true;
+  } catch(e) {
+    console.warn("⚠️ Firebase imeshindwa kupakia:", e.message);
+    console.warn("   Mfumo utatumia LocalDB tu.");
+    _firebaseAvailable = false;
+    return false;
+  }
+}
+
+// Tumia await import() kwa modules (top-level await in supported in modules)
+// Lakini kwa sasa tuko kwenye regular script, hivyo tutatumia promise
+// Italoadiwa baada ya LocalDB kuwa ready
 
 // ===== FIREBASE CONFIG (placeholder — user can replace with their own project) =====
 const firebaseConfig = {
@@ -967,34 +1031,47 @@ const firebaseConfig = {
   messagingSenderId: "423907949019",
   appId: "1:423907949019:web:0a7d2c9b8e1f4a6c8d9e0b"
 };
-// ===== FIREBASE INITIALIZATION (kawaida) =====
-// Firebase inakamilishwa kawaida ili iweze kutumika mtandao unaporudi online
-const firebaseApp = initializeApp(firebaseConfig);
-const firestoreDB = getFirestore(firebaseApp);
-
 // ===== DB MODE SWITCH (Hybrid - Auto Online/Offline) =====
 // USE_LOCAL_DB inabadilika kiotomatiki kulingana na hali ya mtandao:
-//   - Online  → USE_LOCAL_DB = false → Firebase inatumika
-//   - Offline → USE_LOCAL_DB = true  → LocalDB inatumika (localStorage)
+//   - Online + Firebase available  → USE_LOCAL_DB = false → Firebase inatumika
+//   - Offline au Firebase haipatikani → USE_LOCAL_DB = true → LocalDB inatumika
 // Mtumiaji anaweza pia kubadilisha kwa mkono kupenza _LDB.forceLocal() au _LDB.forceFirebase()
-let USE_LOCAL_DB = !navigator.onLine;
+let USE_LOCAL_DB = !navigator.onLine;  // Default: based on network status
+
+// Initialize Firebase asynchronously (baada ya LocalDB kuwa ready)
+(async () => {
+  const ok = await _loadFirebase();
+  if (ok && navigator.onLine) {
+    // Firebase imepakiwa na mtandao upo — switch to Firebase
+    USE_LOCAL_DB = false;
+    console.log("🌐 Mfumo unatumia Firebase (online mode).");
+  } else {
+    // Firebase haipatikani au mtandao haupo — endelea na LocalDB
+    USE_LOCAL_DB = true;
+    console.log("💾 Mfumo unatumia LocalDB (offline mode).");
+  }
+  // Update network indicator
+  if (window._updateNetworkIndicator) window._updateNetworkIndicator();
+})();
 
 // Save Firebase function references (kwa ajili ya switch runtime)
+// Hizi zinacheck kama Firebase inapatikana kabla ya kuita functions
 const _FB = {
-  collection: (db, name) => collection(db, name),
-  doc: (db, name, id) => doc(db, name, id),
-  addDoc: async (coll, data) => addDoc(coll, data),
-  getDocs: async (q) => getDocs(q),
-  getDoc: async (ref) => getDoc(ref),
-  setDoc: async (ref, data, opts) => setDoc(ref, data, opts),
-  updateDoc: async (ref, data) => updateDoc(ref, data),
-  deleteDoc: async (ref) => deleteDoc(ref),
-  query: (coll, ...rest) => query(coll, ...rest),
-  where: (f, op, v) => where(f, op, v),
-  orderBy: (f, dir) => orderBy(f, dir),
-  limit: (n) => limit(n),
-  serverTimestamp: () => serverTimestamp(),
-  increment: (n) => increment(n)
+  _check: () => { if (!_firebaseAvailable) throw _fbNotAvailable(); },
+  collection: (db, name) => { _FB._check(); return collection(db, name); },
+  doc: (db, name, id) => { _FB._check(); return doc(db, name, id); },
+  addDoc: async (coll, data) => { _FB._check(); return addDoc(coll, data); },
+  getDocs: async (q) => { _FB._check(); return getDocs(q); },
+  getDoc: async (ref) => { _FB._check(); return getDoc(ref); },
+  setDoc: async (ref, data, opts) => { _FB._check(); return setDoc(ref, data, opts); },
+  updateDoc: async (ref, data) => { _FB._check(); return updateDoc(ref, data); },
+  deleteDoc: async (ref) => { _FB._check(); return deleteDoc(ref); },
+  query: (coll, ...rest) => { _FB._check(); return query(coll, ...rest); },
+  where: (f, op, v) => { _FB._check(); return where(f, op, v); },
+  orderBy: (f, dir) => { _FB._check(); return orderBy(f, dir); },
+  limit: (n) => { _FB._check(); return limit(n); },
+  serverTimestamp: () => { _FB._check(); return serverTimestamp(); },
+  increment: (n) => { _FB._check(); return increment(n); }
 };
 
 // ===== LOCAL DB (Firebase fallback) =====
@@ -1314,16 +1391,41 @@ const _LDB = {
     } catch(e) {
       console.warn("Firebase getDocs failed, falling back to LocalDB:", e.message);
       // Convert Firebase query to LocalDB-compatible query
-      // Firebase query: { _coll: { _name: 'vk101_users' }, _constraints: [{field, op, value}] }
-      // LocalDB query: { _name: 'vk101_users', _filters: [{field, op, value}] }
-      let collName = a._name || (a._coll && a._coll._name) || (a._coll && a._coll._collectionName);
+      // Firebase v10 query structure:
+      //   - q._query._path = 'vk101_users' (ResourcePath)
+      //   - q._query.explicitOrderBy / filters
+      //   - q._query.limitType
+      // Alternative: collection ref has _path = 'vk101_users'
+      let collName = null;
+      if (a._name) collName = a._name;
+      else if (a._coll && a._coll._name) collName = a._coll._name;
+      else if (a._path) collName = String(a._path);
+      else if (a._query && a._query.path) collName = String(a._query.path);
+      else if (a._query && a._query._path) collName = String(a._query._path);
+      else if (a._collectionName) collName = a._collectionName;
+      
       if (!collName) {
         console.error("Cannot determine collection name from query:", a);
         return { empty: true, docs: [], forEach: () => {}, size: 0 };
       }
+      
       const localCollRef = LocalDB.collection(db, collName);
       const localConstraints = [];
-      if (a._constraints && Array.isArray(a._constraints)) {
+      // Extract filters from Firebase query (private API)
+      if (a._query && a._query.filters && Array.isArray(a._query.filters)) {
+        for (const f of a._query.filters) {
+          // Each filter has: field, op, value, or it's nested in _field, _op, _value
+          const field = f._field || f.field;
+          const op = f._op || f.op;
+          const value = f._value || f.value;
+          if (field && op) {
+            const fieldName = field._path || field.path || String(field);
+            localConstraints.push(LocalDB.where(String(fieldName), op === '==' ? '==' : op, value));
+          }
+        }
+      }
+      // Fallback for older format
+      if (localConstraints.length === 0 && a._constraints && Array.isArray(a._constraints)) {
         for (const c of a._constraints) {
           if (c._type === 'where' || (c.field && c.op)) {
             localConstraints.push(LocalDB.where(c.field, c.op, c.value));
@@ -1344,9 +1446,45 @@ const _LDB = {
       return await _FB.getDoc(a);
     } catch(e) {
       console.warn("Firebase getDoc failed, falling back to LocalDB:", e.message);
-      // Convert Firebase doc ref to LocalDB doc ref
-      let collName = a._collectionName || (a._name) || (a.path && a.path.split('/')[0]);
-      let docId = a._id || (a.path && a.path.split('/')[1]);
+      // Convert Firebase v10 doc ref to LocalDB doc ref
+      // Firebase v10 doc ref structure:
+      //   - _key: DocumentKey { path: ResourcePath { segments: ['vk101_users', 'someId'] } }
+      //   - _key.toString() = 'vk101_users/someId'
+      //   - _path: ResourcePath (same as _key.path)
+      let collName = null, docId = null;
+      
+      // Method 1: _collectionName + _id (zilizowekwa na _LDB.doc wrapper)
+      if (a._collectionName && a._id) {
+        collName = a._collectionName;
+        docId = a._id;
+      }
+      // Method 2: _key.toString() = 'coll/docId'
+      else if (a._key) {
+        const pathStr = a._key.toString();
+        const parts = pathStr.split('/');
+        if (parts.length >= 2) {
+          collName = parts[0];
+          docId = parts.slice(1).join('/');
+        }
+      }
+      // Method 3: _path.toString()
+      else if (a._path) {
+        const pathStr = String(a._path);
+        const parts = pathStr.split('/');
+        if (parts.length >= 2) {
+          collName = parts[0];
+          docId = parts.slice(1).join('/');
+        }
+      }
+      // Method 4: a.path
+      else if (a.path) {
+        const parts = String(a.path).split('/');
+        if (parts.length >= 2) {
+          collName = parts[0];
+          docId = parts.slice(1).join('/');
+        }
+      }
+      
       if (!collName || !docId) {
         console.error("Cannot determine collection/docId from ref:", a);
         return { exists: () => false, data: () => undefined, id: 'unknown' };
@@ -1358,12 +1496,47 @@ const _LDB = {
   
   // Write operations — zinaweka kwenye SyncQueue wakati offline
   // Muhimu: Kama Firebase inashindwa, inaandika kwenye LocalDB na kuongeza kwenye SyncQueue
+  
+  // Helper: Pata collection name kutoka ref yoyote (LocalDB au Firebase v10)
+  _getCollectionName: (ref) => {
+    if (!ref) return 'unknown';
+    if (ref._name) return ref._name;
+    if (ref._collectionName) return ref._collectionName;
+    if (ref._path) return String(ref._path);
+    if (ref._key) {
+      const s = ref._key.toString();
+      return s.split('/')[0];
+    }
+    if (ref.path) return String(ref.path).split('/')[0];
+    return 'unknown';
+  },
+  
+  // Helper: Pata docId kutoka doc ref (LocalDB au Firebase v10)
+  _getDocId: (ref) => {
+    if (!ref) return 'unknown';
+    if (ref._id) return ref._id;
+    if (ref._key) {
+      const s = ref._key.toString();
+      const parts = s.split('/');
+      return parts.length >= 2 ? parts.slice(1).join('/') : 'unknown';
+    }
+    if (ref._path) {
+      const parts = String(ref._path).split('/');
+      return parts.length >= 2 ? parts.slice(1).join('/') : 'unknown';
+    }
+    if (ref.path) {
+      const parts = String(ref.path).split('/');
+      return parts.length >= 2 ? parts.slice(1).join('/') : 'unknown';
+    }
+    return 'unknown';
+  },
+  
   addDoc: async (collRef, data) => {
     if (USE_LOCAL_DB) {
       const result = await LocalDB.addDoc(collRef, data);
       SyncQueue.enqueue({
         type: 'addDoc',
-        collection: collRef._name,
+        collection: _LDB._getCollectionName(collRef),
         data: { ...data }
       });
       return result;
@@ -1373,11 +1546,10 @@ const _LDB = {
       return await _FB.addDoc(collRef, data);
     } catch(e) {
       console.warn("Firebase addDoc failed, falling back to LocalDB:", e.message);
-      // Andika kwenye LocalDB badala yake
-      const result = await LocalDB.addDoc(collRef, data);
-      // Ondoa _name kwa sababu LocalDB addDoc inatumia collRef tofauti
-      // Tafuta collection name kutoka collRef ya Firebase
-      const collName = collRef._name || (collRef && collRef.path ? collRef.path.split('/')[0] : 'unknown');
+      const collName = _LDB._getCollectionName(collRef);
+      // Tengeneza LocalDB collection ref
+      const localCollRef = LocalDB.collection(db, collName);
+      const result = await LocalDB.addDoc(localCollRef, data);
       SyncQueue.enqueue({
         type: 'addDoc',
         collection: collName,
@@ -1392,8 +1564,8 @@ const _LDB = {
       const result = await LocalDB.setDoc(docRef, data);
       SyncQueue.enqueue({
         type: 'setDoc',
-        collection: docRef._collectionName,
-        docId: docRef._id,
+        collection: _LDB._getCollectionName(docRef),
+        docId: _LDB._getDocId(docRef),
         data: { ...data }
       });
       return result;
@@ -1402,9 +1574,8 @@ const _LDB = {
       return await _FB.setDoc(docRef, data, opts);
     } catch(e) {
       console.warn("Firebase setDoc failed, falling back to LocalDB:", e.message);
-      // Tengeneza LocalDB doc ref kwa kutumia info kutoka Firebase ref
-      const collName = docRef._collectionName || (docRef && docRef.path ? docRef.path.split('/')[0] : 'unknown');
-      const docId = docRef._id || (docRef && docRef.path ? docRef.path.split('/')[1] : 'unknown');
+      const collName = _LDB._getCollectionName(docRef);
+      const docId = _LDB._getDocId(docRef);
       const localDocRef = LocalDB.doc(db, collName, docId);
       const result = await LocalDB.setDoc(localDocRef, data);
       SyncQueue.enqueue({
@@ -1422,8 +1593,8 @@ const _LDB = {
       const result = await LocalDB.updateDoc(docRef, data);
       SyncQueue.enqueue({
         type: 'updateDoc',
-        collection: docRef._collectionName,
-        docId: docRef._id,
+        collection: _LDB._getCollectionName(docRef),
+        docId: _LDB._getDocId(docRef),
         data: { ...data }
       });
       return result;
@@ -1432,8 +1603,8 @@ const _LDB = {
       return await _FB.updateDoc(docRef, data);
     } catch(e) {
       console.warn("Firebase updateDoc failed, falling back to LocalDB:", e.message);
-      const collName = docRef._collectionName || (docRef && docRef.path ? docRef.path.split('/')[0] : 'unknown');
-      const docId = docRef._id || (docRef && docRef.path ? docRef.path.split('/')[1] : 'unknown');
+      const collName = _LDB._getCollectionName(docRef);
+      const docId = _LDB._getDocId(docRef);
       const localDocRef = LocalDB.doc(db, collName, docId);
       const result = await LocalDB.updateDoc(localDocRef, data);
       SyncQueue.enqueue({
@@ -1451,8 +1622,8 @@ const _LDB = {
       const result = await LocalDB.deleteDoc(docRef);
       SyncQueue.enqueue({
         type: 'deleteDoc',
-        collection: docRef._collectionName,
-        docId: docRef._id,
+        collection: _LDB._getCollectionName(docRef),
+        docId: _LDB._getDocId(docRef),
         data: null
       });
       return result;
@@ -1461,8 +1632,8 @@ const _LDB = {
       return await _FB.deleteDoc(docRef);
     } catch(e) {
       console.warn("Firebase deleteDoc failed, falling back to LocalDB:", e.message);
-      const collName = docRef._collectionName || (docRef && docRef.path ? docRef.path.split('/')[0] : 'unknown');
-      const docId = docRef._id || (docRef && docRef.path ? docRef.path.split('/')[1] : 'unknown');
+      const collName = _LDB._getCollectionName(docRef);
+      const docId = _LDB._getDocId(docRef);
       const localDocRef = LocalDB.doc(db, collName, docId);
       const result = await LocalDB.deleteDoc(localDocRef);
       SyncQueue.enqueue({
@@ -1491,6 +1662,60 @@ const _LDB = {
   pendingSyncCount: () => SyncQueue.pendingCount()
 };
 
+
+
+// ===== GLOBAL ERROR BOUNDARY KWA BUTTONS =====
+// Hii inakamata errors zozote kwenye button clicks na kuonyesha message nzuri
+window._safeCall = function(fnName, ...args) {
+  try {
+    const fn = window[fnName];
+    if (typeof fn !== 'function') {
+      console.error("Function '" + fnName + "' haipatikani!");
+      if (window.BrickNotify) {
+        window.BrickNotify.error("Hitilafu: kitendo hakingepatikana. Pakia upya ukurasa.");
+      }
+      return;
+    }
+    console.log("▶️ Button clicked: " + fnName + "(" + args.map(a => typeof a === 'string' ? '"' + a + '"' : a).join(', ') + ")");
+    const result = fn(...args);
+    // Kama ni promise, ondoa errors vizuri
+    if (result && typeof result.catch === 'function') {
+      result.catch(e => {
+        console.error("Async error in " + fnName + ":", e);
+        if (window.BrickNotify) {
+          window.BrickNotify.error("Hitilafu: " + (e.message || e));
+        }
+      });
+    }
+    return result;
+  } catch(e) {
+    console.error("Error in " + fnName + ":", e);
+    if (window.BrickNotify) {
+      window.BrickNotify.error("Hitilafu: " + (e.message || e));
+    }
+  }
+};
+
+// Global error handler - inakamata errors zozote JavaScript
+window.addEventListener('error', function(e) {
+  console.error("🚨 Global JS Error:", e.message, "| File:", e.filename, "| Line:", e.lineno);
+  if (window.BrickNotify && e.message) {
+    // Onyesha error muhimu tu (sio zote)
+    if (e.message.includes('is not defined') || e.message.includes('is not a function')) {
+      window.BrickNotify.error("Hitilafu: " + e.message + ". Pakia upya ukurasa.");
+    }
+  }
+});
+
+// Unhandled promise rejection handler
+window.addEventListener('unhandledrejection', function(e) {
+  console.error("🚨 Unhandled Promise Rejection:", e.reason);
+});
+
+// Console info: onyesha kama script imekamilika kupakia
+console.log("✅ VIJANA KAZI 101 - Script loaded successfully!");
+console.log("📊 Status: Firebase " + (_firebaseAvailable ? "AVAILABLE" : "LOADING...") + " | LocalDB READY");
+console.log("🌐 Network: " + (navigator.onLine ? "ONLINE" : "OFFLINE"));
 
 // ===== STATE =====
 let currentLang = "sw";
@@ -1617,13 +1842,37 @@ window.scrollToSearch = function() {
 };
 
 // ===== AUTH =====
+// Helper: Handle "Jisajili Bure" button click
+// Kama mtumiaji tayari yupo logged in, elekeza kwenye profile/settings badala ya signup
+window.handleHeroSignup = function() {
+  if (currentUser) {
+    // Mtumiaji tayari yupo - elekeza kwenye wasifu wake
+    BrickNotify.info("Wewe tayari umeingia kama " + currentUser.role + ". Unaweza kutangaza fursa kutoka kwenye button ya '+ Tangaza Fursa'.");
+    // Fungua tangaza fursa moja kwa moja
+    openPostOpportunityModal();
+  } else {
+    // Mtumiaji bado hajaingia - fungua signup form
+    openModal("signup");
+  }
+};
+
 window.openModal = function(t) {
+  // Kama mtumiaji tayari yupo logged in, usifungue login modal
+  if (currentUser && t === "login") {
+    BrickNotify.info("Wewe tayari umeingia. Toka kwanza kuingia kama mtumiaji mwingine.");
+    return;
+  }
+  if (currentUser && t === "signup") {
+    BrickNotify.info("Wewe tayari umeingia. Toka kwanza kujisajili akaunti mpya.");
+    return;
+  }
   document.getElementById("authModal").classList.remove("hidden");
   toggleAuthForm(t);
 };
 
 window.closeModal = function() {
-  if (sessionStorage.getItem("vk101_user")) document.getElementById("authModal").classList.add("hidden");
+  // Funga modal (mtumiaji anaweza kufunga wakati wowote)
+  document.getElementById("authModal").classList.add("hidden");
 };
 
 window.toggleAuthForm = function(t) {
@@ -2118,9 +2367,19 @@ window.showSite = function(user) {
 };
 
 window.enforceLogin = function() {
-  document.getElementById("authModal").classList.remove("hidden");
-  document.getElementById("closeModalBtn").classList.add("forced");
-  document.getElementById("mainSiteContent").style.display = "none";
+  // Mtumiaji asiyeingia anaona homepage moja kwa moja
+  // authModal itafungua tu mtumiaji anapobonyeza "Ingia" au "Super Admin"
+  document.getElementById("mainSiteContent").style.display = "block";
+  // Tuma ujumbe wa kukaribisha
+  setTimeout(() => {
+    if (window.BrickNotify) {
+      BrickNotify.info("Karibu! Bonyeza 'Ingia' au 'Super Admin' kuanza kutumia mfumo.");
+    }
+  }, 1500);
+  // Load data
+  loadOpportunities();
+  loadBranding();
+  loadStats();
 };
 
 // Helper: Angalia kama mtumiaji ni admin mkuu (super_admin au mmiliki)
@@ -3617,6 +3876,19 @@ window.addEventListener('offline', () => {
 // ===== INIT =====
 window.onload = async function() {
   BrickNotify.init();
+  // Subiri Firebase ijaribu kupakia (lakini usizuie kwa muda mrefu)
+  // Hii inahakikisha kwamba kama mtandao upo, Firebase itatumika
+  // Kama haupo, LocalDB itatumika moja kwa moja
+  // (Subiri最多 sekunde 2 kuepuka kukaa sana)
+  await Promise.race([
+    _loadFirebase(),
+    new Promise(resolve => setTimeout(resolve, 2000))
+  ]);
+  // Update flag based on result
+  if (!_firebaseAvailable) {
+    USE_LOCAL_DB = true;
+    console.log("⚠️ Firebase haipatikani - inatumia LocalDB");
+  }
   // Initialize network indicator
   _updateNetworkIndicator();
   // Notify user about current mode (baada ya sekunde 1)
