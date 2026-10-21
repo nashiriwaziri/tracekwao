@@ -617,6 +617,22 @@ tbody tr:hover{background:#f1f3f5}
               <button type="submit" class="btn-submit">Ingia</button>
             </div>
           </form>
+          <div style="margin-top:14px;padding:12px;background:linear-gradient(135deg,#ecfdf5,#fef3c7);border:1px solid #d1fae5;border-radius:8px;font-size:.8rem;color:#065f46">
+            <strong><i class="fas fa-shield-halved"></i> Akaunti za Mfumo (Auto-created):</strong>
+            <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="background:#fff;padding:6px 8px;border-radius:6px;border:1px solid #d1fae5">
+                <div style="font-weight:700;color:var(--primary);font-size:.78rem">Super Admin</div>
+                <div style="font-size:.72rem;color:#374151">super@kazifursa.app</div>
+                <div style="font-size:.72rem;color:#6b7280">Pass: WAZIRI2015</div>
+              </div>
+              <div style="background:#fff;padding:6px 8px;border-radius:6px;border:1px solid #fde68a">
+                <div style="font-weight:700;color:#92400e;font-size:.78rem">Mmiliki (Owner)</div>
+                <div style="font-size:.72rem;color:#374151">mmiliki@kazifursa.app</div>
+                <div style="font-size:.72rem;color:#6b7280">Pass: WAZIRI2015</div>
+              </div>
+            </div>
+            <div style="margin-top:6px;font-size:.7rem;color:#6b7280"><i class="fas fa-info-circle"></i> Akaunti hizi hazihitaji kujisajili — mfumo unazitengeneza moja kwa moja.</div>
+          </div>
           <div class="switch-auth">Huna akaunti? <a onclick="toggleAuthForm('signup')">Jisajili Hapa</a></div>
         </div>
         
@@ -1012,6 +1028,13 @@ window.handleSignup = async function(e) {
     BrickNotify.error("Nenosiri hazilingani!");
     return;
   }
+  // Zuia mtu kujisajili kwa email za mfumo (super admin / mmiliki)
+  const reservedEmails = ["super@kazifursa.app", "mmiliki@kazifursa.app", "admin@vijanakazi101.com"];
+  const enteredEmail = (document.getElementById("su_email").value || "").trim().toLowerCase();
+  if (reservedEmails.includes(enteredEmail)) {
+    BrickNotify.error("Email hii imehifadhiwa kwa akaunti za mfumo. Tumia email nyingine.");
+    return;
+  }
   const userData = {
     fname: document.getElementById("su_fname").value,
     lname: document.getElementById("su_lname").value,
@@ -1070,10 +1093,11 @@ window.showSite = function(user) {
   document.getElementById("navUserName").innerText = user.fname + " " + user.lname;
   
   // Show admin links
-  if (user.role === "super_admin" || user.role === "country_admin" || user.role === "employer" || user.role === "business" || user.role === "trainer" || user.role === "mentor" || user.role === "investor") {
+  const isAdminRole = (user.role === "super_admin" || user.role === "mmiliki");
+  if (isAdminRole || user.role === "country_admin" || user.role === "employer" || user.role === "business" || user.role === "trainer" || user.role === "mentor" || user.role === "investor") {
     document.getElementById("dashboardLink").style.display = "flex";
   }
-  if (user.role === "super_admin") {
+  if (isAdminRole) {
     document.getElementById("manageBrandingLink").style.display = "flex";
     document.getElementById("manageMatangazoLink").style.display = "flex";
     document.getElementById("manageUsersLink").style.display = "flex";
@@ -1082,8 +1106,7 @@ window.showSite = function(user) {
     document.getElementById("applicationsLink").style.display = "flex";
   }
   
-  // Ensure super admin exists
-  ensureSuperAdmin();
+  // Mfumo wa admin uliohakikishwa tayari unawekwa kwenye window.onload
   loadOpportunities();
   loadBranding();
   loadStats();
@@ -1095,24 +1118,84 @@ window.enforceLogin = function() {
   document.getElementById("mainSiteContent").style.display = "none";
 };
 
-async function ensureSuperAdmin() {
-  // Auto-create super admin if not exists (email: admin@vijanakazi101.com / pass: admin2025)
+// Helper: Angalia kama mtumiaji ni admin mkuu (super_admin au mmiliki)
+window.isSystemAdmin = function(role) {
+  return role === "super_admin" || role === "mmiliki";
+};
+
+// Auto-create akaunti za admin wakuu (Super Admin na Mmiliki)
+// Hawahitaji kujisajili — mfumo unawatengeneza moja kwa moja.
+async function ensureSystemAdmins() {
+  // SUPER ADMIN — email: super@kazifursa.app / pass: WAZIRI2015
+  // UID maalum: 8UIr4Q9VYZMle5OIzBeyaET31pr2
   try {
-    const q = query(collection(db, "vk101_users"), where("email", "==", "admin@vijanakazi101.com"));
-    const snap = await getDocs(q);
-    if (snap.empty) {
-      await addDoc(collection(db, "vk101_users"), {
-        fname: "Super", lname: "Admin",
-        email: "admin@vijanakazi101.com",
-        password: "admin2025",
+    const superAdminUid = "8UIr4Q9VYZMle5OIzBeyaET31pr2";
+    const superAdminRef = doc(db, "vk101_users", superAdminUid);
+    const superSnap = await getDoc(superAdminRef);
+    if (!superSnap.exists()) {
+      await setDoc(superAdminRef, {
+        fname: "Super",
+        lname: "Administrator",
+        email: "super@kazifursa.app",
+        password: "WAZIRI2015",
         role: "super_admin",
         country: "tanzania",
         verified: true,
+        isSystemAccount: true,
         createdAt: Date.now()
       });
-      console.log("Super admin created: admin@vijanakazi101.com / admin2025");
+      console.log("Super Admin ameundwa: super@kazifursa.app / WAZIRI2015 (uid: " + superAdminUid + ")");
+    } else {
+      // Hakikisha taarifa ni sahihi hata kama doc ilikuwepo
+      const existing = superSnap.data();
+      if (existing.email !== "super@kazifursa.app" || existing.password !== "WAZIRI2015" || existing.role !== "super_admin") {
+        await updateDoc(superAdminRef, {
+          fname: "Super",
+          lname: "Administrator",
+          email: "super@kazifursa.app",
+          password: "WAZIRI2015",
+          role: "super_admin",
+          verified: true,
+          isSystemAccount: true
+        });
+        console.log("Super Admin taarifa zimesasishwa: super@kazifursa.app");
+      }
     }
-  } catch(e) { console.warn("ensureSuperAdmin:", e); }
+  } catch(e) { console.warn("ensureSystemAdmins (super):", e); }
+
+  // MLIKIKI (Owner) — email: mmiliki@kazifursa.app / pass: WAZIRI2015
+  // Anaweza kuingia maeneo yote ya mfumo wa users bila kujisajili.
+  try {
+    const qMmiliki = query(collection(db, "vk101_users"), where("email", "==", "mmiliki@kazifursa.app"));
+    const mmilikiSnap = await getDocs(qMmiliki);
+    if (mmilikiSnap.empty) {
+      await addDoc(collection(db, "vk101_users"), {
+        fname: "Mmiliki",
+        lname: "Mfumo",
+        email: "mmiliki@kazifursa.app",
+        password: "WAZIRI2015",
+        role: "mmiliki",
+        country: "tanzania",
+        verified: true,
+        isSystemAccount: true,
+        createdAt: Date.now()
+      });
+      console.log("Mmiliki ameundwa: mmiliki@kazifursa.app / WAZIRI2015");
+    } else {
+      // Sasisha ili kuhakikisha password ni sahihi
+      const existingDoc = mmilikiSnap.docs[0];
+      const existing = existingDoc.data();
+      if (existing.password !== "WAZIRI2015" || existing.role !== "mmiliki") {
+        await updateDoc(doc(db, "vk101_users", existingDoc.id), {
+          password: "WAZIRI2015",
+          role: "mmiliki",
+          verified: true,
+          isSystemAccount: true
+        });
+        console.log("Mmiliki taarifa zimesasishwa: mmiliki@kazifursa.app");
+      }
+    }
+  } catch(e) { console.warn("ensureSystemAdmins (mmiliki):", e); }
 }
 
 // ===== OPPORTUNITIES =====
@@ -1309,7 +1392,7 @@ window.openOppDetail = async function(id) {
   if (currentUser && currentUser.role === "youth" && o.type !== "mentor") {
     html += ' <button class="btn-submit" style="width:auto;display:inline-flex;padding:12px 24px;margin-top:0" onclick="applyToOpportunity(\'' + o.id + '\')"><i class="fas fa-paper-plane"></i> Omba Sasa</button>';
   }
-  if (currentUser && (currentUser.id === o.postedBy || currentUser.role === "super_admin")) {
+  if (currentUser && (currentUser.id === o.postedBy || window.isSystemAdmin(currentUser.role))) {
     html += ' <button class="btn-xs btn-edit" style="padding:10px 18px" onclick="editOpportunity(\'' + o.id + '\')"><i class="fas fa-pen"></i> Hariri</button>';
     html += ' <button class="btn-xs btn-delete" style="padding:10px 18px" onclick="deleteOpportunity(\'' + o.id + '\')"><i class="fas fa-trash"></i> Futa</button>';
   }
@@ -1471,8 +1554,8 @@ window.loadStats = async function() {
 
 // ===== USER MANAGEMENT =====
 window.openUserManagement = async function() {
-  if (!currentUser || currentUser.role !== "super_admin") {
-    BrickNotify.error("Super Admin pekee.");
+  if (!currentUser || !window.isSystemAdmin(currentUser.role)) {
+    BrickNotify.error("Super Admin au Mmiliki pekee.");
     return;
   }
   document.getElementById("userManagementModal").classList.remove("hidden");
@@ -1482,9 +1565,9 @@ window.openUserManagement = async function() {
     const snap = await getDocs(collection(db, "vk101_users"));
     const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     tbody.innerHTML = users.map(u => 
-      '<tr><td>' + escapeAISafeHTML(u.fname + " " + u.lname) + '</td><td>' + escapeAISafeHTML(u.email) + '</td><td>' + escapeAISafeHTML(u.role) + '</td><td>' + escapeAISafeHTML(u.country||"-") + '</td><td><span class="status-badge ' + (u.verified ? "verified" : "pending") + '">' + (u.verified ? "Verified" : "Pending") + '</span></td><td>' + (u.role !== "super_admin" ? '<button class="btn-xs btn-delete" onclick="deleteUser(\'' + u.id + '\')"><i class="fas fa-trash"></i></button>' : '-') + '</td></tr>'
+      '<tr><td>' + escapeAISafeHTML(u.fname + " " + u.lname) + '</td><td>' + escapeAISafeHTML(u.email) + '</td><td>' + escapeAISafeHTML(u.role) + '</td><td>' + escapeAISafeHTML(u.country||"-") + '</td><td><span class="status-badge ' + (u.verified ? "verified" : "pending") + '">' + (u.verified ? "Verified" : "Pending") + '</span></td><td>' + (window.isSystemAdmin(u.role) ? '<span style=\'color:var(--muted);font-size:.72rem\'><i class=\'fas fa-lock\'></i> System</span>' : '<button class="btn-xs btn-delete" onclick="deleteUser(\'' + u.id + '\')"><i class="fas fa-trash"></i></button>') + '</td></tr>'
     ).join("");
-  } catch(e) { tbody.innerHTML = "<tr><td colspan='6' style='color:red'>Error: " + e.message + "</td></tr>"; }
+  } catch(e) { tbody.innerHTML = "<tr><td colspan='6' style='color:red'>Error: " + e.message + "</td></tr>" }
 };
 
 window.closeUserManagement = function() {
@@ -1502,8 +1585,8 @@ window.deleteUser = async function(id) {
 
 // ===== BRANDING =====
 window.openManageBranding = async function() {
-  if (!currentUser || currentUser.role !== "super_admin") {
-    BrickNotify.error("Super Admin pekee.");
+  if (!currentUser || !window.isSystemAdmin(currentUser.role)) {
+    BrickNotify.error("Super Admin au Mmiliki pekee.");
     return;
   }
   document.getElementById("manageBrandingModal").classList.remove("hidden");
@@ -1653,7 +1736,7 @@ window.compressImageFile = function(file, maxDim, quality) {
 
 // ===== MATANGAZO =====
 window.openManageMatangazo = function() {
-  if (!currentUser || currentUser.role !== "super_admin") { BrickNotify.error("Super Admin pekee."); return; }
+  if (!currentUser || !window.isSystemAdmin(currentUser.role)) { BrickNotify.error("Super Admin au Mmiliki pekee."); return; }
   document.getElementById("manageMatangazoModal").classList.remove("hidden");
   cancelEditMatangazo();
   loadMatangazoList();
@@ -1950,7 +2033,7 @@ window.resetAISearchBtn = function() {
 
 // ===== DASHBOARD =====
 window.showDashboard = async function() {
-  if (!currentUser || (currentUser.role !== "super_admin" && currentUser.role !== "country_admin" && currentUser.role !== "employer" && currentUser.role !== "trainer" && currentUser.role !== "mentor" && currentUser.role !== "investor")) {
+  if (!currentUser || (!window.isSystemAdmin(currentUser.role) && currentUser.role !== "country_admin" && currentUser.role !== "employer" && currentUser.role !== "trainer" && currentUser.role !== "mentor" && currentUser.role !== "investor")) {
     BrickNotify.error("Hauruhusiwi.");
     return;
   }
@@ -2265,6 +2348,9 @@ window.exportComprehensiveWord = async function() {
 // ===== INIT =====
 window.onload = async function() {
   BrickNotify.init();
+  // Hakikisha akaunti za admin wakuu zipo (Super Admin + Mmiliki)
+  // Hizi hazihitaji kujisajili — mfumo unazitengeneza moja kwa moja.
+  try { await ensureSystemAdmins(); } catch(e) { console.warn("Init ensureSystemAdmins:", e); }
   // Load saved theme
   try {
     const savedTheme = localStorage.getItem("vk101_theme");
