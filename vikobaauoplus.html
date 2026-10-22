@@ -10137,16 +10137,32 @@ function handleGoogleError(err){
   console.error('Google sign-in error:', err);
   setGoogleBtnLoading(false);
   let msg = (err && err.message) || 'Google Sign-In failed.';
+  let showDomainModal = false;
   if(err && err.code){
     if(err.code === 'auth/popup-closed-by-user') msg = 'Google sign-in window was closed. Please try again.';
     else if(err.code === 'auth/popup-blocked') msg = 'Pop-up blocked by browser. Allow pop-ups for this site.';
     else if(err.code === 'auth/cancelled-popup-request') msg = 'Google sign-in was cancelled.';
     else if(err.code === 'auth/network-request-failed') msg = 'Network error. Check your internet connection.';
-    else if(err.code === 'auth/unauthorized-domain') msg = 'This domain is not authorized for Google Sign-In. Add it in Firebase Console → Authentication → Settings → Authorized domains.';
+    else if(err.code === 'auth/unauthorized-domain'){
+      /* Show helpful modal with exact domain to add */
+      showDomainModal = true;
+      msg = 'This domain is not authorized for Google Sign-In.';
+    }
     else if(err.code === 'auth/operation-not-allowed') msg = 'Google Sign-In is not enabled. Enable it in Firebase Console → Authentication → Sign-in method → Google.';
     else if(err.code === 'auth/invalid-credential') msg = 'Google credential is invalid or expired. Please try again.';
   }
   showToast(msg, 'error');
+  if(showDomainModal){
+    /* Detect current domain and show in modal */
+    const fullOrigin = window.location.origin;     // e.g. http://localhost:5500
+    const hostName = window.location.hostname;     // e.g. localhost or 127.0.0.1
+    const displayEl1 = document.getElementById('detectedDomain');
+    const displayEl2 = document.getElementById('domainToAdd');
+    if(displayEl1) displayEl1.textContent = fullOrigin;
+    /* Firebase "Authorized domains" wants hostname only (no port, no protocol) */
+    if(displayEl2) displayEl2.textContent = hostName;
+    openModal('domainErrorModal');
+  }
 }
 
 /* Toggle loading state on all Google buttons */
@@ -10191,6 +10207,38 @@ function setGoogleBtnLoading(loading, loadingText){
 
 <!-- GOOGLE SIGNUP COMPLETION MODAL -->
 <div id="googleCompleteModal" class="modal"><div class="modal-card google-complete-card"><div class="modal-head"><h3><i class="fa-solid fa-user-plus" style="color:var(--blue)"></i> Complete Your Registration</h3><button class="close" onclick="cancelGoogleSignup()">&times;</button></div><div id="googleCompleteBody"></div></div></div>
+
+<!-- DOMAIN AUTHORIZATION ERROR MODAL -->
+<div id="domainErrorModal" class="modal"><div class="modal-card" style="width:min(560px,100%)">
+  <div class="modal-head">
+    <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--yellow)"></i> Domain Not Authorized</h3>
+    <button class="close" onclick="closeModal('domainErrorModal')">&times;</button>
+  </div>
+  <div style="padding:6px 0">
+    <p class="small" style="margin-bottom:14px">Your current domain is not authorized for Google Sign-In. Add it to Firebase Console to fix this issue.</p>
+    <div class="provider-note" style="margin-bottom:14px;background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.3);color:#ffc857">
+      <i class="fa-solid fa-globe"></i> <b>Current domain (origin):</b><br>
+      <code id="detectedDomain" style="display:block;margin-top:6px;padding:8px 10px;background:var(--panel2);border-radius:6px;color:#ffc857;word-break:break-all;font-size:11px">Loading...</code>
+    </div>
+    <h4 style="margin-bottom:10px;font-size:13px"><i class="fa-solid fa-list-check" style="color:var(--p2)"></i> Steps to Fix:</h4>
+    <ol style="padding-left:22px;font-size:12px;line-height:1.8;color:var(--muted)">
+      <li>Open <a href="https://console.firebase.google.com/project/ncrs2-f8da9/authentication/settings" target="_blank" rel="noopener" style="color:var(--p2)">Firebase Console &rarr; ncrs2-f8da9 &rarr; Authentication &rarr; Settings</a></li>
+      <li>Scroll down to the <b>"Authorized domains"</b> section</li>
+      <li>Click <b>"Add domain"</b></li>
+      <li>Enter this exact value: <code id="domainToAdd" style="padding:2px 6px;background:var(--panel2);border-radius:4px;color:var(--p2)">...</code></li>
+      <li>Click <b>"Add"</b> then refresh this page</li>
+    </ol>
+    <div class="provider-note" style="margin-top:14px;background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.3);color:#60a5fa">
+      <i class="fa-solid fa-circle-info"></i> <b>Tip:</b> For local testing, use <code>localhost</code> (without port). For production, add your full domain (e.g. <code>myapp.web.app</code>).
+    </div>
+    <div class="flex gap-sm" style="justify-content:flex-end;margin-top:18px">
+      <a href="https://console.firebase.google.com/project/ncrs2-f8da9/authentication/settings" target="_blank" rel="noopener" class="btn primary">
+        <i class="fa-solid fa-up-right-from-square"></i> Open Firebase Console
+      </a>
+      <button class="btn mutedbtn" onclick="closeModal('domainErrorModal')">Close</button>
+    </div>
+  </div>
+</div></div>
 
 </body> 
 </html> 
