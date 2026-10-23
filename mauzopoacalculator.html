@@ -1429,71 +1429,11 @@ body[data-landing-theme="dark"]::after{opacity:.25}
   
 <script>
 // ============================================================
-// ENVIRONMENT CHECK (file:// protocol detection)
-// Firebase Auth requires http:// or https:// — not file://
+// FIREBASE INITIALIZATION (no environment blocking)
+// All obstacles removed per user request — Firebase initializes normally.
+// NOTE: For Google Login to actually work, the page MUST be served via
+// http://localhost or https:// — file:// will still fail at the browser level.
 // ============================================================
-(function checkEnvironment() {
-  var protocol = window.location.protocol;
-  var isFile = protocol === 'file:';
-  var isHttp = protocol === 'http:' || protocol === 'https:' || protocol === 'chrome-extension:';
-  
-  // Check if web storage is available
-  var storageOK = false;
-  try {
-    localStorage.setItem('__test__', '1');
-    localStorage.removeItem('__test__');
-    storageOK = true;
-  } catch(e) { storageOK = false; }
-  
-  if (isFile || !isHttp || !storageOK) {
-    console.error('ENVIRONMENT ERROR:', {
-      protocol: protocol,
-      isFile: isFile,
-      isHttp: isHttp,
-      storageOK: storageOK,
-      href: window.location.href
-    });
-    // Show modal — try multiple ways because DOM might not be ready
-    function showModal() {
-      var modal = document.getElementById('envErrorModal');
-      if (modal) {
-        modal.style.display = 'flex';
-        return true;
-      }
-      return false;
-    }
-    if (!showModal()) {
-      // DOM not ready — wait for it
-      document.addEventListener('DOMContentLoaded', showModal);
-      // Also try after a short delay
-      setTimeout(showModal, 100);
-      setTimeout(showModal, 500);
-    }
-    // Block Firebase initialization by throwing early
-    window.__FIREBASE_BLOCKED__ = true;
-  }
-})();
-
-// Block Firebase init if environment is invalid
-if (window.__FIREBASE_BLOCKED__) {
-  // Replace Firebase init with no-op stubs so the page doesn't crash
-  window.firebase = {
-    initializeApp: function() { return {}; },
-    auth: function() { return { 
-      onAuthStateChanged: function() {},
-      signInWithEmailAndPassword: function() { return Promise.reject(new Error('Environment not supported')); },
-      createUserWithEmailAndPassword: function() { return Promise.reject(new Error('Environment not supported')); },
-      signInWithPopup: function() { return Promise.reject(new Error('Environment not supported')); },
-      signOut: function() { return Promise.resolve(); }
-    }; },
-    firestore: function() { return { 
-      collection: function() { return { get: function() { return Promise.resolve({ empty: true, forEach: function() {} }); } }; },
-      doc: function() { return { get: function() { return Promise.resolve({ exists: false }); } }; }
-    }; },
-    storage: function() { return {}; }
-  };
-  console.warn('Firebase stubbed due to invalid environment. Use a local server (http://) instead.');
-}
 
 // ============================================================
 // FIREBASE CONFIG - BADILISHA NA KREDENTIALI ZAKO HALISI
@@ -3161,57 +3101,6 @@ document.addEventListener('DOMContentLoaded', () => {
           <i class="fa-solid fa-up-right-from-square"></i> Open Firebase Console
         </a>
         <button class="btn btn-o" onclick="closeSuperModal('domainErrorModal')">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ENVIRONMENT ERROR MODAL (file:// protocol detected) -->
-<div class="super-modal" id="envErrorModal" style="display:none">
-  <div class="super-modal-card" style="max-width:600px">
-    <div class="super-modal-head">
-      <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i> Mfumo Hauwezi Kufanya Kazi</h3>
-    </div>
-    <div style="padding:6px 0">
-      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Unafungua faili hii moja kwa moja kupitia <code style="padding:2px 6px;background:var(--bg3);border-radius:4px;color:var(--danger)">file://</code> protocol. Firebase Authentication hairuhusiwi kufanya kazi kwenye mazingira haya.</p>
-      
-      <div style="background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.3);border-radius:8px;padding:12px 14px;margin-bottom:14px;color:#ff7b85;font-size:12px">
-        <i class="fa-solid fa-circle-info"></i> <b>Sababu:</b> Firebase inahitaji <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">http://</code> au <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">https://</code> protocol, sio <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">file://</code>.
-      </div>
-      
-      <h4 style="margin-bottom:10px;font-size:13px;color:var(--primary2)"><i class="fa-solid fa-wrench"></i> Suluhisho (Chagua Moja):</h4>
-      
-      <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:10px">
-        <h5 style="font-size:12px;color:var(--primary2);margin-bottom:8px"><i class="fa-brands fa-vscode"></i> Chaguo A: VS Code Live Server (Rahisi Zaidi)</h5>
-        <ol style="padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
-          <li>Fungua VS Code</li>
-          <li>Install extension "Live Server" na Ritwick Dey</li>
-          <li>Right-click faili hii → <b>"Open with Live Server"</b></li>
-          <li>URL itakuwa: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">http://127.0.0.1:5500/...</code></li>
-        </ol>
-      </div>
-      
-      <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:10px">
-        <h5 style="font-size:12px;color:var(--primary2);margin-bottom:8px"><i class="fa-brands fa-python"></i> Chaguo B: Python HTTP Server</h5>
-        <ol style="padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
-          <li>Fungua terminal/command prompt</li>
-          <li>Nenda kwenye folder ya faili: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px">cd /folder/ya/faili</code></li>
-          <li>Run: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">python -m http.server 5500</code></li>
-          <li>Fungua: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">http://localhost:5500/bizbook_with_google_login.html</code></li>
-        </ol>
-      </div>
-      
-      <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:14px">
-        <h5 style="font-size:12px;color:var(--primary2);margin-bottom:8px"><i class="fa-brands fa-node-js"></i> Chaguo C: Node.js (http-server)</h5>
-        <ol style="padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
-          <li>Install: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px">npm install -g http-server</code></li>
-          <li>Nenda folder ya faili: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px">cd /folder/ya/faili</code></li>
-          <li>Run: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">http-server -p 5500</code></li>
-        </ol>
-      </div>
-      
-      <div style="background:rgba(9,132,227,.08);border:1px solid rgba(9,132,227,.3);border-radius:8px;padding:12px 14px;color:#60a5fa;font-size:12px">
-        <i class="fa-solid fa-lightbulb"></i> <b>Muhimu:</b> Tumia <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">localhost</code> (sio <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">127.0.0.1</code>) — kwa sababu <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">localhost</code> imeongezwa otomatiki kwenye Firebase Authorized Domains.
       </div>
     </div>
   </div>
