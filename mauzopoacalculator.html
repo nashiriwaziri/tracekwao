@@ -1443,29 +1443,10 @@ const firebaseConfig = {
 
 let app, auth, db, storage;
 let authReady = false;
+let _envSupported = true;
 
 // ============================================================
-// ENVIRONMENT SAFETY: Clean stale Firebase Auth storage entries
-// that cause the operation-not-supported error.
-// ============================================================
-try {
-  for (var _fi = localStorage.length - 1; _fi >= 0; _fi--) {
-    var _fk = localStorage.key(_fi) || '';
-    if (_fk.indexOf('firebase:authUser:') === 0) localStorage.removeItem(_fk);
-  }
-} catch(_fe1) { /* localStorage may be blocked */ }
-
-try {
-  for (var _fj = sessionStorage.length - 1; _fj >= 0; _fj--) {
-    var _fsk = sessionStorage.key(_fj) || '';
-    if (_fsk.indexOf('firebase:authUser:') === 0) sessionStorage.removeItem(_fsk);
-  }
-} catch(_fe2) { /* sessionStorage may be blocked */ }
-
-// ============================================================
-// FIREBASE INIT WITH SAFE AUTH PERSISTENCE
-// - Detects if web storage / protocol is supported
-// - Falls back to in-memory persistence if not
+// ENVIRONMENT CHECK — detect file:// protocol or blocked storage
 // ============================================================
 function _isAuthEnvSupported() {
   try {
@@ -1473,62 +1454,77 @@ function _isAuthEnvSupported() {
     if (proto !== 'http:' && proto !== 'https:' && proto !== 'chrome-extension:') return false;
     localStorage.setItem('__fb_test__', '1');
     localStorage.removeItem('__fb_test__');
+    sessionStorage.setItem('__fb_test__', '1');
+    sessionStorage.removeItem('__fb_test__');
     return true;
   } catch(e) { return false; }
 }
 
+_envSupported = _isAuthEnvSupported();
+
+// ============================================================
+// FIREBASE INIT — fully async-safe, works in ALL environments
+// ============================================================
 try {
   app = firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();
   storage = firebase.storage();
-
-  // ---- CRITICAL FIX: Set safe persistence BEFORE any auth operation ----
-  // Never use LOCAL persistence (default) — it causes the environment error.
-  // SESSION uses sessionStorage (more reliable); NONE is in-memory (always works).
-  var _pSet = false;
-
-  if (_isAuthEnvSupported()) {
-    // http/https with working localStorage — use SESSION persistence
-    try {
-      auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-      _pSet = true;
-      console.log('Firebase Auth: SESSION persistence active');
-    } catch(_pe) {
-      console.warn('SESSION persistence failed, trying NONE:', _pe);
-    }
-  }
-
-  if (!_pSet) {
-    // Fallback: in-memory only (no web storage needed at all)
-    try {
-      auth.setPersistence(firebase.auth.Auth.Persistence.NONE);
-      _pSet = true;
-      console.log('Firebase Auth: NONE (in-memory) persistence — user will need to re-login after refresh');
-    } catch(_pe2) {
-      console.warn('NONE persistence also failed:', _pe2);
-    }
-  }
-
-  if (!_pSet) {
-    console.error('Firebase Auth: Could not set any persistence. Auth may not work in this environment.');
-  }
-
   authReady = true;
-  db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+
+  // Set persistence ASYNCHRONOUSLY using .then().catch()
+  // setPersistence returns a Promise — try/catch will NOT catch its rejection
+  if (_envSupported) {
+    // http/https with working web storage — try SESSION persistence
+    auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+      .then(function() { console.log('Firebase Auth: SESSION persistence active'); })
+      .catch(function(err1) {
+        console.warn('SESSION persistence failed, trying NONE:', err1);
+        auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+          .then(function() { console.log('Firebase Auth: NONE (in-memory) persistence active'); })
+          .catch(function(err2) { console.warn('NONE persistence also failed:', err2); });
+      });
+  } else {
+    // file:// or no web storage — use NONE (in-memory) persistence directly
+    auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+      .then(function() { console.log('Firebase Auth: NONE (in-memory) persistence active (unsupported env)'); })
+      .catch(function(err) { console.warn('NONE persistence failed in unsupported env:', err); });
+  }
+
+  // Firestore offline persistence — also async, handle safely
+  db.enablePersistence({ synchronizeTabs: true }).catch(function(err) {
+    console.warn('Firestore offline persistence not available:', err);
+  });
+
 } catch(e) {
   console.error("Firebase init error:", e);
-  // Show user-friendly message on page
-  try {
-    var _tc = document.getElementById('toastContainer');
-    if (_tc) {
-      var _t = document.createElement('div');
-      _t.className = 'toast e';
-      _t.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Fungua ukurasa huu kwa http:// au https:// (sio file://) ili Firebase ifanye kazi vizuri.';
-      _tc.appendChild(_t);
-      setTimeout(function() { if (_t.parentNode) _t.remove(); }, 8000);
-    }
-  } catch(_te) {}
+  authReady = true;
+}
+
+// ============================================================
+// GLOBAL UNHANDLED REJECTION HANDLER
+// ============================================================
+window.addEventListener('unhandledrejection', function(event) {
+  var err = event.reason;
+  if (err && (err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/unauthorized-domain')) {
+    event.preventDefault();
+    console.warn('Suppressed auth environment error:', err.code);
+  }
+});
+
+// ============================================================
+// ENVIRONMENT WARNING BANNER (shown once, dismissible)
+// ============================================================
+if (!_envSupported) {
+  setTimeout(function() {
+    var existing = document.getElementById('envWarningBanner');
+    if (existing) return;
+    var banner = document.createElement('div');
+    banner.id = 'envWarningBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#e74c3c,#c0392b);color:#fff;padding:10px 16px;font-family:Inter,sans-serif;font-size:13px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    banner.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> <span>Unafungua kwa <b>file://</b> — Firebase Auth inaweza isifanye kazi vizuri. Tumia <b>http://</b> au <b>https://</b> (mfano: Live Server).</span> <button onclick="document.getElementById(\'envWarningBanner\').remove()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:10px">Funga</button>';
+    document.body.appendChild(banner);
+  }, 500);
 }
 
 // ============================================================
@@ -2038,20 +2034,31 @@ function navTo(section) {
 // ============================================================
 function handleLogin(e) {
   e.preventDefault();
-  if (!auth) { showAuthErr('Firebase haijaunganishwa.'); return; }
-  auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value).then(cred => { currentUser = cred.user; return db.collection('users').doc(cred.user.uid).get(); }).then(doc => {
+  if (!auth) { showAuthErr('Firebase haijaunganishwa. Fungua kwa http:// au https://.'); return; }
+  if (!_envSupported) { showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server au host kwenye tovuti.'); return; }
+  auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value).then(cred => db.collection('users').doc(cred.user.uid).get()).then(doc => {
     if (doc.exists) { const d=doc.data(); currentBiz={id:doc.id,name:d.businessName,category:d.businessCategory,logo:d.logo}; showRoleScreen(d); }
     else showAuthErr('Akaunti haipatikani.');
-  }).catch(err => { if(err.code==='auth/operation-not-supported-in-this-environment') showAuthErr('Mazingira hayatumiki: Fungua kwa http:// au https:// (sio file://)'); else showAuthErr(err.message); });
+  }).catch(err => {
+    if(err.code==='auth/operation-not-supported-in-this-environment') showAuthErr('Mazingira hayatumiki: Fungua kwa http:// au https:// (sio file://). Tumia Live Server.');
+    else if(err.code==='auth/invalid-credential'||err.code==='auth/wrong-password'||err.code==='auth/user-not-found') showAuthErr('Barua pepe au nenosiri si sahihi.');
+    else showAuthErr(err.message);
+  });
 }
 function handleSignup(e) {
   e.preventDefault();
-  if (!auth) { showAuthErr('Firebase haijaunganishwa.'); return; }
-  auth.createUserWithEmailAndPassword(document.getElementById('signupEmail').value, document.getElementById('signupPass').value).then(cred => { currentUser = cred.user; return db.collection('users').doc(cred.user.uid).set({
+  if (!auth) { showAuthErr('Firebase haijaunganishwa. Fungua kwa http:// au https://.'); return; }
+  if (!_envSupported) { showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server au host kwenye tovuti.'); return; }
+  auth.createUserWithEmailAndPassword(document.getElementById('signupEmail').value, document.getElementById('signupPass').value).then(cred => db.collection('users').doc(cred.user.uid).set({
     name:document.getElementById('signupName').value, email:document.getElementById('signupEmail').value,
     businessName:document.getElementById('signupBiz').value, businessCategory:document.getElementById('signupCat').value,
     role:'manager', status:'active', logo:'', createdAt:firebase.firestore.FieldValue.serverTimestamp()
-  })).then(() => { db.collection('users').doc(auth.currentUser.uid).collection('settings').doc('main').set({overheadPercent:10,marginPercent:20,logo:''}); toast('Akaunti imeundwa!','s'); switchAuthTab('login'); }).catch(err => { if(err.code==='auth/operation-not-supported-in-this-environment') showAuthErr('Mazingira hayatumiki: Fungua kwa http:// au https:// (sio file://)'); else showAuthErr(err.message); });
+  })).then(() => { db.collection('users').doc(auth.currentUser.uid).collection('settings').doc('main').set({overheadPercent:10,marginPercent:20,logo:''}); toast('Akaunti imeundwa!','s'); switchAuthTab('login'); }).catch(err => {
+    if(err.code==='auth/operation-not-supported-in-this-environment') showAuthErr('Mazingira hayatumiki: Fungua kwa http:// au https:// (sio file://). Tumia Live Server.');
+    else if(err.code==='auth/email-already-in-use') showAuthErr('Barua pepe hii tayari inatumika.');
+    else if(err.code==='auth/weak-password') showAuthErr('Nenosiri ni dhaifu — tumia angalau herufi 6.');
+    else showAuthErr(err.message);
+  });
 }
 
 // ============================================================
@@ -2070,7 +2077,8 @@ function handleSignup(e) {
 const GOOGLE_CLIENT_ID = "797676326076-09rpnb9c1amicstl4db8bkiiqt1et2g2.apps.googleusercontent.com";
 
 function handleGoogleLogin() {
-  if (!auth) { showAuthErr('Firebase haijaunganishwa.'); return; }
+  if (!auth) { showAuthErr('Firebase haijaunganishwa. Fungua kwa http:// au https://.'); return; }
+  if (!_envSupported) { showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server au host kwenye tovuti.'); return; }
 
   // Mark button(s) as loading
   setGoogleBtnLoading(true, 'Inasubiri Google...');
@@ -2129,15 +2137,19 @@ function waitForGIS(cb) {
 
 // Fallback: Firebase's signInWithPopup (uses Firebase project's default Google Client ID)
 function fallbackToFirebasePopup() {
-  if (!auth) { handleGoogleError({ message: 'Firebase haijaunganishwa.' }); return; }
   var provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   auth.signInWithPopup(provider)
-    .then(function(result) { currentUser = result.user; handleGoogleSignInResult(result.user); })
+    .then(function(result) { handleGoogleSignInResult(result.user); })
     .catch(function(pErr) {
       if (pErr.code === 'auth/operation-not-supported-in-this-environment' || pErr.code === 'auth/unauthorized-domain') {
-        showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://)');
-      } else { handleGoogleError(pErr); }
+        showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server.');
+      } else if (pErr.code === 'auth/popup-closed-by-user') {
+        // User closed popup silently — no error needed
+        setGoogleBtnLoading(false);
+      } else {
+        handleGoogleError(pErr);
+      }
     });
 }
 
@@ -2150,16 +2162,20 @@ function handleGoogleCredentialResponse(response) {
   // response.credential is the ID token (JWT) signed by Google
   var credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
   auth.signInWithCredential(credential)
-    .then(function(result) { currentUser = result.user; handleGoogleSignInResult(result.user); })
-    .catch(function(cErr) {
-      if (cErr.code === 'auth/operation-not-supported-in-this-environment' || cErr.code === 'auth/unauthorized-domain') {
-        showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://)');
-      } else { handleGoogleError(cErr); }
+    .then(function(result) { handleGoogleSignInResult(result.user); })
+    .catch(function(err) {
+      if (err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/unauthorized-domain') {
+        showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server.');
+        setGoogleBtnLoading(false);
+      } else {
+        handleGoogleError(err);
+      }
     });
 }
 
 // === Common sign-in success handler (used by both GIS and Firebase popup paths) ===
 function handleGoogleSignInResult(user) {
+  if (!db) { showAuthErr('Firebase haijaunganishwa.'); setGoogleBtnLoading(false); return; }
   return db.collection('users').doc(user.uid).get().then(function(doc) {
     if (doc.exists) {
       // Existing user — proceed to role screen
@@ -2211,6 +2227,7 @@ function handleGoogleError(err) {
     else if (err.code === 'auth/network-request-failed') msg = 'Hitilafu ya mtandao. Angalia muunganisho wako wa intaneti.';
     else if (err.code === 'auth/unauthorized-domain') msg = 'Domain hii haijaidhinishwa kwa Google Sign-In. Ongeza kwenye Firebase Console → Auth → Settings → Authorized domains.';
     else if (err.code === 'auth/operation-not-allowed') msg = 'Login na Google haijawashwa. Washa kwenye Firebase Console → Authentication → Sign-in method → Google.';
+    else if (err.code === 'auth/operation-not-supported-in-this-environment') msg = 'Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server.';
     else if (err.code === 'auth/invalid-credential') msg = 'Credential ya Google si sahihi au imekwisha muda. Jaribu tena.';
   }
   showAuthErr(msg);
@@ -2237,7 +2254,7 @@ function setGoogleBtnLoading(loading, loadingText) {
 }
 
 function showAuthErr(msg) { document.getElementById('authErrText').textContent=msg; document.getElementById('authErr').classList.add('show'); }
-function authLogout() { if(auth) auth.signOut(); currentUser=null; currentBiz=null; showLanding(); }
+function authLogout() { try { if(auth) auth.signOut().catch(function(){}); } catch(e) {} currentUser=null; currentBiz=null; showLanding(); }
 function showRoleScreen(data) { hideAll(); document.getElementById('roleScreen').classList.remove('hidden'); document.getElementById('rsBizName').textContent=data.businessName; document.getElementById('rsBizCat').textContent=data.businessCategory; }
 async function selectRole(role) {
   currentRole = role; hideAll(); document.getElementById('dashScreen').classList.remove('hidden');
@@ -2966,26 +2983,32 @@ function closeGenModal() {
 }
 
 // ============================================================
-// AUTH STATE LISTENER
-// ============================================================
 // AUTH STATE LISTENER (with environment error protection)
-try {
-  auth.onAuthStateChanged(user => {
-    currentUser=user;
-    // Stop Google One Tap if user is now logged in
-    if (user) stopOneTap();
-    // If user is logged in but no currentBiz, try to load it
-    if(user && !currentBiz) {
-      db.collection('users').doc(user.uid).get().then(doc => {
-        if(doc.exists) {
-          const d=doc.data();
-          currentBiz={id:doc.id, name:d.businessName, category:d.businessCategory, logo:d.logo};
-        }
-      }).catch(()=>{});
-    }
-  });
-} catch(e) {
-  console.warn('onAuthStateChanged setup failed (environment not supported):', e);
+// ============================================================
+if (auth) {
+  try {
+    auth.onAuthStateChanged(function(user) {
+      currentUser = user;
+      if (user) { try { stopOneTap(); } catch(e) {} }
+      if (user && !currentBiz && db) {
+        db.collection('users').doc(user.uid).get().then(function(doc) {
+          if (doc.exists) {
+            var d = doc.data();
+            currentBiz = { id: doc.id, name: d.businessName, category: d.businessCategory, logo: d.logo };
+          }
+        }).catch(function() {});
+      }
+    }, function(error) {
+      // Error callback for onAuthStateChanged
+      if (error && error.code === 'auth/operation-not-supported-in-this-environment') {
+        console.warn('Auth state listener: Environment not supported (file:// protocol).');
+      } else {
+        console.warn('Auth state listener error:', error);
+      }
+    });
+  } catch(e) {
+    console.warn('onAuthStateChanged setup failed:', e);
+  }
 }
 
 // ============================================================
@@ -3004,6 +3027,8 @@ var oneTapCooldownMs = 60 * 60 * 1000; // 1 hour
 var oneTapActive = false;
 
 function initOneTapAutoSignin() {
+  // Skip in unsupported environments (file:// protocol)
+  if (!_envSupported) return;
   // Don't show if user is already logged in
   if (currentUser || currentBiz) {
     if (window.google && google.accounts && google.accounts.id) {
@@ -3112,11 +3137,16 @@ function applyLandingTheme(theme) {
   setTimeout(function() { applyLanguage(); applyLandingTheme(landingThemes[currentThemeIdx]); var ls = document.getElementById('ldLangSelect'); if (ls) ls.value = currentLang; }, 100);
 })();
 
-document.addEventListener('DOMContentLoaded', () => {
-  showLanding();
-  renderPublicShowcase();
-  // Show Google One Tap automatically on landing page (after a brief delay to let GIS load)
-  setTimeout(initOneTapAutoSignin, 1500);
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    showLanding();
+    renderPublicShowcase();
+    // Show Google One Tap automatically on landing page (after a brief delay to let GIS load)
+    setTimeout(initOneTapAutoSignin, 1500);
+  } catch(e) {
+    console.error('DOMContentLoaded init error:', e);
+    try { showLanding(); } catch(e2) {}
+  }
 });
 </script>
 </body>
