@@ -3,23 +3,37 @@
 <head>
 <script>
 // ============================================================
-// AUTO-REDIRECT: file:// → http://localhost:5500
+// AUTO-REDIRECT: file:// → https://www.tracekwao.com
 // (Fixes "auth/operation-not-supported-in-this-environment")
+// Production domain: www.tracekwao.com
 // ============================================================
 (function() {
   var protocol = window.location.protocol;
+  var hostname = window.location.hostname;
+  var PROD_DOMAIN = "www.tracekwao.com";
+  
+  // If already on production domain via HTTPS — do nothing, allow normal flow
+  if (protocol === 'https:' && (hostname === PROD_DOMAIN || hostname === PROD_DOMAIN.replace('www.',''))) {
+    return;
+  }
+  
+  // If on localhost via HTTP — allow (local development)
+  if (protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+    return;
+  }
+  
+  // If opened via file:// — redirect to production domain
   if (protocol === 'file:') {
-    // User opened the file directly — redirect to local server
     var fileName = window.location.pathname.split('/').pop() || 'bizbook_with_google_login.html';
-    var targetUrl = 'http://localhost:5500/' + fileName;
+    var targetUrl = 'https://' + PROD_DOMAIN + '/' + fileName;
     
     // Show a brief overlay before redirecting
-    document.title = 'Redirecting to localhost...';
-    document.head.insertAdjacentHTML('beforeend', '<style>#redirect-overlay{position:fixed;inset:0;background:#0d0d12;color:#fff;display:flex;align-items:center;justify-content:center;z-index:999999;font-family:Inter,sans-serif;text-align:center;padding:20px}#redirect-overlay .box{max-width:500px;background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:32px}#redirect-overlay h2{color:#D4AF37;margin:0 0 12px;font-size:22px}#redirect-overlay p{color:#9a9ab0;font-size:14px;line-height:1.6;margin:8px 0}#redirect-overlay a{color:#a29bfe;word-break:break-all}#redirect-overlay .spinner{display:inline-block;width:32px;height:32px;border:3px solid #2a2a3a;border-top-color:#D4AF37;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px}@keyframes spin{to{transform:rotate(360deg)}}</style>');
+    document.title = 'Redirecting to ' + PROD_DOMAIN + '...';
+    document.head.insertAdjacentHTML('beforeend', '<style>#redirect-overlay{position:fixed;inset:0;background:#0d0d12;color:#fff;display:flex;align-items:center;justify-content:center;z-index:999999;font-family:Inter,sans-serif;text-align:center;padding:20px}#redirect-overlay .box{max-width:520px;background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:32px}#redirect-overlay h2{color:#D4AF37;margin:0 0 12px;font-size:22px}#redirect-overlay p{color:#9a9ab0;font-size:14px;line-height:1.6;margin:8px 0}#redirect-overlay a{color:#a29bfe;word-break:break-all}#redirect-overlay .spinner{display:inline-block;width:32px;height:32px;border:3px solid #2a2a3a;border-top-color:#D4AF37;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px}@keyframes spin{to{transform:rotate(360deg)}}</style>');
     
     var overlay = document.createElement('div');
     overlay.id = 'redirect-overlay';
-    overlay.innerHTML = '<div class="box"><div class="spinner"></div><h2>Inahamia kwenye Local Server...</h2><p>Unafungua faili hii moja kwa moja (file://). Firebase haiwezi kufanya kazi hivyo. Tunakuhimia kwenye local server ambapo Google Login itafanya kazi vizuri.</p><p style="font-size:12px;color:#5a5a72">URL ya kufungua: <a href="' + targetUrl + '">' + targetUrl + '</a></p><p style="font-size:11px;color:#5a5a72;margin-top:14px">Kama haujahamishwa otomatiki ndani ya sekunde 3, bonyeza link hapo juu.</p></div>';
+    overlay.innerHTML = '<div class="box"><div class="spinner"></div><h2>Inahamia kwenye TraceKwao.com...</h2><p>Unafungua faili hii moja kwa moja (file://). Firebase haiwezi kufanya kazi hivyo. Tunakuhimia kwenye <b>www.tracekwao.com</b> ambapo Google Login itafanya kazi vizuri.</p><p style="font-size:12px;color:#5a5a72">URL ya kufungua: <a href="' + targetUrl + '">' + targetUrl + '</a></p><p style="font-size:11px;color:#5a5a72;margin-top:14px">Kama haujahamishwa otomatiki ndani ya sekunde 3, bonyeza link hapo juu.</p></div>';
     document.body ? document.body.appendChild(overlay) : document.documentElement.appendChild(overlay);
     
     // Try to redirect after short delay
@@ -30,7 +44,7 @@
     // Block all subsequent script execution
     window.__REDIRECT_BLOCK__ = true;
   }
-})();
+});
 </script>
 
 <meta charset="UTF-8"/>
@@ -2195,9 +2209,10 @@ function handleGoogleError(err) {
   showAuthErr(msg);
   setGoogleBtnLoading(false);
   if (showDomainModal) {
-    /* Detect current domain and show in modal */
-    var fullOrigin = window.location.origin;     /* e.g. http://localhost:5500 */
-    var hostName = window.location.hostname;     /* e.g. localhost or 127.0.0.1 */
+    /* Production domain: www.tracekwao.com — auto-fill this in the modal */
+    var PROD_DOMAIN = 'www.tracekwao.com';
+    var fullOrigin = 'https://' + PROD_DOMAIN;          /* Production domain */
+    var hostName = PROD_DOMAIN;                          /* Firebase wants hostname only */
     var displayEl1 = document.getElementById('detectedDomain');
     var displayEl2 = document.getElementById('domainToAdd');
     if (displayEl1) displayEl1.textContent = fullOrigin;
@@ -3112,21 +3127,22 @@ document.addEventListener('DOMContentLoaded', () => {
       <button onclick="closeSuperModal('domainErrorModal')"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="padding:6px 0">
-      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Domain yako ya sasa haijaidhinishwa kwa Google Sign-In. Ongeza kwenye Firebase Console kutatua.</p>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Domain ya production <b>www.tracekwao.com</b> haijaidhinishwa bado kwa Google Sign-In. Ongeza kwenye Firebase Console kutatua.</p>
       <div style="background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.3);border-radius:8px;padding:12px 14px;margin-bottom:14px;color:#ffc857">
-        <i class="fa-solid fa-globe"></i> <b>Current domain (origin):</b><br>
-        <code id="detectedDomain" style="display:block;margin-top:6px;padding:8px 10px;background:var(--bg3);border-radius:6px;color:#ffc857;word-break:break-all;font-size:11px">Loading...</code>
+        <i class="fa-solid fa-globe"></i> <b>Domain ya kuongeza:</b><br>
+        <code id="detectedDomain" style="display:block;margin-top:6px;padding:8px 10px;background:var(--bg3);border-radius:6px;color:#ffc857;word-break:break-all;font-size:11px">https://www.tracekwao.com</code>
       </div>
       <h4 style="margin-bottom:10px;font-size:13px;color:var(--primary2)"><i class="fa-solid fa-list-check"></i> Hatua za Kufuata:</h4>
       <ol style="padding-left:22px;font-size:12px;line-height:1.8;color:var(--text2)">
         <li>Fungua <a href="https://console.firebase.google.com/project/ncrs-aeb43/authentication/settings" target="_blank" rel="noopener" style="color:var(--primary2)">Firebase Console → ncrs-aeb43 → Authentication → Settings</a></li>
         <li>Skroluu chini hadi sehemu ya <b>"Authorized domains"</b></li>
         <li>Bonyeza <b>"Add domain"</b></li>
-        <li>Ingiza thamani hii: <code id="domainToAdd" style="padding:2px 6px;background:var(--bg3);border-radius:4px;color:var(--primary2)">...</code></li>
-        <li>Bonyeza <b>"Add"</b> kisha refresh page hii</li>
+        <li>Ingiza thamani hii: <code id="domainToAdd" style="padding:2px 6px;background:var(--bg3);border-radius:4px;color:var(--primary2)">www.tracekwao.com</code></li>
+        <li>Pia ongeza domain hii: <code style="padding:2px 6px;background:var(--bg3);border-radius:4px;color:var(--primary2)">tracekwao.com</code> (bila www)</li>
+        <li>Bonyeza <b>"Add"</b> kwa kila domain, kisha refresh page hii</li>
       </ol>
       <div style="background:rgba(9,132,227,.08);border:1px solid rgba(9,132,227,.3);border-radius:8px;padding:12px 14px;margin-top:14px;color:#60a5fa;font-size:12px">
-        <i class="fa-solid fa-circle-info"></i> <b>Tip:</b> Kwa local testing tumia <code>localhost</code> (bila port). Kwa production, ongeza domain yako kamili (mfano <code>myapp.web.app</code>).
+        <i class="fa-solid fa-circle-info"></i> <b>Muhimu:</b> Ongeza domain ZOTE MBILI — <code>www.tracekwao.com</code> NA <code>tracekwao.com</code> (bila www). Hii inahakikisha Google Login inafanya kazi iwe mtumiaji anatumia <code>www</code> au la.
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
         <a href="https://console.firebase.google.com/project/ncrs-aeb43/authentication/settings" target="_blank" rel="noopener" class="btn btn-p">
