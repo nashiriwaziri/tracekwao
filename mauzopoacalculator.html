@@ -1429,6 +1429,73 @@ body[data-landing-theme="dark"]::after{opacity:.25}
   
 <script>
 // ============================================================
+// ENVIRONMENT CHECK (file:// protocol detection)
+// Firebase Auth requires http:// or https:// — not file://
+// ============================================================
+(function checkEnvironment() {
+  var protocol = window.location.protocol;
+  var isFile = protocol === 'file:';
+  var isHttp = protocol === 'http:' || protocol === 'https:' || protocol === 'chrome-extension:';
+  
+  // Check if web storage is available
+  var storageOK = false;
+  try {
+    localStorage.setItem('__test__', '1');
+    localStorage.removeItem('__test__');
+    storageOK = true;
+  } catch(e) { storageOK = false; }
+  
+  if (isFile || !isHttp || !storageOK) {
+    console.error('ENVIRONMENT ERROR:', {
+      protocol: protocol,
+      isFile: isFile,
+      isHttp: isHttp,
+      storageOK: storageOK,
+      href: window.location.href
+    });
+    // Show modal — try multiple ways because DOM might not be ready
+    function showModal() {
+      var modal = document.getElementById('envErrorModal');
+      if (modal) {
+        modal.style.display = 'flex';
+        return true;
+      }
+      return false;
+    }
+    if (!showModal()) {
+      // DOM not ready — wait for it
+      document.addEventListener('DOMContentLoaded', showModal);
+      // Also try after a short delay
+      setTimeout(showModal, 100);
+      setTimeout(showModal, 500);
+    }
+    // Block Firebase initialization by throwing early
+    window.__FIREBASE_BLOCKED__ = true;
+  }
+})();
+
+// Block Firebase init if environment is invalid
+if (window.__FIREBASE_BLOCKED__) {
+  // Replace Firebase init with no-op stubs so the page doesn't crash
+  window.firebase = {
+    initializeApp: function() { return {}; },
+    auth: function() { return { 
+      onAuthStateChanged: function() {},
+      signInWithEmailAndPassword: function() { return Promise.reject(new Error('Environment not supported')); },
+      createUserWithEmailAndPassword: function() { return Promise.reject(new Error('Environment not supported')); },
+      signInWithPopup: function() { return Promise.reject(new Error('Environment not supported')); },
+      signOut: function() { return Promise.resolve(); }
+    }; },
+    firestore: function() { return { 
+      collection: function() { return { get: function() { return Promise.resolve({ empty: true, forEach: function() {} }); } }; },
+      doc: function() { return { get: function() { return Promise.resolve({ exists: false }); } }; }
+    }; },
+    storage: function() { return {}; }
+  };
+  console.warn('Firebase stubbed due to invalid environment. Use a local server (http://) instead.');
+}
+
+// ============================================================
 // FIREBASE CONFIG - BADILISHA NA KREDENTIALI ZAKO HALISI
 // ============================================================
 const firebaseConfig = {
@@ -1442,90 +1509,13 @@ const firebaseConfig = {
 };
 
 let app, auth, db, storage;
-let authReady = false;
-let _envSupported = true;
-
-// ============================================================
-// ENVIRONMENT CHECK — detect file:// protocol or blocked storage
-// ============================================================
-function _isAuthEnvSupported() {
-  try {
-    var proto = window.location.protocol;
-    if (proto !== 'http:' && proto !== 'https:' && proto !== 'chrome-extension:') return false;
-    localStorage.setItem('__fb_test__', '1');
-    localStorage.removeItem('__fb_test__');
-    sessionStorage.setItem('__fb_test__', '1');
-    sessionStorage.removeItem('__fb_test__');
-    return true;
-  } catch(e) { return false; }
-}
-
-_envSupported = _isAuthEnvSupported();
-
-// ============================================================
-// FIREBASE INIT — fully async-safe, works in ALL environments
-// ============================================================
 try {
   app = firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();
   storage = firebase.storage();
-  authReady = true;
-
-  // Set persistence ASYNCHRONOUSLY using .then().catch()
-  // setPersistence returns a Promise — try/catch will NOT catch its rejection
-  if (_envSupported) {
-    // http/https with working web storage — try SESSION persistence
-    auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
-      .then(function() { console.log('Firebase Auth: SESSION persistence active'); })
-      .catch(function(err1) {
-        console.warn('SESSION persistence failed, trying NONE:', err1);
-        auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-          .then(function() { console.log('Firebase Auth: NONE (in-memory) persistence active'); })
-          .catch(function(err2) { console.warn('NONE persistence also failed:', err2); });
-      });
-  } else {
-    // file:// or no web storage — use NONE (in-memory) persistence directly
-    auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
-      .then(function() { console.log('Firebase Auth: NONE (in-memory) persistence active (unsupported env)'); })
-      .catch(function(err) { console.warn('NONE persistence failed in unsupported env:', err); });
-  }
-
-  // Firestore offline persistence — also async, handle safely
-  db.enablePersistence({ synchronizeTabs: true }).catch(function(err) {
-    console.warn('Firestore offline persistence not available:', err);
-  });
-
-} catch(e) {
-  console.error("Firebase init error:", e);
-  authReady = true;
-}
-
-// ============================================================
-// GLOBAL UNHANDLED REJECTION HANDLER
-// ============================================================
-window.addEventListener('unhandledrejection', function(event) {
-  var err = event.reason;
-  if (err && (err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/unauthorized-domain')) {
-    event.preventDefault();
-    console.warn('Suppressed auth environment error:', err.code);
-  }
-});
-
-// ============================================================
-// ENVIRONMENT WARNING BANNER (shown once, dismissible)
-// ============================================================
-if (!_envSupported) {
-  setTimeout(function() {
-    var existing = document.getElementById('envWarningBanner');
-    if (existing) return;
-    var banner = document.createElement('div');
-    banner.id = 'envWarningBanner';
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#e74c3c,#c0392b);color:#fff;padding:10px 16px;font-family:Inter,sans-serif;font-size:13px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.3)';
-    banner.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> <span>Unafungua kwa <b>file://</b> — Firebase Auth inaweza isifanye kazi vizuri. Tumia <b>http://</b> au <b>https://</b> (mfano: Live Server).</span> <button onclick="document.getElementById(\'envWarningBanner\').remove()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:10px">Funga</button>';
-    document.body.appendChild(banner);
-  }, 500);
-}
+  db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+} catch(e) { console.error("Firebase init error:", e); }
 
 // ============================================================
 // GLOBAL STATE
@@ -2034,31 +2024,20 @@ function navTo(section) {
 // ============================================================
 function handleLogin(e) {
   e.preventDefault();
-  if (!auth) { showAuthErr('Firebase haijaunganishwa. Fungua kwa http:// au https://.'); return; }
-  if (!_envSupported) { showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server au host kwenye tovuti.'); return; }
+  if (!auth) { showAuthErr('Firebase haijaunganishwa.'); return; }
   auth.signInWithEmailAndPassword(document.getElementById('loginEmail').value, document.getElementById('loginPass').value).then(cred => db.collection('users').doc(cred.user.uid).get()).then(doc => {
     if (doc.exists) { const d=doc.data(); currentBiz={id:doc.id,name:d.businessName,category:d.businessCategory,logo:d.logo}; showRoleScreen(d); }
     else showAuthErr('Akaunti haipatikani.');
-  }).catch(err => {
-    if(err.code==='auth/operation-not-supported-in-this-environment') showAuthErr('Mazingira hayatumiki: Fungua kwa http:// au https:// (sio file://). Tumia Live Server.');
-    else if(err.code==='auth/invalid-credential'||err.code==='auth/wrong-password'||err.code==='auth/user-not-found') showAuthErr('Barua pepe au nenosiri si sahihi.');
-    else showAuthErr(err.message);
-  });
+  }).catch(err => showAuthErr(err.message));
 }
 function handleSignup(e) {
   e.preventDefault();
-  if (!auth) { showAuthErr('Firebase haijaunganishwa. Fungua kwa http:// au https://.'); return; }
-  if (!_envSupported) { showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server au host kwenye tovuti.'); return; }
+  if (!auth) { showAuthErr('Firebase haijaunganishwa.'); return; }
   auth.createUserWithEmailAndPassword(document.getElementById('signupEmail').value, document.getElementById('signupPass').value).then(cred => db.collection('users').doc(cred.user.uid).set({
     name:document.getElementById('signupName').value, email:document.getElementById('signupEmail').value,
     businessName:document.getElementById('signupBiz').value, businessCategory:document.getElementById('signupCat').value,
     role:'manager', status:'active', logo:'', createdAt:firebase.firestore.FieldValue.serverTimestamp()
-  })).then(() => { db.collection('users').doc(auth.currentUser.uid).collection('settings').doc('main').set({overheadPercent:10,marginPercent:20,logo:''}); toast('Akaunti imeundwa!','s'); switchAuthTab('login'); }).catch(err => {
-    if(err.code==='auth/operation-not-supported-in-this-environment') showAuthErr('Mazingira hayatumiki: Fungua kwa http:// au https:// (sio file://). Tumia Live Server.');
-    else if(err.code==='auth/email-already-in-use') showAuthErr('Barua pepe hii tayari inatumika.');
-    else if(err.code==='auth/weak-password') showAuthErr('Nenosiri ni dhaifu — tumia angalau herufi 6.');
-    else showAuthErr(err.message);
-  });
+  })).then(() => { db.collection('users').doc(auth.currentUser.uid).collection('settings').doc('main').set({overheadPercent:10,marginPercent:20,logo:''}); toast('Akaunti imeundwa!','s'); switchAuthTab('login'); }).catch(err => showAuthErr(err.message));
 }
 
 // ============================================================
@@ -2076,12 +2055,36 @@ function handleSignup(e) {
 // ============================================================
 const GOOGLE_CLIENT_ID = "797676326076-09rpnb9c1amicstl4db8bkiiqt1et2g2.apps.googleusercontent.com";
 
+/* === FIX: Disable GIS One Tap to avoid "auth/invalid-credential" error ===
+   The custom Client ID above belongs to a different Firebase project
+   (ncrs-aeb43) than the current Firebase config (ncrs-aeb43 — but
+   registered separately). When GIS issues a JWT signed for that Client ID,
+   Firebase rejects it with auth/invalid-credential.
+   
+   Solution: Use Firebase's built-in signInWithPopup(GoogleAuthProvider)
+   which uses Firebase's auto-configured Client ID — guaranteed to match.
+   
+   To re-enable GIS One Tap later:
+     1. Firebase Console → Authentication → Sign-in method → Google →
+        Edit → Web SDK configuration → Set "Web Client ID" to GOOGLE_CLIENT_ID above
+     2. Google Cloud Console → API Credentials → OAuth Client 797676326076-... →
+        Authorized JavaScript origins → add your domain (e.g. http://localhost:5500)
+     3. Set USE_GIS_ONE_TAP = true below
+*/
+const USE_GIS_ONE_TAP = false;
+
 function handleGoogleLogin() {
-  if (!auth) { showAuthErr('Firebase haijaunganishwa. Fungua kwa http:// au https://.'); return; }
-  if (!_envSupported) { showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server au host kwenye tovuti.'); return; }
+  if (!auth) { showAuthErr('Firebase haijaunganishwa.'); return; }
 
   // Mark button(s) as loading
   setGoogleBtnLoading(true, 'Inasubiri Google...');
+
+  /* FIX: Skip GIS One Tap to avoid "auth/invalid-credential" error.
+     Firebase popup uses Firebase's own Client ID — always matches project. */
+  if (!USE_GIS_ONE_TAP) {
+    fallbackToFirebasePopup();
+    return;
+  }
   // Hide any previous error
   document.getElementById('authErr').classList.remove('show');
 
@@ -2141,16 +2144,7 @@ function fallbackToFirebasePopup() {
   provider.setCustomParameters({ prompt: 'select_account' });
   auth.signInWithPopup(provider)
     .then(function(result) { handleGoogleSignInResult(result.user); })
-    .catch(function(pErr) {
-      if (pErr.code === 'auth/operation-not-supported-in-this-environment' || pErr.code === 'auth/unauthorized-domain') {
-        showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server.');
-      } else if (pErr.code === 'auth/popup-closed-by-user') {
-        // User closed popup silently — no error needed
-        setGoogleBtnLoading(false);
-      } else {
-        handleGoogleError(pErr);
-      }
-    });
+    .catch(handleGoogleError);
 }
 
 // === GIS callback: receives the ID token (JWT) and converts to Firebase credential ===
@@ -2163,19 +2157,11 @@ function handleGoogleCredentialResponse(response) {
   var credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
   auth.signInWithCredential(credential)
     .then(function(result) { handleGoogleSignInResult(result.user); })
-    .catch(function(err) {
-      if (err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/unauthorized-domain') {
-        showAuthErr('Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server.');
-        setGoogleBtnLoading(false);
-      } else {
-        handleGoogleError(err);
-      }
-    });
+    .catch(handleGoogleError);
 }
 
 // === Common sign-in success handler (used by both GIS and Firebase popup paths) ===
 function handleGoogleSignInResult(user) {
-  if (!db) { showAuthErr('Firebase haijaunganishwa.'); setGoogleBtnLoading(false); return; }
   return db.collection('users').doc(user.uid).get().then(function(doc) {
     if (doc.exists) {
       // Existing user — proceed to role screen
@@ -2220,18 +2206,33 @@ function handleGoogleSignInResult(user) {
 function handleGoogleError(err) {
   console.error('Google sign-in error:', err);
   var msg = (err && err.message) || 'Imeshindwa kuingia na Google.';
+  var showDomainModal = false;
   if (err && err.code) {
     if (err.code === 'auth/popup-closed-by-user') msg = 'Dirisha la Google limefungwa. Jaribu tena.';
     else if (err.code === 'auth/popup-blocked') msg = 'Dirisha la Google limezuiwa na browser. Ruhusu pop-ups kwa tovuti hii.';
     else if (err.code === 'auth/cancelled-popup-request') msg = 'Maombi ya Google yamekatishwa.';
     else if (err.code === 'auth/network-request-failed') msg = 'Hitilafu ya mtandao. Angalia muunganisho wako wa intaneti.';
-    else if (err.code === 'auth/unauthorized-domain') msg = 'Domain hii haijaidhinishwa kwa Google Sign-In. Ongeza kwenye Firebase Console → Auth → Settings → Authorized domains.';
+    else if (err.code === 'auth/unauthorized-domain') {
+      /* Show helpful modal with exact domain to add */
+      showDomainModal = true;
+      msg = 'Domain hii haijaidhinishwa kwa Google Sign-In.';
+    }
     else if (err.code === 'auth/operation-not-allowed') msg = 'Login na Google haijawashwa. Washa kwenye Firebase Console → Authentication → Sign-in method → Google.';
-    else if (err.code === 'auth/operation-not-supported-in-this-environment') msg = 'Mazingira hayatumiki: Fungua ukurasa kwa http:// au https:// (sio file://). Tumia Live Server.';
     else if (err.code === 'auth/invalid-credential') msg = 'Credential ya Google si sahihi au imekwisha muda. Jaribu tena.';
   }
   showAuthErr(msg);
   setGoogleBtnLoading(false);
+  if (showDomainModal) {
+    /* Detect current domain and show in modal */
+    var fullOrigin = window.location.origin;     /* e.g. http://localhost:5500 */
+    var hostName = window.location.hostname;     /* e.g. localhost or 127.0.0.1 */
+    var displayEl1 = document.getElementById('detectedDomain');
+    var displayEl2 = document.getElementById('domainToAdd');
+    if (displayEl1) displayEl1.textContent = fullOrigin;
+    /* Firebase "Authorized domains" wants hostname only (no port, no protocol) */
+    if (displayEl2) displayEl2.textContent = hostName;
+    document.getElementById('domainErrorModal').style.display = 'flex';
+  }
 }
 
 // === Helper: toggle loading state on all .btn-google buttons ===
@@ -2254,7 +2255,7 @@ function setGoogleBtnLoading(loading, loadingText) {
 }
 
 function showAuthErr(msg) { document.getElementById('authErrText').textContent=msg; document.getElementById('authErr').classList.add('show'); }
-function authLogout() { try { if(auth) auth.signOut().catch(function(){}); } catch(e) {} currentUser=null; currentBiz=null; showLanding(); }
+function authLogout() { if(auth) auth.signOut(); currentUser=null; currentBiz=null; showLanding(); }
 function showRoleScreen(data) { hideAll(); document.getElementById('roleScreen').classList.remove('hidden'); document.getElementById('rsBizName').textContent=data.businessName; document.getElementById('rsBizCat').textContent=data.businessCategory; }
 async function selectRole(role) {
   currentRole = role; hideAll(); document.getElementById('dashScreen').classList.remove('hidden');
@@ -2983,33 +2984,22 @@ function closeGenModal() {
 }
 
 // ============================================================
-// AUTH STATE LISTENER (with environment error protection)
+// AUTH STATE LISTENER
 // ============================================================
-if (auth) {
-  try {
-    auth.onAuthStateChanged(function(user) {
-      currentUser = user;
-      if (user) { try { stopOneTap(); } catch(e) {} }
-      if (user && !currentBiz && db) {
-        db.collection('users').doc(user.uid).get().then(function(doc) {
-          if (doc.exists) {
-            var d = doc.data();
-            currentBiz = { id: doc.id, name: d.businessName, category: d.businessCategory, logo: d.logo };
-          }
-        }).catch(function() {});
+auth.onAuthStateChanged(user => {
+  currentUser=user;
+  // Stop Google One Tap if user is now logged in
+  if (user) stopOneTap();
+  // If user is logged in but no currentBiz, try to load it
+  if(user && !currentBiz) {
+    db.collection('users').doc(user.uid).get().then(doc => {
+      if(doc.exists) {
+        const d=doc.data();
+        currentBiz={id:doc.id, name:d.businessName, category:d.businessCategory, logo:d.logo};
       }
-    }, function(error) {
-      // Error callback for onAuthStateChanged
-      if (error && error.code === 'auth/operation-not-supported-in-this-environment') {
-        console.warn('Auth state listener: Environment not supported (file:// protocol).');
-      } else {
-        console.warn('Auth state listener error:', error);
-      }
-    });
-  } catch(e) {
-    console.warn('onAuthStateChanged setup failed:', e);
+    }).catch(()=>{});
   }
-}
+});
 
 // ============================================================
 // INITIALIZATION
@@ -3027,8 +3017,6 @@ var oneTapCooldownMs = 60 * 60 * 1000; // 1 hour
 var oneTapActive = false;
 
 function initOneTapAutoSignin() {
-  // Skip in unsupported environments (file:// protocol)
-  if (!_envSupported) return;
   // Don't show if user is already logged in
   if (currentUser || currentBiz) {
     if (window.google && google.accounts && google.accounts.id) {
@@ -3137,17 +3125,97 @@ function applyLandingTheme(theme) {
   setTimeout(function() { applyLanguage(); applyLandingTheme(landingThemes[currentThemeIdx]); var ls = document.getElementById('ldLangSelect'); if (ls) ls.value = currentLang; }, 100);
 })();
 
-document.addEventListener('DOMContentLoaded', function() {
-  try {
-    showLanding();
-    renderPublicShowcase();
-    // Show Google One Tap automatically on landing page (after a brief delay to let GIS load)
-    setTimeout(initOneTapAutoSignin, 1500);
-  } catch(e) {
-    console.error('DOMContentLoaded init error:', e);
-    try { showLanding(); } catch(e2) {}
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  showLanding();
+  renderPublicShowcase();
+  // Show Google One Tap automatically on landing page (after a brief delay to let GIS load)
+  setTimeout(initOneTapAutoSignin, 1500);
 });
 </script>
+<!-- DOMAIN AUTHORIZATION ERROR MODAL -->
+<div class="super-modal" id="domainErrorModal" style="display:none" onclick="if(event.target===this)closeSuperModal('domainErrorModal')">
+  <div class="super-modal-card" style="max-width:560px">
+    <div class="super-modal-head">
+      <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--warning)"></i> Domain Not Authorized</h3>
+      <button onclick="closeSuperModal('domainErrorModal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:6px 0">
+      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Domain yako ya sasa haijaidhinishwa kwa Google Sign-In. Ongeza kwenye Firebase Console kutatua.</p>
+      <div style="background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.3);border-radius:8px;padding:12px 14px;margin-bottom:14px;color:#ffc857">
+        <i class="fa-solid fa-globe"></i> <b>Current domain (origin):</b><br>
+        <code id="detectedDomain" style="display:block;margin-top:6px;padding:8px 10px;background:var(--bg3);border-radius:6px;color:#ffc857;word-break:break-all;font-size:11px">Loading...</code>
+      </div>
+      <h4 style="margin-bottom:10px;font-size:13px;color:var(--primary2)"><i class="fa-solid fa-list-check"></i> Hatua za Kufuata:</h4>
+      <ol style="padding-left:22px;font-size:12px;line-height:1.8;color:var(--text2)">
+        <li>Fungua <a href="https://console.firebase.google.com/project/ncrs-aeb43/authentication/settings" target="_blank" rel="noopener" style="color:var(--primary2)">Firebase Console → ncrs-aeb43 → Authentication → Settings</a></li>
+        <li>Skroluu chini hadi sehemu ya <b>"Authorized domains"</b></li>
+        <li>Bonyeza <b>"Add domain"</b></li>
+        <li>Ingiza thamani hii: <code id="domainToAdd" style="padding:2px 6px;background:var(--bg3);border-radius:4px;color:var(--primary2)">...</code></li>
+        <li>Bonyeza <b>"Add"</b> kisha refresh page hii</li>
+      </ol>
+      <div style="background:rgba(9,132,227,.08);border:1px solid rgba(9,132,227,.3);border-radius:8px;padding:12px 14px;margin-top:14px;color:#60a5fa;font-size:12px">
+        <i class="fa-solid fa-circle-info"></i> <b>Tip:</b> Kwa local testing tumia <code>localhost</code> (bila port). Kwa production, ongeza domain yako kamili (mfano <code>myapp.web.app</code>).
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+        <a href="https://console.firebase.google.com/project/ncrs-aeb43/authentication/settings" target="_blank" rel="noopener" class="btn btn-p">
+          <i class="fa-solid fa-up-right-from-square"></i> Open Firebase Console
+        </a>
+        <button class="btn btn-o" onclick="closeSuperModal('domainErrorModal')">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ENVIRONMENT ERROR MODAL (file:// protocol detected) -->
+<div class="super-modal" id="envErrorModal" style="display:none">
+  <div class="super-modal-card" style="max-width:600px">
+    <div class="super-modal-head">
+      <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i> Mfumo Hauwezi Kufanya Kazi</h3>
+    </div>
+    <div style="padding:6px 0">
+      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Unafungua faili hii moja kwa moja kupitia <code style="padding:2px 6px;background:var(--bg3);border-radius:4px;color:var(--danger)">file://</code> protocol. Firebase Authentication hairuhusiwi kufanya kazi kwenye mazingira haya.</p>
+      
+      <div style="background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.3);border-radius:8px;padding:12px 14px;margin-bottom:14px;color:#ff7b85;font-size:12px">
+        <i class="fa-solid fa-circle-info"></i> <b>Sababu:</b> Firebase inahitaji <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">http://</code> au <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">https://</code> protocol, sio <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">file://</code>.
+      </div>
+      
+      <h4 style="margin-bottom:10px;font-size:13px;color:var(--primary2)"><i class="fa-solid fa-wrench"></i> Suluhisho (Chagua Moja):</h4>
+      
+      <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:10px">
+        <h5 style="font-size:12px;color:var(--primary2);margin-bottom:8px"><i class="fa-brands fa-vscode"></i> Chaguo A: VS Code Live Server (Rahisi Zaidi)</h5>
+        <ol style="padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
+          <li>Fungua VS Code</li>
+          <li>Install extension "Live Server" na Ritwick Dey</li>
+          <li>Right-click faili hii → <b>"Open with Live Server"</b></li>
+          <li>URL itakuwa: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">http://127.0.0.1:5500/...</code></li>
+        </ol>
+      </div>
+      
+      <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:10px">
+        <h5 style="font-size:12px;color:var(--primary2);margin-bottom:8px"><i class="fa-brands fa-python"></i> Chaguo B: Python HTTP Server</h5>
+        <ol style="padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
+          <li>Fungua terminal/command prompt</li>
+          <li>Nenda kwenye folder ya faili: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px">cd /folder/ya/faili</code></li>
+          <li>Run: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">python -m http.server 5500</code></li>
+          <li>Fungua: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">http://localhost:5500/bizbook_with_google_login.html</code></li>
+        </ol>
+      </div>
+      
+      <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:14px">
+        <h5 style="font-size:12px;color:var(--primary2);margin-bottom:8px"><i class="fa-brands fa-node-js"></i> Chaguo C: Node.js (http-server)</h5>
+        <ol style="padding-left:20px;font-size:12px;line-height:1.7;color:var(--text2)">
+          <li>Install: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px">npm install -g http-server</code></li>
+          <li>Nenda folder ya faili: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px">cd /folder/ya/faili</code></li>
+          <li>Run: <code style="padding:1px 4px;background:var(--bg2);border-radius:3px;color:var(--success)">http-server -p 5500</code></li>
+        </ol>
+      </div>
+      
+      <div style="background:rgba(9,132,227,.08);border:1px solid rgba(9,132,227,.3);border-radius:8px;padding:12px 14px;color:#60a5fa;font-size:12px">
+        <i class="fa-solid fa-lightbulb"></i> <b>Muhimu:</b> Tumia <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">localhost</code> (sio <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">127.0.0.1</code>) — kwa sababu <code style="padding:1px 4px;background:var(--bg3);border-radius:3px">localhost</code> imeongezwa otomatiki kwenye Firebase Authorized Domains.
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
