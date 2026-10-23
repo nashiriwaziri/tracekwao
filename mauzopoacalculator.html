@@ -2,49 +2,27 @@
 <html lang="sw">
 <head>
 <script>
-// ============================================================
-// AUTO-REDIRECT: file:// → https://www.tracekwao.com
-// (Fixes "auth/operation-not-supported-in-this-environment")
-// Production domain: www.tracekwao.com
-// ============================================================
-(function() {
+/* Canonical hosting guard: Firebase Authentication must run on HTTP(S). */
+(function () {
   var protocol = window.location.protocol;
-  var hostname = window.location.hostname;
-  var PROD_DOMAIN = "www.tracekwao.com";
-  
-  // If already on production domain via HTTPS — do nothing, allow normal flow
-  if (protocol === 'https:' && (hostname === PROD_DOMAIN || hostname === PROD_DOMAIN.replace('www.',''))) {
-    return;
-  }
-  
-  // If on localhost via HTTP — allow (local development)
-  if (protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1')) {
-    return;
-  }
-  
-  // If opened via file:// — redirect to production domain
+  var hostname = (window.location.hostname || '').toLowerCase();
+  var canonical = 'https://www.tracekwao.com/mauzopoacalculator.html';
+
   if (protocol === 'file:') {
-    var fileName = window.location.pathname.split('/').pop() || 'bizbook_with_google_login.html';
-    var targetUrl = 'https://' + PROD_DOMAIN + '/' + fileName;
-    
-    // Show a brief overlay before redirecting
-    document.title = 'Redirecting to ' + PROD_DOMAIN + '...';
-    document.head.insertAdjacentHTML('beforeend', '<style>#redirect-overlay{position:fixed;inset:0;background:#0d0d12;color:#fff;display:flex;align-items:center;justify-content:center;z-index:999999;font-family:Inter,sans-serif;text-align:center;padding:20px}#redirect-overlay .box{max-width:520px;background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:32px}#redirect-overlay h2{color:#D4AF37;margin:0 0 12px;font-size:22px}#redirect-overlay p{color:#9a9ab0;font-size:14px;line-height:1.6;margin:8px 0}#redirect-overlay a{color:#a29bfe;word-break:break-all}#redirect-overlay .spinner{display:inline-block;width:32px;height:32px;border:3px solid #2a2a3a;border-top-color:#D4AF37;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px}@keyframes spin{to{transform:rotate(360deg)}}</style>');
-    
-    var overlay = document.createElement('div');
-    overlay.id = 'redirect-overlay';
-    overlay.innerHTML = '<div class="box"><div class="spinner"></div><h2>Inahamia kwenye TraceKwao.com...</h2><p>Unafungua faili hii moja kwa moja (file://). Firebase haiwezi kufanya kazi hivyo. Tunakuhimia kwenye <b>www.tracekwao.com</b> ambapo Google Login itafanya kazi vizuri.</p><p style="font-size:12px;color:#5a5a72">URL ya kufungua: <a href="' + targetUrl + '">' + targetUrl + '</a></p><p style="font-size:11px;color:#5a5a72;margin-top:14px">Kama haujahamishwa otomatiki ndani ya sekunde 3, bonyeza link hapo juu.</p></div>';
-    document.body ? document.body.appendChild(overlay) : document.documentElement.appendChild(overlay);
-    
-    // Try to redirect after short delay
-    setTimeout(function() {
-      window.location.href = targetUrl;
-    }, 2500);
-    
-    // Block all subsequent script execution
-    window.__REDIRECT_BLOCK__ = true;
+    window.location.replace(canonical);
+    return;
   }
-});
+
+  /* Keep production traffic on the configured www origin. */
+  if (protocol === 'https:' && hostname === 'tracekwao.com') {
+    window.location.replace(
+      'https://www.tracekwao.com' +
+      window.location.pathname +
+      window.location.search +
+      window.location.hash
+    );
+  }
+})();
 </script>
 
 <meta charset="UTF-8"/>
@@ -1496,7 +1474,9 @@ const firebaseConfig = {
 
 let app, auth, db, storage;
 try {
-  app = firebase.initializeApp(firebaseConfig);
+  app = firebase.apps && firebase.apps.length
+    ? firebase.app()
+    : firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();
   storage = firebase.storage();
@@ -2060,7 +2040,29 @@ const GOOGLE_CLIENT_ID = "797676326076-09rpnb9c1amicstl4db8bkiiqt1et2g2.apps.goo
 const USE_GIS_ONE_TAP = false;
 
 function handleGoogleLogin() {
-  if (!auth) { showAuthErr('Firebase haijaunganishwa.'); return; }
+  if (!auth) {
+    showAuthErr('Firebase haijaunganishwa. Hakikisha mtandao upo na Firebase SDK imepakia.');
+    return;
+  }
+
+  /* Firebase Auth needs a secure web origin and enabled browser storage. */
+  if (window.location.protocol !== 'https:' &&
+      window.location.protocol !== 'http:' &&
+      window.location.protocol !== 'chrome-extension:') {
+    showAuthErr('Google Login inahitaji mfumo ufunguliwe kupitia HTTPS. Fungua: https://www.tracekwao.com/mauzopoacalculator.html');
+    return;
+  }
+  try {
+    var storageTestKey = '__tracekwao_storage_test__';
+    window.localStorage.setItem(storageTestKey, '1');
+    window.localStorage.removeItem(storageTestKey);
+  } catch (storageError) {
+    showAuthErr('Browser imezuia Web Storage. Ruhusu site data/cookies kwa www.tracekwao.com, kisha refresh ukurasa.');
+    return;
+  }
+
+  var authErr = document.getElementById('authErr');
+  if (authErr) authErr.classList.remove('show');
 
   // Mark button(s) as loading
   setGoogleBtnLoading(true, 'Inasubiri Google...');
@@ -2205,6 +2207,12 @@ function handleGoogleError(err) {
     }
     else if (err.code === 'auth/operation-not-allowed') msg = 'Login na Google haijawashwa. Washa kwenye Firebase Console → Authentication → Sign-in method → Google.';
     else if (err.code === 'auth/invalid-credential') msg = 'Credential ya Google si sahihi au imekwisha muda. Jaribu tena.';
+    else if (err.code === 'auth/operation-not-supported-in-this-environment') {
+      msg = 'Mazingira haya hayaungi mkono Google Login. Fungua ukurasa huu moja kwa moja kupitia https://www.tracekwao.com/mauzopoacalculator.html na ruhusu Web Storage.';
+    }
+    else if (err.code === 'auth/web-storage-unsupported') {
+      msg = 'Browser haijawezesha Web Storage. Ruhusu site data/cookies kwa www.tracekwao.com au jaribu Chrome/Edge ya kawaida.';
+    }
   }
   showAuthErr(msg);
   setGoogleBtnLoading(false);
@@ -3127,7 +3135,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <button onclick="closeSuperModal('domainErrorModal')"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="padding:6px 0">
-      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Domain ya production <b>www.tracekwao.com</b> haijaidhinishwa bado kwa Google Sign-In. Ongeza kwenye Firebase Console kutatua.</p>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:14px">Firebase inarudisha auth/unauthorized-domain. Hakikisha <b>www.tracekwao.com</b> imeongezwa kwenye Authorized domains ya project inayotumiwa na mfumo huu.</p>
       <div style="background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.3);border-radius:8px;padding:12px 14px;margin-bottom:14px;color:#ffc857">
         <i class="fa-solid fa-globe"></i> <b>Domain ya kuongeza:</b><br>
         <code id="detectedDomain" style="display:block;margin-top:6px;padding:8px 10px;background:var(--bg3);border-radius:6px;color:#ffc857;word-break:break-all;font-size:11px">https://www.tracekwao.com</code>
