@@ -2121,13 +2121,62 @@ function waitForGIS(cb) {
   }, 200);
 }
 
-// Fallback: Firebase's signInWithPopup (uses Firebase project's default Google Client ID)
+// Detect if we're running inside an iframe or restricted preview environment.
+// In such environments signInWithPopup fails because Google cannot post the
+// credential back to a cross-origin iframe — signInWithRedirect works instead.
+function isInIframeOrRestrictedEnv() {
+  try {
+    if (window.self !== window.top) return true; // standard iframe detection
+  } catch (e) { return true; } // cross-origin iframe throws SecurityError
+  // Sandboxed iframe that blocks same-origin: ancestor-origin check
+  try {
+    if (window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0) {
+      var ancestor = window.location.ancestorOrigins[0];
+      if (ancestor && ancestor.indexOf(window.location.origin) === -1) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// Fallback: Firebase Google Sign-In (uses Firebase project's default Google Client ID)
+// Uses signInWithRedirect inside iframes/preview environments because popups
+// cannot communicate back to a cross-origin iframe (this is the exact cause of
+// the "auth/operation-not-supported-in-this-environment" error).
 function fallbackToFirebasePopup() {
   var provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  auth.signInWithPopup(provider)
-    .then(function(result) { handleGoogleSignInResult(result.user); })
-    .catch(handleGoogleError);
+
+  if (isInIframeOrRestrictedEnv()) {
+    // Redirect-based sign-in works inside iframes where popup fails.
+    // Result is picked up by handleRedirectResult() on the next page load.
+    setGoogleBtnLoading(true, 'Inaelekeza kwa Google...');
+    auth.signInWithRedirect(provider).catch(function(err) {
+      handleGoogleError(err);
+      setGoogleBtnLoading(false);
+    });
+  } else {
+    auth.signInWithPopup(provider)
+      .then(function(result) { handleGoogleSignInResult(result.user); })
+      .catch(handleGoogleError);
+  }
+}
+
+// Handle the redirect result when the page reloads after signInWithRedirect.
+// Must be called once on page load. Safe to call even if no redirect happened —
+// in that case result.user is null and we simply do nothing.
+function handleRedirectResult() {
+  if (!auth) return;
+  auth.getRedirectResult().then(function(result) {
+    if (result && result.user) {
+      // Successfully completed redirect-based Google sign-in
+      handleGoogleSignInResult(result.user);
+    }
+  }).catch(function(err) {
+    // "auth/no-auth-event" is normal when there is no redirect in progress
+    if (err && err.code && err.code !== 'auth/no-auth-event') {
+      handleGoogleError(err);
+    }
+  });
 }
 
 // === GIS callback: receives the ID token (JWT) and converts to Firebase credential ===
@@ -2203,8 +2252,10 @@ function handleGoogleError(err) {
     else if (err.code === 'auth/operation-not-allowed') msg = 'Login na Google haijawashwa. Washa kwenye Firebase Console → Authentication → Sign-in method → Google.';
     else if (err.code === 'auth/invalid-credential') msg = 'Credential ya Google si sahihi au imekwisha muda. Jaribu tena.';
     else if (err.code === 'auth/operation-not-supported-in-this-environment') {
-      msg = 'Kivinjari au mazingira haya hayaungi mkono Google Login. Fungua https://www.tracekwao.com/mauzopoacalculator.html kwenye Edge/Chrome ya kawaida, si ndani ya iframe au preview.';
+      msg = 'Mfumo umeshajaribu redirect moja kwa moja. Kama bado linashindikana, fungua https://www.tracekwao.com/mauzopoacalculator.html kwenye dirisha jipya la Edge/Chrome (si ndani ya iframe au preview).';
     }
+    else if (err.code === 'auth/redirect-cancelled-by-user') msg = 'Google redirect imekatishwa. Jaribu tena.';
+    else if (err.code === 'auth/redirect-operation-has-been-blocked') msg = 'Google redirect imezuiwa na kivinjari. Fungua https://www.tracekwao.com/mauzopoacalculator.html kwenye dirisha jipya la Edge/Chrome.';
     else if (err.code === 'auth/web-storage-unsupported') {
       msg = 'Firebase imeshindwa kutumia Web Storage. Ruhusu cookies na site data kwa www.tracekwao.com, zima InPrivate/Incognito kwa jaribio, kisha fungua ukurasa kwenye Edge/Chrome ya kawaida.';
     }
@@ -3118,6 +3169,9 @@ function applyLandingTheme(theme) {
 document.addEventListener('DOMContentLoaded', () => {
   showLanding();
   renderPublicShowcase();
+  // Pick up Google sign-in result if we are returning from a signInWithRedirect flow.
+  // This is what makes Google Login work inside iframe/preview environments.
+  handleRedirectResult();
   // Show Google One Tap automatically on landing page (after a brief delay to let GIS load)
   setTimeout(initOneTapAutoSignin, 1500);
 });
