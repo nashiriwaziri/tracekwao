@@ -137,7 +137,21 @@ button,input,select,textarea{font:inherit}button{cursor:pointer;border:0;backgro
 
 .app-layout{min-height:100vh;display:flex}
 
-.sidebar{width:260px;min-height:100vh;background:#091625;border-right:1px solid var(--line);overflow-y:auto;position:fixed;left:0;top:0;bottom:0;z-index:20;transition:transform .3s}
+.sidebar{width:260px;min-height:100vh;background:#091625;border-right:1px solid var(--line);overflow-y:auto;position:fixed;left:0;top:0;bottom:0;z-index:30;transition:transform .3s ease}
+
+/* === Sidebar overlay (backdrop) — appears when sidebar is open === */
+.sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);z-index:25;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease;cursor:pointer}
+.sidebar-overlay.show{opacity:1;visibility:visible}
+
+/* === Menu button (3 bars) — enhanced with "Menu" label === */
+.menu-toggle-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);color:var(--text);cursor:pointer;transition:all .2s;font-size:13px;font-weight:600}
+.menu-toggle-btn:hover{background:rgba(22,169,121,.12);border-color:var(--p);color:var(--p2);transform:translateY(-1px)}
+.menu-toggle-btn .menu-icon{display:inline-flex;flex-direction:column;gap:3px;flex-shrink:0}
+.menu-toggle-btn .menu-icon span{display:block;width:18px;height:2px;background:currentColor;border-radius:2px;transition:all .3s ease}
+.menu-toggle-btn.active .menu-icon span:nth-child(1){transform:translateY(5px) rotate(45deg)}
+.menu-toggle-btn.active .menu-icon span:nth-child(2){opacity:0}
+.menu-toggle-btn.active .menu-icon span:nth-child(3){transform:translateY(-5px) rotate(-45deg)}
+.menu-toggle-btn .menu-label{font-size:12px;letter-spacing:.5px}
 
 .side-head{padding:16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
 
@@ -610,6 +624,19 @@ body,.card,.modal-card,.auth-card,.member-reg-card,.sidebar,.top-bar,.super-nav,
 
 
 @media(max-width:900px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.main-area{margin-left:0}.super-nav{width:180px}.row2,.row3,.row4,.su-row,.su-row3,.sa-edit-grid,.sa-chart-grid{grid-template-columns:1fr}.top-bar{padding:0 12px}.content-area{padding:14px}.brand{font-size:30px}.search-box input{width:100px}.sa-metrics{grid-template-columns:repeat(2,1fr)}.sa-group-stats{grid-template-columns:repeat(3,1fr)}}
+
+/* Desktop behavior: sidebar slides over content, overlay shows behind it */
+@media(min-width:901px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .main-area{margin-left:0}
+}
+
+/* Hide the "Menu" text on very narrow screens (icon-only) to save space */
+@media(max-width:480px){
+  .menu-toggle-btn{padding:8px 10px}
+  .menu-toggle-btn .menu-label{display:none}
+}
 
 @media(max-width:600px){.hero-actions{flex-direction:column;align-items:center}.hero-actions .btn{width:100%;max-width:280px}.super-body{flex-direction:column}.super-nav{width:100%;border-right:0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px;padding:8px}.snav-btn{width:auto;padding:6px 10px;font-size:11px}.snav-section{display:none}.super-content{max-height:none}.ad-banner-grid{grid-template-columns:1fr}.sa-metrics{grid-template-columns:1fr}.sa-group-stats{grid-template-columns:repeat(3,1fr)}.sa-filter-bar{flex-direction:column}.sa-filter-bar input{width:100%}}
 
@@ -1380,13 +1407,19 @@ img {
 
 </aside>
 
+<!-- Sidebar overlay backdrop — clicking it closes the sidebar -->
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()" title="Click to close menu"></div>
+
 <main class="main-area">
 
   <header class="top-bar">
 
     <div class="flex gap-md" style="align-items:center">
 
-      <button class="ghost" onclick="toggleSidebar()"><i class="fa-solid fa-bars" style="font-size:16px"></i></button>
+      <button class="menu-toggle-btn" id="menuToggleBtn" onclick="toggleSidebar()" aria-label="Toggle Menu" title="Open / Close Menu">
+        <span class="menu-icon"><span></span><span></span><span></span></span>
+        <span class="menu-label">Menu</span>
+      </button>
       <div class="nav-arrows" title="Navigate Back / Forward">
         <button id="navArrowBack" class="nav-arrow-btn nav-arrow-back no-history" onclick="goBack()" title="Go Back" aria-label="Go Back"><i class="fa-solid fa-chevron-left"></i></button>
         <button id="navArrowFwd" class="nav-arrow-btn nav-arrow-forward no-history" onclick="goForward()" title="Go Forward" aria-label="Go Forward"><i class="fa-solid fa-chevron-right"></i></button>
@@ -1943,10 +1976,48 @@ window.openModal=id=>{const e=$(id);if(e)e.classList.add('show');};
 
 window.closeModal=id=>{const e=$(id);if(e)e.classList.remove('show');};
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));
+  if(e.key==='Escape'){
+    document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));
+    /* Close sidebar on Escape key */
+    if(typeof closeSidebar==='function') closeSidebar();
+  }
 });
 
-window.toggleSidebar=()=>{const s=$('sidebar');if(s)s.classList.toggle('open');};
+/* === Sidebar toggle (open/close) — works on both desktop and mobile ===
+   - Adds .open class to sidebar (slides in)
+   - Shows overlay backdrop (click to close)
+   - Animates menu button icon to "X" when open
+   - Locks body scroll to prevent background scrolling while menu is open
+*/
+window.toggleSidebar=()=>{
+  const s=$('sidebar'),o=$('sidebarOverlay'),btn=$('menuToggleBtn');
+  if(!s) return;
+  const willOpen=!s.classList.contains('open');
+  /* If we are opening, set a flag so the document's click/touch listeners
+     don't immediately close the sidebar in the same event cycle.
+  */
+  if(willOpen){
+    window._sidebarJustOpened=true;
+    setTimeout(()=>{window._sidebarJustOpened=false;},350);
+  }
+  s.classList.toggle('open',willOpen);
+  if(o) o.classList.toggle('show',willOpen);
+  if(btn) btn.classList.toggle('active',willOpen);
+  document.body.style.overflow=willOpen?'hidden':'';
+};
+
+/* Open sidebar explicitly */
+window.openSidebar=()=>{const s=$('sidebar');if(s&&!s.classList.contains('open'))window.toggleSidebar();};
+
+/* Close sidebar explicitly (used by overlay click, Escape key, nav click) */
+window.closeSidebar=()=>{
+  const s=$('sidebar'),o=$('sidebarOverlay'),btn=$('menuToggleBtn');
+  if(!s||!s.classList.contains('open')) return;
+  s.classList.remove('open');
+  if(o) o.classList.remove('show');
+  if(btn) btn.classList.remove('active');
+  document.body.style.overflow='';
+};
 
 window.addEventListener('DOMContentLoaded',()=>{
   const gs=$('globalSearch');
@@ -5617,7 +5688,28 @@ let DPC=[];
 let DVC=[];
 let ALC=[];
 
-/* Browser-style nav history */
+/* === Sequential navigation (sidebar order) ===
+   - Next arrow → navigates to the NEXT section in sidebar order
+   - Back arrow → navigates to the PREVIOUS section in sidebar order
+   - Order is determined by navItems array, filtered by user role (chair vs member)
+   - This is NOT browser-style history navigation — it walks through the sidebar buttons in order.
+*/
+
+/* Returns the ordered list of accessible section IDs based on current user role */
+function getNavSequence(){
+  const isChair = CR === 'chair';
+  return navItems
+    .filter(item => item.id && (isChair || mAllowed.has(item.id)))
+    .map(item => item.id);
+}
+
+/* Find current position in the nav sequence (-1 if not found) */
+function getCurrentNavIndex(){
+  if(!aSec) return -1;
+  return getNavSequence().indexOf(aSec);
+}
+
+/* Browser-style nav history (kept for compatibility, not used for arrow navigation) */
 let navHistory = ['dashboard'];
 let navIndex = 0;
 let saNavHistory = ['sa-dashboard'];
@@ -5630,18 +5722,41 @@ function pushNavHistory(id){
   navIndex = navHistory.length - 1;
   try{updateNavArrowState();}catch(e){}
 }
+
+/* Backward arrow → go to PREVIOUS section in sidebar order (Dashboard → ... → Appearance & Settings) */
 window.goBack = () => {
-  if(navIndex <= 0){ showToast('No previous page to go back to','warning'); return; }
-  navIndex--;
-  directNavigate(navHistory[navIndex]);
+  const seq = getNavSequence();
+  const idx = getCurrentNavIndex();
+  if(idx <= 0){
+    showToast('Uko kwenye ukurasa wa kwanza (Dashboard)','warning');
+    return;
+  }
+  const prevId = seq[idx - 1];
+  const prevItem = navItems.find(n => n.id === prevId);
+  if(prevItem) showToast('Kurudi: ' + tr(prevItem.label),'success');
+  directNavigate(prevId);
   try{updateNavArrowState();}catch(e){}
+  /* Auto-close sidebar on mobile after navigation */
+  if(window.innerWidth <= 900){ setTimeout(()=>{ if(typeof closeSidebar==='function') closeSidebar(); }, 80); }
 };
+
+/* Forward arrow → go to NEXT section in sidebar order */
 window.goForward = () => {
-  if(navIndex >= navHistory.length - 1){ showToast('No next page to go forward to','warning'); return; }
-  navIndex++;
-  directNavigate(navHistory[navIndex]);
+  const seq = getNavSequence();
+  const idx = getCurrentNavIndex();
+  if(idx < 0 || idx >= seq.length - 1){
+    showToast('Uko kwenye ukurasa wa mwisho (' + (navItems.find(n=>n.id===seq[seq.length-1])?.label || 'Appearance & Settings') + ')','warning');
+    return;
+  }
+  const nextId = seq[idx + 1];
+  const nextItem = navItems.find(n => n.id === nextId);
+  if(nextItem) showToast('Inaendelea: ' + tr(nextItem.label),'success');
+  directNavigate(nextId);
   try{updateNavArrowState();}catch(e){}
+  /* Auto-close sidebar on mobile after navigation */
+  if(window.innerWidth <= 900){ setTimeout(()=>{ if(typeof closeSidebar==='function') closeSidebar(); }, 80); }
 };
+
 function directNavigate(id){
   if(CR!=='chair'&&!mAllowed.has(id)){showToast('Chairperson only','error');return;}
   aSec=id;
@@ -5651,11 +5766,15 @@ function directNavigate(id){
   renderSec(id);
   try{document.querySelector('.content-area')?.scrollTo({top:0,behavior:'smooth'});}catch(e){}
 }
+
+/* Update arrow button states based on position in sidebar sequence */
 function updateNavArrowState(){
   const backBtns=document.querySelectorAll('.nav-arrow-back');
   const fwdBtns=document.querySelectorAll('.nav-arrow-forward');
-  const canBack=navIndex>0;
-  const canFwd=navIndex<navHistory.length-1;
+  const seq = getNavSequence();
+  const idx = getCurrentNavIndex();
+  const canBack = idx > 0;
+  const canFwd = idx >= 0 && idx < seq.length - 1;
   backBtns.forEach(b=>b.classList.toggle('no-history',!canBack));
   fwdBtns.forEach(b=>b.classList.toggle('no-history',!canFwd));
 }
@@ -5667,16 +5786,42 @@ function pushSANavHistory(id){
   saNavIndex = saNavHistory.length - 1;
   try{updateSANavArrowState();}catch(e){}
 }
+
+/* === Super Admin sequential navigation (sidebar order) ===
+   - saGoForward → NEXT section in Super Admin sidebar
+   - saGoBack → PREVIOUS section in Super Admin sidebar
+*/
+function getSANavSequence(){
+  return saNavSections.filter(item => item.id).map(item => item.id);
+}
+function getCurrentSANavIndex(){
+  if(!sTab) return -1;
+  return getSANavSequence().indexOf(sTab);
+}
 window.saGoBack = () => {
-  if(saNavIndex <= 0){ showToast('No previous page to go back to','warning'); return; }
-  saNavIndex--;
-  directSANavigate(saNavHistory[saNavIndex]);
+  const seq = getSANavSequence();
+  const idx = getCurrentSANavIndex();
+  if(idx <= 0){
+    showToast('Uko kwenye ukurasa wa kwanza (Dashboard)','warning');
+    return;
+  }
+  const prevId = seq[idx - 1];
+  const prevItem = saNavSections.find(n => n.id === prevId);
+  if(prevItem) showToast('Kurudi: ' + tr(prevItem.label),'success');
+  directSANavigate(prevId);
   try{updateSANavArrowState();}catch(e){}
 };
 window.saGoForward = () => {
-  if(saNavIndex >= saNavHistory.length - 1){ showToast('No next page to go forward to','warning'); return; }
-  saNavIndex++;
-  directSANavigate(saNavHistory[saNavIndex]);
+  const seq = getSANavSequence();
+  const idx = getCurrentSANavIndex();
+  if(idx < 0 || idx >= seq.length - 1){
+    showToast('Uko kwenye ukurasa wa mwisho (' + (saNavSections.find(n=>n.id===seq[seq.length-1])?.label || 'System Settings') + ')','warning');
+    return;
+  }
+  const nextId = seq[idx + 1];
+  const nextItem = saNavSections.find(n => n.id === nextId);
+  if(nextItem) showToast('Inaendelea: ' + tr(nextItem.label),'success');
+  directSANavigate(nextId);
   try{updateSANavArrowState();}catch(e){}
 };
 function directSANavigate(id){
@@ -5688,8 +5833,10 @@ function directSANavigate(id){
 function updateSANavArrowState(){
   const backBtns=document.querySelectorAll('.sa-nav-arrow-back');
   const fwdBtns=document.querySelectorAll('.sa-nav-arrow-forward');
-  const canBack=saNavIndex>0;
-  const canFwd=saNavIndex<saNavHistory.length-1;
+  const seq = getSANavSequence();
+  const idx = getCurrentSANavIndex();
+  const canBack = idx > 0;
+  const canFwd = idx >= 0 && idx < seq.length - 1;
   backBtns.forEach(b=>b.classList.toggle('no-history',!canBack));
   fwdBtns.forEach(b=>b.classList.toggle('no-history',!canFwd));
 }
@@ -5697,22 +5844,82 @@ function updateSANavArrowState(){
 window.openSidebarMenu = () => {
   const s=$('sidebar');
   if(!s) return;
-  window.toggleSidebar();
+  /* If sidebar is already open, just keep it open; if closed, open it.
+     toggleSidebar() sets _sidebarJustOpened flag internally to prevent
+     the document click handler from immediately closing it.
+  */
+  if(!s.classList.contains('open')) window.toggleSidebar();
 };
 
-/* Auto-close sidebar after nav click (all screens) */
+/* Auto-close sidebar after nav click (all screens) — especially important on mobile
+   so the work area is fully visible after navigation.
+*/
 document.addEventListener('DOMContentLoaded', () => {
   const nav = $('navContainer');
   if(nav){
     nav.addEventListener('click', e => {
       const btn = e.target.closest('.nav-btn');
       if(!btn) return;
-      setTimeout(() => {
-        const s = $('sidebar');
-        if(s && s.classList.contains('open')) window.toggleSidebar();
-      }, 60);
+      /* Close sidebar after navigating — short delay so the click registers first.
+         On mobile (≤900px), close IMMEDIATELY for snappier feel.
+         On desktop, also close so the work area is fully visible.
+      */
+      const delay = window.innerWidth <= 900 ? 40 : 60;
+      setTimeout(() => { if(typeof closeSidebar==='function') closeSidebar(); }, delay);
     });
   }
+  /* Also auto-close when Super Admin nav is clicked */
+  const saNav = $('superNav');
+  if(saNav){
+    saNav.addEventListener('click', e => {
+      const btn = e.target.closest('.snav-btn');
+      if(!btn) return;
+      const delay = window.innerWidth <= 900 ? 40 : 60;
+      /* Super Admin doesn't use the sidebar component, but if it ever does,
+         we still attempt to close. Safe no-op if no sidebar element.
+      */
+      setTimeout(() => { if(typeof closeSidebar==='function') closeSidebar(); }, delay);
+    });
+  }
+  /* Listen for clicks anywhere on the document — if user clicks outside the sidebar
+     and the menu toggle button while the sidebar is open, close it.
+     This handles both mouse clicks and touch events.
+  */
+  document.addEventListener('click', (e) => {
+    /* Skip if sidebar was just opened in this event cycle (prevents instant close) */
+    if(window._sidebarJustOpened) return;
+    const s=$('sidebar');
+    if(!s || !s.classList.contains('open')) return;
+    const overlay=$('sidebarOverlay');
+    const toggleBtn=$('menuToggleBtn');
+    const target=e.target;
+    /* If click is on the overlay, the overlay's own onclick will handle it.
+       If click is inside the sidebar, leave it open.
+       If click is on the menu toggle button, the button's onclick will handle toggling.
+       Otherwise (clicked elsewhere) — close the sidebar.
+    */
+    if(overlay && overlay.contains(target)) return;
+    if(s.contains(target)) return;
+    if(toggleBtn && toggleBtn.contains(target)) return;
+    /* Click was outside sidebar AND outside toggle button → close */
+    closeSidebar();
+  });
+  /* Touchstart handler — closes sidebar when user taps outside on touch devices.
+     Using touchstart for snappier response on mobile.
+  */
+  document.addEventListener('touchstart', (e) => {
+    /* Skip if sidebar was just opened */
+    if(window._sidebarJustOpened) return;
+    const s=$('sidebar');
+    if(!s || !s.classList.contains('open')) return;
+    const overlay=$('sidebarOverlay');
+    const toggleBtn=$('menuToggleBtn');
+    const target=e.target;
+    if(overlay && overlay.contains(target)) return; /* overlay handles its own close */
+    if(s.contains(target)) return;
+    if(toggleBtn && toggleBtn.contains(target)) return;
+    closeSidebar();
+  }, {passive:true});
 });
 
 /* Update nav arrow state after initApp/initSA */
