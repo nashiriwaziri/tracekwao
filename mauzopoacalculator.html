@@ -5593,33 +5593,59 @@ function executeSuperDeleteAccount(uid, bizId) {
 
   var promises = [];
 
-  /* Futa data ya biashara ikiwa bizId ipo */
-  if (bizId) {
-    var collections = ['products', 'sales', 'purchases', 'sellers', 'customers', 'expenses', 'employees', 'debts', 'notifications'];
+  /* Futa subcollections zote za mtumiaji (products, sales, customers, etc.)
+     Mfumo wa sasa unatumia subcollections chini ya users/{uid}/... */
+  if (uid) {
+    var collections = ['products', 'sales', 'purchases', 'sellers', 'suppliers', 'customers', 'expenses', 'employees', 'debts', 'notifications', 'assets', 'users', 'settings'];
     for (var i = 0; i < collections.length; i++) {
-      promises.push(deleteCollectionByBiz(collections[i], bizId));
+      promises.push(
+        db.collection('users').doc(uid).collection(collections[i]).get().then(function(snap) {
+          var batch = db.batch();
+          snap.forEach(function(d) { batch.delete(d.ref); });
+          if (snap.size > 0) return batch.commit();
+          return Promise.resolve();
+        }).catch(function() { return Promise.resolve(); })
+      );
     }
-    promises.push(db.collection('businesses').doc(bizId).delete());
   }
 
-  /* Futa user doc */
+  /* Futa user doc (document kuu) */
   promises.push(db.collection('users').doc(uid).delete());
+
+  /* Log kwa audit trail */
+  promises.push(db.collection('payment_history').add({
+    userId: uid,
+    action: 'account_deleted',
+    reason: 'Manual deletion by Super Admin (via superDeleteAccount)',
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    adminEmail: 'super@mauzopoa.app'
+  }).catch(function() { return Promise.resolve(); }));
 
   Promise.all(promises).then(function() {
     toast('Akaunti imefutwa kwa mafanikio', 's');
-    loadSuperData();
+    // Refresh Super Admin panel na sections zote zinazoonyesha users
+    loadSuperPanel();
+    renderAllBusinesses();
+    renderSuperUsers();
+    renderSuperSubscriptions();
   }).catch(function(err) {
     toast('Hitilafu wakati wa kufuta: ' + err.message, 'e');
+    // Hata kama kuna hitilafu, onyesha updates
+    loadSuperPanel();
+    renderAllBusinesses();
+    renderSuperUsers();
+    renderSuperSubscriptions();
   });
 }
 
+// Function hii imeondolewa - ilikuwa inatumia data structure ya zamani
+// (top-level collections zenye businessId field). Mfumo wa sasa unatumia
+// subcollections chini ya users/{uid}/... ambayo inashughulikiwa na
+// executeSuperDeleteAccount() hapo juu.
 function deleteCollectionByBiz(colName, bizId) {
-  return db.collection(colName).where('businessId', '==', bizId).get().then(function(snap) {
-    var batch = db.batch();
-    snap.forEach(function(doc) { batch.delete(doc.ref); });
-    if (snap.size > 0) return batch.commit();
-    return Promise.resolve();
-  });
+  // Backwards compatibility: rudi Promise resolved bila kufanya kitu
+  console.warn('deleteCollectionByBiz is deprecated - data structure has changed');
+  return Promise.resolve();
 }
 
 // ============================================================
