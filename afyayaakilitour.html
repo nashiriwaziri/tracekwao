@@ -2456,7 +2456,9 @@ function printRegistrations() {
         </tbody>
       </table>
       <footer>Imeundwa na Afya ya Akili Tour System • ${today}</footer>
-    </body>
+    
+
+</body>
     </html>
   `;
   const win = window.open('', '_blank');
@@ -3531,6 +3533,7 @@ function initPublicStats() {
       <button class="admin-tab" data-tab="requests"><i class="fa-solid fa-bell"></i> Maombi <span class="count" id="countReq">0</span></button>
       <button class="admin-tab" data-tab="messages"><i class="fa-solid fa-envelope"></i> Jumbe <span class="count" id="countMsg">0</span></button>
       <button class="admin-tab" data-tab="gallery"><i class="fa-solid fa-images"></i> Picha</button>
+      <button class="admin-tab" data-tab="cms"><i class="fa-solid fa-sliders"></i> Website Control</button>
       <button class="admin-tab" data-tab="logs"><i class="fa-solid fa-clock-rotate-left"></i> Shughuli</button>
     </div>
 
@@ -3544,6 +3547,51 @@ function initPublicStats() {
       <div class="stat-card"><div class="stat-icon b"><i class="fa-solid fa-envelope"></i></div><div><strong id="statTotalMsg">0</strong><span>Jumla Jumbe</span></div></div>
       <div class="stat-card"><div class="stat-icon y"><i class="fa-solid fa-envelope-open"></i></div><div><strong id="statUnreadMsg">0</strong><span>Jumbe Mpya</span></div></div>
       <div class="stat-card"><div class="stat-icon p"><i class="fa-solid fa-reply"></i></div><div><strong id="statRepliedMsg">0</strong><span>Jumbe Zilizojibiwa</span></div></div>
+    </div>
+
+    <!-- ===== SUPER ADMIN WEBSITE CMS ===== -->
+    <div class="admin-content" id="admin-cms">
+      <div class="card" style="margin-bottom:18px">
+        <h3 style="margin-bottom:8px;color:var(--p2)"><i class="fa-solid fa-shield-halved"></i> Super Admin — Website Control Center</h3>
+        <p style="color:var(--muted);font-size:.9rem;margin-bottom:14px">
+          Hariri maudhui yote ya sehemu za tovuti. Unaweza kuongeza, kuondoa au kubadilisha HTML ya sehemu husika, kuona preview, kuhifadhi mabadiliko Firebase, au kurudisha maudhui ya awali.
+          Tumia akaunti ya Super Admin pekee. Hifadhi nakala ya HTML kabla ya mabadiliko makubwa.
+        </p>
+        <div class="form-group">
+          <label for="cmsSectionSelect">Chagua eneo la tovuti</label>
+          <select id="cmsSectionSelect" class="form-control">
+            <option value="home">Nyumbani (Hero)</option>
+            <option value="booking-updates">Booking Updates</option>
+            <option value="matangazo">Matangazo</option>
+            <option value="about">Kuhusu</option>
+            <option value="activities">Shughuli</option>
+            <option value="packages">Vifurushi</option>
+            <option value="gallery">Picha</option>
+            <option value="contact">Wasiliana</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="cmsHtmlEditor">Maudhui ya eneo (HTML)</label>
+          <textarea id="cmsHtmlEditor" class="form-control" style="min-height:360px;font-family:Consolas,monospace;font-size:12px" spellcheck="false" placeholder="HTML ya eneo lililochaguliwa itaonekana hapa..."></textarea>
+          <div class="small" style="margin-top:6px">Tahadhari: usiondoe kwa bahati mbaya ID zinazotumiwa na fomu au JavaScript. Usihifadhi script zisizojulikana.</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn primary" id="cmsLoadBtn"><i class="fa-solid fa-folder-open"></i> Pakia Eneo</button>
+          <button class="btn info" id="cmsPreviewBtn"><i class="fa-solid fa-eye"></i> Preview</button>
+          <button class="btn primary" id="cmsSaveBtn"><i class="fa-solid fa-cloud-arrow-up"></i> Hifadhi Firebase</button>
+          <button class="btn warning" id="cmsResetBtn"><i class="fa-solid fa-rotate-left"></i> Rejesha HTML ya Awali</button>
+          <button class="btn danger" id="cmsDeleteBtn"><i class="fa-solid fa-trash"></i> Ondoa Mabadiliko Yaliyohifadhiwa</button>
+        </div>
+        <div id="cmsStatus" role="status" style="margin-top:14px;padding:12px;border-radius:8px;display:none"></div>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--p2);margin-bottom:10px"><i class="fa-solid fa-circle-info"></i> Maeneo yanayodhibitiwa</h4>
+        <div class="flex wrap gap-sm">
+          <span class="badge info-b">Nyumbani</span><span class="badge info-b">Booking Updates</span><span class="badge info-b">Matangazo</span>
+          <span class="badge info-b">Kuhusu</span><span class="badge info-b">Shughuli</span><span class="badge info-b">Vifurushi</span>
+          <span class="badge info-b">Picha</span><span class="badge info-b">Wasiliana</span>
+        </div>
+      </div>
     </div>
 
     <!-- ===== REGISTRATIONS ===== -->
@@ -3669,5 +3717,130 @@ function initPublicStats() {
 <!-- ===== ADMIN NOTIFICATIONS CONTAINER ===== -->
 <div class="admin-notify-container" id="adminNotifyContainer"></div>
 
+
+<script>
+// ===== SUPER ADMIN WEBSITE CONTENT CONTROL =====
+// Content is stored in its own collection and does not modify other system collections.
+(function () {
+  const CMS_COLLECTION = 'afya_akili_site_content';
+  const SECTION_IDS = ['home','booking-updates','matangazo','about','activities','packages','gallery','contact'];
+  const originalSections = {};
+  SECTION_IDS.forEach(id => {
+    const node = document.getElementById(id);
+    if (node) originalSections[id] = node.innerHTML;
+  });
+
+  function cmsNode(id) { return document.getElementById(id); }
+  function cmsStatus(message, ok) {
+    const el = cmsNode('cmsStatus');
+    if (!el) return;
+    el.style.display = 'block';
+    el.style.background = ok ? 'rgba(22,169,121,.12)' : 'rgba(239,68,68,.12)';
+    el.style.border = '1px solid ' + (ok ? 'var(--p)' : 'var(--red)');
+    el.style.color = ok ? 'var(--p2)' : '#fca5a5';
+    el.textContent = message;
+  }
+  function selectedSection() { return cmsNode('cmsSectionSelect').value; }
+  function sectionNode(id) { return document.getElementById(id); }
+  function requireSuperAdmin() {
+    const user = auth && auth.currentUser;
+    if (!user || user.uid !== ADMIN_UID_CONST) {
+      cmsStatus('Imekataliwa: akaunti ya Super Admin pekee ndiyo inayoweza kutumia CMS.', false);
+      return false;
+    }
+    return true;
+  }
+  async function loadCMSSection() {
+    if (!requireSuperAdmin()) return;
+    const id = selectedSection();
+    try {
+      const snap = await db.collection(CMS_COLLECTION).doc(id).get();
+      const node = sectionNode(id);
+      if (!node) throw new Error('Eneo halijapatikana kwenye ukurasa.');
+      cmsNode('cmsHtmlEditor').value = snap.exists && typeof snap.data().html === 'string'
+        ? snap.data().html : (originalSections[id] || node.innerHTML);
+      cmsStatus(snap.exists ? 'Maudhui yaliyohifadhiwa yamepakiwa.' : 'Hakuna mabadiliko yaliyohifadhiwa; HTML ya sasa imepakiwa.', true);
+    } catch (err) {
+      cmsStatus('Imeshindikana kupakia: ' + (err.message || err), false);
+    }
+  }
+  async function applySavedCMSContent() {
+    try {
+      // Read-only public rendering. Security rules must allow public reads for this collection.
+      const snaps = await db.collection(CMS_COLLECTION).get();
+      snaps.forEach(doc => {
+        const data = doc.data();
+        const node = sectionNode(doc.id);
+        if (node && SECTION_IDS.includes(doc.id) && data && typeof data.html === 'string') {
+          node.innerHTML = data.html;
+        }
+      });
+    } catch (err) {
+      console.warn('CMS content not loaded; showing default website content.', err);
+    }
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const select = cmsNode('cmsSectionSelect');
+    if (!select) return;
+    cmsNode('cmsLoadBtn').addEventListener('click', loadCMSSection);
+    select.addEventListener('change', loadCMSSection);
+    cmsNode('cmsPreviewBtn').addEventListener('click', () => {
+      if (!requireSuperAdmin()) return;
+      const id = selectedSection(), node = sectionNode(id);
+      if (!node) return cmsStatus('Eneo halijapatikana.', false);
+      if (!confirm('Preview itabadilisha eneo kwenye ukurasa huu kwa muda. Endelea?')) return;
+      node.innerHTML = cmsNode('cmsHtmlEditor').value;
+      cmsStatus('Preview imewekwa kwenye ukurasa huu. Bado haijahifadhiwa Firebase.', true);
+      node.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+    cmsNode('cmsSaveBtn').addEventListener('click', async () => {
+      if (!requireSuperAdmin()) return;
+      const id = selectedSection(), html = cmsNode('cmsHtmlEditor').value;
+      if (!confirm('Hifadhi HTML hii kwa eneo la ' + id + '? Mabadiliko yataonekana kwa wageni wa tovuti.')) return;
+      const btn = cmsNode('cmsSaveBtn'); btn.disabled = true;
+      try {
+        await db.collection(CMS_COLLECTION).doc(id).set({
+          sectionId: id, html, updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedBy: auth.currentUser.uid
+        }, {merge:true});
+        await writeCMSLog('CMS_SAVE', id);
+        cmsStatus('Imehifadhiwa kikamilifu. Ukurasa wa umma utatumia maudhui mapya baada ya kupakia upya.', true);
+      } catch (err) {
+        cmsStatus('Hitilafu ya kuhifadhi: ' + (err.message || err) + '. Hakiki Firestore Rules za afya_akili_site_content.', false);
+      } finally { btn.disabled = false; }
+    });
+    cmsNode('cmsResetBtn').addEventListener('click', () => {
+      if (!requireSuperAdmin()) return;
+      const id = selectedSection();
+      cmsNode('cmsHtmlEditor').value = originalSections[id] || '';
+      cmsStatus('HTML ya awali imewekwa kwenye editor. Bofya Hifadhi Firebase ili kuiweka mtandaoni.', true);
+    });
+    cmsNode('cmsDeleteBtn').addEventListener('click', async () => {
+      if (!requireSuperAdmin()) return;
+      const id = selectedSection();
+      if (!confirm('Ondoa mabadiliko yaliyohifadhiwa ya eneo ' + id + ' na kurudi maudhui ya awali?')) return;
+      try {
+        await db.collection(CMS_COLLECTION).doc(id).delete();
+        cmsNode('cmsHtmlEditor').value = originalSections[id] || '';
+        await writeCMSLog('CMS_DELETE_OVERRIDE', id);
+        cmsStatus('Mabadiliko yaliyohifadhiwa yameondolewa. Eneo litarudi maudhui ya awali baada ya kupakia upya.', true);
+      } catch (err) {
+        cmsStatus('Imeshindikana kuondoa: ' + (err.message || err), false);
+      }
+    });
+    // Load CMS only after initial DOM listeners have been registered.
+    setTimeout(applySavedCMSContent, 1200);
+  });
+  async function writeCMSLog(action, sectionId) {
+    try {
+      await db.collection('afya_akili_activity_logs').add({
+        action, system:'Afya ya Akili Tour CMS', details:'Section: '+sectionId,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        uid: auth.currentUser ? auth.currentUser.uid : null
+      });
+    } catch (e) { console.warn('CMS log not saved', e); }
+  }
+})();
+</script>
 </body>
 </html>
