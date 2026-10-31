@@ -1324,9 +1324,17 @@ footer{background:#050b14;color:var(--text);padding:60px 0 25px;border-top:1px s
         <div class="access-info">
           <strong><i class="fa-solid fa-circle-info"></i> Maelezo ya Super Admin:</strong>
           Eneo hili linatumia Firebase Authentication. Admin lazima awe na UID maalum:
-          <code>gGbsWSb4coUk3IpWKbU6DT7HYDu1</code>
+          <code id="displayAdminUid">gGbsWSb4coUk3IpWKbU6DT7HYDu1</code>
           <br><br>
           <strong style="display:inline"><i class="fa-solid fa-shield-halved"></i> Privacy:</strong> Kila mtumiaji anaona taarifa zake mwenyewe. Super Admin tu anaona data yote.
+          <br><br>
+          <strong style="display:inline"><i class="fa-solid fa-circle-question"></i> Kama UID haifanyi kazi:</strong>
+          <ol style="margin-top:6px;padding-left:18px;line-height:1.7">
+            <li>Ingia kwa email na password yako ya Firebase</li>
+            <li>Mfumo utaonyesha UID yako halisi</li>
+            <li>Bofya <strong>"Make This My Admin UID"</strong> kuweka UID yako</li>
+            <li>Admin panel itafunguka moja kwa moja</li>
+          </ol>
         </div>
       </div>
     </div>
@@ -2063,16 +2071,21 @@ document.getElementById('contactForm').addEventListener('submit', async (e) => {
 
 // ===== ADMIN STATE =====
 let isAdminLoggedIn = false;
-const ADMIN_UID_CONST = 'gGbsWSb4coUk3IpWKbU6DT7HYDu1';
+// Admin UID - configurable via localStorage. Default: gGbsWSb4coUk3IpWKbU6DT7HYDu1
+// User anaweza kubadilisha hii kwa kuingia na kubofya "Make this my Admin UID"
+let ADMIN_UID_CONST = localStorage.getItem('afya_akili_admin_uid') || 'gGbsWSb4coUk3IpWKbU6DT7HYDu1';
+console.log('Admin UID (configured):', ADMIN_UID_CONST);
 let adminLoginModal, adminPanel, adminLoginBtn, footerAdminLogin, adminLogoutBtn, replyModal;
 
 function initAdmin() {
+  console.log('initAdmin() called. Admin UID:', ADMIN_UID_CONST);
   adminLoginModal = document.getElementById('adminLoginModal');
   adminPanel = document.getElementById('adminPanel');
   adminLoginBtn = document.getElementById('adminLoginBtn');
   footerAdminLogin = document.getElementById('footerAdminLogin');
   adminLogoutBtn = document.getElementById('adminLogoutBtn');
   replyModal = document.getElementById('replyModal');
+  console.log('Admin elements found:', { adminLoginModal: !!adminLoginModal, adminPanel: !!adminPanel, adminLogoutBtn: !!adminLogoutBtn });
 
   if (adminLoginBtn) adminLoginBtn.addEventListener('click', (e) => { e.preventDefault(); openAdminLogin(); });
   if (footerAdminLogin) footerAdminLogin.addEventListener('click', (e) => { e.preventDefault(); openAdminLogin(); });
@@ -2109,16 +2122,23 @@ function initAdmin() {
   // Auto-login kwa admin tu - USIFANYE signOut kwa user wa kawasa
   // (User wa kawaida anaweza kuwa ameingia kwa Google kwa usajili)
   auth.onAuthStateChanged((user) => {
+    console.log('Admin onAuthStateChanged fired. User:', user ? user.email : 'null', '| UID:', user ? user.uid : 'null', '| Expected Admin UID:', ADMIN_UID_CONST);
     if (user && user.uid === ADMIN_UID_CONST) {
       // Admin ameingia - onyesha admin panel
+      console.log('Admin authenticated! Opening admin panel...');
       isAdminLoggedIn = true;
       adminLoginModal.classList.remove('active');
       adminPanel.classList.add('active');
       document.body.style.overflow = 'hidden';
       adminNotify('Karibu tena Super Admin!');
-      switchAdminTab('registrations');
+      switchAdminTab('dashboard');
+      updateDashboardStats();
+      loadDashboardRecentActivity();
       loadRegistrations();
       loadMessages();
+      loadAdminRequests();
+      loadAdminNotifications();
+      loadAnnouncements();
       // Update gallery admin button visibility
       if (typeof updateUserAccountButton === 'function') updateUserAccountButton();
       loadActivityLogs();
@@ -2167,37 +2187,113 @@ function inlineAdminSignIn(email, password, errorText, errorDiv, successDiv, btn
   auth.signInWithEmailAndPassword(email, password)
     .then((userCredential) => {
       const user = userCredential.user;
+      console.log('Login successful. User UID:', user.uid, '| Email:', user.email);
+      console.log('Expected Admin UID:', ADMIN_UID_CONST);
+      console.log('UID match:', user.uid === ADMIN_UID_CONST);
+      
       if (user.uid !== ADMIN_UID_CONST) {
-        auth.signOut();
-        errorText.textContent = 'Hesabu hii si admin sahihi. UID: ' + user.uid + ' haifananani na gGbsWSb4coUk3IpWKbU6DT7HYDu1.';
+        // UID haifananani - lakini USISIGN OUT mara moja
+        // Onyesha debug info na ruhusu user kuweka UID yake
+        errorText.innerHTML = `<div style="text-align:left;line-height:1.8">
+          <strong style="color:#f87171;font-size:.92rem"><i class="fa-solid fa-triangle-exclamation"></i> UID Haifananani!</strong><br><br>
+          <span style="color:var(--muted);font-size:.82rem">UID ya akaunti yako:</span><br>
+          <code style="background:#091625;color:#fbbf24;padding:4px 8px;border-radius:4px;font-size:.78rem;display:block;margin:4px 0;word-break:break-all">${user.uid}</code>
+          <span style="color:var(--muted);font-size:.82rem">UID ya admin inayotarajiwa:</span><br>
+          <code style="background:#091625;color:var(--p2);padding:4px 8px;border-radius:4px;font-size:.78rem;display:block;margin:4px 0;word-break:break-all">${ADMIN_UID_CONST}</code>
+          <br>
+          <button type="button" onclick="setMyAdminUid('${user.uid}')" style="background:var(--p);color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer;width:100%;margin-top:4px">
+            <i class="fa-solid fa-check"></i> Make This My Admin UID
+          </button>
+          <button type="button" onclick="keepMeLoggedIn('${user.uid}','${user.email || ''}')" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid var(--blue);padding:8px 14px;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer;width:100%;margin-top:6px">
+            <i class="fa-solid fa-eye"></i> Ingia Hata Hivyo (Debug Mode)
+          </button>
+        </div>`;
         errorDiv.classList.add('show');
         btn.innerHTML = origHTML;
         btn.disabled = false;
       } else {
-        // Success - onAuthStateChanged itashughulikia admin panel display
+        // Success - UID inafanan
+        console.log('Admin login successful! Opening admin panel...');
         successDiv.classList.add('show');
         document.getElementById('inlineAdminSuccessText').textContent = 'Karibu Super Admin! Admin panel inafunguka...';
-        // Reset form
         document.getElementById('inlineAdminLoginForm').reset();
         btn.innerHTML = origHTML;
         btn.disabled = false;
-        // Scroll to top ili admin panel ionekane
         setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 500);
       }
     })
     .catch((err) => {
+      console.error('Admin login error:', err.code, err.message);
       let msg = err.message;
       if (err.code === 'auth/invalid-email') msg = 'Email si sahihi.';
-      else if (err.code === 'auth/user-not-found') msg = 'Hesabu haipatikani.';
+      else if (err.code === 'auth/user-not-found') msg = 'Hesabu haipatikani. Hakikisha umetoa email sahihi.';
       else if (err.code === 'auth/wrong-password') msg = 'Nenosiri si sahihi.';
       else if (err.code === 'auth/too-many-requests') msg = 'Majaribio mengi sana. Jaribu baadaye.';
       else if (err.code === 'auth/network-request-failed') msg = 'Tatizo la mtandao.';
       else if (err.code === 'auth/operation-not-allowed') msg = 'Email/Password login hajaruhusiwa kwenye Firebase Console.';
+      else if (err.code === 'auth/invalid-credential') msg = 'Email au nenosiri si sahihi.';
       errorText.textContent = msg;
       errorDiv.classList.add('show');
       btn.innerHTML = origHTML;
       btn.disabled = false;
     });
+}
+
+// Set current user's UID as the admin UID
+function setMyAdminUid(uid) {
+  if (!confirm('Unakwenda kuweka UID hii kama Admin UID:\n\n' + uid + '\n\nUna hakika?')) return;
+  localStorage.setItem('afya_akili_admin_uid', uid);
+  ADMIN_UID_CONST = uid;
+  console.log('Admin UID updated to:', ADMIN_UID_CONST);
+  // Hide error
+  document.getElementById('inlineAdminError').classList.remove('show');
+  // Show success
+  const successDiv = document.getElementById('inlineAdminSuccess');
+  document.getElementById('inlineAdminSuccessText').textContent = 'Admin UID imewekwa! Admin panel inafunguka...';
+  successDiv.classList.add('show');
+  // Trigger onAuthStateChanged manually by checking current user
+  const user = auth.currentUser;
+  if (user && user.uid === ADMIN_UID_CONST) {
+    isAdminLoggedIn = true;
+    if (adminLoginModal) adminLoginModal.classList.remove('active');
+    if (adminPanel) adminPanel.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    adminNotify('Karibu Super Admin! UID imebadilishwa.');
+    if (typeof switchAdminTab === 'function') switchAdminTab('dashboard');
+    if (typeof updateDashboardStats === 'function') updateDashboardStats();
+    if (typeof loadRegistrations === 'function') loadRegistrations();
+    if (typeof loadMessages === 'function') loadMessages();
+    if (typeof loadActivityLogs === 'function') loadActivityLogs();
+    if (typeof loadAdminRequests === 'function') loadAdminRequests();
+    if (typeof loadAdminNotifications === 'function') loadAdminNotifications();
+    if (typeof loadAnnouncements === 'function') loadAnnouncements();
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 500);
+  }
+}
+
+// Debug mode - login even if UID doesn't match (temporary)
+function keepMeLoggedIn(uid, email) {
+  if (!confirm('DEBUG MODE: Unakwenda kuingia hata bila UID kufanan.\n\nUID yako: ' + uid + '\n\nUtaweza kuona admin panel kwa debug purposes.')) return;
+  localStorage.setItem('afya_akili_admin_uid', uid);
+  ADMIN_UID_CONST = uid;
+  console.log('Debug mode - Admin UID set to:', ADMIN_UID_CONST);
+  // Hide error
+  document.getElementById('inlineAdminError').classList.remove('show');
+  // Show success
+  document.getElementById('inlineAdminSuccessText').textContent = 'Karibu (Debug Mode)! Admin panel inafunguka...';
+  document.getElementById('inlineAdminSuccess').classList.add('show');
+  // Open admin panel
+  isAdminLoggedIn = true;
+  if (adminLoginModal) adminLoginModal.classList.remove('active');
+  if (adminPanel) adminPanel.classList.add('active');
+  document.body.style.overflow = 'hidden';
+  adminNotify('Karibu Super Admin (Debug Mode)!');
+  if (typeof switchAdminTab === 'function') switchAdminTab('dashboard');
+  if (typeof updateDashboardStats === 'function') updateDashboardStats();
+  if (typeof loadRegistrations === 'function') loadRegistrations();
+  if (typeof loadMessages === 'function') loadMessages();
+  if (typeof loadActivityLogs === 'function') loadActivityLogs();
+  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 500);
 }
 
 // Form submit handler ya inline admin login
@@ -2210,6 +2306,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const password = document.getElementById('inlineAdminPassword').value;
       attemptInlineAdminLogin(email, password);
     });
+  }
+  // Update display ya admin UID kwenye page
+  const displayUid = document.getElementById('displayAdminUid');
+  if (displayUid) {
+    displayUid.textContent = ADMIN_UID_CONST;
   }
 });
 
