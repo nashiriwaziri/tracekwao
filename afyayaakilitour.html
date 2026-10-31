@@ -2094,21 +2094,28 @@ function initAdmin() {
   if (adminLoginBtn) adminLoginBtn.addEventListener('click', (e) => { e.preventDefault(); openAdminLogin(); });
   if (footerAdminLogin) footerAdminLogin.addEventListener('click', (e) => { e.preventDefault(); openAdminLogin(); });
   if (adminLogoutBtn) adminLogoutBtn.addEventListener('click', () => {
+    console.log('Admin logout clicked');
+    // Funga admin panel mara moja
+    isAdminLoggedIn = false;
+    adminPanel.classList.remove('active');
+    document.body.style.overflow = '';
+    // Rudi kwenye sections zilizofichwa
+    const inlineSection = document.getElementById('super-admin');
+    if (inlineSection) inlineSection.style.display = '';
+    const regSection = document.getElementById('register');
+    if (regSection) regSection.style.display = '';
+    adminNotify('Umefunga kikao cha admin.');
+    // Sign out kutoka Firebase
     auth.signOut().then(() => {
-      isAdminLoggedIn = false;
-      adminPanel.classList.remove('active');
-      document.body.style.overflow = '';
-      // Rudi kwenye sections zilizofichwa
-      const inlineSection = document.getElementById('super-admin');
-      if (inlineSection) inlineSection.style.display = '';
-      const regSection = document.getElementById('register');
-      if (regSection) regSection.style.display = '';
-      adminNotify('Umefunga kikao cha admin.');
+      console.log('Firebase sign out successful');
       // Rudi kwenye section ya super-admin
       setTimeout(() => {
         if (inlineSection) inlineSection.scrollIntoView({ behavior: 'smooth' });
       }, 300);
-    }).catch(err => adminNotify('Hitilafu ya logout: ' + err.message, 'error'));
+    }).catch(err => {
+      console.error('Sign out error:', err);
+      adminNotify('Hitilafu ya logout: ' + err.message, 'error');
+    });
   });
 
   const passInput = document.getElementById('adminPasscodeInput');
@@ -2278,7 +2285,15 @@ function inlineAdminSignIn(email, password, errorText, errorDiv, successDiv, btn
 function openAdminPanelDirectly() {
   console.log('openAdminPanelDirectly() called');
   try {
+    // Hakikisha initAdmin() imewekwa (kama bado)
+    if (!adminLoginModal) {
+      console.log('initAdmin() bado haijaitwa - inaita sasa...');
+      initAdmin();
+    }
+    
     isAdminLoggedIn = true;
+    console.log('isAdminLoggedIn set to:', isAdminLoggedIn);
+    
     // Ficha modal ya login
     if (adminLoginModal) adminLoginModal.classList.remove('active');
     // Ficha inline admin section
@@ -2294,22 +2309,26 @@ function openAdminPanelDirectly() {
       console.log('Admin panel activated');
     } else {
       console.error('adminPanel element not found!');
+      adminNotify('Hitilafu: Admin panel haipatikani!', 'error');
+      return;
     }
     document.body.style.overflow = 'hidden';
     adminNotify('Karibu Super Admin! Umefanikiwa kuingia.');
-    // Piga functions zote za kusoma data
-    if (typeof switchAdminTab === 'function') switchAdminTab('dashboard');
-    if (typeof updateDashboardStats === 'function') updateDashboardStats();
-    if (typeof loadDashboardRecentActivity === 'function') loadDashboardRecentActivity();
-    if (typeof loadRegistrations === 'function') loadRegistrations();
-    if (typeof loadMessages === 'function') loadMessages();
-    if (typeof loadAdminRequests === 'function') loadAdminRequests();
-    if (typeof loadAdminNotifications === 'function') loadAdminNotifications();
-    if (typeof loadAnnouncements === 'function') loadAnnouncements();
-    if (typeof loadActivityLogs === 'function') loadActivityLogs();
-    if (typeof loadPublicGallery === 'function') loadPublicGallery();
-    if (typeof updateUserAccountButton === 'function') updateUserAccountButton();
-    console.log('Admin panel opened successfully!');
+    
+    // Piga functions zote za kusoma data - kwa try/catch ili kuepuka hitilafu
+    console.log('Loading admin data functions...');
+    try { if (typeof switchAdminTab === 'function') { switchAdminTab('dashboard'); console.log('✓ switchAdminTab'); } } catch(e) { console.error('switchAdminTab error:', e); }
+    try { if (typeof updateDashboardStats === 'function') { updateDashboardStats(); console.log('✓ updateDashboardStats'); } } catch(e) { console.error('updateDashboardStats error:', e); }
+    try { if (typeof loadDashboardRecentActivity === 'function') { loadDashboardRecentActivity(); console.log('✓ loadDashboardRecentActivity'); } } catch(e) { console.error('loadDashboardRecentActivity error:', e); }
+    try { if (typeof loadRegistrations === 'function') { loadRegistrations(); console.log('✓ loadRegistrations'); } } catch(e) { console.error('loadRegistrations error:', e); }
+    try { if (typeof loadMessages === 'function') { loadMessages(); console.log('✓ loadMessages'); } } catch(e) { console.error('loadMessages error:', e); }
+    try { if (typeof loadAdminRequests === 'function') { loadAdminRequests(); console.log('✓ loadAdminRequests'); } } catch(e) { console.error('loadAdminRequests error:', e); }
+    try { if (typeof loadAdminNotifications === 'function') { loadAdminNotifications(); console.log('✓ loadAdminNotifications'); } } catch(e) { console.error('loadAdminNotifications error:', e); }
+    try { if (typeof loadAnnouncements === 'function') { loadAnnouncements(); console.log('✓ loadAnnouncements'); } } catch(e) { console.error('loadAnnouncements error:', e); }
+    try { if (typeof loadActivityLogs === 'function') { loadActivityLogs(); console.log('✓ loadActivityLogs'); } } catch(e) { console.error('loadActivityLogs error:', e); }
+    try { if (typeof loadPublicGallery === 'function') { loadPublicGallery(); console.log('✓ loadPublicGallery'); } } catch(e) { console.error('loadPublicGallery error:', e); }
+    try { if (typeof updateUserAccountButton === 'function') { updateUserAccountButton(); console.log('✓ updateUserAccountButton'); } } catch(e) { console.error('updateUserAccountButton error:', e); }
+    console.log('All admin data functions loaded!');
   } catch (err) {
     console.error('openAdminPanelDirectly error:', err);
     adminNotify('Hitilafu ya kufungua admin panel: ' + err.message, 'error');
@@ -2472,13 +2491,19 @@ document.querySelectorAll('.admin-tab').forEach(t => t.addEventListener('click',
 // ===== LOAD REGISTRATIONS =====
 let allRegistrations = [];
 function loadRegistrations() {
-  if (!isAdminLoggedIn) return;
+  if (!isAdminLoggedIn) { console.log('loadRegistrations: Not admin, skipping'); return; }
+  if (!db) { console.error('loadRegistrations: db not initialized'); return; }
+  console.log('loadRegistrations: Loading from Firestore...');
   db.collection('afya_akili_registrations').orderBy('createdAt', 'desc').onSnapshot(snap => {
     allRegistrations = [];
     snap.forEach(doc => allRegistrations.push({ id: doc.id, ...doc.data() }));
+    console.log('loadRegistrations: Loaded', allRegistrations.length, 'registrations');
     renderRegistrations();
     updateStats();
     updateTabCounts();
+  }, (err) => {
+    console.error('loadRegistrations: Firestore error:', err.code, err.message);
+    adminNotify('Hitilafu ya kusoma usajili: ' + (err.code === 'permission-denied' ? 'Ruhusa haitoshi. Angalia Firestore Rules.' : err.message), 'error');
   });
 }
 
@@ -2548,13 +2573,19 @@ async function updateRegStatus(id, status) {
 // ===== LOAD MESSAGES =====
 let allMessages = [];
 function loadMessages() {
-  if (!isAdminLoggedIn) return;
+  if (!isAdminLoggedIn) { console.log('loadMessages: Not admin, skipping'); return; }
+  if (!db) { console.error('loadMessages: db not initialized'); return; }
+  console.log('loadMessages: Loading from Firestore...');
   db.collection('afya_akili_messages').orderBy('createdAt', 'desc').onSnapshot(snap => {
     allMessages = [];
     snap.forEach(doc => allMessages.push({ id: doc.id, ...doc.data() }));
+    console.log('loadMessages: Loaded', allMessages.length, 'messages');
     renderMessages();
     updateStats();
     updateTabCounts();
+  }, (err) => {
+    console.error('loadMessages: Firestore error:', err.code, err.message);
+    adminNotify('Hitilafu ya kusoma jumbe: ' + (err.code === 'permission-denied' ? 'Ruhusa haitoshi.' : err.message), 'error');
   });
 }
 
@@ -2642,9 +2673,12 @@ async function deleteRecord(coll, id, name) {
 
 // ===== LOAD ACTIVITY LOGS =====
 function loadActivityLogs() {
-  if (!isAdminLoggedIn) return;
+  if (!isAdminLoggedIn) { console.log('loadActivityLogs: Not admin, skipping'); return; }
+  if (!db) { console.error('loadActivityLogs: db not initialized'); return; }
+  console.log('loadActivityLogs: Loading from Firestore...');
   db.collection('afya_akili_activity_logs').orderBy('timestamp', 'desc').limit(100).onSnapshot(snap => {
     const tbody = document.getElementById('logsBody');
+    if (!tbody) { console.error('loadActivityLogs: logsBody not found'); return; }
     if (snap.empty) {
       tbody.innerHTML = '<tr><td colspan="3"><div class="admin-empty"><i class="fa-solid fa-clock-rotate-left"></i><p>Hakuna shughuli zilizorekodiwa.</p></div></td></tr>';
       return;
@@ -2654,6 +2688,9 @@ function loadActivityLogs() {
       const time = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString('sw-TZ') : '-';
       return `<tr><td>${time}</td><td><strong>${data.action || '-'}</strong></td><td>${data.system || '-'}</td></tr>`;
     }).join('');
+    console.log('loadActivityLogs: Loaded', snap.size, 'logs');
+  }, (err) => {
+    console.error('loadActivityLogs: Firestore error:', err.code, err.message);
   });
 }
 
@@ -2934,14 +2971,17 @@ let allGalleryImages = [];
 
 // Load gallery images (public - displays on landing page)
 function loadPublicGallery() {
+  if (!db) { console.error('loadPublicGallery: db not initialized'); return; }
   try {
+    console.log('loadPublicGallery: Loading from Firestore...');
     db.collection('afya_akili_gallery').orderBy('createdAt', 'desc').onSnapshot(snap => {
       allGalleryImages = [];
       snap.forEach(doc => allGalleryImages.push({ id: doc.id, ...doc.data() }));
+      console.log('loadPublicGallery: Loaded', allGalleryImages.length, 'images');
       renderPublicGallery();
       // Update admin gallery grid if admin panel is open
       if (isAdminLoggedIn) renderAdminGalleryGrid();
-    }, (err) => { console.error('Gallery load error:', err); });
+    }, (err) => { console.error('loadPublicGallery: Firestore error:', err.code, err.message); });
   } catch(e) { console.error('loadPublicGallery error:', e); }
 }
 
@@ -3368,13 +3408,18 @@ document.getElementById('reqOtherForm').addEventListener('submit', async (e) => 
 // ============================================================
 let allRequests = [];
 function loadAdminRequests() {
-  if (!isAdminLoggedIn) return;
+  if (!isAdminLoggedIn) { console.log('loadAdminRequests: Not admin, skipping'); return; }
+  if (!db) { console.error('loadAdminRequests: db not initialized'); return; }
+  console.log('loadAdminRequests: Loading from Firestore...');
   db.collection('afya_akili_requests').orderBy('createdAt', 'desc').onSnapshot(snap => {
     allRequests = [];
     snap.forEach(doc => allRequests.push({ id: doc.id, ...doc.data() }));
+    console.log('loadAdminRequests: Loaded', allRequests.length, 'requests');
     renderAdminRequests();
     updateReqCounts();
-  }, (err) => { console.error('Admin requests load error:', err); });
+  }, (err) => {
+    console.error('loadAdminRequests: Firestore error:', err.code, err.message);
+  });
 }
 
 function renderAdminRequests() {
@@ -3726,13 +3771,16 @@ document.addEventListener('DOMContentLoaded', () => {
 let allAnnouncements = [];
 
 function loadAnnouncements() {
+  if (!db) { console.error('loadAnnouncements: db not initialized'); return; }
   // Public listener - load all active announcements
+  console.log('loadAnnouncements: Loading from Firestore...');
   db.collection('afya_akili_announcements').orderBy('createdAt', 'desc').onSnapshot(snap => {
     allAnnouncements = [];
     snap.forEach(doc => allAnnouncements.push({ id: doc.id, ...doc.data() }));
+    console.log('loadAnnouncements: Loaded', allAnnouncements.length, 'announcements');
     renderPublicAnnouncements();
     if (isAdminLoggedIn) renderAdminAnnouncementList();
-  }, (err) => { console.error('Announcements load error:', err); });
+  }, (err) => { console.error('loadAnnouncements: Firestore error:', err.code, err.message); });
 }
 
 function renderPublicAnnouncements() {
@@ -4074,11 +4122,16 @@ async function bulkDelete() {
 let allAdminNotifications = [];
 
 function loadAdminNotifications() {
-  if (!isAdminLoggedIn) return;
+  if (!isAdminLoggedIn) { console.log('loadAdminNotifications: Not admin, skipping'); return; }
+  if (!db) { console.error('loadAdminNotifications: db not initialized'); return; }
+  console.log('loadAdminNotifications: Loading from Firestore...');
   db.collection('afya_akili_admin_notifications').orderBy('createdAt', 'desc').limit(50).onSnapshot(snap => {
     allAdminNotifications = [];
     snap.forEach(doc => allAdminNotifications.push({ id: doc.id, ...doc.data() }));
+    console.log('loadAdminNotifications: Loaded', allAdminNotifications.length, 'notifications');
     renderAdminNotifications();
+  }, (err) => {
+    console.error('loadAdminNotifications: Firestore error:', err.code, err.message);
   });
 }
 
